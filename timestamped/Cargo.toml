@@ -1,0 +1,11 @@
+[package]
+name = "omtrent"
+version = "0.1.0"
+edition = "2021"
+authors = ["tor torberge@outlook.com"]
+description = "type to model imprecise time"
+license = "GPL-2.0-only"
+
+
+
+[dependencies]
