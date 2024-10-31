@@ -1,0 +1,11 @@
+[package]
+name = "samsvar"
+version = "0.1.2"
+edition = "2021"
+authors = ["tor torberge@outlook.com"]
+description = "trait for matching on custom types"
+license = "GPL-2.0-only"
+
+[dependencies]
+serde_json = "1.0.128"
+nom = "7.0"

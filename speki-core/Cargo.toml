@@ -1,0 +1,32 @@
+[package]
+name = "speki-core"
+version = "0.1.10"
+edition = "2021"
+authors = ["tor torberge@outlook.com"]
+description = "core functionality of speki"
+license = "GPL-2.0-only"
+
+
+[dependencies]
+serde.workspace = true
+dirs.workspace = true
+gkquad.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+toml.workspace = true
+uuid.workspace = true
+sanitize-filename.workspace = true
+graphviz-rust.workspace = true
+git2.workspace = true
+url.workspace = true
+walkdir.workspace = true
+octocrab.workspace = true
+ureq.workspace = true
+futures.workspace = true
+eyre.workspace = true
+rayon.workspace = true
+cli-justify.workspace = true
+samsvar.workspace = true
+filecash.workspace = true
+omtrent.workspace = true
+speki-dto.workspace = true
