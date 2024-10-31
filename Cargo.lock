@@ -2734,6 +2734,8 @@ dependencies = [
  "serde_json",
  "skim",
  "speki-core",
+ "speki-dto",
+ "speki-fs",
  "strum 0.24.1",
  "strum_macros 0.24.3",
  "tokio",
@@ -2748,7 +2750,6 @@ dependencies = [
  "cli-justify",
  "dirs",
  "eyre",
- "filecash",
  "futures",
  "git2",
  "gkquad",
@@ -2761,6 +2762,7 @@ dependencies = [
  "serde",
  "serde_json",
  "speki-dto",
+ "speki-fs",
  "tokio",
  "toml",
  "ureq",
@@ -2781,6 +2783,17 @@ dependencies = [
  "tokio",
  "toml",
  "uuid",
+]
+
+[[package]]
+name = "speki-fs"
+version = "0.1.0"
+dependencies = [
+ "dirs",
+ "rayon",
+ "serde",
+ "speki-dto",
+ "toml",
 ]
 
 [[package]]

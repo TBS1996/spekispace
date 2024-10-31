@@ -1,9 +1,9 @@
 use dialoguer::{theme::ColorfulTheme, Input, Select};
-use speki_core::{
-    attribute::{Attribute, AttributeId},
-    card::AnyType,
-    Card, CardId,
-};
+use speki_core::{attribute::Attribute, card::AnyType, Card, CardId};
+use speki_dto::AttributeId;
+use speki_fs::paths;
+use std::path::Path;
+use std::process::Command;
 
 #[allow(dead_code)]
 pub fn notify(msg: impl Into<String>) {
@@ -92,19 +92,6 @@ pub fn get_lines(text: &str, line_width: usize, height: usize, position: usize) 
     }
 
     output
-}
-
-pub fn select_item_default_pos<T: ToString>(items: &[T], default: usize) -> usize {
-    Select::with_theme(&ColorfulTheme::default())
-        .with_prompt("")
-        .items(items)
-        .default(default)
-        .interact()
-        .unwrap()
-}
-
-pub fn select_item<T: ToString>(items: &[T]) -> usize {
-    select_item_default_pos(items, 0)
 }
 
 pub fn get_input_opt(prompt: &str) -> Option<String> {
@@ -217,4 +204,13 @@ mod cli_justify {
 
         justified
     }
+}
+
+pub fn edit_with_vim(id: CardId) {
+    let p = paths::get_cards_path().join(id.to_string());
+    open_file_with_vim(&p);
+}
+
+pub fn open_file_with_vim(path: &Path) {
+    Command::new("nvim").arg(path).status().unwrap();
 }

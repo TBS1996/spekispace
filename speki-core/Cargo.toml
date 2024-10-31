@@ -27,6 +27,6 @@ eyre.workspace = true
 rayon.workspace = true
 cli-justify.workspace = true
 samsvar.workspace = true
-filecash.workspace = true
 omtrent.workspace = true
 speki-dto.workspace = true
+speki-fs.workspace = true

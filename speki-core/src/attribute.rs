@@ -1,52 +1,20 @@
-use crate::paths::get_attributes_path;
 use crate::Card;
-use crate::{get_containing_file_paths, my_sanitize_filename};
 use eyre::Result;
-use serde::{Deserialize, Serialize};
-use speki_dto::CardId;
-use std::collections::BTreeSet;
-use std::fs;
-use std::io::Write;
+use speki_dto::{AttributeDTO, AttributeId, CardId, SpekiProvider};
+use speki_fs::FileProvider;
 use uuid::Uuid;
-
-#[derive(Serialize, Deserialize, Debug, Clone, Ord, Eq, PartialEq, PartialOrd, Copy, Hash)]
-#[serde(transparent)]
-pub struct AttributeId(Uuid);
-
-impl AsRef<Uuid> for AttributeId {
-    fn as_ref(&self) -> &Uuid {
-        &self.0
-    }
-}
-
-impl AttributeId {
-    pub fn into_inner(self) -> Uuid {
-        self.0
-    }
-
-    pub fn verify(id: impl AsRef<Uuid>) -> Option<Self> {
-        if let Some(concept) = Attribute::load(Self(*id.as_ref())) {
-            Some(concept.id)
-        } else {
-            None
-        }
-    }
-}
 
 /// An attribute of a sub-class or an instance
 /// predefined questions that are valid for all in its class.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct Attribute {
     pub pattern: String,
     pub id: AttributeId,
     /// The attribute is valid for this class
-    #[serde(alias = "concept")]
     pub class: CardId,
     // the answer to the attribute should be part of this
     // for example, if the attribute is 'where was {} born?' the type should be of concept place
     pub back_type: Option<CardId>,
-    #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
-    pub dependencies: BTreeSet<CardId>,
 }
 
 impl Attribute {
@@ -60,25 +28,37 @@ impl Attribute {
         }
     }
 
+    fn from_dto(dto: AttributeDTO) -> Self {
+        Self {
+            pattern: dto.pattern,
+            id: dto.id,
+            class: dto.class,
+            back_type: dto.back_type,
+        }
+    }
+
+    fn into_dto(self) -> AttributeDTO {
+        AttributeDTO {
+            pattern: self.pattern,
+            id: self.id,
+            class: self.class,
+            back_type: self.back_type,
+        }
+    }
+
     pub fn pattern(&self) -> &str {
         &self.pattern
     }
 
     pub fn load_all() -> Vec<Self> {
-        get_containing_file_paths(&get_attributes_path(), None)
+        FileProvider::load_all_attributes()
             .into_iter()
-            .map(|path| std::fs::read_to_string(path).unwrap())
-            .map(|s| toml::from_str(&s).unwrap())
+            .map(Self::from_dto)
             .collect()
     }
 
     pub fn save(&self) -> Result<()> {
-        let filename = my_sanitize_filename(&self.pattern);
-        let path = get_attributes_path().join(filename);
-        let mut f = fs::File::create(&path)?;
-        let s = toml::to_string_pretty(self)?;
-        f.write_all(&mut s.as_bytes())?;
-
+        FileProvider::save_attribute(self.clone().into_dto());
         Ok(())
     }
 
@@ -120,7 +100,6 @@ impl Attribute {
             pattern,
             id: AttributeId(Uuid::new_v4()),
             class: concept,
-            dependencies: Default::default(),
             back_type,
         };
 

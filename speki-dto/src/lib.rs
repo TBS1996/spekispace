@@ -2,10 +2,33 @@ use core::fmt;
 use omtrent::TimeStamp;
 use serde::{ser::SerializeSeq, Deserialize, Deserializer, Serialize};
 use serde_json::Value;
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Debug;
 use std::str::FromStr;
+use std::time::Duration;
 use uuid::Uuid;
+
+pub trait SpekiProvider {
+    fn load_all_cards() -> Vec<RawCard>;
+    fn save_card(card: RawCard);
+    fn load_card(id: CardId) -> Option<RawCard>;
+    fn delete_card(id: CardId);
+
+    fn load_all_attributes() -> Vec<AttributeDTO>;
+    fn save_attribute(attribute: AttributeDTO);
+    fn load_attribute(id: AttributeId) -> Option<AttributeDTO>;
+    fn delete_attribute(id: AttributeId);
+
+    fn load_reviews(id: CardId) -> Vec<Review>;
+    fn add_review(id: CardId, review: Review) {
+        let mut reviews = Self::load_reviews(id);
+        dbg!(&reviews);
+        reviews.push(review);
+        Self::save_reviews(id, reviews);
+        dbg!(Self::load_reviews(id));
+    }
+    fn save_reviews(id: CardId, reviews: Vec<Review>);
+}
 
 #[derive(Serialize, Deserialize, Debug, Clone, Default)]
 #[serde(rename_all = "lowercase")]
@@ -76,28 +99,6 @@ impl From<String> for BackSide {
         }
     }
 }
-/*
-pub fn matches_constraint(&self, constraint: BackConstraint) -> bool {
-    match (self, constraint) {
-        (BackSide::Card(card_id), BackConstraint::Card(card_characteristic)) => {
-            card_characteristic.card_matches(*card_id)
-        }
-        (BackSide::List(cardlist), BackConstraint::List(vec)) => {
-            if cardlist.len() != vec.len() {
-                return false;
-            }
-            cardlist
-                .iter()
-                .zip(vec.iter())
-                .all(|(card, charac)| charac.card_matches(*card))
-        }
-
-        (BackSide::Time(_), BackConstraint::Time) => true,
-
-        (_, _) => false,
-    }
-}
-*/
 
 impl BackSide {
     pub fn dependencies(&self) -> BTreeSet<CardId> {
@@ -169,6 +170,10 @@ impl Serialize for BackSide {
     }
 }
 
+fn is_false(flag: &bool) -> bool {
+    !flag
+}
+
 #[derive(Serialize, Deserialize, Default, Debug, Clone)]
 pub struct RawType {
     pub ty: CType,
@@ -180,4 +185,90 @@ pub struct RawType {
     pub start_time: Option<String>,
     pub end_time: Option<String>,
     pub parent_event: Option<Uuid>,
+}
+
+#[derive(Serialize, Deserialize, Default, Debug)]
+pub struct RawCard {
+    pub id: Uuid,
+    #[serde(flatten)]
+    pub data: RawType,
+    #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
+    pub dependencies: BTreeSet<Uuid>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub tags: BTreeMap<String, String>,
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub suspended: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AttributeDTO {
+    pub pattern: String,
+    pub id: AttributeId,
+    pub class: CardId,
+    pub back_type: Option<CardId>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, Ord, Eq, PartialEq, PartialOrd, Copy, Hash)]
+#[serde(transparent)]
+pub struct AttributeId(pub Uuid);
+
+impl AsRef<Uuid> for AttributeId {
+    fn as_ref(&self) -> &Uuid {
+        &self.0
+    }
+}
+
+impl AttributeId {
+    pub fn into_inner(self) -> Uuid {
+        self.0
+    }
+}
+
+#[derive(Ord, PartialOrd, Eq, PartialEq, Hash, Clone, Debug, Default)]
+pub struct Review {
+    // When (unix time) did the review take place?
+    pub timestamp: Duration,
+    // Recall grade.
+    pub grade: Recall,
+    // How long you spent before attempting recall.
+    pub time_spent: Duration,
+}
+
+#[derive(Ord, PartialOrd, Eq, PartialEq, Hash, Deserialize, Serialize, Debug, Default, Clone)]
+#[serde(rename_all = "lowercase")]
+pub enum Recall {
+    // No recall, not even when you saw the answer.
+    #[default]
+    None,
+    // No recall, but you remember the answer when you read it.
+    Late,
+    // Struggled but you got the answer right or somewhat right.
+    Some,
+    // No hesitation, perfect recall.
+    Perfect,
+}
+
+impl Recall {
+    pub fn get_factor(&self) -> f32 {
+        match self {
+            Recall::None => 0.1,
+            Recall::Late => 0.25,
+            Recall::Some => 2.,
+            Recall::Perfect => 3.,
+        }
+    }
+}
+
+impl std::str::FromStr for Recall {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "1" => Ok(Self::None),
+            "2" => Ok(Self::Late),
+            "3" => Ok(Self::Some),
+            "4" => Ok(Self::Perfect),
+            _ => Err(()),
+        }
+    }
 }

@@ -1,9 +1,9 @@
 use crate::{
     add_any_card, get_timestamp, new_attribute, new_class, opt_input, print_card_info,
     utils::{
-        clear_terminal, get_input, notify, select_from_all_cards, select_from_all_class_cards,
-        select_from_all_instance_cards, select_from_attributes, select_from_class_attributes,
-        select_from_subclass_cards,
+        clear_terminal, edit_with_vim, get_input, notify, select_from_all_cards,
+        select_from_all_class_cards, select_from_all_instance_cards, select_from_attributes,
+        select_from_class_attributes, select_from_subclass_cards,
     },
 };
 use dialoguer::{theme::ColorfulTheme, Input, Select};
@@ -13,10 +13,10 @@ use speki_core::{
     card::{
         display_backside, AnyType, AttributeCard, ClassCard, EventCard, InstanceCard, StatementCard,
     },
-    paths,
-    reviews::Recall,
     BackSide, Card, CardId,
 };
+use speki_dto::Recall;
+use speki_fs::paths;
 use std::{ops::ControlFlow, str::FromStr};
 
 fn review_help() -> &'static str {
@@ -370,7 +370,9 @@ fn handle_action(card: CardId, action: CardAction) -> ControlFlow<()> {
                 Card::from_id(card.id()).unwrap().set_ref(reff);
             }
         }
-        CardAction::Edit => speki_core::edit(card.id()),
+        CardAction::Edit => {
+            let _ = edit_with_vim(card.id());
+        }
         CardAction::Delete => {
             speki_core::delete(card.id());
             return ControlFlow::Break(());

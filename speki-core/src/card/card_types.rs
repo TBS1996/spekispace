@@ -1,5 +1,5 @@
 use omtrent::TimeStamp;
-use speki_dto::BackSide;
+use speki_dto::{AttributeId, BackSide};
 
 use super::*;
 
@@ -29,7 +29,7 @@ impl CardTrait for InstanceCard {
 
 impl CardTrait for AttributeCard {
     fn get_dependencies(&self) -> BTreeSet<CardId> {
-        let mut dependencies = Attribute::load(self.attribute).unwrap().dependencies;
+        let mut dependencies = BTreeSet::default();
         dependencies.insert(self.instance);
         dependencies.extend(self.back.dependencies().iter());
         dependencies

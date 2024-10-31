@@ -4,7 +4,8 @@ members = [
     "samsvar",
     "speki-cli",
     "speki-core",
-    "speki-dto",
+    "speki-dto", 
+    "speki-fs",
     "timestamped",
 ]
 
@@ -18,6 +19,7 @@ samsvar = { path = "samsvar" }
 filecash = { path = "fsload" }
 omtrent = { path = "timestamped" }
 speki-dto = { path = "speki-dto" }
+speki-fs = { path = "speki-fs" }
 
 clap = { version = "4.5.17", features = ["derive"] }
 skim = "0.10.4"

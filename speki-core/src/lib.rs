@@ -2,21 +2,18 @@ use attribute::Attribute;
 pub use card::Card;
 use card::{AnyType, AttributeCard, CardTrait, InstanceCard, NormalCard, UnfinishedCard};
 use eyre::Result;
-use reviews::Recall;
 use samsvar::Matcher;
 use sanitize_filename::sanitize;
-use std::{
-    collections::BTreeSet,
-    path::{Path, PathBuf},
-};
+use speki_dto::Recall;
+use speki_dto::SpekiProvider;
+use speki_fs::FileProvider;
+use std::collections::BTreeSet;
 
+//pub mod collections;
+//pub mod github;
 pub mod attribute;
 pub mod card;
-pub mod collections;
 pub mod common;
-pub mod config;
-pub mod github;
-pub mod paths;
 pub mod recall_rate;
 pub mod reviews;
 
@@ -63,7 +60,7 @@ pub fn add_unfinished(front: String) -> CardId {
 
 pub fn review(card_id: CardId, grade: Recall) {
     let mut card = Card::from_id(card_id).unwrap();
-    card.new_review(grade, Default::default());
+    card.new_review(grade);
 }
 
 pub fn set_class(card_id: CardId, class: CardId) -> Result<()> {
@@ -92,41 +89,13 @@ pub fn card_from_id(card_id: CardId) -> Card<AnyType> {
     Card::from_id(card_id).unwrap()
 }
 
-pub fn delete(card_id: CardId) {
-    let path = Card::from_id(card_id).unwrap().as_path();
-    std::fs::remove_file(path).unwrap();
+pub fn delete(id: CardId) {
+    FileProvider::delete_card(id);
 }
 
 pub fn as_graph() -> String {
     // mermaid::export()
     graphviz::export()
-}
-
-pub fn edit(card_id: CardId) {
-    Card::from_id(card_id).unwrap().edit_with_vim();
-}
-
-pub fn get_containing_file_paths(directory: &Path, ext: Option<&str>) -> Vec<PathBuf> {
-    let mut paths = vec![];
-
-    for entry in std::fs::read_dir(directory).unwrap() {
-        let entry = entry.unwrap();
-        let path = entry.path();
-
-        if !path.is_file() {
-            continue;
-        }
-
-        match ext {
-            Some(ext) => {
-                if path.extension().and_then(|s| s.to_str()) == Some(ext) {
-                    paths.push(path)
-                }
-            }
-            None => paths.push(path),
-        }
-    }
-    paths
 }
 
 pub fn my_sanitize_filename(s: &str) -> String {

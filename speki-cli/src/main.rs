@@ -1,10 +1,8 @@
 use add_cards::add_cards_menu;
 use clap::Parser;
-use collections::col_stuff;
 use console::style;
 use dialoguer::{theme::ColorfulTheme, Input, Select};
 use incread::inc_path;
-use opener::open;
 use review::{review_menu, view_card};
 use speki_core::{
     attribute::Attribute,
@@ -12,17 +10,22 @@ use speki_core::{
         AnyType, AttributeCard, ClassCard, EventCard, InstanceCard, NormalCard, StatementCard,
         UnfinishedCard,
     },
-    github::{poll_for_token, request_device_code, LoginInfo},
-    paths::{config_dir, get_cards_path, get_review_path},
-    BackSide, CType, Card, CardId, TimeStamp,
+    // github::{poll_for_token, request_device_code, LoginInfo},
+    BackSide,
+    CType,
+    Card,
+    CardId,
+    TimeStamp,
 };
 use utils::{
-    clear_terminal, notify, select_from_all_cards, select_from_all_class_cards,
-    select_from_all_instance_cards, select_from_attributes,
+    notify, select_from_all_cards, select_from_all_class_cards, select_from_all_instance_cards,
+    select_from_attributes,
 };
 
+use speki_fs::paths::{config_dir, get_cards_path, get_review_path};
+
+//mod collections;
 mod add_cards;
-mod collections;
 mod incread;
 mod review;
 mod unfinished;
@@ -222,31 +225,12 @@ fn inspect_files() {
 }
 
 async fn menu() {
-    let mut login = LoginInfo::load();
-
     //new_repo_col(&login.clone().unwrap(), "repo3", true);
 
     loop {
         utils::clear_terminal();
-        if let Some(info) = &login {
-            println!("signed in as {}", info.login)
-        };
 
-        let sign = if login.is_some() {
-            "sign out"
-        } else {
-            "sign in"
-        };
-
-        let items = vec![
-            "Review cards",
-            "Add cards",
-            "Manage collections",
-            "Inspect files",
-            "sync",
-            "view card",
-            sign,
-        ];
+        let items = vec!["Review cards", "Add cards", "Inspect files", "view card"];
 
         let selection = Select::with_theme(&ColorfulTheme::default())
             .items(&items)
@@ -257,22 +241,12 @@ async fn menu() {
         match selection {
             0 => review_menu(),
             1 => add_cards_menu().await,
-            2 => col_stuff(),
-            3 => inspect_files(),
-            4 => {
-                if let Some(login) = LoginInfo::load() {
-                    speki_core::github::sync(&login);
-                }
-            }
-            5 => {
+            2 => inspect_files(),
+            3 => {
                 if let Some(card) = select_from_all_cards() {
                     view_card(card, false);
                 }
             }
-            6 => match login.take() {
-                Some(login) => login.delete_login(),
-                None => login = Some(authenticate()),
-            },
             _ => panic!(),
         }
     }
@@ -344,16 +318,6 @@ struct Cli {
     healthcheck: bool,
     #[arg(long)]
     roundtrip: bool,
-}
-
-pub fn authenticate() -> LoginInfo {
-    clear_terminal();
-    let res = request_device_code().unwrap();
-    open(&res.verification_uri).unwrap();
-    clear_terminal();
-    notify(format!("enter code in browser: {}", &res.user_code));
-    let token = poll_for_token(&res.device_code, res.interval);
-    token
 }
 
 #[tokio::main]

@@ -12,3 +12,4 @@ tokio.workspace = true
 toml.workspace = true
 uuid.workspace = true
 omtrent.workspace = true
+#filecash.workspace = true

@@ -1,9 +1,8 @@
 use std::time::Duration;
 
-use crate::{
-    card::RecallRate,
-    reviews::{Recall, Reviews},
-};
+use speki_dto::Recall;
+
+use crate::{card::RecallRate, reviews::Reviews};
 
 /// Randomizes the flashcard factor with a factor of 0.5 to 1.4 to avoid clustering of reviews
 fn randomize_factor(factor: f32, prev_review_timestamp: Duration) -> f32 {

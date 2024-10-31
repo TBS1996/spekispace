@@ -1,22 +1,23 @@
 use crate::attribute::Attribute;
-use crate::attribute::AttributeId;
 use crate::common::current_time;
-use crate::common::open_file_with_vim;
-use crate::reviews::{Recall, Review, Reviews};
-use filecash::get_cards_path;
-use filecash::FsLoad;
+use crate::reviews::Reviews;
 use rayon::prelude::*;
 use samsvar::json;
 use samsvar::Matcher;
 use serializing::from_any;
+use serializing::from_raw_card;
 use serializing::into_any;
-use serializing::RawCard;
+use serializing::new_raw_card;
 use speki_dto::BackSide;
 use speki_dto::CType;
 use speki_dto::CardId;
+use speki_dto::RawCard;
+use speki_dto::Recall;
+use speki_dto::Review;
+use speki_dto::SpekiProvider;
+use speki_fs::FileProvider;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Debug;
-use std::path::PathBuf;
 use std::time::Duration;
 
 pub type RecallRate = f32;
@@ -211,10 +212,11 @@ impl<T: CardTrait> AsRef<CardId> for Card<T> {
 
 impl Card<AttributeCard> {
     pub fn new(attr: AttributeCard) -> Card<AnyType> {
-        let raw = RawCard::new_attribute(attr);
+        let raw = new_raw_card(attr);
         let id = raw.id;
-        raw.save();
-        Card::from_raw(RawCard::load(id).unwrap())
+        FileProvider::save_card(raw);
+        let raw = FileProvider::load_card(CardId(id)).unwrap();
+        Card::from_raw(raw)
     }
 }
 
@@ -270,13 +272,8 @@ impl Card<AnyType> {
         classes
     }
 
-    pub fn dependents(id: CardId) -> BTreeSet<CardId> {
-        RawCard::load(id.into_inner())
-            .unwrap()
-            .dependents()
-            .into_iter()
-            .map(|id| CardId(id))
-            .collect()
+    pub fn dependents(_id: CardId) -> BTreeSet<CardId> {
+        Default::default()
     }
 
     pub fn set_ref(mut self, reff: CardId) -> Card<AnyType> {
@@ -288,7 +285,7 @@ impl Card<AnyType> {
 
     // potentially expensive function!
     pub fn from_id(id: CardId) -> Option<Card<AnyType>> {
-        Some(Self::from_raw(RawCard::load(id.into_inner())?))
+        Some(Self::from_raw(FileProvider::load_card(id).unwrap()))
     }
 
     pub fn is_finished(&self) -> bool {
@@ -306,8 +303,10 @@ impl Card<AnyType> {
     // Call this function every time SavedCard is mutated.
     pub fn persist(&mut self) {
         self.history.save(self.id());
-        RawCard::from_card(self.clone()).save();
-        *self = Self::from_raw(RawCard::load(self.id().into_inner()).unwrap());
+        let raw = from_raw_card(self.clone());
+        FileProvider::save_card(raw);
+
+        *self = Self::from_raw(FileProvider::load_card(self.id()).unwrap());
     }
 
     pub fn from_raw(raw_card: RawCard) -> Card<AnyType> {
@@ -322,74 +321,82 @@ impl Card<AnyType> {
                 .map(|id| CardId(id))
                 .collect(),
             tags: raw_card.tags,
-            history: Reviews::load(id).unwrap_or_default(),
+            history: Reviews::load(id),
             suspended: IsSuspended::from(raw_card.suspended),
         }
     }
 
     pub fn save_at(raw_card: RawCard) -> Card<AnyType> {
         let id = raw_card.id;
-        raw_card.save();
-        let raw_card = RawCard::load(id).unwrap();
+        FileProvider::save_card(raw_card);
+        let raw_card = FileProvider::load_card(CardId(id)).unwrap();
         Self::from_raw(raw_card)
     }
 
     pub fn new_any(any: AnyType) -> Card<AnyType> {
-        let raw_card = RawCard::new(any);
-        raw_card.save();
-        let raw_card = RawCard::load(raw_card.id).unwrap();
+        let raw_card = new_raw_card(any);
+        let id = raw_card.id;
+        FileProvider::save_card(raw_card);
+        let raw_card = FileProvider::load_card(CardId(id)).unwrap();
         Self::from_raw(raw_card)
     }
 
     pub fn new_normal(unfinished: NormalCard) -> Card<AnyType> {
-        let raw_card = RawCard::new(unfinished);
-        raw_card.save();
-        let raw_card = RawCard::load(raw_card.id).unwrap();
+        let raw_card = new_raw_card(unfinished);
+        let id = raw_card.id;
+        FileProvider::save_card(raw_card);
+        let raw_card = FileProvider::load_card(CardId(id)).unwrap();
         Self::from_raw(raw_card)
     }
 
     pub fn new_event(class: EventCard) -> Card<AnyType> {
-        let raw_card = RawCard::new(class);
-        raw_card.save();
-        let raw_card = RawCard::load(raw_card.id).unwrap();
+        let raw_card = new_raw_card(class);
+        let id = raw_card.id;
+        FileProvider::save_card(raw_card);
+        let raw_card = FileProvider::load_card(CardId(id)).unwrap();
         Self::from_raw(raw_card)
     }
     pub fn new_statement(class: StatementCard) -> Card<AnyType> {
-        let raw_card = RawCard::new(class);
-        raw_card.save();
-        let raw_card = RawCard::load(raw_card.id).unwrap();
+        let raw_card = new_raw_card(class);
+        let id = raw_card.id;
+        FileProvider::save_card(raw_card);
+        let raw_card = FileProvider::load_card(CardId(id)).unwrap();
         Self::from_raw(raw_card)
     }
     pub fn new_class(class: ClassCard) -> Card<AnyType> {
-        let raw_card = RawCard::new(class);
-        raw_card.save();
-        let raw_card = RawCard::load(raw_card.id).unwrap();
+        let raw_card = new_raw_card(class);
+        let id = CardId(raw_card.id);
+        FileProvider::save_card(raw_card);
+        let raw_card = FileProvider::load_card(id).unwrap();
         Self::from_raw(raw_card)
     }
 
     pub fn new_attribute(unfinished: AttributeCard) -> Card<AnyType> {
-        let raw_card = RawCard::new(unfinished);
-        raw_card.save();
-        let raw_card = RawCard::load(raw_card.id).unwrap();
+        let raw_card = new_raw_card(unfinished);
+        let id = CardId(raw_card.id);
+        FileProvider::save_card(raw_card);
+        let raw_card = FileProvider::load_card(id).unwrap();
         Self::from_raw(raw_card)
     }
 
     pub fn new_instance(instance: InstanceCard) -> Card<AnyType> {
-        let raw_card = RawCard::new(instance);
-        raw_card.save();
-        let raw_card = RawCard::load(raw_card.id).unwrap();
+        let raw_card = new_raw_card(instance);
+        let id = CardId(raw_card.id);
+        FileProvider::save_card(raw_card);
+        let raw_card = FileProvider::load_card(id).unwrap();
         Self::from_raw(raw_card)
     }
 
     pub fn new_unfinished(unfinished: UnfinishedCard) -> Card<AnyType> {
-        let raw_card = RawCard::new(unfinished);
-        raw_card.save();
-        let raw_card = RawCard::load(raw_card.id).unwrap();
+        let raw_card = new_raw_card(unfinished);
+        let id = CardId(raw_card.id);
+        FileProvider::save_card(raw_card);
+        let raw_card = FileProvider::load_card(id).unwrap();
         Self::from_raw(raw_card)
     }
 
     pub fn load_all_cards() -> Vec<Card<AnyType>> {
-        RawCard::load_all()
+        FileProvider::load_all_cards()
             .into_par_iter()
             .map(Self::from_raw)
             .collect()
@@ -446,15 +453,9 @@ impl Card<AnyType> {
         self.persist();
     }
 
-    pub fn edit_with_vim(&self) -> Card<AnyType> {
-        let path = self.as_path();
-        open_file_with_vim(path.as_path()).unwrap();
-        Self::from_raw(RawCard::load(self.id().into_inner()).unwrap())
-    }
-
-    pub fn new_review(&mut self, grade: Recall, time: Duration) {
-        let review = Review::new(grade, time);
-        self.history.add_review(review);
+    pub fn new_review(&mut self, grade: Recall) {
+        let time = current_time();
+        self.history.add_review(self.id, grade, time);
         self.persist();
     }
 
@@ -472,9 +473,9 @@ impl Card<AnyType> {
 
     pub fn into_type(self, data: impl Into<AnyType>) -> Card<AnyType> {
         let id = self.id();
-        let mut raw = RawCard::from_card(self);
+        let mut raw = from_raw_card(self);
         raw.data = from_any(data.into());
-        raw.save();
+        FileProvider::save_card(raw);
         Card::from_id(id).unwrap()
     }
 }
@@ -612,10 +613,6 @@ impl<T: CardTrait> Card<T> {
         let mut deps = self.dependencies.clone();
         deps.extend(self.data.get_dependencies());
         deps
-    }
-
-    pub fn as_path(&self) -> PathBuf {
-        get_cards_path().join(self.id.into_inner().to_string())
     }
 
     pub fn lapses(&self) -> u32 {

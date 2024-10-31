@@ -1,13 +1,8 @@
-use crate::attribute::AttributeId;
-use crate::paths;
-use filecash::FsLoad;
 use omtrent::TimeStamp;
 use serde::de::{self, Deserializer};
 use serde::{Deserialize, Serialize};
-use speki_dto::CardId;
-use std::collections::{BTreeMap, BTreeSet};
-use std::fmt::Debug;
-use std::path::PathBuf;
+use speki_dto::RawCard;
+use speki_dto::{AttributeId, CardId};
 use std::time::Duration;
 use toml::Value;
 use uuid::Uuid;
@@ -15,13 +10,9 @@ use uuid::Uuid;
 use speki_dto::{CType, RawType};
 
 use super::{
-    AnyType, AttributeCard, Card, CardTrait, ClassCard, EventCard, InstanceCard, IsSuspended,
-    NormalCard, StatementCard, UnfinishedCard,
+    AnyType, AttributeCard, Card, ClassCard, EventCard, InstanceCard, IsSuspended, NormalCard,
+    StatementCard, UnfinishedCard,
 };
-
-fn is_false(flag: &bool) -> bool {
-    !flag
-}
 
 pub fn into_any(raw: RawType) -> AnyType {
     match raw.ty {
@@ -41,7 +32,7 @@ pub fn into_any(raw: RawType) -> AnyType {
         }
         .into(),
         CType::Attribute => AttributeCard {
-            attribute: AttributeId::verify(raw.attribute.unwrap()).unwrap(),
+            attribute: AttributeId(raw.attribute.unwrap()),
             back: raw.back.unwrap(),
             instance: CardId(raw.instance.unwrap()),
         }
@@ -126,130 +117,83 @@ pub fn from_any(ty: AnyType) -> RawType {
     raw
 }
 
-impl FsLoad for RawCard {
-    fn id(&self) -> Uuid {
-        self.id
+pub fn new_raw_card(card: impl Into<AnyType>) -> RawCard {
+    let card: AnyType = card.into();
+    match card {
+        AnyType::Instance(concept) => new_concept(concept),
+        AnyType::Normal(normal) => new_normal(normal),
+        AnyType::Unfinished(unfinished) => new_unfinished(unfinished),
+        AnyType::Attribute(attribute) => new_attribute(attribute),
+        AnyType::Class(class) => new_class(class),
+        AnyType::Statement(statement) => new_statement(statement),
+        AnyType::Event(event) => new_event(event),
     }
+}
 
-    fn type_name() -> String {
-        String::from("speki")
+pub fn new_unfinished(unfinished: UnfinishedCard) -> RawCard {
+    RawCard {
+        id: Uuid::new_v4(),
+        data: from_any(unfinished.into()),
+        ..Default::default()
     }
+}
 
-    fn save_paths() -> Vec<PathBuf> {
-        let p1 = paths::get_cards_path();
-        vec![p1]
+pub fn new_event(statement: EventCard) -> RawCard {
+    RawCard {
+        id: Uuid::new_v4(),
+        data: from_any(statement.into()),
+        ..Default::default()
     }
+}
 
-    fn file_name(&self) -> String {
-        into_any(self.data.clone()).display_front()
+pub fn new_statement(statement: StatementCard) -> RawCard {
+    RawCard {
+        id: Uuid::new_v4(),
+        data: from_any(statement.into()),
+        ..Default::default()
     }
+}
 
-    fn dependencies(&self) -> BTreeSet<Uuid> {
-        let mut deps = self.dependencies.clone();
-        let _any = into_any(self.data.clone());
-        let other_deps: BTreeSet<Uuid> = _any
-            .get_dependencies()
+pub fn new_class(class: ClassCard) -> RawCard {
+    RawCard {
+        id: Uuid::new_v4(),
+        data: from_any(class.into()),
+        ..Default::default()
+    }
+}
+pub fn new_attribute(attr: AttributeCard) -> RawCard {
+    RawCard {
+        id: Uuid::new_v4(),
+        data: from_any(attr.into()),
+        ..Default::default()
+    }
+}
+pub fn new_concept(concept: InstanceCard) -> RawCard {
+    RawCard {
+        id: Uuid::new_v4(),
+        data: from_any(concept.into()),
+        ..Default::default()
+    }
+}
+pub fn new_normal(normal: NormalCard) -> RawCard {
+    RawCard {
+        id: Uuid::new_v4(),
+        data: from_any(normal.into()),
+        ..Default::default()
+    }
+}
+
+pub fn from_raw_card(card: Card<AnyType>) -> RawCard {
+    RawCard {
+        id: card.id.into_inner(),
+        data: from_any(card.data),
+        dependencies: card
+            .dependencies
             .into_iter()
             .map(|id| id.into_inner())
-            .collect();
-        deps.extend(other_deps.iter());
-
-        deps
-    }
-}
-
-#[derive(Serialize, Deserialize, Default, Debug)]
-pub struct RawCard {
-    pub id: Uuid,
-    #[serde(flatten)]
-    pub data: RawType,
-    #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
-    pub dependencies: BTreeSet<Uuid>,
-    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
-    pub tags: BTreeMap<String, String>,
-    #[serde(default, skip_serializing_if = "is_false")]
-    pub suspended: bool,
-}
-
-impl RawCard {
-    pub fn new(card: impl Into<AnyType>) -> Self {
-        let card: AnyType = card.into();
-        match card {
-            AnyType::Instance(concept) => Self::new_concept(concept),
-            AnyType::Normal(normal) => Self::new_normal(normal),
-            AnyType::Unfinished(unfinished) => Self::new_unfinished(unfinished),
-            AnyType::Attribute(attribute) => Self::new_attribute(attribute),
-            AnyType::Class(class) => Self::new_class(class),
-            AnyType::Statement(statement) => Self::new_statement(statement),
-            AnyType::Event(event) => Self::new_event(event),
-        }
-    }
-
-    pub fn new_unfinished(unfinished: UnfinishedCard) -> Self {
-        Self {
-            id: Uuid::new_v4(),
-            data: from_any(unfinished.into()),
-            ..Default::default()
-        }
-    }
-
-    pub fn new_event(statement: EventCard) -> Self {
-        Self {
-            id: Uuid::new_v4(),
-            data: from_any(statement.into()),
-            ..Default::default()
-        }
-    }
-
-    pub fn new_statement(statement: StatementCard) -> Self {
-        Self {
-            id: Uuid::new_v4(),
-            data: from_any(statement.into()),
-            ..Default::default()
-        }
-    }
-
-    pub fn new_class(class: ClassCard) -> Self {
-        Self {
-            id: Uuid::new_v4(),
-            data: from_any(class.into()),
-            ..Default::default()
-        }
-    }
-    pub fn new_attribute(attr: AttributeCard) -> Self {
-        Self {
-            id: Uuid::new_v4(),
-            data: from_any(attr.into()),
-            ..Default::default()
-        }
-    }
-    pub fn new_concept(concept: InstanceCard) -> Self {
-        Self {
-            id: Uuid::new_v4(),
-            data: from_any(concept.into()),
-            ..Default::default()
-        }
-    }
-    pub fn new_normal(normal: NormalCard) -> Self {
-        Self {
-            id: Uuid::new_v4(),
-            data: from_any(normal.into()),
-            ..Default::default()
-        }
-    }
-
-    pub fn from_card(card: Card<AnyType>) -> Self {
-        Self {
-            id: card.id.into_inner(),
-            data: from_any(card.data),
-            dependencies: card
-                .dependencies
-                .into_iter()
-                .map(|id| id.into_inner())
-                .collect(),
-            tags: card.tags,
-            suspended: card.suspended.is_suspended(),
-        }
+            .collect(),
+        tags: card.tags,
+        suspended: card.suspended.is_suspended(),
     }
 }
 

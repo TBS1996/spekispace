@@ -3,9 +3,9 @@ use dialoguer::theme::ColorfulTheme;
 use dialoguer::Select;
 use serde::{Deserialize, Serialize};
 use speki_core::common::current_time;
-use speki_core::paths::get_share_path;
 use speki_core::Card;
 use speki_core::CardId;
+use speki_fs::paths;
 use std::collections::HashMap;
 use std::fs::{self, read_to_string};
 use std::io::{self, Write};
@@ -18,7 +18,7 @@ use crate::utils::get_lines;
 use crate::utils::{clear_terminal, notify};
 
 pub fn inc_path() -> PathBuf {
-    let path = get_share_path().join("texts");
+    let path = paths::get_share_path().join("texts");
     fs::create_dir_all(&path).unwrap();
     path
 }
@@ -138,7 +138,7 @@ impl TextProgress {
     }
 
     fn path() -> PathBuf {
-        speki_core::paths::get_share_path().join("bookmarks")
+        paths::get_share_path().join("bookmarks")
     }
 
     fn load() -> Option<Self> {

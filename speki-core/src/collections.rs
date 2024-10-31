@@ -8,7 +8,7 @@ use git2::{
     Cred, FetchOptions, IndexAddOption, PushOptions, RemoteCallbacks, Repository, Signature,
 };
 
-use crate::{github::LoginInfo, paths::get_collections_path};
+use crate::github::LoginInfo;
 
 pub struct Collection {
     pub name: String,

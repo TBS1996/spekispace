@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use std::{
     fs::{self, create_dir_all},
     path::PathBuf,
@@ -27,12 +29,6 @@ pub fn get_collections_path() -> PathBuf {
     path
 }
 
-pub fn get_cards_path() -> PathBuf {
-    let path = get_share_path().join("cards");
-    create_dir_all(&path).unwrap();
-    path
-}
-
 pub fn get_concepts_path() -> PathBuf {
     let path = get_share_path().join("concepts");
     create_dir_all(&path).unwrap();
@@ -41,6 +37,12 @@ pub fn get_concepts_path() -> PathBuf {
 
 pub fn get_attributes_path() -> PathBuf {
     let path = get_share_path().join("attributes");
+    create_dir_all(&path).unwrap();
+    path
+}
+
+pub fn get_cards_path() -> PathBuf {
+    let path = get_share_path().join("cards");
     create_dir_all(&path).unwrap();
     path
 }
