@@ -2,7 +2,6 @@ use cli_epub_to_text::epub_to_text;
 use dialoguer::theme::ColorfulTheme;
 use dialoguer::Select;
 use serde::{Deserialize, Serialize};
-use speki_core::categories::Category;
 use speki_core::common::current_time;
 use speki_core::paths::get_share_path;
 use speki_core::Card;
@@ -15,7 +14,7 @@ use std::time::Duration;
 
 use crate::add_any_card;
 use crate::review::view_card;
-use crate::utils::{choose_folder, get_lines};
+use crate::utils::get_lines;
 use crate::utils::{clear_terminal, notify};
 
 pub fn inc_path() -> PathBuf {
@@ -45,9 +44,7 @@ impl TextFile {
         let mut recall_rate: f32 = 1.0;
         for (card, _) in &self.added_cards {
             let card = Card::from_id(*card).unwrap();
-            if card.days_since_created() > 2.0 {
-                recall_rate = recall_rate.min(card.min_rec_recall_rate()?);
-            }
+            recall_rate = recall_rate.min(card.min_rec_recall_rate()?);
         }
 
         Some(recall_rate)
@@ -77,12 +74,6 @@ impl TextFile {
         self.position
     }
 
-    pub fn save_cat(&mut self, path: PathBuf) {
-        let mut txt = TextProgress::xload();
-        self.category = Some(path);
-        txt.0.insert(self.path.clone(), self.clone());
-        txt.save();
-    }
     pub fn save_pos(&mut self, new_pos: usize) {
         let mut txt = TextProgress::xload();
         self.position = new_pos;
@@ -228,12 +219,6 @@ pub fn textstuff() {
 
     let mut textfile = select_text(textfiles);
     let text = textfile.load_text();
-    let def_cat = textfile
-        .category
-        .clone()
-        .map(|path| Category::from_dir_path(&path));
-    let category = choose_folder(def_cat.as_ref());
-    textfile.save_cat(category.as_path());
 
     let opts = [
         "add card",
@@ -280,7 +265,7 @@ pub fn textstuff() {
         menu_position = idx;
         match idx {
             0 => {
-                if let Some(id) = add_any_card(&category) {
+                if let Some(id) = add_any_card() {
                     textfile.add_card(id);
                 };
             }

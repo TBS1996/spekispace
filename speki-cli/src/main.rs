@@ -12,7 +12,6 @@ use speki_core::{
         AnyType, AttributeCard, ClassCard, EventCard, InstanceCard, NormalCard, StatementCard,
         UnfinishedCard,
     },
-    categories::Category,
     github::{poll_for_token, request_device_code, LoginInfo},
     paths::{config_dir, get_cards_path, get_review_path},
     BackSide, CType, Card, CardId, TimeStamp,
@@ -139,9 +138,9 @@ pub fn get_timestamp(front: &str) -> TimeStamp {
     }
 }
 
-pub fn create_card(ty: CType, category: &Category) -> Option<Card<AnyType>> {
+pub fn create_card(ty: CType) -> Option<Card<AnyType>> {
     let ty = create_type(ty)?;
-    Some(Card::new_any(ty, category))
+    Some(Card::new_any(ty))
 }
 
 pub fn create_type(ty: CType) -> Option<AnyType> {
@@ -191,9 +190,9 @@ pub fn choose_type() -> Option<CType> {
     .into()
 }
 
-pub fn add_any_card(category: &Category) -> Option<CardId> {
+pub fn add_any_card() -> Option<CardId> {
     let ty = choose_type()?;
-    Some(create_card(ty, category)?.id())
+    Some(create_card(ty)?.id())
 }
 
 fn inspect_files() {
@@ -363,12 +362,11 @@ async fn main() {
 
     if cli.add.is_some() {
         let s = cli.add.unwrap();
-        let category = Category::default();
 
         if let Some((front, back)) = s.split_once(";") {
-            speki_core::add_card(front.to_string(), back.to_string(), &category);
+            speki_core::add_card(front.to_string(), back.to_string());
         } else {
-            speki_core::add_unfinished(s, &category);
+            speki_core::add_unfinished(s);
         }
     } else if cli.list {
         dbg!(speki_core::load_cards());

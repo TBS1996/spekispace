@@ -1,6 +1,5 @@
 use dirs::home_dir;
 use rayon::prelude::*;
-use sanitize_filename::sanitize;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use std::marker::PhantomData;
 use std::{
@@ -76,6 +75,17 @@ impl<T: FsLoad> CacheInfo<T> {
     }
 }
 
+pub fn get_cards_path() -> PathBuf {
+    let path = get_share_path().join("cards");
+    std::fs::create_dir_all(&path).unwrap();
+    path
+}
+
+pub fn get_share_path() -> PathBuf {
+    let home = dirs::home_dir().unwrap();
+    home.join(".local/share/speki/")
+}
+
 pub trait FsLoad: Serialize + DeserializeOwned + Send {
     fn id(&self) -> Uuid;
 
@@ -90,42 +100,11 @@ pub trait FsLoad: Serialize + DeserializeOwned + Send {
     }
 
     fn save(&self) {
-        let path = Self::load_path_with_cache::<Self>(Self::save_paths(), self.id())
-            .unwrap_or_else(|| Self::save_paths()[0].join(self.file_name()));
+        let path = get_cards_path().join(self.id().to_string());
         let s: String = toml::to_string(&self).unwrap();
         let mut file = std::fs::File::create(&path).unwrap();
         file.write_all(&mut s.as_bytes()).unwrap();
-
         CacheInfo::<Self>::cache_path(self.id(), path);
-        CacheInfo::cache_dependents(self);
-    }
-
-    fn save_at(&self, dir: &Path) {
-        assert!(
-            dir.is_dir(),
-            "pass in the directory where the file should reside"
-        );
-        assert!(
-            CacheInfo::<Self>::load(self.id()).is_none(),
-            "card already exists"
-        );
-
-        let base_filename = sanitize(&self.file_name()).replace(" ", "_");
-        let mut path = dir.join(&base_filename);
-        path.set_extension("toml");
-
-        let mut counter = 1;
-        while path.exists() {
-            let new_name = format!("{}({})", &base_filename, counter);
-            path = dir.join(&new_name);
-            path.set_extension("toml");
-            counter += 1;
-        }
-
-        let s: String = toml::to_string(&self).unwrap();
-        let mut file = std::fs::File::create(&path).unwrap();
-        file.write_all(&mut s.as_bytes()).unwrap();
-        CacheInfo::<Self>::cache_path(self.id(), path.to_path_buf());
         CacheInfo::cache_dependents(self);
     }
 
@@ -241,6 +220,10 @@ fn load_all<T: DeserializeOwned + FsLoad + Send>(dir: &Path) -> Vec<T> {
     let vec: Vec<T> = paths
         .into_par_iter()
         .map(|path| {
+            if path.is_dir() {
+                dbg!(path);
+                panic!();
+            }
             let s = std::fs::read_to_string(&path).unwrap();
             let obj: T = toml::from_str(&s).unwrap();
             CacheInfo::<T>::cache_path(obj.id(), path);
@@ -260,9 +243,8 @@ fn get_all_file_paths(root: &Path) -> Vec<PathBuf> {
         .into_iter()
         .filter_map(|entry| entry.ok())
         .filter_map(|entry| {
-            let path = entry.path();
-            if path.extension().is_some_and(|ext| ext == "toml") {
-                Some(path.to_path_buf())
+            if entry.path().is_file() {
+                Some(entry.path().to_path_buf())
             } else {
                 None
             }

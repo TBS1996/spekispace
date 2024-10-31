@@ -1,7 +1,6 @@
 use attribute::Attribute;
 pub use card::Card;
 use card::{AnyType, AttributeCard, CardTrait, InstanceCard, NormalCard, UnfinishedCard};
-use categories::Category;
 use eyre::Result;
 use reviews::Recall;
 use samsvar::Matcher;
@@ -13,7 +12,6 @@ use std::{
 
 pub mod attribute;
 pub mod card;
-pub mod categories;
 pub mod collections;
 pub mod common;
 pub mod config;
@@ -50,17 +48,17 @@ pub fn cards_filtered(filter: String) -> Vec<CardId> {
     cards.iter().map(|card| card.id()).collect()
 }
 
-pub fn add_card(front: String, back: String, cat: &Category) -> CardId {
+pub fn add_card(front: String, back: String) -> CardId {
     let data = NormalCard {
         front,
         back: back.into(),
     };
-    Card::<AnyType>::new_normal(data, cat).id()
+    Card::<AnyType>::new_normal(data).id()
 }
 
-pub fn add_unfinished(front: String, category: &Category) -> CardId {
+pub fn add_unfinished(front: String) -> CardId {
     let data = UnfinishedCard { front };
-    Card::<AnyType>::new_unfinished(data, category).id()
+    Card::<AnyType>::new_unfinished(data).id()
 }
 
 pub fn review(card_id: CardId, grade: Recall) {

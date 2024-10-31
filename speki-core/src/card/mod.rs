@@ -1,9 +1,9 @@
 use crate::attribute::Attribute;
 use crate::attribute::AttributeId;
-use crate::categories::Category;
 use crate::common::current_time;
-use crate::common::{open_file_with_vim, system_time_as_unix_time};
+use crate::common::open_file_with_vim;
 use crate::reviews::{Recall, Review, Reviews};
+use filecash::get_cards_path;
 use filecash::FsLoad;
 use rayon::prelude::*;
 use samsvar::json;
@@ -14,11 +14,9 @@ use serializing::RawCard;
 use speki_dto::BackSide;
 use speki_dto::CType;
 use speki_dto::CardId;
-use std::cmp::Ordering;
 use std::collections::{BTreeMap, BTreeSet};
-use std::ffi::OsString;
 use std::fmt::Debug;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::time::Duration;
 
 pub type RecallRate = f32;
@@ -29,29 +27,6 @@ mod serializing;
 
 pub use back_side::*;
 pub use card_types::*;
-
-#[derive(Ord, PartialOrd, Eq, PartialEq, Hash, Clone, Debug)]
-pub struct CardLocation {
-    file_name: OsString,
-    category: Category,
-}
-
-impl CardLocation {
-    pub fn new(path: &Path) -> Self {
-        let file_name = path.file_name().unwrap().to_owned();
-        let category = Category::from_card_path(path);
-        Self {
-            file_name,
-            category,
-        }
-    }
-
-    fn as_path(&self) -> PathBuf {
-        let mut path = self.category.as_path().join(self.file_name.clone());
-        path.set_extension("toml");
-        path
-    }
-}
 
 pub trait CardTrait: Debug + Clone {
     fn get_dependencies(&self) -> BTreeSet<CardId>;
@@ -219,9 +194,6 @@ pub struct Card<T: CardTrait + ?Sized> {
     dependencies: BTreeSet<CardId>,
     tags: BTreeMap<String, String>,
     history: Reviews,
-    location: CardLocation,
-    last_modified: Duration,
-    created: Duration,
     suspended: IsSuspended,
 }
 
@@ -238,10 +210,10 @@ impl<T: CardTrait> AsRef<CardId> for Card<T> {
 }
 
 impl Card<AttributeCard> {
-    pub fn new(attr: AttributeCard, category: &Category) -> Card<AnyType> {
+    pub fn new(attr: AttributeCard) -> Card<AnyType> {
         let raw = RawCard::new_attribute(attr);
         let id = raw.id;
-        raw.save_at(&category.as_path());
+        raw.save();
         Card::from_raw(RawCard::load(id).unwrap())
     }
 }
@@ -339,17 +311,6 @@ impl Card<AnyType> {
     }
 
     pub fn from_raw(raw_card: RawCard) -> Card<AnyType> {
-        let path = raw_card.path().unwrap();
-
-        let (last_modified, created) = {
-            let system_time = std::fs::metadata(&path).unwrap().modified().unwrap();
-            let created = std::fs::metadata(&path).unwrap().created().unwrap();
-            (
-                system_time_as_unix_time(system_time),
-                system_time_as_unix_time(created),
-            )
-        };
-
         let id = CardId(raw_card.id);
 
         Card::<AnyType> {
@@ -362,74 +323,67 @@ impl Card<AnyType> {
                 .collect(),
             tags: raw_card.tags,
             history: Reviews::load(id).unwrap_or_default(),
-            location: CardLocation::new(&path),
-            last_modified,
-            created,
             suspended: IsSuspended::from(raw_card.suspended),
         }
     }
 
-    pub fn days_since_created(&self) -> f32 {
-        (current_time() - self.created).as_secs_f32() / 86400.
-    }
-
-    pub fn save_at(raw_card: RawCard, path: &Path) -> Card<AnyType> {
+    pub fn save_at(raw_card: RawCard) -> Card<AnyType> {
         let id = raw_card.id;
-        raw_card.save_at(path);
+        raw_card.save();
         let raw_card = RawCard::load(id).unwrap();
         Self::from_raw(raw_card)
     }
 
-    pub fn new_any(any: AnyType, category: &Category) -> Card<AnyType> {
+    pub fn new_any(any: AnyType) -> Card<AnyType> {
         let raw_card = RawCard::new(any);
-        raw_card.save_at(&category.as_path());
+        raw_card.save();
         let raw_card = RawCard::load(raw_card.id).unwrap();
         Self::from_raw(raw_card)
     }
 
-    pub fn new_normal(unfinished: NormalCard, category: &Category) -> Card<AnyType> {
+    pub fn new_normal(unfinished: NormalCard) -> Card<AnyType> {
         let raw_card = RawCard::new(unfinished);
-        raw_card.save_at(&category.as_path());
+        raw_card.save();
         let raw_card = RawCard::load(raw_card.id).unwrap();
         Self::from_raw(raw_card)
     }
 
-    pub fn new_event(class: EventCard, category: &Category) -> Card<AnyType> {
+    pub fn new_event(class: EventCard) -> Card<AnyType> {
         let raw_card = RawCard::new(class);
-        raw_card.save_at(&category.as_path());
+        raw_card.save();
         let raw_card = RawCard::load(raw_card.id).unwrap();
         Self::from_raw(raw_card)
     }
-    pub fn new_statement(class: StatementCard, category: &Category) -> Card<AnyType> {
+    pub fn new_statement(class: StatementCard) -> Card<AnyType> {
         let raw_card = RawCard::new(class);
-        raw_card.save_at(&category.as_path());
+        raw_card.save();
         let raw_card = RawCard::load(raw_card.id).unwrap();
         Self::from_raw(raw_card)
     }
-    pub fn new_class(class: ClassCard, category: &Category) -> Card<AnyType> {
+    pub fn new_class(class: ClassCard) -> Card<AnyType> {
         let raw_card = RawCard::new(class);
-        raw_card.save_at(&category.as_path());
+        raw_card.save();
         let raw_card = RawCard::load(raw_card.id).unwrap();
         Self::from_raw(raw_card)
     }
 
-    pub fn new_attribute(unfinished: AttributeCard, category: &Category) -> Card<AnyType> {
+    pub fn new_attribute(unfinished: AttributeCard) -> Card<AnyType> {
         let raw_card = RawCard::new(unfinished);
-        raw_card.save_at(&category.as_path());
+        raw_card.save();
         let raw_card = RawCard::load(raw_card.id).unwrap();
         Self::from_raw(raw_card)
     }
 
-    pub fn new_instance(instance: InstanceCard, category: &Category) -> Card<AnyType> {
+    pub fn new_instance(instance: InstanceCard) -> Card<AnyType> {
         let raw_card = RawCard::new(instance);
-        raw_card.save_at(&category.as_path());
+        raw_card.save();
         let raw_card = RawCard::load(raw_card.id).unwrap();
         Self::from_raw(raw_card)
     }
 
-    pub fn new_unfinished(unfinished: UnfinishedCard, category: &Category) -> Card<AnyType> {
+    pub fn new_unfinished(unfinished: UnfinishedCard) -> Card<AnyType> {
         let raw_card = RawCard::new(unfinished);
-        raw_card.save_at(&category.as_path());
+        raw_card.save();
         let raw_card = RawCard::load(raw_card.id).unwrap();
         Self::from_raw(raw_card)
     }
@@ -637,14 +591,6 @@ impl<T: CardTrait> Card<T> {
         &self.history.0
     }
 
-    pub fn last_modified(&self) -> Duration {
-        self.last_modified
-    }
-
-    pub fn category(&self) -> &Category {
-        &self.location.category
-    }
-
     #[allow(dead_code)]
     pub fn is_pending(&self) -> bool {
         self.history.is_empty()
@@ -669,26 +615,7 @@ impl<T: CardTrait> Card<T> {
     }
 
     pub fn as_path(&self) -> PathBuf {
-        self.location.as_path()
-    }
-
-    /// Checks if corresponding file has been modified after this type got deserialized from the file.
-    pub fn is_outdated(&self) -> bool {
-        let file_last_modified = {
-            let path = self.as_path();
-            let system_time = std::fs::metadata(path).unwrap().modified().unwrap();
-            system_time_as_unix_time(system_time)
-        };
-
-        let in_memory_last_modified = self.last_modified;
-
-        match in_memory_last_modified.cmp(&file_last_modified) {
-            Ordering::Less => true,
-            Ordering::Equal => false,
-            Ordering::Greater => panic!(
-            "Card in-memory shouldn't have a last_modified more recent than its corresponding file"
-        ),
-        }
+        get_cards_path().join(self.id.into_inner().to_string())
     }
 
     pub fn lapses(&self) -> u32 {

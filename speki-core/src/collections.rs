@@ -8,7 +8,7 @@ use git2::{
     Cred, FetchOptions, IndexAddOption, PushOptions, RemoteCallbacks, Repository, Signature,
 };
 
-use crate::{categories::Category, github::LoginInfo, paths::get_collections_path};
+use crate::{github::LoginInfo, paths::get_collections_path};
 
 pub struct Collection {
     pub name: String,
@@ -122,10 +122,6 @@ impl Collection {
 
     pub fn load_or_create(name: &str) -> Self {
         Self::load(name).unwrap_or_else(|| Self::create(name))
-    }
-
-    pub fn load_categories(&self) -> Vec<Category> {
-        Category::load_all(Some(self))
     }
 
     pub fn path(&self) -> PathBuf {

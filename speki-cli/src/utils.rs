@@ -2,7 +2,6 @@ use dialoguer::{theme::ColorfulTheme, Input, Select};
 use speki_core::{
     attribute::{Attribute, AttributeId},
     card::AnyType,
-    categories::Category,
     Card, CardId,
 };
 
@@ -124,30 +123,6 @@ pub fn get_input_opt(prompt: &str) -> Option<String> {
 
 pub fn get_input(prompt: &str) -> String {
     get_input_opt(prompt).unwrap_or_default()
-}
-
-pub fn choose_folder(default_category: Option<&Category>) -> Category {
-    let mut default = 0;
-    let cats = Category::load_all(None);
-
-    if let Some(def) = default_category {
-        for (i, cat) in cats.iter().enumerate() {
-            if cat == def {
-                default = i;
-            }
-        }
-    }
-
-    let cats: Vec<String> = Category::load_all(None)
-        .iter()
-        .map(|cat| format!("{}", cat.print_it_with_depth()))
-        .collect();
-
-    if cats.len() < 2 {
-        return Category::default();
-    }
-
-    Category::load_all(None).remove(select_item_default_pos(&cats, default))
 }
 
 /*

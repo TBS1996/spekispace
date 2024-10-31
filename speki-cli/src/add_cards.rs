@@ -1,18 +1,16 @@
 use crate::{
     create_card,
     incread::{inc_path, textstuff},
-    utils::{choose_folder, clear_terminal, get_input_opt, notify},
+    utils::{clear_terminal, get_input_opt, notify},
 };
 use dialoguer::{theme::ColorfulTheme, Select};
-use speki_core::{categories::Category, common::filename_sanitizer, CType};
-use std::{fs::read_to_string, io::Write, path::PathBuf, str::FromStr};
+use speki_core::CType;
+use std::io::Write;
 
 pub fn add_cards() {
-    let category = choose_folder(None);
-
     loop {
         clear_terminal();
-        if create_card(CType::Normal, &category).is_none() {
+        if create_card(CType::Normal).is_none() {
             break;
         }
     }
@@ -24,7 +22,6 @@ pub async fn add_cards_menu() {
         "Unfinished cards",
         "Add wikipedia article",
         "Incremental reading",
-        "Import",
         "exit",
     ];
 
@@ -39,8 +36,7 @@ pub async fn add_cards_menu() {
         1 => crate::unfinished::unfinished(),
         2 => add_wikipedia(),
         3 => textstuff(),
-        4 => import(),
-        5 => return,
+        4 => return,
         _ => panic!(),
     }
 }
@@ -82,45 +78,5 @@ fn add_wikipedia() {
         Err(_) => {
             notify("failed to join thread");
         }
-    }
-}
-
-fn import() {
-    notify("pick a csv file where the left side is the question and the right side the answer");
-
-    if let Some(path) = get_input_opt("file path") {
-        let path = match PathBuf::from_str(&path) {
-            Ok(path) => path,
-            Err(e) => {
-                notify(&format!("failed to parse input as a valid path: {:?}", e));
-                return;
-            }
-        };
-
-        if !path.exists() {
-            notify("provided path does not point to a file");
-            return;
-        }
-
-        let import: String = read_to_string(&path).unwrap();
-        let filename = path.file_stem().unwrap().to_str().unwrap();
-        let filename = filename_sanitizer(filename);
-        let category = Category::default().join("imports").join(&filename);
-
-        let mut cards = vec![];
-
-        for line in import.lines() {
-            let (front, back) = line.split_once(";").unwrap();
-            let card = speki_core::add_card(front.to_string(), back.to_string(), &category);
-            cards.push(card);
-        }
-
-        let card_qty = cards.len();
-
-        notify(&format!(
-            "imported {} cards to following path: {:#?}",
-            card_qty,
-            category.as_path()
-        ));
     }
 }

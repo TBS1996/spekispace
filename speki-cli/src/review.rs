@@ -250,7 +250,7 @@ fn handle_action(card: CardId, action: CardAction) -> ControlFlow<()> {
 
         CardAction::NewDependency => {
             println!("add dependency");
-            if let Some(new_card) = add_any_card(card.category()) {
+            if let Some(new_card) = add_any_card() {
                 speki_core::set_dependency(card.id(), new_card);
             }
         }
@@ -261,7 +261,7 @@ fn handle_action(card: CardId, action: CardAction) -> ControlFlow<()> {
         }
         CardAction::NewDependent => {
             println!("add dependent");
-            if let Some(new_card) = add_any_card(card.category()) {
+            if let Some(new_card) = add_any_card() {
                 speki_core::set_dependency(new_card, card.id());
             }
         }
@@ -276,9 +276,7 @@ fn handle_action(card: CardId, action: CardAction) -> ControlFlow<()> {
             }
         }
         CardAction::NewClass => {
-            if let Some(class) =
-                new_class().map(|class| Card::new_any(class.into(), card.category()))
-            {
+            if let Some(class) = new_class().map(|class| Card::new_any(class.into())) {
                 speki_core::set_class(card.id(), class.id()).unwrap();
             }
         }
@@ -297,7 +295,7 @@ fn handle_action(card: CardId, action: CardAction) -> ControlFlow<()> {
                             instance: card.id(),
                         };
 
-                        Card::<AttributeCard>::new(attr, card.category());
+                        Card::<AttributeCard>::new(attr);
                     }
                 }
             }
@@ -379,7 +377,7 @@ fn handle_action(card: CardId, action: CardAction) -> ControlFlow<()> {
         }
 
         CardAction::NewCard => {
-            let _ = add_any_card(card.category());
+            let _ = add_any_card();
         }
     }
 

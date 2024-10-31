@@ -137,8 +137,7 @@ impl FsLoad for RawCard {
 
     fn save_paths() -> Vec<PathBuf> {
         let p1 = paths::get_cards_path();
-        let p2 = paths::get_collections_path();
-        vec![p1, p2]
+        vec![p1]
     }
 
     fn file_name(&self) -> String {
