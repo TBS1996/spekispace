@@ -302,10 +302,8 @@ impl Card<AnyType> {
 
     // Call this function every time SavedCard is mutated.
     pub fn persist(&mut self) {
-        self.history.save(self.id());
         let raw = from_raw_card(self.clone());
         FileProvider::save_card(raw);
-
         *self = Self::from_raw(FileProvider::load_card(self.id()).unwrap());
     }
 

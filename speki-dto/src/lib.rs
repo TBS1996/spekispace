@@ -22,10 +22,11 @@ pub trait SpekiProvider {
     fn load_reviews(id: CardId) -> Vec<Review>;
     fn add_review(id: CardId, review: Review) {
         let mut reviews = Self::load_reviews(id);
-        dbg!(&reviews);
+        let foo = reviews.len();
         reviews.push(review);
         Self::save_reviews(id, reviews);
-        dbg!(Self::load_reviews(id));
+        let bar = Self::load_reviews(id).len();
+        assert!(foo < bar);
     }
     fn save_reviews(id: CardId, reviews: Vec<Review>);
 }

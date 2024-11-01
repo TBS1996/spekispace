@@ -1,22 +1,22 @@
 [application]
 
 # App (Project) Name
-name = "speki-top"
+name = "speki-web"
 
 # Dioxus App Default Platform
 # web, desktop, fullstack
-default_platform = "desktop"
+default_platform = "web"
 
 # `build` & `serve` dist path
 out_dir = "dist"
 
-# assets file folder
+# resource (assets) file folder
 asset_dir = "assets"
 
 [web.app]
 
 # HTML title tag content
-title = "speki-top"
+title = "speki-web"
 
 [web.watcher]
 
@@ -31,7 +31,7 @@ watch_path = ["src", "assets"]
 
 # CSS style file
 
-style = []
+style = ["/tailwind.css"]
 
 # Javascript code file
 script = []
