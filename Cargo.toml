@@ -7,9 +7,10 @@ members = [
     "speki-core",
     "speki-dto", 
     "speki-fs",
-    "timestamped",
-    "speki-web",
+    "omtrent", "speki-auth",
 ]
+
+exclude = ["speki-web"]
 
 
 resolver = "2"
@@ -19,7 +20,7 @@ resolver = "2"
 speki-core = { path = "speki-core" }
 samsvar = { path = "samsvar" }
 filecash = { path = "fsload" }
-omtrent = { path = "timestamped" }
+omtrent = { path = "omtrent" }
 speki-dto = { path = "speki-dto" }
 speki-fs = { path = "speki-fs" }
 
