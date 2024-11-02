@@ -1,105 +1,278 @@
-use attribute::Attribute;
-pub use card::Card;
-use card::{AnyType, AttributeCard, CardTrait, InstanceCard, NormalCard, UnfinishedCard};
+use card::serializing::from_raw_card;
+use card::RecallRate;
 use eyre::Result;
+use reviews::Reviews;
 use samsvar::Matcher;
-use sanitize_filename::sanitize;
+use speki_dto::AttributeId;
+use speki_dto::Config;
 use speki_dto::Recall;
+use speki_dto::Review;
 use speki_dto::SpekiProvider;
-use speki_fs::FileProvider;
 use std::collections::BTreeSet;
+use std::fmt::Debug;
+use std::time::Duration;
 
 //pub mod collections;
 //pub mod github;
-pub mod attribute;
-pub mod card;
-pub mod common;
-pub mod recall_rate;
-pub mod reviews;
+mod attribute;
+mod card;
+mod common;
+mod recall_rate;
+mod reviews;
 
+pub use attribute::Attribute;
+pub use card::Card;
+pub use card::{
+    AnyType, AttributeCard, CardTrait, ClassCard, EventCard, InstanceCard, NormalCard,
+    StatementCard, UnfinishedCard,
+};
+pub use common::current_time;
 pub use omtrent::TimeStamp;
+pub use recall_rate::SimpleRecall;
 pub use speki_dto::BackSide;
 pub use speki_dto::CType;
 pub use speki_dto::CardId;
 
-pub fn load_cards() -> Vec<CardId> {
-    Card::load_all_cards()
-        .iter()
-        .map(|card| card.id())
-        .collect()
+pub trait RecallCalc {
+    fn recall_rate(&self, reviews: &Reviews, current_unix: Duration) -> Option<RecallRate>;
 }
 
-pub fn load_and_persist() {
-    for mut card in Card::load_all_cards() {
+use std::sync::Arc;
+
+impl Debug for FooBar {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "provider thing")
+    }
+}
+
+#[derive(Clone)]
+pub struct FooBar {
+    provider: Provider,
+    recaller: Recaller,
+}
+
+impl FooBar {
+    pub fn load_all_cards(&self) -> Vec<Card<AnyType>> {
+        self.provider
+            .load_all_cards()
+            .into_iter()
+            .map(|raw| Card::from_raw(self.clone(), raw))
+            .collect()
+    }
+
+    pub fn save_card(&self, card: Card<AnyType>) {
+        self.provider.save_card(from_raw_card(card));
+    }
+
+    pub fn load_card(&self, id: CardId) -> Option<Card<AnyType>> {
+        self.provider
+            .load_card(id)
+            .map(|raw| Card::from_raw(self.clone(), raw))
+    }
+
+    pub fn delete_card(&self, id: CardId) {
+        self.provider.delete_card(id);
+    }
+
+    pub fn load_all_attributes(&self) -> Vec<Attribute> {
+        self.provider
+            .load_all_attributes()
+            .into_iter()
+            .map(|dto| Attribute::from_dto(dto, self.clone()))
+            .collect()
+    }
+
+    pub fn save_attribute(&self, attribute: Attribute) {
+        self.provider.save_attribute(Attribute::into_dto(attribute));
+    }
+
+    pub fn load_attribute(&self, id: AttributeId) -> Option<Attribute> {
+        self.provider
+            .load_attribute(id)
+            .map(|dto| Attribute::from_dto(dto, self.clone()))
+    }
+
+    pub fn delete_attribute(&self, id: AttributeId) {
+        self.provider.delete_attribute(id);
+    }
+
+    pub fn load_reviews(&self, id: CardId) -> Reviews {
+        Reviews(self.provider.load_reviews(id))
+    }
+
+    pub fn save_reviews(&self, id: CardId, reviews: Reviews) {
+        self.provider.save_reviews(id, reviews.into_inner());
+    }
+
+    pub fn add_review(&self, id: CardId, review: Review) {
+        self.provider.add_review(id, review);
+    }
+
+    pub fn load_config(&self) -> Config {
+        Config
+    }
+
+    pub fn save_config(&self, _config: Config) {}
+}
+
+pub type Provider = Arc<Box<dyn SpekiProvider + Send>>;
+pub type Recaller = Arc<Box<dyn RecallCalc + Send>>;
+
+pub struct App {
+    pub foobar: FooBar,
+    pub config: Config,
+}
+
+impl Debug for App {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "app!")
+    }
+}
+
+impl App {
+    pub fn new<A, B>(provider: A, recall_calc: B) -> Self
+    where
+        A: SpekiProvider + 'static + Send,
+        B: RecallCalc + 'static + Send,
+    {
+        let config = provider.load_config();
+        let foobar = FooBar {
+            provider: Arc::new(Box::new(provider)),
+            recaller: Arc::new(Box::new(recall_calc)),
+        };
+
+        Self { foobar, config }
+    }
+
+    pub fn load_cards(&self) -> Vec<CardId> {
+        self.foobar
+            .load_all_cards()
+            .into_iter()
+            .map(|card| card.id())
+            .collect()
+    }
+
+    fn full_load_cards(&self) -> Vec<Card<AnyType>> {
+        self.foobar.load_all_cards().into_iter().collect()
+    }
+
+    pub fn load_non_pending(&self, filter: Option<String>) -> Vec<CardId> {
+        self.full_load_cards()
+            .into_iter()
+            .filter(|card| !card.history().is_empty())
+            .filter(|card| {
+                if let Some(ref filter) = filter {
+                    card.eval(filter.clone())
+                } else {
+                    true
+                }
+            })
+            .map(|card| card.id())
+            .collect()
+    }
+
+    pub fn card_from_id(&self, id: CardId) -> Card<AnyType> {
+        self.foobar.load_card(id).unwrap()
+    }
+
+    pub fn delete_card(&self, id: CardId) {
+        self.foobar.delete_card(id);
+    }
+
+    pub fn load_and_persist(&self) {
+        for mut card in self.full_load_cards() {
+            card.persist();
+        }
+    }
+
+    pub fn get_cached_dependents(&self, id: CardId) -> BTreeSet<CardId> {
+        Card::<AnyType>::dependents(id)
+    }
+
+    pub fn cards_filtered(&self, filter: String) -> Vec<CardId> {
+        let mut cards = self.full_load_cards();
+        cards.retain(|card| card.eval(filter.clone()));
+        cards.iter().map(|card| card.id()).collect()
+    }
+
+    pub fn add_card(&self, front: String, back: String) -> CardId {
+        let data = NormalCard {
+            front,
+            back: back.into(),
+        };
+        self.new_any(data).id()
+    }
+
+    pub fn add_unfinished(&self, front: String) -> CardId {
+        let data = UnfinishedCard { front };
+        self.new_any(data).id()
+    }
+
+    pub fn review(&self, id: CardId, grade: Recall) {
+        let review = Review {
+            timestamp: current_time(),
+            grade,
+            time_spent: Default::default(),
+        };
+        self.foobar.add_review(id, review);
+    }
+
+    pub fn set_class(&self, card_id: CardId, class: CardId) -> Result<()> {
+        let card = self.card_from_id(card_id);
+
+        let instance = InstanceCard {
+            name: card.card_type().display_front(),
+            back: card.back_side().map(ToOwned::to_owned),
+            class,
+        };
+        card.into_type(instance);
+        Ok(())
+    }
+
+    pub fn set_dependency(&self, card_id: CardId, dependency: CardId) {
+        if card_id == dependency {
+            return;
+        }
+
+        let mut card = self.card_from_id(card_id);
+        card.set_dependency(dependency);
         card.persist();
     }
-}
 
-pub fn get_cached_dependents(id: CardId) -> BTreeSet<CardId> {
-    Card::<AnyType>::dependents(id)
-}
-
-pub fn cards_filtered(filter: String) -> Vec<CardId> {
-    let mut cards = Card::load_all_cards();
-    cards.retain(|card| card.clone().eval(filter.clone()));
-    cards.iter().map(|card| card.id()).collect()
-}
-
-pub fn add_card(front: String, back: String) -> CardId {
-    let data = NormalCard {
-        front,
-        back: back.into(),
-    };
-    Card::<AnyType>::new_normal(data).id()
-}
-
-pub fn add_unfinished(front: String) -> CardId {
-    let data = UnfinishedCard { front };
-    Card::<AnyType>::new_unfinished(data).id()
-}
-
-pub fn review(card_id: CardId, grade: Recall) {
-    let mut card = Card::from_id(card_id).unwrap();
-    card.new_review(grade);
-}
-
-pub fn set_class(card_id: CardId, class: CardId) -> Result<()> {
-    let card = Card::from_id(card_id).unwrap();
-
-    let instance = InstanceCard {
-        name: card.card_type().display_front(),
-        back: card.back_side().map(ToOwned::to_owned),
-        class,
-    };
-    card.into_type(instance);
-    Ok(())
-}
-
-pub fn set_dependency(card_id: CardId, dependency: CardId) {
-    if card_id == dependency {
-        return;
+    pub fn load_class_cards(&self) -> Vec<Card<AnyType>> {
+        self.full_load_cards()
+            .into_iter()
+            .filter(|card| card.is_class())
+            .collect()
     }
 
-    let mut card = Card::from_id(card_id).unwrap();
-    card.set_dependency(dependency);
-    card.persist();
+    pub fn load_pending(&self, filter: Option<String>) -> Vec<CardId> {
+        self.full_load_cards()
+            .into_iter()
+            .filter(|card| card.history().is_empty())
+            .filter(|card| {
+                if let Some(ref filter) = filter {
+                    card.eval(filter.clone())
+                } else {
+                    true
+                }
+            })
+            .map(|card| card.id())
+            .collect()
+    }
+
+    pub fn new_any(&self, any: impl Into<AnyType>) -> Card<AnyType> {
+        let raw_card = new_raw_card(any);
+        let id = raw_card.id;
+        self.foobar.provider.save_card(raw_card);
+        self.foobar.load_card(CardId(id)).unwrap()
+    }
 }
 
-pub fn card_from_id(card_id: CardId) -> Card<AnyType> {
-    Card::from_id(card_id).unwrap()
-}
+use crate::card::serializing::new_raw_card;
 
-pub fn delete(id: CardId) {
-    FileProvider::delete_card(id);
-}
-
-pub fn as_graph() -> String {
-    // mermaid::export()
-    graphviz::export()
-}
-
-pub fn my_sanitize_filename(s: &str) -> String {
-    sanitize(s.replace(" ", "_").replace("'", ""))
+pub fn as_graph(app: &App) -> String {
+    graphviz::export(app)
 }
 
 mod graphviz {
@@ -107,10 +280,10 @@ mod graphviz {
 
     use super::*;
 
-    pub fn export() -> String {
+    pub fn export(app: &App) -> String {
         let mut dot = String::from("digraph G {\nranksep=2.0;\nrankdir=BT;\n");
         let mut relations = BTreeSet::default();
-        let cards = Card::load_all_cards();
+        let cards = app.full_load_cards();
 
         for card in cards {
             let label = card
@@ -176,40 +349,5 @@ mod graphviz {
 
     fn yellow_color() -> String {
         String::from("#FFFF00")
-    }
-}
-
-pub fn health_check() {
-    println!("STARTING HEALTH CHECK");
-    verify_attributes();
-    println!("HEALTH CHECK OVER");
-}
-
-fn verify_attributes() {
-    for card in Card::load_all_cards() {
-        if let AnyType::Attribute(AttributeCard {
-            attribute,
-            instance: concept_card,
-            ..
-        }) = card.card_type()
-        {
-            if Attribute::load(*attribute).is_none() {
-                println!("error loading attribute for: {:?}", &card);
-            }
-
-            match Card::from_id(*concept_card) {
-                Some(concept_card) => {
-                    if !card.card_type().is_class() {
-                        println!(
-                            "error, cards concept card is not a concept: {:?} -> {:?}",
-                            &card, concept_card
-                        )
-                    }
-                }
-                None => {
-                    println!("error loading concept card for: {}", &card);
-                }
-            }
-        }
     }
 }

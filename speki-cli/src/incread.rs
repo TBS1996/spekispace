@@ -2,8 +2,8 @@ use cli_epub_to_text::epub_to_text;
 use dialoguer::theme::ColorfulTheme;
 use dialoguer::Select;
 use serde::{Deserialize, Serialize};
-use speki_core::common::current_time;
-use speki_core::Card;
+use speki_core::current_time;
+use speki_core::App;
 use speki_core::CardId;
 use speki_fs::paths;
 use std::collections::HashMap;
@@ -28,7 +28,7 @@ pub struct TextFile {
     path: PathBuf,
     position: usize,
     length: usize,
-    #[serde(default = "speki_core::common::current_time")]
+    #[serde(default = "current_time")]
     time_added: Duration,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     added_cards: Vec<(CardId, usize)>,
@@ -36,14 +36,14 @@ pub struct TextFile {
 }
 
 impl TextFile {
-    pub fn min_rec_recall_rate(&self) -> Option<f32> {
+    pub fn min_rec_recall_rate(&self, app: &App) -> Option<f32> {
         if self.added_cards.is_empty() {
             return Some(1.0);
         }
 
         let mut recall_rate: f32 = 1.0;
         for (card, _) in &self.added_cards {
-            let card = Card::from_id(*card).unwrap();
+            let card = app.foobar.load_card(*card).unwrap();
             recall_rate = recall_rate.min(card.min_rec_recall_rate()?);
         }
 
@@ -175,12 +175,12 @@ impl TextProgress {
     }
 }
 
-fn select_text(mut textfiles: Vec<TextFile>) -> TextFile {
+fn select_text(mut textfiles: Vec<TextFile>, app: &App) -> TextFile {
     textfiles.sort_by_key(|f| {
         if f.is_finished() {
             usize::MIN
         } else {
-            (f.min_rec_recall_rate().unwrap_or_default() * 1000.) as usize
+            (f.min_rec_recall_rate(app).unwrap_or_default() * 1000.) as usize
         }
     });
 
@@ -192,7 +192,7 @@ fn select_text(mut textfiles: Vec<TextFile>) -> TextFile {
             format!(
                 "{:.1}%, {:.1}%: {}",
                 p.progress_percentage(),
-                p.min_rec_recall_rate().unwrap_or_default() * 100.,
+                p.min_rec_recall_rate(app).unwrap_or_default() * 100.,
                 p.name()
             )
         })
@@ -208,7 +208,7 @@ fn select_text(mut textfiles: Vec<TextFile>) -> TextFile {
     textfiles[idx].clone()
 }
 
-pub fn textstuff() {
+pub fn textstuff(app: &App) {
     clear_terminal();
     //    let paths = get_text_files(&inc_path()).unwrap();
     let textfiles = TextFile::load_all();
@@ -217,7 +217,7 @@ pub fn textstuff() {
         return;
     }
 
-    let mut textfile = select_text(textfiles);
+    let mut textfile = select_text(textfiles, app);
     let text = textfile.load_text();
 
     let opts = [
@@ -265,7 +265,7 @@ pub fn textstuff() {
         menu_position = idx;
         match idx {
             0 => {
-                if let Some(id) = add_any_card() {
+                if let Some(id) = add_any_card(app) {
                     textfile.add_card(id);
                 };
             }
@@ -273,7 +273,7 @@ pub fn textstuff() {
             2 => textfile.position_decrement(char_len),
             3 => {
                 if let Some((card, _)) = textfile.added_cards.last() {
-                    view_card(*card, false);
+                    view_card(app, *card, false);
                 }
             }
             4 => return,

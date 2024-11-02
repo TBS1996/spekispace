@@ -9,12 +9,14 @@ use uuid::Uuid;
 
 use speki_dto::{CType, RawType};
 
+use crate::FooBar;
+
 use super::{
     AnyType, AttributeCard, Card, ClassCard, EventCard, InstanceCard, IsSuspended, NormalCard,
     StatementCard, UnfinishedCard,
 };
 
-pub fn into_any(raw: RawType) -> AnyType {
+pub fn into_any(raw: RawType, foobar: &FooBar) -> AnyType {
     match raw.ty {
         CType::Instance => InstanceCard {
             name: raw.front.unwrap(),
@@ -35,6 +37,7 @@ pub fn into_any(raw: RawType) -> AnyType {
             attribute: AttributeId(raw.attribute.unwrap()),
             back: raw.back.unwrap(),
             instance: CardId(raw.instance.unwrap()),
+            foobar: foobar.clone(),
         }
         .into(),
         CType::Class => ClassCard {
@@ -84,6 +87,7 @@ pub fn from_any(ty: AnyType) -> RawType {
             attribute,
             back,
             instance,
+            foobar: _,
         }) => {
             raw.attribute = Some(attribute.into_inner());
             raw.back = Some(back);

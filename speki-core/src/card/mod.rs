@@ -1,32 +1,27 @@
-use crate::attribute::Attribute;
 use crate::common::current_time;
+use crate::recall_rate::SimpleRecall;
 use crate::reviews::Reviews;
-use rayon::prelude::*;
+use crate::FooBar;
+use crate::RecallCalc;
 use samsvar::json;
 use samsvar::Matcher;
 use serializing::from_any;
 use serializing::from_raw_card;
 use serializing::into_any;
-use serializing::new_raw_card;
 use speki_dto::BackSide;
 use speki_dto::CType;
 use speki_dto::CardId;
 use speki_dto::RawCard;
-use speki_dto::Recall;
 use speki_dto::Review;
-use speki_dto::SpekiProvider;
-use speki_fs::FileProvider;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Debug;
 use std::time::Duration;
 
 pub type RecallRate = f32;
 
-mod back_side;
 mod card_types;
-mod serializing;
+pub(crate) mod serializing;
 
-pub use back_side::*;
 pub use card_types::*;
 
 pub trait CardTrait: Debug + Clone {
@@ -69,10 +64,6 @@ impl IsSuspended {
 
     pub fn is_suspended(&self) -> bool {
         !matches!(self, IsSuspended::False)
-    }
-
-    pub fn is_not_suspended(&self) -> bool {
-        !self.is_suspended()
     }
 }
 
@@ -123,7 +114,7 @@ impl AnyType {
         !matches!(self, Self::Unfinished(_))
     }
 
-    pub fn set_backside(self, new_back: BackSide) -> Self {
+    pub fn set_backside(self, new_back: BackSide, foobar: &FooBar) -> Self {
         match self {
             x @ AnyType::Event(_) => x,
             x @ AnyType::Instance(_) => x,
@@ -146,6 +137,7 @@ impl AnyType {
                 attribute,
                 back: new_back,
                 instance: concept_card,
+                foobar: foobar.clone(),
             }
             .into(),
             Self::Class(class) => ClassCard {
@@ -188,7 +180,7 @@ impl CardTrait for AnyType {
 /// except for when youre constructing a new card.
 /// Don't save this in containers or pass to functions, rather use the Id, and get new instances of SavedCard from the cache.
 /// Also, every time you mutate it, call the persist() method.
-#[derive(Clone, Ord, PartialOrd, PartialEq, Eq, Hash, Debug)]
+#[derive(Clone)]
 pub struct Card<T: CardTrait + ?Sized> {
     id: CardId,
     data: T,
@@ -196,6 +188,17 @@ pub struct Card<T: CardTrait + ?Sized> {
     tags: BTreeMap<String, String>,
     history: Reviews,
     suspended: IsSuspended,
+    foobar: FooBar,
+}
+
+impl<T: CardTrait + ?Sized> Debug for Card<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut s = String::new();
+        s.push_str(&format!("{:?}\n", self.id));
+        s.push_str(&format!("{:?}\n", self.data));
+
+        write!(f, "{}", s)
+    }
 }
 
 impl<T: CardTrait> std::fmt::Display for Card<T> {
@@ -210,17 +213,21 @@ impl<T: CardTrait> AsRef<CardId> for Card<T> {
     }
 }
 
-impl Card<AttributeCard> {
-    pub fn new(attr: AttributeCard) -> Card<AnyType> {
-        let raw = new_raw_card(attr);
-        let id = raw.id;
-        FileProvider::save_card(raw);
-        let raw = FileProvider::load_card(CardId(id)).unwrap();
-        Card::from_raw(raw)
-    }
-}
-
 impl Card<AnyType> {
+    /// Loads all the ancestor ancestor classes
+    /// for example, king, human male, human
+    pub fn load_ancestor_classes(&self) -> Vec<CardId> {
+        let mut classes = vec![];
+        let mut parent_class = self.parent_class();
+
+        while let Some(class) = parent_class {
+            classes.push(class);
+            parent_class = self.foobar.load_card(class).unwrap().parent_class();
+        }
+
+        classes
+    }
+
     pub fn lapses_last_month(&self) -> u32 {
         let current_time = current_time();
         let day = Duration::from_secs(86400 * 30);
@@ -241,6 +248,24 @@ impl Card<AnyType> {
         self.history.lapses_since(day, current_time)
     }
 
+    pub fn from_raw(foobar: FooBar, raw_card: RawCard) -> Card<AnyType> {
+        let id = CardId(raw_card.id);
+
+        Card::<AnyType> {
+            id,
+            data: into_any(raw_card.data, &foobar),
+            dependencies: raw_card
+                .dependencies
+                .into_iter()
+                .map(|id| CardId(id))
+                .collect(),
+            tags: raw_card.tags,
+            history: Reviews::load(id),
+            suspended: IsSuspended::from(raw_card.suspended),
+            foobar,
+        }
+    }
+
     pub fn card_type(&self) -> &AnyType {
         &self.data
     }
@@ -258,34 +283,8 @@ impl Card<AnyType> {
         }
     }
 
-    /// Loads all the ancestor ancestor classes
-    /// for example, king, human male, human
-    pub fn load_ancestor_classes(&self) -> Vec<CardId> {
-        let mut classes = vec![];
-        let mut parent_class = self.parent_class();
-
-        while let Some(class) = parent_class {
-            classes.push(class);
-            parent_class = Card::from_id(class).unwrap().parent_class();
-        }
-
-        classes
-    }
-
     pub fn dependents(_id: CardId) -> BTreeSet<CardId> {
         Default::default()
-    }
-
-    pub fn set_ref(mut self, reff: CardId) -> Card<AnyType> {
-        let backside = BackSide::Card(reff);
-        self.data = self.data.set_backside(backside);
-        self.persist();
-        self
-    }
-
-    // potentially expensive function!
-    pub fn from_id(id: CardId) -> Option<Card<AnyType>> {
-        Some(Self::from_raw(FileProvider::load_card(id).unwrap()))
     }
 
     pub fn is_finished(&self) -> bool {
@@ -300,141 +299,11 @@ impl Card<AnyType> {
         self.data.is_instance()
     }
 
-    // Call this function every time SavedCard is mutated.
-    pub fn persist(&mut self) {
-        let raw = from_raw_card(self.clone());
-        FileProvider::save_card(raw);
-        *self = Self::from_raw(FileProvider::load_card(self.id()).unwrap());
-    }
-
-    pub fn from_raw(raw_card: RawCard) -> Card<AnyType> {
-        let id = CardId(raw_card.id);
-
-        Card::<AnyType> {
-            id,
-            data: into_any(raw_card.data),
-            dependencies: raw_card
-                .dependencies
-                .into_iter()
-                .map(|id| CardId(id))
-                .collect(),
-            tags: raw_card.tags,
-            history: Reviews::load(id),
-            suspended: IsSuspended::from(raw_card.suspended),
-        }
-    }
-
-    pub fn save_at(raw_card: RawCard) -> Card<AnyType> {
-        let id = raw_card.id;
-        FileProvider::save_card(raw_card);
-        let raw_card = FileProvider::load_card(CardId(id)).unwrap();
-        Self::from_raw(raw_card)
-    }
-
-    pub fn new_any(any: AnyType) -> Card<AnyType> {
-        let raw_card = new_raw_card(any);
-        let id = raw_card.id;
-        FileProvider::save_card(raw_card);
-        let raw_card = FileProvider::load_card(CardId(id)).unwrap();
-        Self::from_raw(raw_card)
-    }
-
-    pub fn new_normal(unfinished: NormalCard) -> Card<AnyType> {
-        let raw_card = new_raw_card(unfinished);
-        let id = raw_card.id;
-        FileProvider::save_card(raw_card);
-        let raw_card = FileProvider::load_card(CardId(id)).unwrap();
-        Self::from_raw(raw_card)
-    }
-
-    pub fn new_event(class: EventCard) -> Card<AnyType> {
-        let raw_card = new_raw_card(class);
-        let id = raw_card.id;
-        FileProvider::save_card(raw_card);
-        let raw_card = FileProvider::load_card(CardId(id)).unwrap();
-        Self::from_raw(raw_card)
-    }
-    pub fn new_statement(class: StatementCard) -> Card<AnyType> {
-        let raw_card = new_raw_card(class);
-        let id = raw_card.id;
-        FileProvider::save_card(raw_card);
-        let raw_card = FileProvider::load_card(CardId(id)).unwrap();
-        Self::from_raw(raw_card)
-    }
-    pub fn new_class(class: ClassCard) -> Card<AnyType> {
-        let raw_card = new_raw_card(class);
-        let id = CardId(raw_card.id);
-        FileProvider::save_card(raw_card);
-        let raw_card = FileProvider::load_card(id).unwrap();
-        Self::from_raw(raw_card)
-    }
-
-    pub fn new_attribute(unfinished: AttributeCard) -> Card<AnyType> {
-        let raw_card = new_raw_card(unfinished);
-        let id = CardId(raw_card.id);
-        FileProvider::save_card(raw_card);
-        let raw_card = FileProvider::load_card(id).unwrap();
-        Self::from_raw(raw_card)
-    }
-
-    pub fn new_instance(instance: InstanceCard) -> Card<AnyType> {
-        let raw_card = new_raw_card(instance);
-        let id = CardId(raw_card.id);
-        FileProvider::save_card(raw_card);
-        let raw_card = FileProvider::load_card(id).unwrap();
-        Self::from_raw(raw_card)
-    }
-
-    pub fn new_unfinished(unfinished: UnfinishedCard) -> Card<AnyType> {
-        let raw_card = new_raw_card(unfinished);
-        let id = CardId(raw_card.id);
-        FileProvider::save_card(raw_card);
-        let raw_card = FileProvider::load_card(id).unwrap();
-        Self::from_raw(raw_card)
-    }
-
-    pub fn load_all_cards() -> Vec<Card<AnyType>> {
-        FileProvider::load_all_cards()
-            .into_par_iter()
-            .map(Self::from_raw)
-            .collect()
-    }
-
-    pub fn load_class_cards() -> Vec<Card<AnyType>> {
-        Self::load_all_cards()
-            .into_par_iter()
-            .filter(|card| card.is_class())
-            .collect()
-    }
-
-    pub fn load_pending(filter: Option<String>) -> Vec<CardId> {
-        Self::load_all_cards()
-            .into_par_iter()
-            .filter(|card| card.history().is_empty())
-            .filter(|card| {
-                if let Some(ref filter) = filter {
-                    card.eval(filter.clone())
-                } else {
-                    true
-                }
-            })
-            .map(|card| card.id())
-            .collect()
-    }
-
-    pub fn load_non_pending(filter: Option<String>) -> Vec<CardId> {
-        Self::load_all_cards()
-            .into_par_iter()
-            .filter(|card| !card.history().is_empty())
-            .filter(|card| {
-                if let Some(ref filter) = filter {
-                    card.eval(filter.clone())
-                } else {
-                    true
-                }
-            })
-            .map(|card| card.id())
-            .collect()
+    pub fn set_ref(mut self, reff: CardId) -> Card<AnyType> {
+        let backside = BackSide::Card(reff);
+        self.data = self.data.set_backside(backside, &self.foobar);
+        self.persist();
+        self
     }
 
     pub fn rm_dependency(&mut self, dependency: CardId) -> bool {
@@ -442,18 +311,11 @@ impl Card<AnyType> {
         self.persist();
         res
     }
-
     pub fn set_dependency(&mut self, dependency: CardId) {
         if self.id() == dependency {
             return;
         }
         self.dependencies.insert(dependency);
-        self.persist();
-    }
-
-    pub fn new_review(&mut self, grade: Recall) {
-        let time = current_time();
-        self.history.add_review(self.id, grade, time);
         self.persist();
     }
 
@@ -471,15 +333,80 @@ impl Card<AnyType> {
 
     pub fn into_type(self, data: impl Into<AnyType>) -> Card<AnyType> {
         let id = self.id();
-        let mut raw = from_raw_card(self);
+        let mut raw = from_raw_card(self.clone());
         raw.data = from_any(data.into());
-        FileProvider::save_card(raw);
-        Card::from_id(id).unwrap()
+        self.foobar.provider.save_card(raw);
+        self.foobar.load_card(id).unwrap()
+    }
+
+    // Call this function every time SavedCard is mutated.
+    pub fn persist(&mut self) {
+        let raw = from_raw_card(self.clone());
+        self.foobar.provider.save_card(raw);
+        *self = self.foobar.load_card(self.id()).unwrap();
+    }
+
+    pub fn min_rec_recall_rate(&self) -> Option<RecallRate> {
+        let mut recall_rate = self.recall_rate()?;
+
+        for id in self.all_dependencies() {
+            let card = self.foobar.load_card(id).unwrap();
+            recall_rate = recall_rate.min(card.recall_rate()?);
+        }
+
+        Some(recall_rate)
+    }
+
+    fn is_resolved(&self) -> bool {
+        for id in self.all_dependencies() {
+            if let Some(card) = self.foobar.load_card(id) {
+                if !card.is_finished() {
+                    return false;
+                }
+            }
+        }
+
+        true
+    }
+
+    pub fn all_dependencies(&self) -> Vec<CardId> {
+        fn inner(id: CardId, deps: &mut Vec<CardId>, foobar: &FooBar) {
+            let Some(card) = foobar.load_card(id) else {
+                return;
+            };
+
+            for dep in card.dependency_ids() {
+                deps.push(dep);
+                inner(dep, deps, foobar);
+            }
+        }
+
+        let mut deps = vec![];
+
+        inner(self.id(), &mut deps, &self.foobar);
+
+        deps
+    }
+
+    pub fn display_backside(&self) -> Option<String> {
+        Some(match self.back_side()? {
+            BackSide::Trivial => format!("…"),
+            BackSide::Time(time) => format!("🕒 {}", time),
+            BackSide::Text(s) => s.to_owned(),
+            BackSide::Card(id) => format!("→ {}", self.foobar.load_card(*id).unwrap().print()),
+            BackSide::List(list) => format!(
+                "→ [{}]",
+                list.iter()
+                    .map(|id| self.foobar.load_card(*id).unwrap().print())
+                    .collect::<Vec<String>>()
+                    .join(", ")
+            ),
+        })
     }
 }
 
 impl<T: CardTrait> Card<T> {
-    fn history(&self) -> &Reviews {
+    pub fn history(&self) -> &Reviews {
         &self.history
     }
 
@@ -499,54 +426,12 @@ impl<T: CardTrait> Card<T> {
     }
 
     pub fn recall_rate_at(&self, current_unix: Duration) -> Option<RecallRate> {
-        crate::recall_rate::recall_rate(&self.history, current_unix)
-    }
-
-    pub fn min_rec_recall_rate(&self) -> Option<RecallRate> {
-        let mut recall_rate = self.recall_rate()?;
-
-        for id in self.all_dependencies() {
-            let card = Card::from_id(id)?;
-            recall_rate = recall_rate.min(card.recall_rate()?);
-        }
-
-        Some(recall_rate)
+        SimpleRecall.recall_rate(&self.history, current_unix)
     }
 
     pub fn recall_rate(&self) -> Option<RecallRate> {
         let now = current_time();
-        crate::recall_rate::recall_rate(&self.history, now)
-    }
-
-    fn is_resolved(&self) -> bool {
-        for id in self.all_dependencies() {
-            if let Some(card) = Card::from_id(id) {
-                if !card.is_finished() {
-                    return false;
-                }
-            }
-        }
-
-        true
-    }
-
-    pub fn all_dependencies(&self) -> Vec<CardId> {
-        fn inner(id: CardId, deps: &mut Vec<CardId>) {
-            let Some(card) = Card::from_id(id) else {
-                return;
-            };
-
-            for dep in card.dependency_ids() {
-                deps.push(dep);
-                inner(dep, deps);
-            }
-        }
-
-        let mut deps = vec![];
-
-        inner(self.id(), &mut deps);
-
-        deps
+        self.foobar.recaller.recall_rate(&self.history, now)
     }
 
     pub fn maybeturity(&self) -> Option<f32> {
@@ -565,6 +450,7 @@ impl<T: CardTrait> Card<T> {
 
         Some(result as f32)
     }
+
     pub fn maturity(&self) -> f32 {
         use gkquad::single::integral;
 
@@ -621,11 +507,8 @@ impl<T: CardTrait> Card<T> {
 impl Matcher for Card<AnyType> {
     fn get_val(&self, key: &str) -> Option<samsvar::Value> {
         match key {
-            "front" => json!(&self.data.display_front()),
-            "back" => json!(&self
-                .back_side()
-                .map(|bs| display_backside(bs))
-                .unwrap_or_default()),
+            "front" => json!(self.data.display_front()),
+            "back" => json!(self.display_backside().unwrap_or_default()),
             "suspended" => json!(&self.is_suspended()),
             "finished" => json!(&self.is_finished()),
             "resolved" => json!(&self.is_resolved()),
@@ -643,9 +526,14 @@ impl Matcher for Card<AnyType> {
             ),
             "minrecrecall" => {
                 let mut min_stability = usize::MAX;
-                let cards = self.all_dependencies();
-                for id in cards {
-                    let stab = (Card::from_id(id).unwrap().recall_rate().unwrap_or_default()
+                let selfs = self.all_dependencies();
+                for id in selfs {
+                    let stab = (self
+                        .foobar
+                        .load_card(id)
+                        .unwrap()
+                        .recall_rate()
+                        .unwrap_or_default()
                         * 1000.) as usize;
                     min_stability = min_stability.min(stab);
                 }
@@ -654,9 +542,9 @@ impl Matcher for Card<AnyType> {
             }
             "minrecstab" => {
                 let mut min_recall = usize::MAX;
-                let cards = self.all_dependencies();
-                for id in cards {
-                    let stab = (Card::from_id(id).unwrap().maturity() * 1000.) as usize;
+                let selfs = self.all_dependencies();
+                for id in selfs {
+                    let stab = (self.foobar.load_card(id).unwrap().maturity() * 1000.) as usize;
                     min_recall = min_recall.min(stab);
                 }
 
@@ -667,7 +555,7 @@ impl Matcher for Card<AnyType> {
                 let id = self.id();
                 let mut count: usize = 0;
 
-                for card in Card::load_all_cards() {
+                for card in self.foobar.load_all_cards() {
                     if card.dependency_ids().contains(&id) {
                         count += 1;
                     }

@@ -4,19 +4,20 @@ use crate::{
     utils::{clear_terminal, get_input_opt, notify},
 };
 use dialoguer::{theme::ColorfulTheme, Select};
+use speki_core::App;
 use speki_core::CType;
 use std::io::Write;
 
-pub fn add_cards() {
+pub fn add_cards(app: &App) {
     loop {
         clear_terminal();
-        if create_card(CType::Normal).is_none() {
+        if create_card(CType::Normal, app).is_none() {
             break;
         }
     }
 }
 
-pub async fn add_cards_menu() {
+pub async fn add_cards_menu(app: &App) {
     let items = vec![
         "New cards",
         "Unfinished cards",
@@ -32,10 +33,10 @@ pub async fn add_cards_menu() {
         .unwrap();
 
     match selection {
-        0 => crate::add_cards::add_cards(),
-        1 => crate::unfinished::unfinished(),
+        0 => crate::add_cards::add_cards(app),
+        1 => crate::unfinished::unfinished(app),
         2 => add_wikipedia(),
-        3 => textstuff(),
+        3 => textstuff(app),
         4 => return,
         _ => panic!(),
     }

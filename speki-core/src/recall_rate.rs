@@ -2,7 +2,24 @@ use std::time::Duration;
 
 use speki_dto::Recall;
 
-use crate::{card::RecallRate, reviews::Reviews};
+use crate::{card::RecallRate, reviews::Reviews, RecallCalc};
+
+pub struct SimpleRecall;
+
+impl RecallCalc for SimpleRecall {
+    fn recall_rate(&self, reviews: &Reviews, current_unix: Duration) -> Option<RecallRate> {
+        simple_recall_rate(reviews, current_unix)
+    }
+}
+
+fn simple_recall_rate(reviews: &Reviews, current_unix: Duration) -> Option<RecallRate> {
+    let days_passed = reviews.time_since_last_review(current_unix)?;
+    let stability = stability(reviews)?;
+    let randomized_stability =
+        randomize_factor(stability.as_secs_f32(), reviews.0.last().unwrap().timestamp);
+    let stability = Duration::from_secs_f32(randomized_stability);
+    Some(calculate_recall_rate(&days_passed, &stability))
+}
 
 /// Randomizes the flashcard factor with a factor of 0.5 to 1.4 to avoid clustering of reviews
 fn randomize_factor(factor: f32, prev_review_timestamp: Duration) -> f32 {
@@ -57,15 +74,6 @@ fn stability(reviews: &Reviews) -> Option<Duration> {
     }
 
     Some(stability)
-}
-
-pub fn recall_rate(reviews: &Reviews, current_unix: Duration) -> Option<RecallRate> {
-    let days_passed = reviews.time_since_last_review(current_unix)?;
-    let stability = stability(reviews)?;
-    let randomized_stability =
-        randomize_factor(stability.as_secs_f32(), reviews.0.last().unwrap().timestamp);
-    let stability = Duration::from_secs_f32(randomized_stability);
-    Some(calculate_recall_rate(&days_passed, &stability))
 }
 
 fn calculate_recall_rate(days_passed: &Duration, stability: &Duration) -> RecallRate {

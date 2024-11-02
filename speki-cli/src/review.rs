@@ -9,11 +9,8 @@ use crate::{
 use dialoguer::{theme::ColorfulTheme, Input, Select};
 use rand::prelude::*;
 use speki_core::{
-    attribute::Attribute,
-    card::{
-        display_backside, AnyType, AttributeCard, ClassCard, EventCard, InstanceCard, StatementCard,
-    },
-    BackSide, Card, CardId,
+    AnyType, Attribute, AttributeCard, BackSide, Card, CardId, ClassCard, EventCard, InstanceCard,
+    StatementCard,
 };
 use speki_dto::Recall;
 use speki_fs::paths;
@@ -123,7 +120,9 @@ impl FromStr for ReviewAction {
     }
 }
 
-pub fn review_menu() {
+use speki_core::App;
+
+pub fn review_menu(app: &App) {
     let items = vec!["Old cards", "Pending cards", "exit"];
 
     let selection = Select::with_theme(&ColorfulTheme::default())
@@ -133,8 +132,8 @@ pub fn review_menu() {
         .unwrap();
 
     match selection {
-        0 => review_old(),
-        1 => review_new(),
+        0 => review_old(app),
+        1 => review_new(app),
         2 => return,
         _ => panic!(),
     }
@@ -143,27 +142,27 @@ pub fn review_menu() {
 const DEFAULT_FILTER: &'static str =
     "recall < 0.8 & finished == true & suspended == false & resolved == true & minrecrecall > 0.8 & minrecstab > 10 & lastreview > 0.5 & weeklapses < 3 & monthlapses < 6";
 
-pub fn review_new() {
+pub fn review_new(app: &App) {
     let filter = DEFAULT_FILTER.to_string();
-    let mut cards = speki_core::Card::load_pending(Some(filter));
+    let mut cards = app.load_pending(Some(filter));
     cards.shuffle(&mut thread_rng());
 
-    review(cards);
+    review(app, cards);
 }
 
-pub fn review_old() {
+pub fn review_old(app: &App) {
     let filter = DEFAULT_FILTER.to_string();
-    let mut cards = speki_core::Card::load_non_pending(Some(filter));
+    let mut cards = app.load_non_pending(Some(filter));
     cards.shuffle(&mut thread_rng());
 
-    review(cards);
+    review(app, cards);
 }
 
-fn handle_review_action(card: CardId, action: ReviewAction) -> ControlFlow<()> {
-    let card = Card::from_id(card).unwrap();
+fn handle_review_action(app: &App, card: CardId, action: ReviewAction) -> ControlFlow<()> {
+    let card = app.foobar.load_card(card).unwrap();
     match action {
         ReviewAction::Grade(grade) => {
-            speki_core::review(card.id(), grade);
+            app.review(card.id(), grade);
             ControlFlow::Break(())
         }
         ReviewAction::Skip => ControlFlow::Break(()),
@@ -174,24 +173,24 @@ fn handle_review_action(card: CardId, action: ReviewAction) -> ControlFlow<()> {
     }
 }
 
-fn create_attribute_card(card: &Card<AnyType>) -> Option<AttributeCard> {
+fn create_attribute_card(card: &Card<AnyType>, app: &App) -> Option<AttributeCard> {
     notify(format!("Which instance ?"));
-    let instance_id = select_from_all_instance_cards()?;
-    let instance = Card::from_id(instance_id).unwrap();
+    let instance_id = select_from_all_instance_cards(app)?;
+    let instance = app.foobar.load_card(instance_id).unwrap();
 
     notify(format!("Which attribute among the class?"));
-    let attribute_id = select_from_class_attributes(instance.parent_class().unwrap())?;
+    let attribute_id = select_from_class_attributes(app, instance.parent_class().unwrap())?;
 
-    let attribute = Attribute::load(attribute_id).unwrap();
+    let attribute = app.foobar.load_attribute(attribute_id).unwrap();
 
     let back = if let Some(back_type) = attribute.back_type {
-        let class_name = Card::from_id(back_type).unwrap().print();
+        let class_name = app.foobar.load_card(back_type).unwrap().print();
         notify(format!(
             "chosen attribute requires card belonging to this class: {}",
             class_name,
         ));
 
-        let back = select_from_subclass_cards(back_type)?;
+        let back = select_from_subclass_cards(app, back_type)?;
 
         BackSide::Card(back)
     } else {
@@ -216,16 +215,17 @@ fn create_attribute_card(card: &Card<AnyType>) -> Option<AttributeCard> {
         attribute: attribute.id,
         back,
         instance: instance_id,
+        foobar: app.foobar.clone(),
     })
 }
 
-fn handle_action(card: CardId, action: CardAction) -> ControlFlow<()> {
-    let card = Card::from_id(card).unwrap();
+fn handle_action(app: &App, card: CardId, action: CardAction) -> ControlFlow<()> {
+    let card = app.foobar.load_card(card).unwrap();
 
     match action {
         CardAction::IntoAttribute => match card.card_type() {
             AnyType::Normal(_) | AnyType::Unfinished(_) => {
-                if let Some(attr) = create_attribute_card(&card) {
+                if let Some(attr) = create_attribute_card(&card, app) {
                     card.into_type(attr);
                 }
             }
@@ -237,7 +237,7 @@ fn handle_action(card: CardId, action: CardAction) -> ControlFlow<()> {
         },
 
         CardAction::IntoInstance => {
-            if let Some(class) = select_from_all_class_cards() {
+            if let Some(class) = select_from_all_class_cards(app) {
                 let instance = InstanceCard {
                     name: card.print(),
                     class,
@@ -250,42 +250,42 @@ fn handle_action(card: CardId, action: CardAction) -> ControlFlow<()> {
 
         CardAction::NewDependency => {
             println!("add dependency");
-            if let Some(new_card) = add_any_card() {
-                speki_core::set_dependency(card.id(), new_card);
+            if let Some(new_card) = add_any_card(app) {
+                app.set_dependency(card.id(), new_card);
             }
         }
         CardAction::OldDependency => {
-            if let Some(dep) = select_from_all_cards() {
-                speki_core::set_dependency(card.id(), dep);
+            if let Some(dep) = select_from_all_cards(app) {
+                app.set_dependency(card.id(), dep);
             }
         }
         CardAction::NewDependent => {
             println!("add dependent");
-            if let Some(new_card) = add_any_card() {
-                speki_core::set_dependency(new_card, card.id());
+            if let Some(new_card) = add_any_card(app) {
+                app.set_dependency(new_card, card.id());
             }
         }
         CardAction::OldDependent => {
-            if let Some(dep) = select_from_all_cards() {
-                speki_core::set_dependency(dep, card.id());
+            if let Some(dep) = select_from_all_cards(app) {
+                app.set_dependency(dep, card.id());
             }
         }
         CardAction::OldClass => {
-            if let Some(concept) = select_from_all_class_cards() {
-                speki_core::set_class(card.id(), concept).unwrap();
+            if let Some(concept) = select_from_all_class_cards(app) {
+                app.set_class(card.id(), concept).unwrap();
             }
         }
         CardAction::NewClass => {
-            if let Some(class) = new_class().map(|class| Card::new_any(class.into())) {
-                speki_core::set_class(card.id(), class.id()).unwrap();
+            if let Some(class) = new_class().map(|class| app.new_any(class)) {
+                app.set_class(card.id(), class.id()).unwrap();
             }
         }
         CardAction::FillAttribute => {
             if card.is_instance() {
-                let attributes = Attribute::load_relevant_attributes(card.id());
+                let attributes = Attribute::load_relevant_attributes(app, card.id());
 
                 if let Some(attribute) = select_from_attributes(attributes) {
-                    let attr = Attribute::load(attribute).unwrap();
+                    let attr = app.foobar.load_attribute(attribute).unwrap();
                     let txt = attr.name(card.id());
 
                     if let Some(back) = opt_input(&txt) {
@@ -293,9 +293,10 @@ fn handle_action(card: CardId, action: CardAction) -> ControlFlow<()> {
                             attribute,
                             back: back.into(),
                             instance: card.id(),
+                            foobar: app.foobar.clone(),
                         };
 
-                        Card::<AttributeCard>::new(attr);
+                        app.new_any(attr);
                     }
                 }
             }
@@ -303,7 +304,7 @@ fn handle_action(card: CardId, action: CardAction) -> ControlFlow<()> {
 
         // Marks this card as an attribute
         CardAction::OldAttribute => {
-            if let Some(attr) = new_attribute() {
+            if let Some(attr) = new_attribute(app) {
                 card.into_type(attr);
             }
         }
@@ -311,8 +312,8 @@ fn handle_action(card: CardId, action: CardAction) -> ControlFlow<()> {
             if let Some(class) = card.parent_class().or(card.is_class().then_some(card.id())) {
                 if let Some(pattern) = opt_input("attribute pattern") {
                     notify("which class should the answer belong to?");
-                    let back_type = select_from_all_class_cards();
-                    Attribute::create(pattern, class, back_type);
+                    let back_type = select_from_all_class_cards(app);
+                    Attribute::create(app, pattern, class, back_type);
                     notify("new pattern created");
                 }
             } else {
@@ -353,7 +354,7 @@ fn handle_action(card: CardId, action: CardAction) -> ControlFlow<()> {
 
         CardAction::ParentClass => {
             if let AnyType::Class(class) = card.card_type() {
-                if let Some(parent_class) = select_from_all_class_cards() {
+                if let Some(parent_class) = select_from_all_class_cards(app) {
                     if parent_class != card.id() {
                         let mut class = class.clone();
                         class.parent_class = Some(parent_class);
@@ -366,31 +367,31 @@ fn handle_action(card: CardId, action: CardAction) -> ControlFlow<()> {
         }
 
         CardAction::SetBackRef => {
-            if let Some(reff) = select_from_all_cards() {
-                Card::from_id(card.id()).unwrap().set_ref(reff);
+            if let Some(reff) = select_from_all_cards(app) {
+                app.foobar.load_card(card.id()).unwrap().set_ref(reff);
             }
         }
         CardAction::Edit => {
             let _ = edit_with_vim(card.id());
         }
         CardAction::Delete => {
-            speki_core::delete(card.id());
+            app.delete_card(card.id());
             return ControlFlow::Break(());
         }
 
         CardAction::NewCard => {
-            let _ = add_any_card();
+            let _ = add_any_card(app);
         }
     }
 
     ControlFlow::Continue(())
 }
 
-pub fn view_card(card: CardId, review_mode: bool) -> ControlFlow<()> {
+pub fn view_card(app: &App, card: CardId, review_mode: bool) -> ControlFlow<()> {
     let mut show_backside = !review_mode;
 
     loop {
-        if print_card(card, show_backside).is_break() {
+        if print_card(app, card, show_backside).is_break() {
             return ControlFlow::Continue(());
         }
 
@@ -400,7 +401,7 @@ pub fn view_card(card: CardId, review_mode: bool) -> ControlFlow<()> {
 
         if let Ok(action) = txt.parse::<ReviewAction>() {
             if review_mode {
-                match handle_review_action(card, action) {
+                match handle_review_action(app, card, action) {
                     ControlFlow::Continue(_) => continue,
                     ControlFlow::Break(_) => return ControlFlow::Continue(()),
                 }
@@ -408,7 +409,7 @@ pub fn view_card(card: CardId, review_mode: bool) -> ControlFlow<()> {
         }
 
         if let Ok(action) = txt.parse::<CardAction>() {
-            match handle_action(card, action) {
+            match handle_action(app, card, action) {
                 ControlFlow::Continue(_) => continue,
                 ControlFlow::Break(_) => return ControlFlow::Continue(()),
             }
@@ -421,8 +422,8 @@ pub fn view_card(card: CardId, review_mode: bool) -> ControlFlow<()> {
             }
 
             if txt.contains("find") {
-                if let Some(card) = select_from_all_cards() {
-                    view_card(card, false);
+                if let Some(card) = select_from_all_cards(app) {
+                    view_card(app, card, false);
                 }
 
                 continue;
@@ -440,28 +441,28 @@ pub fn view_card(card: CardId, review_mode: bool) -> ControlFlow<()> {
     }
 }
 
-fn print_card(card: CardId, mut show_backside: bool) -> ControlFlow<()> {
+fn print_card(app: &App, card: CardId, mut show_backside: bool) -> ControlFlow<()> {
     clear_terminal();
-    let card = speki_core::card_from_id(card);
+    let card = app.card_from_id(card);
 
     let var_name = match card.card_type() {
         AnyType::Instance(instance) => match card.back_side() {
-            Some(back) => {
-                let parent_class = Card::from_id(instance.class).unwrap();
+            Some(_) => {
+                let parent_class = app.foobar.load_card(instance.class).unwrap();
                 let front = format!("what is: {} ({})", card.print(), parent_class.print());
-                let back = display_backside(&back);
+                let back = card.display_backside().unwrap_or_default();
                 (front, back)
             }
             None => {
                 let front = format!("which class: {}", card.print());
-                let back = Card::from_id(instance.class).unwrap().print();
+                let back = app.foobar.load_card(instance.class).unwrap().print();
                 (front, back)
             }
         },
 
-        AnyType::Normal(normal) => {
+        AnyType::Normal(_) => {
             let front = card.print();
-            let back = display_backside(&normal.back);
+            let back = card.display_backside().unwrap_or_default();
             (front, back)
         }
         AnyType::Unfinished(_) => {
@@ -470,14 +471,14 @@ fn print_card(card: CardId, mut show_backside: bool) -> ControlFlow<()> {
             let back = String::from("card has no answer yet");
             (front, back)
         }
-        AnyType::Attribute(attribute) => {
+        AnyType::Attribute(_) => {
             let front = card.print();
-            let back = display_backside(&attribute.back);
+            let back = card.display_backside().unwrap_or_default();
             (front, back)
         }
-        AnyType::Class(class) => {
+        AnyType::Class(_) => {
             let front = card.print();
-            let back = display_backside(&class.back);
+            let back = card.display_backside().unwrap_or_default();
             (front, back)
         }
         AnyType::Statement(_) | AnyType::Event(_) => {
@@ -528,11 +529,11 @@ fn print_card(card: CardId, mut show_backside: bool) -> ControlFlow<()> {
 
     println!("{}", &back);
     println!();
-    print_card_info(card.id());
+    print_card_info(app, card.id());
     ControlFlow::Continue(())
 }
 
-pub fn review(cards: Vec<CardId>) {
+pub fn review(app: &App, cards: Vec<CardId>) {
     if cards.is_empty() {
         clear_terminal();
         notify("nothing to review!");
@@ -543,7 +544,7 @@ pub fn review(cards: Vec<CardId>) {
     }
 
     for card in cards {
-        if view_card(card, true).is_break() {
+        if view_card(app, card, true).is_break() {
             return;
         }
     }

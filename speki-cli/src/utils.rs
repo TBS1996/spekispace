@@ -1,5 +1,5 @@
 use dialoguer::{theme::ColorfulTheme, Input, Select};
-use speki_core::{attribute::Attribute, card::AnyType, Card, CardId};
+use speki_core::{AnyType, App, Attribute, Card, CardId};
 use speki_dto::AttributeId;
 use speki_fs::paths;
 use std::path::Path;
@@ -16,8 +16,10 @@ pub fn notify(msg: impl Into<String>) {
         .unwrap();
 }
 
-pub fn select_from_subclass_cards(class: CardId) -> Option<CardId> {
-    let cards: Vec<Card<AnyType>> = Card::load_all_cards()
+pub fn select_from_subclass_cards(app: &App, class: CardId) -> Option<CardId> {
+    let cards: Vec<Card<AnyType>> = app
+        .foobar
+        .load_all_cards()
         .into_iter()
         .filter(|card| card.load_ancestor_classes().contains(&class))
         .collect();
@@ -27,8 +29,10 @@ pub fn select_from_subclass_cards(class: CardId) -> Option<CardId> {
         .into()
 }
 
-pub fn select_from_all_instance_cards() -> Option<CardId> {
-    let cards: Vec<Card<AnyType>> = Card::load_all_cards()
+pub fn select_from_all_instance_cards(app: &App) -> Option<CardId> {
+    let cards: Vec<Card<AnyType>> = app
+        .foobar
+        .load_all_cards()
         .into_iter()
         .filter(|card| card.is_instance())
         .collect();
@@ -37,16 +41,16 @@ pub fn select_from_all_instance_cards() -> Option<CardId> {
         .into()
 }
 
-pub fn select_from_all_class_cards() -> Option<CardId> {
-    let cards = Card::load_class_cards();
+pub fn select_from_all_class_cards(app: &App) -> Option<CardId> {
+    let cards = app.foobar.load_all_cards();
     enumselector::select_item_with_formatter(cards, |card: &Card<AnyType>| card.print())?
         .id()
         .into()
 }
 
-pub fn select_from_class_attributes(class: CardId) -> Option<AttributeId> {
+pub fn select_from_class_attributes(app: &App, class: CardId) -> Option<AttributeId> {
     enumselector::select_item_with_formatter(
-        Attribute::load_from_class_only(class),
+        Attribute::load_from_class_only(app, class),
         |attr: &Attribute| attr.pattern().to_owned(),
     )?
     .id
@@ -61,10 +65,11 @@ pub fn select_from_attributes(attributes: Vec<Attribute>) -> Option<AttributeId>
     .into()
 }
 
-pub fn select_from_all_cards() -> Option<CardId> {
-    enumselector::select_item_with_formatter(Card::load_all_cards(), |card: &Card<AnyType>| {
-        card.print().to_owned()
-    })?
+pub fn select_from_all_cards(app: &App) -> Option<CardId> {
+    enumselector::select_item_with_formatter(
+        app.foobar.load_all_cards(),
+        |card: &Card<AnyType>| card.print().to_owned(),
+    )?
     .id()
     .into()
 }

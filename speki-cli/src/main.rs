@@ -4,25 +4,20 @@ use console::style;
 use dialoguer::{theme::ColorfulTheme, Input, Select};
 use incread::inc_path;
 use review::{review_menu, view_card};
+use speki_core::App;
 use speki_core::{
-    attribute::Attribute,
-    card::{
-        AnyType, AttributeCard, ClassCard, EventCard, InstanceCard, NormalCard, StatementCard,
-        UnfinishedCard,
-    },
-    // github::{poll_for_token, request_device_code, LoginInfo},
-    BackSide,
-    CType,
-    Card,
-    CardId,
-    TimeStamp,
+    AnyType, Attribute, AttributeCard, BackSide, CType, Card, CardId, ClassCard, EventCard,
+    InstanceCard, NormalCard, SimpleRecall, StatementCard, TimeStamp, UnfinishedCard,
 };
 use utils::{
     notify, select_from_all_cards, select_from_all_class_cards, select_from_all_instance_cards,
     select_from_attributes,
 };
 
-use speki_fs::paths::{config_dir, get_cards_path, get_review_path};
+use speki_fs::{
+    paths::{config_dir, get_cards_path, get_review_path},
+    FileProvider,
+};
 
 //mod collections;
 mod add_cards;
@@ -58,8 +53,8 @@ fn new_class() -> Option<ClassCard> {
     })
 }
 
-fn new_instance() -> Option<InstanceCard> {
-    let class = select_from_all_class_cards()?;
+fn new_instance(app: &App) -> Option<InstanceCard> {
+    let class = select_from_all_class_cards(app)?;
     let name = opt_input("name of instance")?;
     Some(InstanceCard {
         name,
@@ -68,12 +63,12 @@ fn new_instance() -> Option<InstanceCard> {
     })
 }
 
-fn new_attribute() -> Option<AttributeCard> {
+fn new_attribute(app: &App) -> Option<AttributeCard> {
     notify("which instance card is this attribute for?");
 
-    let instance = select_from_all_instance_cards()?;
+    let instance = select_from_all_instance_cards(app)?;
     let attribute = {
-        let attributes = Attribute::load_relevant_attributes(instance);
+        let attributes = Attribute::load_relevant_attributes(app, instance);
         if attributes.is_empty() {
             notify("no relevant attributes found for instance");
             return None;
@@ -82,7 +77,7 @@ fn new_attribute() -> Option<AttributeCard> {
     };
 
     let back: BackSide = {
-        let prompt = Attribute::load(attribute).unwrap().name(instance);
+        let prompt = app.foobar.load_attribute(attribute).unwrap().name(instance);
         opt_input(&prompt)?.into()
     };
 
@@ -90,6 +85,7 @@ fn new_attribute() -> Option<AttributeCard> {
         attribute,
         back,
         instance,
+        foobar: app.foobar.clone(),
     })
 }
 
@@ -141,17 +137,17 @@ pub fn get_timestamp(front: &str) -> TimeStamp {
     }
 }
 
-pub fn create_card(ty: CType) -> Option<Card<AnyType>> {
-    let ty = create_type(ty)?;
-    Some(Card::new_any(ty))
+pub fn create_card(ty: CType, app: &App) -> Option<Card<AnyType>> {
+    let ty = create_type(ty, app)?;
+    Some(app.new_any(ty))
 }
 
-pub fn create_type(ty: CType) -> Option<AnyType> {
+pub fn create_type(ty: CType, app: &App) -> Option<AnyType> {
     let any: AnyType = match ty {
-        CType::Instance => new_instance()?.into(),
+        CType::Instance => new_instance(app)?.into(),
         CType::Normal => new_normal()?.into(),
         CType::Unfinished => new_unfinished()?.into(),
-        CType::Attribute => new_attribute()?.into(),
+        CType::Attribute => new_attribute(app)?.into(),
         CType::Class => new_class()?.into(),
         CType::Statement => new_statement()?.into(),
         CType::Event => new_event()?.into(),
@@ -193,9 +189,9 @@ pub fn choose_type() -> Option<CType> {
     .into()
 }
 
-pub fn add_any_card() -> Option<CardId> {
+pub fn add_any_card(app: &App) -> Option<CardId> {
     let ty = choose_type()?;
-    Some(create_card(ty)?.id())
+    Some(create_card(ty, app)?.id())
 }
 
 fn inspect_files() {
@@ -224,9 +220,7 @@ fn inspect_files() {
     }
 }
 
-async fn menu() {
-    //new_repo_col(&login.clone().unwrap(), "repo3", true);
-
+async fn menu(app: &App) {
     loop {
         utils::clear_terminal();
 
@@ -239,12 +233,12 @@ async fn menu() {
             .unwrap();
 
         match selection {
-            0 => review_menu(),
-            1 => add_cards_menu().await,
+            0 => review_menu(&app),
+            1 => add_cards_menu(&app).await,
             2 => inspect_files(),
             3 => {
-                if let Some(card) = select_from_all_cards() {
-                    view_card(card, false);
+                if let Some(card) = select_from_all_cards(app) {
+                    view_card(&app, card, false);
                 }
             }
             _ => panic!(),
@@ -252,13 +246,13 @@ async fn menu() {
     }
 }
 
-fn print_card_info(id: CardId) {
-    let card = Card::from_id(id).unwrap();
+fn print_card_info(app: &App, id: CardId) {
+    let card = app.foobar.load_card(id).unwrap();
     let dependencies = card.dependency_ids();
-    let dependents = speki_core::get_cached_dependents(id);
+    let dependents = app.get_cached_dependents(id);
 
     if let AnyType::Instance(ty) = card.card_type() {
-        let concept = Card::from_id(ty.class).unwrap().print();
+        let concept = app.foobar.load_card(ty.class).unwrap().print();
         println!("concept: {}", concept);
     }
 
@@ -267,7 +261,8 @@ fn print_card_info(id: CardId) {
         for id in dependencies {
             println!(
                 "{}",
-                Card::from_id(id)
+                app.foobar
+                    .load_card(id)
                     .map(|card| card.print())
                     .unwrap_or_else(|| format!("missing card for dependency: {id}"))
             );
@@ -284,7 +279,8 @@ fn print_card_info(id: CardId) {
             for id in dependents {
                 println!(
                     "{}",
-                    Card::from_id(id)
+                    app.foobar
+                        .load_card(id)
                         .map(|card| card.print())
                         .unwrap_or_else(|| format!("missing card for dependent: {id}"))
                 );
@@ -323,19 +319,20 @@ struct Cli {
 #[tokio::main]
 async fn main() {
     let cli = Cli::parse();
+    let app = App::new(FileProvider, SimpleRecall);
 
     if cli.add.is_some() {
         let s = cli.add.unwrap();
 
         if let Some((front, back)) = s.split_once(";") {
-            speki_core::add_card(front.to_string(), back.to_string());
+            app.add_card(front.to_string(), back.to_string());
         } else {
-            speki_core::add_unfinished(s);
+            app.add_unfinished(s);
         }
     } else if cli.list {
-        dbg!(speki_core::load_cards());
+        dbg!(app.load_cards());
     } else if cli.graph {
-        println!("{}", speki_core::as_graph());
+        println!("{}", speki_core::as_graph(&app));
     } else if cli.prune {
         todo!()
     } else if cli.debug {
@@ -345,14 +342,14 @@ async fn main() {
         let id = cli.recall.unwrap();
         let id: uuid::Uuid = id.parse().unwrap();
         let id = CardId(id);
-        let x = speki_core::Card::from_id(id).unwrap().recall_rate();
+        let x = app.foobar.load_card(id).unwrap().recall_rate();
         dbg!(x);
     } else if cli.concept.is_some() {
     } else if cli.healthcheck {
-        speki_core::health_check();
+        // speki_core::health_check();
     } else if cli.roundtrip {
-        speki_core::load_and_persist();
+        app.load_and_persist();
     } else {
-        menu().await;
+        menu(&app).await;
     }
 }

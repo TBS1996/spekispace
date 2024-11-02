@@ -9,27 +9,33 @@ use std::time::Duration;
 use uuid::Uuid;
 
 pub trait SpekiProvider {
-    fn load_all_cards() -> Vec<RawCard>;
-    fn save_card(card: RawCard);
-    fn load_card(id: CardId) -> Option<RawCard>;
-    fn delete_card(id: CardId);
+    fn load_all_cards(&self) -> Vec<RawCard>;
+    fn save_card(&self, card: RawCard);
+    fn load_card(&self, id: CardId) -> Option<RawCard>;
+    fn delete_card(&self, id: CardId);
 
-    fn load_all_attributes() -> Vec<AttributeDTO>;
-    fn save_attribute(attribute: AttributeDTO);
-    fn load_attribute(id: AttributeId) -> Option<AttributeDTO>;
-    fn delete_attribute(id: AttributeId);
+    fn load_all_attributes(&self) -> Vec<AttributeDTO>;
+    fn save_attribute(&self, attribute: AttributeDTO);
+    fn load_attribute(&self, id: AttributeId) -> Option<AttributeDTO>;
+    fn delete_attribute(&self, id: AttributeId);
 
-    fn load_reviews(id: CardId) -> Vec<Review>;
-    fn add_review(id: CardId, review: Review) {
-        let mut reviews = Self::load_reviews(id);
+    fn load_reviews(&self, id: CardId) -> Vec<Review>;
+    fn add_review(&self, id: CardId, review: Review) {
+        let mut reviews = self.load_reviews(id);
         let foo = reviews.len();
         reviews.push(review);
-        Self::save_reviews(id, reviews);
-        let bar = Self::load_reviews(id).len();
+        self.save_reviews(id, reviews);
+        let bar = self.load_reviews(id).len();
         assert!(foo < bar);
     }
-    fn save_reviews(id: CardId, reviews: Vec<Review>);
+    fn save_reviews(&self, id: CardId, reviews: Vec<Review>);
+
+    fn load_config(&self) -> Config;
+    fn save_config(&self, config: Config);
 }
+
+#[derive(Serialize, Deserialize, Debug, Clone, Default)]
+pub struct Config;
 
 #[derive(Serialize, Deserialize, Debug, Clone, Default)]
 #[serde(rename_all = "lowercase")]

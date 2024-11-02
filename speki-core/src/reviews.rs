@@ -3,17 +3,16 @@ use speki_dto::{CardId, Recall, SpekiProvider};
 use speki_fs::FileProvider;
 use std::time::Duration;
 
-
 #[derive(Ord, PartialOrd, Eq, Hash, PartialEq, Debug, Default, Clone)]
 pub struct Reviews(pub Vec<Review>);
 
 impl Reviews {
     pub fn load(id: CardId) -> Self {
-        Self(FileProvider::load_reviews(id))
+        Self(FileProvider.load_reviews(id))
     }
 
     pub fn save(&self, id: CardId) {
-        FileProvider::save_reviews(id, self.clone().into_inner());
+        FileProvider.save_reviews(id, self.clone().into_inner());
     }
 
     pub fn is_empty(&self) -> bool {
@@ -38,7 +37,7 @@ impl Reviews {
             grade: recall,
             time_spent: Default::default(),
         };
-        FileProvider::add_review(id, review);
+        FileProvider.add_review(id, review);
     }
 
     pub fn lapses_since(&self, dur: Duration, current_time: Duration) -> u32 {

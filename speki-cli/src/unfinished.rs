@@ -1,11 +1,11 @@
 use crate::utils::{clear_terminal, notify};
 use dialoguer::{theme::ColorfulTheme, Input, Select};
 use rand::seq::SliceRandom;
-use speki_core::{card::NormalCard, Card};
+use speki_core::{App, NormalCard};
 
-pub fn unfinished() {
+pub fn unfinished(app: &App) {
     let filter = "finished == false & suspended == false".to_string();
-    let mut cards = speki_core::cards_filtered(filter);
+    let mut cards = app.cards_filtered(filter);
     if cards.is_empty() {
         clear_terminal();
         notify("no unfinished cards");
@@ -16,7 +16,7 @@ pub fn unfinished() {
 
     for card_id in cards {
         loop {
-            let front = Card::from_id(card_id).unwrap().print();
+            let front = app.foobar.load_card(card_id).unwrap().print();
             clear_terminal();
 
             let input: String = Input::new()
@@ -39,10 +39,13 @@ pub fn unfinished() {
 
             match selection {
                 0 => {
-                    Card::from_id(card_id).unwrap().into_type(NormalCard {
-                        front,
-                        back: input.into(),
-                    });
+                    app.foobar
+                        .load_card(card_id)
+                        .unwrap()
+                        .into_type(NormalCard {
+                            front,
+                            back: input.into(),
+                        });
                     break;
                 }
                 1 => continue,

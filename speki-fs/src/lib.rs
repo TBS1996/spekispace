@@ -1,4 +1,5 @@
 use rayon::prelude::*;
+use speki_dto::Config;
 use speki_dto::{AttributeDTO, AttributeId, CardId, RawCard, Recall, Review, SpekiProvider};
 use std::{
     fs::{self, read_to_string},
@@ -35,7 +36,7 @@ fn load_files<P: AsRef<Path>>(folder_path: P) -> std::io::Result<Vec<String>> {
 pub struct FileProvider;
 
 impl SpekiProvider for FileProvider {
-    fn load_all_cards() -> Vec<RawCard> {
+    fn load_all_cards(&self) -> Vec<RawCard> {
         load_files(paths::get_cards_path())
             .unwrap()
             .into_par_iter()
@@ -43,14 +44,14 @@ impl SpekiProvider for FileProvider {
             .collect()
     }
 
-    fn save_card(card: RawCard) {
+    fn save_card(&self, card: RawCard) {
         let s: String = toml::to_string(&card).unwrap();
         let path = paths::get_cards_path().join(card.id.to_string());
         let mut file = fs::File::create(path).unwrap();
         file.write_all(&mut s.as_bytes()).unwrap();
     }
 
-    fn load_card(id: CardId) -> Option<RawCard> {
+    fn load_card(&self, id: CardId) -> Option<RawCard> {
         let path = paths::get_cards_path().join(id.to_string());
 
         if !path.exists() {
@@ -61,7 +62,7 @@ impl SpekiProvider for FileProvider {
         }
     }
 
-    fn load_all_attributes() -> Vec<AttributeDTO> {
+    fn load_all_attributes(&self) -> Vec<AttributeDTO> {
         load_files(paths::get_attributes_path())
             .unwrap()
             .into_par_iter()
@@ -69,14 +70,14 @@ impl SpekiProvider for FileProvider {
             .collect()
     }
 
-    fn save_attribute(attribute: AttributeDTO) {
+    fn save_attribute(&self, attribute: AttributeDTO) {
         let s: String = toml::to_string(&attribute).unwrap();
         let path = paths::get_attributes_path().join(attribute.id.into_inner().to_string());
         let mut file = fs::File::create(path).unwrap();
         file.write_all(&mut s.as_bytes()).unwrap();
     }
 
-    fn load_attribute(id: AttributeId) -> Option<AttributeDTO> {
+    fn load_attribute(&self, id: AttributeId) -> Option<AttributeDTO> {
         let path = paths::get_attributes_path().join(id.into_inner().to_string());
 
         if !path.exists() {
@@ -87,17 +88,17 @@ impl SpekiProvider for FileProvider {
         }
     }
 
-    fn delete_card(id: CardId) {
+    fn delete_card(&self, id: CardId) {
         let path = paths::get_cards_path().join(id.to_string());
         fs::remove_file(&path).unwrap();
     }
 
-    fn delete_attribute(id: AttributeId) {
+    fn delete_attribute(&self, id: AttributeId) {
         let path = paths::get_attributes_path().join(id.into_inner().to_string());
         fs::remove_file(&path).unwrap();
     }
 
-    fn load_reviews(id: CardId) -> Vec<Review> {
+    fn load_reviews(&self, id: CardId) -> Vec<Review> {
         let mut reviews = vec![];
         let path = paths::get_review_path().join(id.to_string());
 
@@ -122,7 +123,7 @@ impl SpekiProvider for FileProvider {
         reviews
     }
 
-    fn save_reviews(id: CardId, reviews: Vec<Review>) {
+    fn save_reviews(&self, id: CardId, reviews: Vec<Review>) {
         let path = paths::get_review_path().join(id.to_string());
         let mut s = String::new();
         for r in reviews {
@@ -139,6 +140,14 @@ impl SpekiProvider for FileProvider {
         let mut f = fs::File::create(&path).unwrap();
         f.write_all(&mut s.as_bytes()).unwrap();
 
-        Self::load_reviews(id);
+        self.load_reviews(id);
+    }
+
+    fn load_config(&self) -> Config {
+        Config
+    }
+
+    fn save_config(&self, _config: Config) {
+        todo!()
     }
 }
