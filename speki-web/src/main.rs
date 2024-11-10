@@ -52,6 +52,12 @@ extern "C" {
     fn cloneRepo(url: &str, dir: &str) -> Promise;
 }
 
+#[wasm_bindgen]
+extern "C" {
+    #[wasm_bindgen(js_name = cloneRepoAndListFiles)]
+    fn clone_repo_and_list_files();
+}
+
 async fn clone_repository(url: &str, dir: &str) {
     let promise = cloneRepo(url, dir);
     let _ = JsFuture::from(promise).await;
@@ -127,6 +133,7 @@ fn Home() -> Element {
     rsx! {
         h1 {"state: {flag:?}"}
 
+
         button { onclick: move |_| {
                     let state = state.clone();
 
@@ -139,5 +146,10 @@ fn Home() -> Element {
 
         }, "log in" }
         button { onclick: move |_| flag.set(None), "log out" }
+
+
+        button { onclick: move |_| {
+            clone_repo_and_list_files();
+        }, "repo stuff" }
     }
 }

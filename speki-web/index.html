@@ -1,97 +1,62 @@
-<!-- public/index.html -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Cool Dioxus App</title>
-    <!-- Add any external JavaScript libraries here, e.g., moment.js -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.29.1/moment.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/browserfs@1.4.3/dist/browserfs.min.js"></script>
 </head>
 <body>
     <div id="main"></div>
-    <div id="output">Initializing...</div> <!-- Added output div -->
-    <!-- Your Dioxus app will render into #main -->
+    <div id="output">Initializing...</div>
 
-    <!-- Add custom JavaScript here -->
-    <script>
-        function getCurrentFormattedDate() {
-            return moment().format("MMMM Do YYYY, h:mm:ss a");
-        }
-    </script>
+    <script type="module">
+        import * as git from "https://esm.sh/isomorphic-git@1.27.1";
+        import http from "https://esm.sh/isomorphic-git@1.27.1/http/web";
 
+        async function cloneRepoAndListFiles() {
+            const output = document.getElementById("output");
 
-
-
-
-
-
-
-
-<script src="https://cdn.jsdelivr.net/npm/browserfs@1.4.3/dist/browserfs.min.js"></script>
-
-
-<script>
-    // Initialize BrowserFS to use IndexedDB for persistence
-    BrowserFS.configure({ fs: "IndexedDB", options: {} }, (err) => {
-        const output = document.getElementById("output");
-
-        if (err) {
-            output.textContent = "Failed to initialize BrowserFS: " + err;
-            return;
-        }
-
-        // Get the `fs` instance from BrowserFS
-        const fs = BrowserFS.BFSRequire("fs");
-        window.fs = fs;  // Make `fs` available globally for easier access
-
-        // Path and content for the test file
-        const filePath = "/example.txt";
-        const fileContent = "Hello from BrowserFS!";
-
-
-
-
-        // Write to the file
-        fs.writeFile(filePath, fileContent, (writeErr) => {
-            if (writeErr) {
-                console.error("Failed to write file:", writeErr);
-                output.textContent = "Failed to write file.";
-                return;
-            }
-
-            // Read from the file
-            fs.readFile(filePath, "utf8", (readErr, data) => {
-                if (readErr) {
-                    console.error("Failed to read file:", readErr);
-                    output.textContent = "Failed to read file.";
+            // Initialize BrowserFS with IndexedDB
+            BrowserFS.configure({ fs: "IndexedDB", options: {} }, async (err) => {
+                if (err) {
+                    output.textContent = "Failed to initialize BrowserFS: " + err;
                     return;
                 }
 
-                // Display file content
-                output.textContent = "File content: " + data;
+                const fs = BrowserFS.BFSRequire("fs");
+
+                try {
+                    // Clone the repository with a CORS proxy
+                    await git.clone({
+                        fs,
+                        http,
+                        dir: "/my-other-repo",
+                        url: "https://github.com/tbs1996/talecast.git",
+                        corsProxy: "https://cors.isomorphic-git.org",
+                        singleBranch: true,
+                        depth: 1,
+                    });
+                    output.textContent = "Repository cloned successfully!";
+
+                    // List files in the root of the cloned repository
+                    fs.readdir("/my-other-repo", (err, files) => {
+                        if (err) {
+                            output.textContent = "Error reading directory: " + err;
+                            return;
+                        }
+
+                        output.textContent += "\nFiles in /my-other-repo:\n" + files.join("\n");
+                    });
+                } catch (error) {
+                    output.textContent = "Failed to clone repository: " + error;
+                }
             });
-        });
-    });
-</script>
+        }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+        // Call the function to clone the repo and list files
+        cloneRepoAndListFiles();
+    </script>
 </body>
 </html>
-
