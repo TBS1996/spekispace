@@ -1,14 +1,13 @@
 use axum::http::HeaderValue;
+use axum::http::Response;
 use axum::http::StatusCode;
 use axum::Extension;
-use axum::Json;
 use axum::{extract::Query, response::IntoResponse, routing::get, Router};
 use oauth2::reqwest::async_http_client;
 use oauth2::ClientSecret;
 use oauth2::{basic::BasicClient, AuthUrl, AuthorizationCode, ClientId, RedirectUrl, TokenUrl};
 use oauth2::{CsrfToken, TokenResponse};
 use serde::Deserialize;
-use serde_json::json;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::net::SocketAddr;
@@ -142,15 +141,21 @@ async fn github_callback(
     Extension(verifier_store): Extension<VerifierStore>,
     Query(params): Query<AuthQuery>,
 ) -> impl IntoResponse {
+    dbg!("@@@@@@@@@@@@@@@@@");
+
+    use axum::body::Body;
+
     let csrf_token = params.state;
 
+    // Verify the CSRF token
     if !verifier_store.take(&csrf_token) {
-        return (
-            StatusCode::BAD_REQUEST,
-            Json(json!({"error": "Invalid or missing PKCE verifier"})),
-        );
+        return Response::builder()
+            .status(StatusCode::INTERNAL_SERVER_ERROR)
+            .body(Body::from("state not found"))
+            .unwrap();
     }
 
+    // Exchange the authorization code for an access token
     let token_result = oauth_client()
         .exchange_code(AuthorizationCode::new(params.code))
         .request_async(async_http_client)
@@ -158,13 +163,29 @@ async fn github_callback(
 
     match token_result {
         Ok(token) => {
-            let access_token = token.access_token().secret();
-            let token = Json(json!({"access_token": access_token}));
-            (StatusCode::OK, token)
+            let access_token = token.access_token().secret().to_string();
+            use axum_extra::extract::cookie::Cookie;
+            let mut cookie = Cookie::new("auth-token", access_token);
+            cookie.set_http_only(false);
+            cookie.set_secure(false);
+            cookie.set_path("/");
+
+            dbg!(Response::builder()
+                .status(StatusCode::FOUND)
+                .header(
+                    "Set-Cookie",
+                    HeaderValue::from_str(&cookie.to_string()).unwrap(),
+                )
+                .header(
+                    "Location",
+                    HeaderValue::from_static("http://localhost:8080/")
+                )
+                .body("Redirecting to homepage".into())
+                .unwrap())
         }
-        Err(err) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({"error": format!("Failed to get access token: {:?}", err)})),
-        ),
+        Err(_err) => dbg!(Response::builder()
+            .status(StatusCode::INTERNAL_SERVER_ERROR)
+            .body("lol".into())
+            .unwrap()),
     }
 }

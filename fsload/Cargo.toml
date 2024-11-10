@@ -1,6 +1,6 @@
 [package]
 name = "filecash"
-version = "0.1.1"
+version = "0.1.2"
 edition = "2021"
 description = "Easy loading, saving, and caching using just your filesystem"
 license = "GPL-3.0"  
