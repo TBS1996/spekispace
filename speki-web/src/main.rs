@@ -1,25 +1,18 @@
 #![allow(non_snake_case)]
 
 use dioxus::prelude::*;
-use serde_json::Value;
-use serde_json::json;
 use std::sync::{Arc, Mutex};
 use wasm_bindgen::prelude::*;
 use dioxus_logger::tracing::{Level, info};
-use wasm_bindgen_futures::JsFuture;
-use web_sys::{Request, RequestInit, RequestMode, Response};
-use serde::{Deserialize, Serialize};
-use gloo_timers::future::TimeoutFuture;
-use gloo_utils::format::JsValueSerdeExt;
+use serde::{ Serialize};
 use web_sys::console;
 use wasm_bindgen_futures::spawn_local;
 
 
-const CLIENT_ID: &'static str = "Ov23lihX6Mhl07qzP1Yh";
 
-#[derive(PartialEq, Props, Clone)]
-struct FooProp {
-    score: i32,
+pub fn log_to_console(message: impl std::fmt::Debug) {
+    let message = format!("{:?}", message);
+    console::log_1(&JsValue::from_str(&message));
 }
 
 
@@ -27,8 +20,11 @@ struct FooProp {
 enum Route {
     #[route("/")]
     Home {},
-    #[route("/callback")]
-    Foo {},
+    #[route("/callback?:code&:state")] 
+    CallBack {
+        code: String,
+        state: String,
+    },
 }
 
 
@@ -68,13 +64,76 @@ struct InnerState {
     logged_in: Signal<bool>,
 }
 
+
+
 #[component]
-fn Foo() -> Element {
+fn CallBack(code: ReadOnlySignal<String>, state: ReadOnlySignal<String>) -> Element {
+    let code_value = code().clone();
+    let state_value = state().clone();
+
+
 
     rsx!{
-        "ooops"
+        h1 {"code: {code}, state: {state}"}
+
+
+
+        button { onclick: move |_| {
+            let code = code_value.clone();
+            let state = state_value.clone();
+
+            send_auth_request(code, state);
+
+        }
+        , "send to backend :D" }
+
+    }
+}
+
+fn send_auth_request(code: String, state: String) {
+    use wasm_bindgen::JsCast;
+    use wasm_bindgen::JsValue;
+    use wasm_bindgen_futures::spawn_local;
+    use web_sys::{Request, RequestInit, RequestMode, Response};
+    use serde::Serialize;
+    use serde_json;
+
+    #[derive(Serialize)]
+    struct AuthParams {
+        code: String,
+        state: String,
     }
 
+    spawn_local(async move {
+        // Create the AuthParams struct and convert it to JSON string for the request body
+        let auth_params = AuthParams { code, state };
+        let auth_params_json = serde_json::to_string(&auth_params).unwrap(); // Serialize to JSON string
+        let auth_params_js = JsValue::from_str(&auth_params_json); // Convert JSON string to JsValue
+
+        // Configure the request with method, mode, and body
+        let opts = RequestInit::new();
+        opts.set_method("POST");
+        opts.set_mode(RequestMode::Cors);
+        opts.set_body(&auth_params_js);
+
+        // Create the request with URL and options
+        let request = Request::new_with_str_and_init("http://localhost:3000/auth/github/callback", &opts).unwrap();
+        request.headers().set("Content-Type", "application/json").unwrap();
+
+        // Send the request
+        let window = web_sys::window().unwrap();
+        let resp_value = wasm_bindgen_futures::JsFuture::from(window.fetch_with_request(&request)).await.unwrap();
+        let resp: Response = resp_value.dyn_into().unwrap();
+
+        // Handle the JSON response
+        if resp.ok() {
+            let json = wasm_bindgen_futures::JsFuture::from(resp.json().unwrap()).await.unwrap();
+            log_to_console(format!("Access token received: {:?}", json));
+        } else {
+            let error_text = wasm_bindgen_futures::JsFuture::from(resp.text().unwrap()).await.unwrap();
+            log_to_console(format!("Error: {:?}", error_text));
+        }
+    });
 }
 
 
@@ -83,8 +142,6 @@ fn Foo() -> Element {
 fn Home() -> Element {
     let state = use_context::<State>();
     let mut flag = state.logged_in();
-    
-
 
     rsx!{
         if flag() {
@@ -99,8 +156,6 @@ fn Home() -> Element {
                     let auth_url = "http://localhost:3000/auth/github";
                     let x = web_sys::window().unwrap().location().set_href(auth_url).unwrap();
                     log_to_console(x);
-                    
-
             });
 
         }, "log in" }
@@ -110,12 +165,19 @@ fn Home() -> Element {
 
 
 
-
+/* 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct AccessTokenResponse {
     pub access_token: String,
     pub token_type: String,
     pub scope: String,
+}
+
+
+#[derive(Serialize)]
+struct AuthParams {
+    code: String,
+    state: String,
 }
 
 
@@ -155,8 +217,6 @@ pub async fn poll_for_token(device_code: String, interval: u32) -> Result<JsValu
         }
     }
 }
-/* 
-*/
 
 
 
@@ -219,50 +279,6 @@ pub struct DeviceResponse {
 }
 
 
-#[wasm_bindgen]
-pub async fn xrequest_device_code() -> Result<JsValue, JsValue> {
-    log_to_console("heyyoo");
-    // Set up the request options
-    let mut opts = RequestInit::new();
-    opts.method("POST");
-    opts.mode(RequestMode::Cors);
-
-    // Create the JSON body for the request
-    let body = json!({
-        "client_id": CLIENT_ID,
-        "scope": "repo",
-    });
-
-    opts.body(Some(&JsValue::from_str(&body.to_string())));
-
-    // Create the request
-    let request = Request::new_with_str_and_init("https://github.com/login/device/code", &opts)?;
-    request.headers().set("Accept", "application/json")?;
-
-    // Make the fetch call
-    let window = web_sys::window().ok_or("no global `window` exists")?;
-    let resp_value = JsFuture::from(window.fetch_with_request(&request)).await?;
-
-    // Convert the response to `web_sys::Response`
-    let resp: Response = resp_value.dyn_into()?;
-
-    // Check if the request was successful
-    if resp.ok() {
-        let json = JsFuture::from(resp.json()?).await?;
-        
-        // Deserialize the JSON response to DeviceResponse
-        let device_response: DeviceResponse = json.into_serde().unwrap();
-        
-        // Convert DeviceResponse to JsValue for JavaScript compatibility
-        Ok(JsValue::from_serde(&device_response).unwrap())
-    } else {
-        Err(JsValue::from_str("Failed to fetch device code"))
-    }
-}
-/* 
-    */
-
-
 
 
 pub async fn request_device_code() -> Result<DeviceResponse, String> {
@@ -305,3 +321,5 @@ pub async fn request_device_code() -> Result<DeviceResponse, String> {
         Err(format!("Failed to request device code: {:?}", resp.status_text()))
     }
 }
+
+*/
