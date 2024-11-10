@@ -1,0 +1,6 @@
+{
+  "dependencies": {
+    "browserfs": "^1.4.3",
+    "isomorphic-git": "^1.27.1"
+  }
+}

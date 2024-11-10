@@ -10,6 +10,7 @@
 </head>
 <body>
     <div id="main"></div>
+    <div id="output">Initializing...</div> <!-- Added output div -->
     <!-- Your Dioxus app will render into #main -->
 
     <!-- Add custom JavaScript here -->
@@ -18,10 +19,79 @@
             return moment().format("MMMM Do YYYY, h:mm:ss a");
         }
     </script>
-    <script type="module">
-        import init from './your_app_name.js';
-        init();
-    </script>
+
+
+
+
+
+
+
+
+
+<script src="https://cdn.jsdelivr.net/npm/browserfs@1.4.3/dist/browserfs.min.js"></script>
+
+
+<script>
+    // Initialize BrowserFS to use IndexedDB for persistence
+    BrowserFS.configure({ fs: "IndexedDB", options: {} }, (err) => {
+        const output = document.getElementById("output");
+
+        if (err) {
+            output.textContent = "Failed to initialize BrowserFS: " + err;
+            return;
+        }
+
+        // Get the `fs` instance from BrowserFS
+        const fs = BrowserFS.BFSRequire("fs");
+        window.fs = fs;  // Make `fs` available globally for easier access
+
+        // Path and content for the test file
+        const filePath = "/example.txt";
+        const fileContent = "Hello from BrowserFS!";
+
+
+
+
+        // Write to the file
+        fs.writeFile(filePath, fileContent, (writeErr) => {
+            if (writeErr) {
+                console.error("Failed to write file:", writeErr);
+                output.textContent = "Failed to write file.";
+                return;
+            }
+
+            // Read from the file
+            fs.readFile(filePath, "utf8", (readErr, data) => {
+                if (readErr) {
+                    console.error("Failed to read file:", readErr);
+                    output.textContent = "Failed to read file.";
+                    return;
+                }
+
+                // Display file content
+                output.textContent = "File content: " + data;
+            });
+        });
+    });
+</script>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 </body>
 </html>
 

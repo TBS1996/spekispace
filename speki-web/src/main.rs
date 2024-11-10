@@ -16,7 +16,7 @@ mod cookies {
     #[wasm_bindgen(inline_js = "
 export function getCookies() {
     const cookies = document.cookie;
-    console.log('Cookies:', cookies); // Log cookies to the console for debugging
+    console.log('Cookies:', cookies);
     return cookies;
 }
 ")]
@@ -41,6 +41,20 @@ export function getCookies() {
             })
             .collect()
     }
+}
+
+use js_sys::Promise;
+use wasm_bindgen_futures::JsFuture;
+
+#[wasm_bindgen]
+extern "C" {
+    #[wasm_bindgen(js_namespace = window)]
+    fn cloneRepo(url: &str, dir: &str) -> Promise;
+}
+
+async fn clone_repository(url: &str, dir: &str) {
+    let promise = cloneRepo(url, dir);
+    let _ = JsFuture::from(promise).await;
 }
 
 fn get_auth_token() -> Option<String> {
@@ -76,11 +90,10 @@ fn App() -> Element {
 pub struct State {
     inner: Arc<Mutex<InnerState>>,
 }
+use futures::executor::block_on;
 
 impl State {
     pub fn new() -> Self {
-        // let cookie = block_on_get_cookie("auth-token");
-        //log_to_console(cookie);
         let selv = Self::default();
         selv.load_token();
         selv

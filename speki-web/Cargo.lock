@@ -2085,6 +2085,7 @@ dependencies = [
  "gloo 0.11.0",
  "gloo-timers 0.3.0",
  "gloo-utils 0.2.0",
+ "js-sys",
  "serde",
  "serde-wasm-bindgen 0.6.5",
  "serde_json",
