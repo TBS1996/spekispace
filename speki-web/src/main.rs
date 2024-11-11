@@ -2,6 +2,8 @@
 
 use dioxus::prelude::*;
 use dioxus_logger::tracing::{info, Level};
+use gloo_net::http::Request;
+use serde::Deserialize;
 use std::sync::{Arc, Mutex};
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::spawn_local;
@@ -46,23 +48,6 @@ export function getCookies() {
 use js_sys::Promise;
 use wasm_bindgen_futures::JsFuture;
 
-#[wasm_bindgen]
-extern "C" {
-    #[wasm_bindgen(js_namespace = window)]
-    fn cloneRepo(url: &str, dir: &str) -> Promise;
-}
-
-#[wasm_bindgen]
-extern "C" {
-    #[wasm_bindgen(js_name = cloneRepoAndListFiles)]
-    fn clone_repo_and_list_files();
-}
-
-async fn clone_repository(url: &str, dir: &str) {
-    let promise = cloneRepo(url, dir);
-    let _ = JsFuture::from(promise).await;
-}
-
 fn get_auth_token() -> Option<String> {
     cookies::get("auth-token")
 }
@@ -78,8 +63,13 @@ enum Route {
     Home {},
 }
 
+#[wasm_bindgen(module = "/assets/utils.js")]
+extern "C" {
+    fn greet(name: &str);
+    fn clone_repo_and_list_files();
+}
+
 fn main() {
-    // Init logger
     dioxus_logger::init(Level::INFO).expect("failed to init logger");
     info!("starting app");
     launch(App);
@@ -98,35 +88,102 @@ pub struct State {
 }
 use futures::executor::block_on;
 
+#[derive(Deserialize)]
+struct GithubUser {
+    login: String,
+}
+
+#[wasm_bindgen]
+pub async fn fetch_github_username(access_token: String) -> Result<String, JsValue> {
+    // Import necessary items within the function for encapsulation
+    use serde::Deserialize;
+    use serde_wasm_bindgen::from_value;
+    use web_sys::{Request, RequestInit, RequestMode, Response};
+
+    #[derive(Deserialize)]
+    struct GithubUser {
+        login: String,
+    }
+
+    // Initialize the request
+    let mut opts = RequestInit::new();
+    opts.method("GET");
+    opts.mode(RequestMode::Cors);
+
+    // GitHub API endpoint for the user data
+    let url = "https://api.github.com/user";
+    let request = Request::new_with_str_and_init(url, &opts)?;
+
+    // Set Authorization header with the access token
+    request
+        .headers()
+        .set("Authorization", &format!("token {}", access_token))?;
+
+    // Make the request
+    let window = web_sys::window().expect("no global `window` exists");
+    let resp_value = JsFuture::from(window.fetch_with_request(&request)).await?;
+    let resp: Response = resp_value.dyn_into().unwrap();
+
+    // Check if the response is successful
+    if resp.ok() {
+        let json = JsFuture::from(resp.json()?).await?;
+        let user: GithubUser = from_value(json)
+            .map_err(|e| JsValue::from_str(&format!("Failed to parse user data: {:?}", e)))?;
+        Ok(user.login)
+    } else {
+        Err(JsValue::from_str("Failed to fetch GitHub user data"))
+    }
+}
+
 impl State {
     pub fn new() -> Self {
+        greet("yo whassup");
         let selv = Self::default();
-        selv.load_token();
         selv
     }
 
-    pub fn token(&self) -> Signal<Option<String>> {
+    pub fn info(&self) -> Signal<Option<UserInfo>> {
         self.inner.lock().unwrap().token.clone()
     }
 
     pub fn load_token(&self) {
-        let mut token = self.token();
-        if let Some(auth) = get_auth_token() {
-            token.set(Some(auth));
-        }
+        let self_clone = self.clone();
+        use_effect(move || {
+            log_to_console("loadin token!!");
+
+            let value = self_clone.clone();
+            spawn_local(async move {
+                let mut token = value.info();
+                if let Some(auth) = get_auth_token() {
+                    let username = fetch_github_username(auth.clone()).await.unwrap();
+                    let info = UserInfo {
+                        username,
+                        token: auth,
+                    };
+                    token.set(Some(info));
+                }
+            });
+        });
     }
+}
+
+#[derive(Debug)]
+struct UserInfo {
+    token: String,
+    username: String,
 }
 
 #[derive(Default)]
 struct InnerState {
-    token: Signal<Option<String>>,
+    token: Signal<Option<UserInfo>>,
 }
 
 #[component]
 fn Home() -> Element {
     let state = use_context::<State>();
+    let state2 = state.clone();
 
-    let mut flag = state.token();
+    let mut flag = state.info();
     let x = get_auth_token();
     log_to_console(("cookies:", x));
 
@@ -135,17 +192,19 @@ fn Home() -> Element {
 
 
         button { onclick: move |_| {
-                    let state = state.clone();
+            let state = state.clone();
 
             spawn_local(async move {
-                    let state = state.clone();
-                    let auth_url = "http://localhost:3000/auth/github";
-                    let x = web_sys::window().unwrap().location().set_href(auth_url).unwrap();
-                    state.load_token();
+                let auth_url = "http://localhost:3000/auth/github";
+                let x = web_sys::window().unwrap().location().set_href(auth_url).unwrap();
             });
 
         }, "log in" }
-        button { onclick: move |_| flag.set(None), "log out" }
+        button { onclick: move |_|{
+            let state = state2.clone();
+
+
+        }, "update lol" },
 
 
         button { onclick: move |_| {

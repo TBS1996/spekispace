@@ -6,57 +6,14 @@
     <title>Cool Dioxus App</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.29.1/moment.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/browserfs@1.4.3/dist/browserfs.min.js"></script>
+    <script type="module" src="utils.js"></script>
 </head>
 <body>
     <div id="main"></div>
     <div id="output">Initializing...</div>
 
+
     <script type="module">
-        import * as git from "https://esm.sh/isomorphic-git@1.27.1";
-        import http from "https://esm.sh/isomorphic-git@1.27.1/http/web";
-
-        async function cloneRepoAndListFiles() {
-            const output = document.getElementById("output");
-
-            // Initialize BrowserFS with IndexedDB
-            BrowserFS.configure({ fs: "IndexedDB", options: {} }, async (err) => {
-                if (err) {
-                    output.textContent = "Failed to initialize BrowserFS: " + err;
-                    return;
-                }
-
-                const fs = BrowserFS.BFSRequire("fs");
-
-                try {
-                    // Clone the repository with a CORS proxy
-                    await git.clone({
-                        fs,
-                        http,
-                        dir: "/my-other-repo",
-                        url: "https://github.com/tbs1996/talecast.git",
-                        corsProxy: "https://cors.isomorphic-git.org",
-                        singleBranch: true,
-                        depth: 1,
-                    });
-                    output.textContent = "Repository cloned successfully!";
-
-                    // List files in the root of the cloned repository
-                    fs.readdir("/my-other-repo", (err, files) => {
-                        if (err) {
-                            output.textContent = "Error reading directory: " + err;
-                            return;
-                        }
-
-                        output.textContent += "\nFiles in /my-other-repo:\n" + files.join("\n");
-                    });
-                } catch (error) {
-                    output.textContent = "Failed to clone repository: " + error;
-                }
-            });
-        }
-
-        // Call the function to clone the repo and list files
-        cloneRepoAndListFiles();
     </script>
 </body>
 </html>
