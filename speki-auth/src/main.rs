@@ -7,7 +7,8 @@ use oauth2::reqwest::async_http_client;
 use oauth2::ClientSecret;
 use oauth2::{basic::BasicClient, AuthUrl, AuthorizationCode, ClientId, RedirectUrl, TokenUrl};
 use oauth2::{CsrfToken, TokenResponse};
-use serde::Deserialize;
+use reqwest::Client;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::net::SocketAddr;
@@ -19,6 +20,60 @@ const APP_ID: &'static str = "1044773";
 const INSTALLATION_ID: &'static str = "56713615";
 const PRIVATE_KEY: &'static str = include_str!("/home/tor/prog/privkey.pem");
 const CLIENT_SECRET: &'static str = include_str!("/home/tor/prog/client_secret");
+
+async fn get_installation_token() -> String {
+    let jwt = generate_jwt().await;
+
+    let client = Client::new();
+    let url = format!(
+        "https://api.github.com/app/installations/{}/access_tokens",
+        INSTALLATION_ID
+    );
+
+    let response = client
+        .post(&url)
+        .header("Authorization", format!("Bearer {}", jwt))
+        .header("Accept", "application/vnd.github+json")
+        .header("User-Agent", "speki-auth")
+        .send()
+        .await
+        .unwrap();
+
+    #[derive(Deserialize)]
+    struct TokenResponse {
+        token: String,
+    }
+
+    let res: TokenResponse = response.json().await.unwrap();
+    res.token
+}
+
+async fn generate_jwt() -> String {
+    use jsonwebtoken::{encode, Algorithm, EncodingKey, Header};
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    #[derive(Debug, Serialize)]
+    struct Claims {
+        iat: usize,
+        exp: usize,
+        iss: String,
+    }
+
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_secs() as usize;
+    let claims = Claims {
+        iat: now,
+        exp: now + 600,
+        iss: APP_ID.to_string(),
+    };
+
+    let key = EncodingKey::from_rsa_pem(PRIVATE_KEY.as_bytes()).unwrap();
+    let token = encode(&Header::new(Algorithm::RS256), &claims, &key).unwrap();
+
+    token
+}
 
 mod other;
 
@@ -170,11 +225,21 @@ async fn github_callback(
             cookie.set_secure(false);
             cookie.set_path("/");
 
+            let install_token = get_installation_token().await;
+            let mut cookie2 = Cookie::new("install-token", install_token);
+            cookie2.set_http_only(false);
+            cookie2.set_secure(false);
+            cookie2.set_path("/");
+
             dbg!(Response::builder()
                 .status(StatusCode::FOUND)
                 .header(
                     "Set-Cookie",
                     HeaderValue::from_str(&cookie.to_string()).unwrap(),
+                )
+                .header(
+                    "Set-Cookie",
+                    HeaderValue::from_str(&cookie2.to_string()).unwrap(),
                 )
                 .header(
                     "Location",

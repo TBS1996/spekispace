@@ -2,14 +2,14 @@
 
 use dioxus::prelude::*;
 use dioxus_logger::tracing::{info, Level};
-use gloo_net::http::Request;
 use serde::Deserialize;
 use std::sync::{Arc, Mutex};
 use wasm_bindgen::prelude::*;
-use wasm_bindgen_futures::spawn_local;
 use web_sys::console;
 
 mod utils;
+
+const REPO_PATH: &'static str = "/bruh7/";
 
 mod cookies {
     use std::collections::HashMap;
@@ -48,13 +48,17 @@ export function getCookies() {
 use js_sys::Promise;
 use wasm_bindgen_futures::JsFuture;
 
+fn get_install_token() -> Option<String> {
+    cookies::get("install-token")
+}
 fn get_auth_token() -> Option<String> {
     cookies::get("auth-token")
 }
 
-pub fn log_to_console(message: impl std::fmt::Debug) {
-    let message = format!("{:?}", message);
+pub fn log_to_console<T: std::fmt::Debug>(val: T) -> T {
+    let message = format!("{:?}", &val);
     console::log_1(&JsValue::from_str(&message));
+    val
 }
 
 #[derive(Clone, Routable, Debug, PartialEq)]
@@ -63,10 +67,26 @@ enum Route {
     Home {},
 }
 
-#[wasm_bindgen(module = "/assets/utils.js")]
-extern "C" {
-    fn greet(name: &str);
-    fn clone_repo_and_list_files();
+mod js {
+    use wasm_bindgen::prelude::*;
+
+    #[wasm_bindgen(module = "/assets/utils.js")]
+    extern "C" {
+        fn cloneRepo(path: &JsValue, url: &JsValue, token: &JsValue);
+        fn listFiles(path: &JsValue);
+    }
+
+    pub fn clone_repo(path: &str, url: &str, token: &str) {
+        let path = JsValue::from_str(path);
+        let url = JsValue::from_str(url);
+        let token = JsValue::from_str(token);
+        cloneRepo(&path, &url, &token);
+    }
+
+    pub fn list_files(path: &str) {
+        let path = JsValue::from_str(path);
+        listFiles(&path);
+    }
 }
 
 fn main() {
@@ -135,9 +155,40 @@ pub async fn fetch_github_username(access_token: String) -> Result<String, JsVal
     }
 }
 
+async fn load_cached_info() -> Option<UserInfo> {
+    let auth_token = get_auth_token()?;
+    let res = fetch_github_username(auth_token.clone()).await;
+    log_to_console(&res);
+    let username = res.ok()?;
+    let install_token = get_install_token().unwrap();
+    Some(UserInfo {
+        auth_token,
+        username,
+        install_token,
+    })
+}
+
+async fn load_user_info() -> Option<UserInfo> {
+    let auth_url = "http://localhost:3000/auth/github";
+    web_sys::window()
+        .unwrap()
+        .location()
+        .set_href(auth_url)
+        .unwrap();
+    let auth_token = get_auth_token()?;
+    let res = fetch_github_username(auth_token.clone()).await;
+    log_to_console(&res);
+    let username = res.ok()?;
+    let install_token = get_install_token().unwrap();
+    Some(UserInfo {
+        auth_token,
+        username,
+        install_token,
+    })
+}
+
 impl State {
     pub fn new() -> Self {
-        greet("yo whassup");
         let selv = Self::default();
         selv
     }
@@ -145,31 +196,12 @@ impl State {
     pub fn info(&self) -> Signal<Option<UserInfo>> {
         self.inner.lock().unwrap().token.clone()
     }
-
-    pub fn load_token(&self) {
-        let self_clone = self.clone();
-        use_effect(move || {
-            log_to_console("loadin token!!");
-
-            let value = self_clone.clone();
-            spawn_local(async move {
-                let mut token = value.info();
-                if let Some(auth) = get_auth_token() {
-                    let username = fetch_github_username(auth.clone()).await.unwrap();
-                    let info = UserInfo {
-                        username,
-                        token: auth,
-                    };
-                    token.set(Some(info));
-                }
-            });
-        });
-    }
 }
 
 #[derive(Debug)]
 struct UserInfo {
-    token: String,
+    auth_token: String,
+    install_token: String,
     username: String,
 }
 
@@ -183,32 +215,50 @@ fn Home() -> Element {
     let state = use_context::<State>();
     let state2 = state.clone();
 
-    let mut flag = state.info();
-    let x = get_auth_token();
-    log_to_console(("cookies:", x));
+    let mut repopath = use_signal(|| "/sup".to_string());
+
+    let mut niceinfo = state.info();
+    use_effect(move || {
+        log_to_console("YY");
+        spawn(async move {
+            let new_info = load_cached_info().await;
+            log_to_console(("EYYY", &new_info));
+            niceinfo.set(new_info);
+        });
+    });
+
+    let flag = state.info();
 
     rsx! {
         h1 {"state: {flag:?}"}
-
-
         button { onclick: move |_| {
             let state = state.clone();
 
-            spawn_local(async move {
-                let auth_url = "http://localhost:3000/auth/github";
-                let x = web_sys::window().unwrap().location().set_href(auth_url).unwrap();
+            let mut info = state.info();
+            spawn(async move {
+                log_to_console("XX");
+                let new_info = load_user_info().await;
+                info.set(new_info);
             });
 
         }, "log in" }
-        button { onclick: move |_|{
-            let state = state2.clone();
-
-
+        button { onclick:  |_|{
         }, "update lol" },
-
-
         button { onclick: move |_| {
-            clone_repo_and_list_files();
-        }, "repo stuff" }
+            js::list_files(repopath().as_ref());
+        }, "show repo!" }
+        button { onclick: move |_| {
+            if let Some(info) = flag.as_ref(){
+                js::clone_repo(repopath().as_ref(), "https://github.com/tbs1996/spekibase.git", &info.install_token);
+            }
+
+        }, "clone repo!" }
+
+        input {
+            // we tell the component what to render
+            value: "{repopath}",
+            // and what to do when the value changes
+            oninput: move |event| repopath.set(event.value())
+        }
     }
 }
