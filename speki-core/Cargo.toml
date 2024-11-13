@@ -30,3 +30,4 @@ samsvar.workspace = true
 omtrent.workspace = true
 speki-dto.workspace = true
 speki-fs.workspace = true
+async-trait = "0.1.83"

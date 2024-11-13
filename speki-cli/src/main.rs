@@ -53,8 +53,8 @@ fn new_class() -> Option<ClassCard> {
     })
 }
 
-fn new_instance(app: &App) -> Option<InstanceCard> {
-    let class = select_from_all_class_cards(app)?;
+async fn new_instance(app: &App) -> Option<InstanceCard> {
+    let class = select_from_all_class_cards(app).await?;
     let name = opt_input("name of instance")?;
     Some(InstanceCard {
         name,
@@ -63,12 +63,12 @@ fn new_instance(app: &App) -> Option<InstanceCard> {
     })
 }
 
-fn new_attribute(app: &App) -> Option<AttributeCard> {
+async fn new_attribute(app: &App) -> Option<AttributeCard> {
     notify("which instance card is this attribute for?");
 
-    let instance = select_from_all_instance_cards(app)?;
+    let instance = select_from_all_instance_cards(app).await?;
     let attribute = {
-        let attributes = Attribute::load_relevant_attributes(app, instance);
+        let attributes = Attribute::load_relevant_attributes(app, instance).await;
         if attributes.is_empty() {
             notify("no relevant attributes found for instance");
             return None;
@@ -77,7 +77,13 @@ fn new_attribute(app: &App) -> Option<AttributeCard> {
     };
 
     let back: BackSide = {
-        let prompt = app.foobar.load_attribute(attribute).unwrap().name(instance);
+        let prompt = app
+            .foobar
+            .load_attribute(attribute)
+            .await
+            .unwrap()
+            .name(instance)
+            .await;
         opt_input(&prompt)?.into()
     };
 
@@ -137,17 +143,17 @@ pub fn get_timestamp(front: &str) -> TimeStamp {
     }
 }
 
-pub fn create_card(ty: CType, app: &App) -> Option<Card<AnyType>> {
-    let ty = create_type(ty, app)?;
-    Some(app.new_any(ty))
+pub async fn create_card(ty: CType, app: &App) -> Option<Card<AnyType>> {
+    let ty = create_type(ty, app).await?;
+    Some(app.new_any(ty).await)
 }
 
-pub fn create_type(ty: CType, app: &App) -> Option<AnyType> {
+pub async fn create_type(ty: CType, app: &App) -> Option<AnyType> {
     let any: AnyType = match ty {
-        CType::Instance => new_instance(app)?.into(),
+        CType::Instance => new_instance(app).await?.into(),
         CType::Normal => new_normal()?.into(),
         CType::Unfinished => new_unfinished()?.into(),
-        CType::Attribute => new_attribute(app)?.into(),
+        CType::Attribute => new_attribute(app).await?.into(),
         CType::Class => new_class()?.into(),
         CType::Statement => new_statement()?.into(),
         CType::Event => new_event()?.into(),
@@ -189,9 +195,9 @@ pub fn choose_type() -> Option<CType> {
     .into()
 }
 
-pub fn add_any_card(app: &App) -> Option<CardId> {
+pub async fn add_any_card(app: &App) -> Option<CardId> {
     let ty = choose_type()?;
-    Some(create_card(ty, app)?.id())
+    Some(create_card(ty, app).await?.id())
 }
 
 fn inspect_files() {
@@ -233,12 +239,12 @@ async fn menu(app: &App) {
             .unwrap();
 
         match selection {
-            0 => review_menu(&app),
+            0 => review_menu(&app).await,
             1 => add_cards_menu(&app).await,
             2 => inspect_files(),
             3 => {
-                if let Some(card) = select_from_all_cards(app) {
-                    view_card(&app, card, false);
+                if let Some(card) = select_from_all_cards(app).await {
+                    view_card(&app, card, false).await;
                 }
             }
             _ => panic!(),
@@ -246,26 +252,20 @@ async fn menu(app: &App) {
     }
 }
 
-fn print_card_info(app: &App, id: CardId) {
-    let card = app.foobar.load_card(id).unwrap();
-    let dependencies = card.dependency_ids();
+async fn print_card_info(app: &App, id: CardId) {
+    let card = app.foobar.load_card(id).await.unwrap();
+    let dependencies = card.dependency_ids().await;
     let dependents = app.get_cached_dependents(id);
 
     if let AnyType::Instance(ty) = card.card_type() {
-        let concept = app.foobar.load_card(ty.class).unwrap().print();
+        let concept = app.foobar.load_card(ty.class).await.unwrap().print().await;
         println!("concept: {}", concept);
     }
 
     if !dependencies.is_empty() {
         println!("{}", style("dependencies").bold());
         for id in dependencies {
-            println!(
-                "{}",
-                app.foobar
-                    .load_card(id)
-                    .map(|card| card.print())
-                    .unwrap_or_else(|| format!("missing card for dependency: {id}"))
-            );
+            println!("{}", app.foobar.load_card(id).await.unwrap().print().await);
         }
     }
 
@@ -277,13 +277,7 @@ fn print_card_info(app: &App, id: CardId) {
         } else {
             println!("{}", style("dependendents").bold());
             for id in dependents {
-                println!(
-                    "{}",
-                    app.foobar
-                        .load_card(id)
-                        .map(|card| card.print())
-                        .unwrap_or_else(|| format!("missing card for dependent: {id}"))
-                );
+                println!("{}", app.foobar.load_card(id).await.unwrap().print().await);
             }
         }
     }
@@ -325,14 +319,14 @@ async fn main() {
         let s = cli.add.unwrap();
 
         if let Some((front, back)) = s.split_once(";") {
-            app.add_card(front.to_string(), back.to_string());
+            app.add_card(front.to_string(), back.to_string()).await;
         } else {
-            app.add_unfinished(s);
+            app.add_unfinished(s).await;
         }
     } else if cli.list {
-        dbg!(app.load_cards());
+        dbg!(app.load_cards().await);
     } else if cli.graph {
-        println!("{}", speki_core::as_graph(&app));
+        println!("{}", speki_core::as_graph(&app).await);
     } else if cli.prune {
         todo!()
     } else if cli.debug {
@@ -342,13 +336,13 @@ async fn main() {
         let id = cli.recall.unwrap();
         let id: uuid::Uuid = id.parse().unwrap();
         let id = CardId(id);
-        let x = app.foobar.load_card(id).unwrap().recall_rate();
+        let x = app.foobar.load_card(id).await.unwrap().recall_rate();
         dbg!(x);
     } else if cli.concept.is_some() {
     } else if cli.healthcheck {
         // speki_core::health_check();
     } else if cli.roundtrip {
-        app.load_and_persist();
+        app.load_and_persist().await;
     } else {
         menu(&app).await;
     }

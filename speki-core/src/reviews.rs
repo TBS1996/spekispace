@@ -7,12 +7,14 @@ use std::time::Duration;
 pub struct Reviews(pub Vec<Review>);
 
 impl Reviews {
-    pub fn load(id: CardId) -> Self {
-        Self(FileProvider.load_reviews(id))
+    pub async fn load(id: CardId) -> Self {
+        Self(FileProvider.load_reviews(id).await)
     }
 
-    pub fn save(&self, id: CardId) {
-        FileProvider.save_reviews(id, self.clone().into_inner());
+    pub async fn save(&self, id: CardId) {
+        FileProvider
+            .save_reviews(id, self.clone().into_inner())
+            .await;
     }
 
     pub fn is_empty(&self) -> bool {
@@ -31,13 +33,13 @@ impl Reviews {
         Self(reviews)
     }
 
-    pub fn add_review(&mut self, id: CardId, recall: Recall, now: Duration) {
+    pub async fn add_review(&mut self, id: CardId, recall: Recall, now: Duration) {
         let review = Review {
             timestamp: now,
             grade: recall,
             time_spent: Default::default(),
         };
-        FileProvider.add_review(id, review);
+        FileProvider.add_review(id, review).await;
     }
 
     pub fn lapses_since(&self, dur: Duration, current_time: Duration) -> u32 {

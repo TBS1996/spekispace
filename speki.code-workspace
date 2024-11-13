@@ -1,0 +1,20 @@
+{
+	"folders": [
+		{
+			"path": "speki-web"
+		},
+		{
+			"path": "speki-auth"
+		},
+		{
+			"path": "speki-core"
+		},
+		{
+			"path": "speki-fs"
+		},
+		{
+			"path": "speki-dto"
+		}
+	],
+	"settings": {}
+}

@@ -3,9 +3,9 @@ use dialoguer::{theme::ColorfulTheme, Input, Select};
 use rand::seq::SliceRandom;
 use speki_core::{App, NormalCard};
 
-pub fn unfinished(app: &App) {
+pub async fn unfinished(app: &App) {
     let filter = "finished == false & suspended == false".to_string();
-    let mut cards = app.cards_filtered(filter);
+    let mut cards = app.cards_filtered(filter).await;
     if cards.is_empty() {
         clear_terminal();
         notify("no unfinished cards");
@@ -16,7 +16,7 @@ pub fn unfinished(app: &App) {
 
     for card_id in cards {
         loop {
-            let front = app.foobar.load_card(card_id).unwrap().print();
+            let front = app.foobar.load_card(card_id).await.unwrap().print().await;
             clear_terminal();
 
             let input: String = Input::new()
@@ -41,11 +41,13 @@ pub fn unfinished(app: &App) {
                 0 => {
                     app.foobar
                         .load_card(card_id)
+                        .await
                         .unwrap()
                         .into_type(NormalCard {
                             front,
                             back: input.into(),
-                        });
+                        })
+                        .await;
                     break;
                 }
                 1 => continue,

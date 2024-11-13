@@ -8,10 +8,10 @@ use speki_core::App;
 use speki_core::CType;
 use std::io::Write;
 
-pub fn add_cards(app: &App) {
+pub async fn add_cards(app: &App) {
     loop {
         clear_terminal();
-        if create_card(CType::Normal, app).is_none() {
+        if create_card(CType::Normal, app).await.is_none() {
             break;
         }
     }
@@ -33,10 +33,10 @@ pub async fn add_cards_menu(app: &App) {
         .unwrap();
 
     match selection {
-        0 => crate::add_cards::add_cards(app),
-        1 => crate::unfinished::unfinished(app),
+        0 => crate::add_cards::add_cards(app).await,
+        1 => crate::unfinished::unfinished(app).await,
         2 => add_wikipedia(),
-        3 => textstuff(app),
+        3 => textstuff(app).await,
         4 => return,
         _ => panic!(),
     }

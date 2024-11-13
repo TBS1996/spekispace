@@ -16,41 +16,45 @@ pub fn notify(msg: impl Into<String>) {
         .unwrap();
 }
 
-pub fn select_from_subclass_cards(app: &App, class: CardId) -> Option<CardId> {
+pub async fn select_from_subclass_cards(app: &App, class: CardId) -> Option<CardId> {
     let cards: Vec<Card<AnyType>> = app
         .foobar
         .load_all_cards()
+        .await
         .into_iter()
-        .filter(|card| card.load_ancestor_classes().contains(&class))
+        .filter(|card| block_on(card.load_ancestor_classes()).contains(&class))
         .collect();
 
-    enumselector::select_item_with_formatter(cards, |card: &Card<AnyType>| card.print())?
+    enumselector::select_item_with_formatter(cards, |card: &Card<AnyType>| block_on(card.print()))?
         .id()
         .into()
 }
 
-pub fn select_from_all_instance_cards(app: &App) -> Option<CardId> {
+pub async fn select_from_all_instance_cards(app: &App) -> Option<CardId> {
     let cards: Vec<Card<AnyType>> = app
         .foobar
         .load_all_cards()
+        .await
         .into_iter()
         .filter(|card| card.is_instance())
         .collect();
-    enumselector::select_item_with_formatter(cards, |card: &Card<AnyType>| card.print())?
+    enumselector::select_item_with_formatter(cards, |card: &Card<AnyType>| block_on(card.print()))?
         .id()
         .into()
 }
 
-pub fn select_from_all_class_cards(app: &App) -> Option<CardId> {
-    let cards = app.foobar.load_all_cards();
-    enumselector::select_item_with_formatter(cards, |card: &Card<AnyType>| card.print())?
+use futures::executor::block_on;
+
+pub async fn select_from_all_class_cards(app: &App) -> Option<CardId> {
+    let cards = app.foobar.load_all_cards().await;
+    enumselector::select_item_with_formatter(cards, |card: &Card<AnyType>| block_on(card.print()))?
         .id()
         .into()
 }
 
-pub fn select_from_class_attributes(app: &App, class: CardId) -> Option<AttributeId> {
+pub async fn select_from_class_attributes(app: &App, class: CardId) -> Option<AttributeId> {
     enumselector::select_item_with_formatter(
-        Attribute::load_from_class_only(app, class),
+        Attribute::load_from_class_only(app, class).await,
         |attr: &Attribute| attr.pattern().to_owned(),
     )?
     .id
@@ -65,10 +69,10 @@ pub fn select_from_attributes(attributes: Vec<Attribute>) -> Option<AttributeId>
     .into()
 }
 
-pub fn select_from_all_cards(app: &App) -> Option<CardId> {
+pub async fn select_from_all_cards(app: &App) -> Option<CardId> {
     enumselector::select_item_with_formatter(
-        app.foobar.load_all_cards(),
-        |card: &Card<AnyType>| card.print().to_owned(),
+        app.foobar.load_all_cards().await,
+        |card: &Card<AnyType>| block_on(card.print()).to_owned(),
     )?
     .id()
     .into()

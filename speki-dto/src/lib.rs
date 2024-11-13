@@ -1,3 +1,4 @@
+use async_trait::async_trait;
 use core::fmt;
 use omtrent::TimeStamp;
 use serde::{ser::SerializeSeq, Deserialize, Deserializer, Serialize};
@@ -8,30 +9,88 @@ use std::str::FromStr;
 use std::time::Duration;
 use uuid::Uuid;
 
-pub trait SpekiProvider {
-    fn load_all_cards(&self) -> Vec<RawCard>;
-    fn save_card(&self, card: RawCard);
-    fn load_card(&self, id: CardId) -> Option<RawCard>;
-    fn delete_card(&self, id: CardId);
+use futures::executor::block_on;
 
-    fn load_all_attributes(&self) -> Vec<AttributeDTO>;
-    fn save_attribute(&self, attribute: AttributeDTO);
-    fn load_attribute(&self, id: AttributeId) -> Option<AttributeDTO>;
-    fn delete_attribute(&self, id: AttributeId);
+#[async_trait(?Send)]
+pub trait SpekiProvider: Sync {
+    async fn load_all_cards(&self) -> Vec<RawCard>;
+    async fn save_card(&self, card: RawCard);
+    async fn load_card(&self, id: CardId) -> Option<RawCard>;
+    async fn delete_card(&self, id: CardId);
+    async fn load_all_attributes(&self) -> Vec<AttributeDTO>;
+    async fn save_attribute(&self, attribute: AttributeDTO);
+    async fn load_attribute(&self, id: AttributeId) -> Option<AttributeDTO>;
+    async fn delete_attribute(&self, id: AttributeId);
+    async fn load_reviews(&self, id: CardId) -> Vec<Review>;
+    async fn save_reviews(&self, id: CardId, reviews: Vec<Review>);
+    async fn load_config(&self) -> Config;
+    async fn save_config(&self, config: Config);
 
-    fn load_reviews(&self, id: CardId) -> Vec<Review>;
-    fn add_review(&self, id: CardId, review: Review) {
-        let mut reviews = self.load_reviews(id);
+    fn blocking_load_all_cards(&self) -> Vec<RawCard> {
+        block_on(self.load_all_cards())
+    }
+
+    fn blocking_save_card(&self, card: RawCard) {
+        block_on(self.save_card(card))
+    }
+
+    fn blocking_load_card(&self, id: CardId) -> Option<RawCard> {
+        block_on(self.load_card(id))
+    }
+
+    fn blocking_delete_card(&self, id: CardId) {
+        block_on(self.delete_card(id))
+    }
+
+    fn blocking_load_all_attributes(&self) -> Vec<AttributeDTO> {
+        block_on(self.load_all_attributes())
+    }
+
+    fn blocking_save_attribute(&self, attribute: AttributeDTO) {
+        block_on(self.save_attribute(attribute))
+    }
+
+    fn blocking_load_attribute(&self, id: AttributeId) -> Option<AttributeDTO> {
+        block_on(self.load_attribute(id))
+    }
+
+    fn blocking_delete_attribute(&self, id: AttributeId) {
+        block_on(self.delete_attribute(id))
+    }
+
+    fn blocking_load_reviews(&self, id: CardId) -> Vec<Review> {
+        block_on(self.load_reviews(id))
+    }
+
+    fn blocking_save_reviews(&self, id: CardId, reviews: Vec<Review>) {
+        block_on(self.save_reviews(id, reviews))
+    }
+
+    fn blocking_load_config(&self) -> Config {
+        block_on(self.load_config())
+    }
+
+    fn blocking_save_config(&self, config: Config) {
+        block_on(self.save_config(config))
+    }
+
+    async fn add_review(&self, id: CardId, review: Review) {
+        let mut reviews = self.load_reviews(id).await;
         let foo = reviews.len();
         reviews.push(review);
-        self.save_reviews(id, reviews);
-        let bar = self.load_reviews(id).len();
+        self.save_reviews(id, reviews).await;
+        let bar = self.load_reviews(id).await.len();
         assert!(foo < bar);
     }
-    fn save_reviews(&self, id: CardId, reviews: Vec<Review>);
 
-    fn load_config(&self) -> Config;
-    fn save_config(&self, config: Config);
+    fn blocking_add_review(&self, id: CardId, review: Review) {
+        let mut reviews = self.blocking_load_reviews(id);
+        let foo = reviews.len();
+        reviews.push(review);
+        self.blocking_save_reviews(id, reviews);
+        let bar = self.blocking_load_reviews(id).len();
+        assert!(foo < bar);
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, Default)]

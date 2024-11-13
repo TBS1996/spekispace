@@ -4,52 +4,58 @@ use speki_dto::{AttributeId, BackSide};
 
 use super::*;
 
+#[async_trait::async_trait(?Send)]
 impl CardTrait for NormalCard {
-    fn get_dependencies(&self) -> BTreeSet<CardId> {
+    async fn get_dependencies(&self) -> BTreeSet<CardId> {
         let mut set: BTreeSet<CardId> = Default::default();
         set.extend(self.back.dependencies().iter());
         set
     }
 
-    fn display_front(&self) -> String {
+    async fn display_front(&self) -> String {
         self.front.clone()
     }
 }
 
+#[async_trait::async_trait(?Send)]
 impl CardTrait for InstanceCard {
-    fn get_dependencies(&self) -> BTreeSet<CardId> {
+    async fn get_dependencies(&self) -> BTreeSet<CardId> {
         let mut set = BTreeSet::default();
         set.insert(self.class);
         set
     }
 
-    fn display_front(&self) -> String {
+    async fn display_front(&self) -> String {
         self.name.clone()
     }
 }
 
+#[async_trait::async_trait(?Send)]
 impl CardTrait for AttributeCard {
-    fn get_dependencies(&self) -> BTreeSet<CardId> {
+    async fn get_dependencies(&self) -> BTreeSet<CardId> {
         let mut dependencies = BTreeSet::default();
         dependencies.insert(self.instance);
         dependencies.extend(self.back.dependencies().iter());
         dependencies
     }
 
-    fn display_front(&self) -> String {
+    async fn display_front(&self) -> String {
         self.foobar
             .load_attribute(self.attribute)
+            .await
             .unwrap()
             .name(self.instance)
+            .await
     }
 }
 
+#[async_trait::async_trait(?Send)]
 impl CardTrait for UnfinishedCard {
-    fn get_dependencies(&self) -> BTreeSet<CardId> {
+    async fn get_dependencies(&self) -> BTreeSet<CardId> {
         Default::default()
     }
 
-    fn display_front(&self) -> String {
+    async fn display_front(&self) -> String {
         self.front.clone()
     }
 }
@@ -86,8 +92,9 @@ impl From<ClassCard> for AnyType {
     }
 }
 
+#[async_trait::async_trait(?Send)]
 impl CardTrait for ClassCard {
-    fn get_dependencies(&self) -> BTreeSet<CardId> {
+    async fn get_dependencies(&self) -> BTreeSet<CardId> {
         let mut dependencies: BTreeSet<CardId> = Default::default();
         dependencies.extend(self.back.dependencies().iter());
         if let Some(id) = self.parent_class {
@@ -96,7 +103,7 @@ impl CardTrait for ClassCard {
         dependencies
     }
 
-    fn display_front(&self) -> String {
+    async fn display_front(&self) -> String {
         self.name.clone()
     }
 }
@@ -163,12 +170,13 @@ pub struct StatementCard {
     pub front: String,
 }
 
+#[async_trait::async_trait(?Send)]
 impl CardTrait for StatementCard {
-    fn get_dependencies(&self) -> BTreeSet<CardId> {
+    async fn get_dependencies(&self) -> BTreeSet<CardId> {
         Default::default()
     }
 
-    fn display_front(&self) -> String {
+    async fn display_front(&self) -> String {
         self.front.clone()
     }
 }
@@ -192,8 +200,9 @@ impl EventCard {
             true
         }
     }
-    pub fn valid_sub_event(&self, other: CardId, app: &App) -> bool {
-        let other = app.foobar.load_card(other).unwrap();
+
+    pub async fn valid_sub_event(&self, other: CardId, app: &App) -> bool {
+        let other = app.foobar.load_card(other).await.unwrap();
 
         let AnyType::Event(other) = other.data else {
             panic!("wrong type");
@@ -202,8 +211,8 @@ impl EventCard {
         self.inner_valid_sub_event(&other)
     }
 
-    pub fn valid_parent_event(&self, parent: CardId, app: &App) -> bool {
-        let parent = app.foobar.load_card(parent).unwrap();
+    pub async fn valid_parent_event(&self, parent: CardId, app: &App) -> bool {
+        let parent = app.foobar.load_card(parent).await.unwrap();
         let AnyType::Event(parent) = parent.data else {
             panic!("wrong type");
         };
@@ -218,8 +227,9 @@ impl From<EventCard> for AnyType {
     }
 }
 
+#[async_trait::async_trait(?Send)]
 impl CardTrait for EventCard {
-    fn get_dependencies(&self) -> BTreeSet<CardId> {
+    async fn get_dependencies(&self) -> BTreeSet<CardId> {
         let mut set: BTreeSet<CardId> = Default::default();
 
         if let Some(id) = self.parent_event {
@@ -229,7 +239,7 @@ impl CardTrait for EventCard {
         set
     }
 
-    fn display_front(&self) -> String {
+    async fn display_front(&self) -> String {
         self.front.clone()
     }
 }

@@ -36,15 +36,15 @@ pub struct TextFile {
 }
 
 impl TextFile {
-    pub fn min_rec_recall_rate(&self, app: &App) -> Option<f32> {
+    pub async fn min_rec_recall_rate(&self, app: &App) -> Option<f32> {
         if self.added_cards.is_empty() {
             return Some(1.0);
         }
 
         let mut recall_rate: f32 = 1.0;
         for (card, _) in &self.added_cards {
-            let card = app.foobar.load_card(*card).unwrap();
-            recall_rate = recall_rate.min(card.min_rec_recall_rate()?);
+            let card = app.foobar.load_card(*card).await.unwrap();
+            recall_rate = recall_rate.min(card.min_rec_recall_rate().await?);
         }
 
         Some(recall_rate)
@@ -52,12 +52,6 @@ impl TextFile {
 
     pub fn name(&self) -> &str {
         self.path.file_stem().unwrap().to_str().unwrap()
-    }
-
-    pub fn is_finished(&self) -> bool {
-        let buffer = 500;
-
-        self.position() + buffer >= self.length
     }
 
     pub fn _avg_daily_progress(&self) -> usize {
@@ -175,28 +169,18 @@ impl TextProgress {
     }
 }
 
-fn select_text(mut textfiles: Vec<TextFile>, app: &App) -> TextFile {
-    textfiles.sort_by_key(|f| {
-        if f.is_finished() {
-            usize::MIN
-        } else {
-            (f.min_rec_recall_rate(app).unwrap_or_default() * 1000.) as usize
-        }
-    });
+async fn select_text(textfiles: Vec<TextFile>, app: &App) -> TextFile {
+    let mut named = vec![];
 
-    textfiles.reverse();
-
-    let named: Vec<String> = textfiles
-        .iter()
-        .map(|p| {
-            format!(
-                "{:.1}%, {:.1}%: {}",
-                p.progress_percentage(),
-                p.min_rec_recall_rate(app).unwrap_or_default() * 100.,
-                p.name()
-            )
-        })
-        .collect();
+    for p in &textfiles {
+        let s = format!(
+            "{:.1}%, {:.1}%: {}",
+            p.progress_percentage(),
+            p.min_rec_recall_rate(app).await.unwrap_or_default() * 100.,
+            p.name()
+        );
+        named.push(s);
+    }
 
     let idx = Select::with_theme(&ColorfulTheme::default())
         .with_prompt("")
@@ -208,7 +192,7 @@ fn select_text(mut textfiles: Vec<TextFile>, app: &App) -> TextFile {
     textfiles[idx].clone()
 }
 
-pub fn textstuff(app: &App) {
+pub async fn textstuff(app: &App) {
     clear_terminal();
     //    let paths = get_text_files(&inc_path()).unwrap();
     let textfiles = TextFile::load_all();
@@ -217,7 +201,7 @@ pub fn textstuff(app: &App) {
         return;
     }
 
-    let mut textfile = select_text(textfiles, app);
+    let mut textfile = select_text(textfiles, app).await;
     let text = textfile.load_text();
 
     let opts = [
@@ -265,7 +249,7 @@ pub fn textstuff(app: &App) {
         menu_position = idx;
         match idx {
             0 => {
-                if let Some(id) = add_any_card(app) {
+                if let Some(id) = add_any_card(app).await {
                     textfile.add_card(id);
                 };
             }
@@ -273,7 +257,7 @@ pub fn textstuff(app: &App) {
             2 => textfile.position_decrement(char_len),
             3 => {
                 if let Some((card, _)) = textfile.added_cards.last() {
-                    view_card(app, *card, false);
+                    view_card(app, *card, false).await;
                 }
             }
             4 => return,

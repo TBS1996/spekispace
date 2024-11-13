@@ -52,60 +52,67 @@ pub struct FooBar {
 }
 
 impl FooBar {
-    pub fn load_all_cards(&self) -> Vec<Card<AnyType>> {
-        self.provider
-            .load_all_cards()
-            .into_iter()
-            .map(|raw| Card::from_raw(self.clone(), raw))
-            .collect()
+    pub async fn load_all_cards(&self) -> Vec<Card<AnyType>> {
+        let raw_cards = self.provider.load_all_cards().await;
+        let mut cards = vec![];
+
+        for card in raw_cards {
+            let card = Card::from_raw(self.clone(), card).await;
+            cards.push(card);
+        }
+
+        cards
     }
 
-    pub fn save_card(&self, card: Card<AnyType>) {
-        self.provider.save_card(from_raw_card(card));
+    pub async fn save_card(&self, card: Card<AnyType>) {
+        self.provider.save_card(from_raw_card(card)).await;
     }
 
-    pub fn load_card(&self, id: CardId) -> Option<Card<AnyType>> {
-        self.provider
-            .load_card(id)
-            .map(|raw| Card::from_raw(self.clone(), raw))
+    pub async fn load_card(&self, id: CardId) -> Option<Card<AnyType>> {
+        let raw = self.provider.load_card(id).await?;
+        Some(Card::from_raw(self.clone(), raw).await)
     }
 
-    pub fn delete_card(&self, id: CardId) {
-        self.provider.delete_card(id);
+    pub async fn delete_card(&self, id: CardId) {
+        self.provider.delete_card(id).await;
     }
 
-    pub fn load_all_attributes(&self) -> Vec<Attribute> {
+    pub async fn load_all_attributes(&self) -> Vec<Attribute> {
         self.provider
             .load_all_attributes()
+            .await
             .into_iter()
             .map(|dto| Attribute::from_dto(dto, self.clone()))
             .collect()
     }
 
-    pub fn save_attribute(&self, attribute: Attribute) {
-        self.provider.save_attribute(Attribute::into_dto(attribute));
+    pub async fn save_attribute(&self, attribute: Attribute) {
+        self.provider
+            .save_attribute(Attribute::into_dto(attribute))
+            .await;
     }
 
-    pub fn load_attribute(&self, id: AttributeId) -> Option<Attribute> {
+    pub async fn load_attribute(&self, id: AttributeId) -> Option<Attribute> {
         self.provider
             .load_attribute(id)
+            .await
             .map(|dto| Attribute::from_dto(dto, self.clone()))
     }
 
-    pub fn delete_attribute(&self, id: AttributeId) {
-        self.provider.delete_attribute(id);
+    pub async fn delete_attribute(&self, id: AttributeId) {
+        self.provider.delete_attribute(id).await;
     }
 
-    pub fn load_reviews(&self, id: CardId) -> Reviews {
-        Reviews(self.provider.load_reviews(id))
+    pub async fn load_reviews(&self, id: CardId) -> Reviews {
+        Reviews(self.provider.load_reviews(id).await)
     }
 
-    pub fn save_reviews(&self, id: CardId, reviews: Reviews) {
-        self.provider.save_reviews(id, reviews.into_inner());
+    pub async fn save_reviews(&self, id: CardId, reviews: Reviews) {
+        self.provider.save_reviews(id, reviews.into_inner()).await;
     }
 
-    pub fn add_review(&self, id: CardId, review: Review) {
-        self.provider.add_review(id, review);
+    pub async fn add_review(&self, id: CardId, review: Review) {
+        self.provider.add_review(id, review).await;
     }
 
     pub fn load_config(&self) -> Config {
@@ -120,7 +127,6 @@ pub type Recaller = Arc<Box<dyn RecallCalc + Send>>;
 
 pub struct App {
     pub foobar: FooBar,
-    pub config: Config,
 }
 
 impl Debug for App {
@@ -135,53 +141,62 @@ impl App {
         A: SpekiProvider + 'static + Send,
         B: RecallCalc + 'static + Send,
     {
-        let config = provider.load_config();
         let foobar = FooBar {
             provider: Arc::new(Box::new(provider)),
             recaller: Arc::new(Box::new(recall_calc)),
         };
 
-        Self { foobar, config }
+        Self { foobar }
     }
 
-    pub fn load_cards(&self) -> Vec<CardId> {
+    pub async fn load_cards(&self) -> Vec<CardId> {
         self.foobar
             .load_all_cards()
+            .await
             .into_iter()
             .map(|card| card.id())
             .collect()
     }
 
-    fn full_load_cards(&self) -> Vec<Card<AnyType>> {
-        self.foobar.load_all_cards().into_iter().collect()
+    async fn full_load_cards(&self) -> Vec<Card<AnyType>> {
+        self.foobar.load_all_cards().await.into_iter().collect()
     }
 
-    pub fn load_non_pending(&self, filter: Option<String>) -> Vec<CardId> {
-        self.full_load_cards()
+    pub async fn load_non_pending(&self, filter: Option<String>) -> Vec<CardId> {
+        let iter = self
+            .full_load_cards()
+            .await
             .into_iter()
-            .filter(|card| !card.history().is_empty())
-            .filter(|card| {
-                if let Some(ref filter) = filter {
-                    card.eval(filter.clone())
-                } else {
-                    true
+            .filter(|card| !card.history().is_empty());
+
+        let mut ids = vec![];
+
+        if let Some(ref filter) = filter {
+            for card in iter {
+                if card.eval(filter.clone()).await {
+                    ids.push(card.id());
                 }
-            })
-            .map(|card| card.id())
-            .collect()
+            }
+        } else {
+            for card in iter {
+                ids.push(card.id());
+            }
+        }
+
+        ids
     }
 
-    pub fn card_from_id(&self, id: CardId) -> Card<AnyType> {
-        self.foobar.load_card(id).unwrap()
+    pub async fn card_from_id(&self, id: CardId) -> Card<AnyType> {
+        self.foobar.load_card(id).await.unwrap()
     }
 
-    pub fn delete_card(&self, id: CardId) {
-        self.foobar.delete_card(id);
+    pub async fn delete_card(&self, id: CardId) {
+        self.foobar.delete_card(id).await;
     }
 
-    pub fn load_and_persist(&self) {
-        for mut card in self.full_load_cards() {
-            card.persist();
+    pub async fn load_and_persist(&self) {
+        for mut card in self.full_load_cards().await {
+            card.persist().await;
         }
     }
 
@@ -189,90 +204,106 @@ impl App {
         Card::<AnyType>::dependents(id)
     }
 
-    pub fn cards_filtered(&self, filter: String) -> Vec<CardId> {
-        let mut cards = self.full_load_cards();
-        cards.retain(|card| card.eval(filter.clone()));
-        cards.iter().map(|card| card.id()).collect()
+    pub async fn cards_filtered(&self, filter: String) -> Vec<CardId> {
+        let cards = self.full_load_cards().await;
+        let mut ids = vec![];
+
+        for card in cards {
+            if card.eval(filter.clone()).await {
+                ids.push(card.id());
+            }
+        }
+        ids
     }
 
-    pub fn add_card(&self, front: String, back: String) -> CardId {
+    pub async fn add_card(&self, front: String, back: String) -> CardId {
         let data = NormalCard {
             front,
             back: back.into(),
         };
-        self.new_any(data).id()
+        self.new_any(data).await.id()
     }
 
-    pub fn add_unfinished(&self, front: String) -> CardId {
+    pub async fn add_unfinished(&self, front: String) -> CardId {
         let data = UnfinishedCard { front };
-        self.new_any(data).id()
+        self.new_any(data).await.id()
     }
 
-    pub fn review(&self, id: CardId, grade: Recall) {
+    pub async fn review(&self, id: CardId, grade: Recall) {
         let review = Review {
             timestamp: current_time(),
             grade,
             time_spent: Default::default(),
         };
-        self.foobar.add_review(id, review);
+        self.foobar.add_review(id, review).await;
     }
 
-    pub fn set_class(&self, card_id: CardId, class: CardId) -> Result<()> {
-        let card = self.card_from_id(card_id);
+    pub async fn set_class(&self, card_id: CardId, class: CardId) -> Result<()> {
+        let card = self.card_from_id(card_id).await;
 
         let instance = InstanceCard {
-            name: card.card_type().display_front(),
+            name: card.card_type().display_front().await,
             back: card.back_side().map(ToOwned::to_owned),
             class,
         };
-        card.into_type(instance);
+        card.into_type(instance).await;
         Ok(())
     }
 
-    pub fn set_dependency(&self, card_id: CardId, dependency: CardId) {
+    pub async fn set_dependency(&self, card_id: CardId, dependency: CardId) {
         if card_id == dependency {
             return;
         }
 
-        let mut card = self.card_from_id(card_id);
-        card.set_dependency(dependency);
-        card.persist();
+        let mut card = self.card_from_id(card_id).await;
+        card.set_dependency(dependency).await;
+        card.persist().await;
     }
 
-    pub fn load_class_cards(&self) -> Vec<Card<AnyType>> {
+    pub async fn load_class_cards(&self) -> Vec<Card<AnyType>> {
         self.full_load_cards()
+            .await
             .into_iter()
             .filter(|card| card.is_class())
             .collect()
     }
 
-    pub fn load_pending(&self, filter: Option<String>) -> Vec<CardId> {
-        self.full_load_cards()
+    pub async fn load_pending(&self, filter: Option<String>) -> Vec<CardId> {
+        let iter = self
+            .full_load_cards()
+            .await
             .into_iter()
-            .filter(|card| card.history().is_empty())
-            .filter(|card| {
-                if let Some(ref filter) = filter {
-                    card.eval(filter.clone())
-                } else {
-                    true
+            .filter(|card| card.history().is_empty());
+
+        let mut ids = vec![];
+
+        if let Some(ref filter) = filter {
+            for card in iter {
+                if card.eval(filter.clone()).await {
+                    ids.push(card.id());
                 }
-            })
-            .map(|card| card.id())
-            .collect()
+            }
+        } else {
+            for card in iter {
+                ids.push(card.id());
+            }
+        }
+
+        ids
     }
 
-    pub fn new_any(&self, any: impl Into<AnyType>) -> Card<AnyType> {
+    pub async fn new_any(&self, any: impl Into<AnyType>) -> Card<AnyType> {
         let raw_card = new_raw_card(any);
         let id = raw_card.id;
-        self.foobar.provider.save_card(raw_card);
-        self.foobar.load_card(CardId(id)).unwrap()
+        self.foobar.provider.save_card(raw_card).await;
+        self.foobar.load_card(CardId(id)).await.unwrap()
     }
 }
 
 use crate::card::serializing::new_raw_card;
 
-pub fn as_graph(app: &App) -> String {
-    graphviz::export(app)
+pub async fn as_graph(app: &App) -> String {
+    graphviz::export(app).await
 }
 
 mod graphviz {
@@ -280,14 +311,15 @@ mod graphviz {
 
     use super::*;
 
-    pub fn export(app: &App) -> String {
+    pub async fn export(app: &App) -> String {
         let mut dot = String::from("digraph G {\nranksep=2.0;\nrankdir=BT;\n");
         let mut relations = BTreeSet::default();
-        let cards = app.full_load_cards();
+        let cards = app.full_load_cards().await;
 
         for card in cards {
             let label = card
                 .print()
+                .await
                 .to_string()
                 .replace(")", "")
                 .replace("(", "")
@@ -323,7 +355,7 @@ mod graphviz {
             }
 
             // Create edges for dependencies, also enclosing IDs in quotes
-            for child_id in card.dependency_ids() {
+            for child_id in card.dependency_ids().await {
                 relations.insert(format!("    \"{}\" -> \"{}\";\n", card.id(), child_id));
             }
         }

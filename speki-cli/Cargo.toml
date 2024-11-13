@@ -28,3 +28,4 @@ rand.workspace = true
 speki-core.workspace = true
 speki-dto.workspace = true
 speki-fs.workspace = true
+futures.workspace = true

@@ -2,14 +2,15 @@
 
 use dioxus::prelude::*;
 use dioxus_logger::tracing::{info, Level};
+use js::load_all_files;
 use serde::Deserialize;
+use speki_dto::SpekiProvider;
 use std::sync::{Arc, Mutex};
 use wasm_bindgen::prelude::*;
 use web_sys::console;
 
+mod provider;
 mod utils;
-
-const REPO_PATH: &'static str = "/bruh7/";
 
 mod cookies {
     use std::collections::HashMap;
@@ -45,7 +46,6 @@ export function getCookies() {
     }
 }
 
-use js_sys::Promise;
 use wasm_bindgen_futures::JsFuture;
 
 fn get_install_token() -> Option<String> {
@@ -67,13 +67,24 @@ enum Route {
     Home {},
 }
 
-mod js {
+pub mod js {
+    use futures::executor::block_on;
+    use gloo_utils::format::JsValueSerdeExt;
+    use js_sys::Promise;
+    use serde_json::Value;
     use wasm_bindgen::prelude::*;
+    use wasm_bindgen_futures::future_to_promise;
+
+    use crate::log_to_console;
 
     #[wasm_bindgen(module = "/assets/utils.js")]
     extern "C" {
+        fn loadAllFiles(path: &JsValue) -> Promise;
         fn cloneRepo(path: &JsValue, url: &JsValue, token: &JsValue);
         fn listFiles(path: &JsValue);
+        fn deleteFile(path: &JsValue);
+        fn loadFile(path: &JsValue) -> Promise;
+        fn saveFile(path: &JsValue, content: &JsValue);
     }
 
     pub fn clone_repo(path: &str, url: &str, token: &str) {
@@ -83,9 +94,48 @@ mod js {
         cloneRepo(&path, &url, &token);
     }
 
+    pub fn delete_file(path: &str) {
+        let path = JsValue::from_str(path);
+        deleteFile(&path);
+    }
     pub fn list_files(path: &str) {
         let path = JsValue::from_str(path);
         listFiles(&path);
+    }
+
+    pub fn save_file(path: &str, content: &str) {
+        let path = JsValue::from_str(path);
+        let content = JsValue::from_str(content);
+        saveFile(&path, &content);
+    }
+
+    async fn promise_to_val(promise: Promise) -> Value {
+        let future = wasm_bindgen_futures::JsFuture::from(promise);
+        let jsvalue = future.await.unwrap();
+        jsvalue.into_serde().unwrap()
+    }
+
+    pub async fn load_all_files(path: &str) -> Vec<String> {
+        let path = JsValue::from_str(path);
+        let val = promise_to_val(loadAllFiles(&path)).await;
+        let arr = val.as_array().unwrap();
+        arr.into_iter()
+            .map(|elm| match elm {
+                Value::String(s) => s.clone(),
+                other => panic!("file isnt textfile damn: {}", other),
+            })
+            .collect()
+    }
+
+    pub async fn load_file(path: &str) -> Option<String> {
+        let path = JsValue::from_str(path);
+        let val = promise_to_val(loadFile(&path)).await;
+
+        match val {
+            Value::Null => None,
+            Value::String(s) => Some(s.clone()),
+            other => panic!("invalid type: {}", other),
+        }
     }
 }
 
@@ -106,7 +156,6 @@ fn App() -> Element {
 pub struct State {
     inner: Arc<Mutex<InnerState>>,
 }
-use futures::executor::block_on;
 
 #[derive(Deserialize)]
 struct GithubUser {
@@ -249,11 +298,20 @@ fn Home() -> Element {
         }, "show repo!" }
         button { onclick: move |_| {
             if let Some(info) = flag.as_ref(){
-                js::clone_repo(repopath().as_ref(), "https://github.com/tbs1996/spekibase.git", &info.install_token);
+                js::clone_repo(repopath().as_ref(), "https://github.com/tbs1996/remotespeki.git", &info.install_token);
             }
 
         }, "clone repo!" }
 
+        button { onclick: move |_| {
+            spawn(async move {
+                for x in IndexBaseProvider.load_all_attributes().await {
+                    let x = format!("{:?}", x) ;
+                    log_to_console(&x);
+                }
+            });
+
+        }, "load cards" }
         input {
             // we tell the component what to render
             value: "{repopath}",
@@ -262,3 +320,5 @@ fn Home() -> Element {
         }
     }
 }
+
+use crate::provider::IndexBaseProvider;

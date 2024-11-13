@@ -122,7 +122,7 @@ impl FromStr for ReviewAction {
 
 use speki_core::App;
 
-pub fn review_menu(app: &App) {
+pub async fn review_menu(app: &App) {
     let items = vec!["Old cards", "Pending cards", "exit"];
 
     let selection = Select::with_theme(&ColorfulTheme::default())
@@ -132,8 +132,8 @@ pub fn review_menu(app: &App) {
         .unwrap();
 
     match selection {
-        0 => review_old(app),
-        1 => review_new(app),
+        0 => review_old(app).await,
+        1 => review_new(app).await,
         2 => return,
         _ => panic!(),
     }
@@ -142,27 +142,27 @@ pub fn review_menu(app: &App) {
 const DEFAULT_FILTER: &'static str =
     "recall < 0.8 & finished == true & suspended == false & resolved == true & minrecrecall > 0.8 & minrecstab > 10 & lastreview > 0.5 & weeklapses < 3 & monthlapses < 6";
 
-pub fn review_new(app: &App) {
+pub async fn review_new(app: &App) {
     let filter = DEFAULT_FILTER.to_string();
-    let mut cards = app.load_pending(Some(filter));
+    let mut cards = app.load_pending(Some(filter)).await;
     cards.shuffle(&mut thread_rng());
 
-    review(app, cards);
+    review(app, cards).await;
 }
 
-pub fn review_old(app: &App) {
+pub async fn review_old(app: &App) {
     let filter = DEFAULT_FILTER.to_string();
-    let mut cards = app.load_non_pending(Some(filter));
+    let mut cards = app.load_non_pending(Some(filter)).await;
     cards.shuffle(&mut thread_rng());
 
-    review(app, cards);
+    review(app, cards).await;
 }
 
-fn handle_review_action(app: &App, card: CardId, action: ReviewAction) -> ControlFlow<()> {
-    let card = app.foobar.load_card(card).unwrap();
+async fn handle_review_action(app: &App, card: CardId, action: ReviewAction) -> ControlFlow<()> {
+    let card = app.foobar.load_card(card).await.unwrap();
     match action {
         ReviewAction::Grade(grade) => {
-            app.review(card.id(), grade);
+            app.review(card.id(), grade).await;
             ControlFlow::Break(())
         }
         ReviewAction::Skip => ControlFlow::Break(()),
@@ -173,24 +173,24 @@ fn handle_review_action(app: &App, card: CardId, action: ReviewAction) -> Contro
     }
 }
 
-fn create_attribute_card(card: &Card<AnyType>, app: &App) -> Option<AttributeCard> {
+async fn create_attribute_card(card: &Card<AnyType>, app: &App) -> Option<AttributeCard> {
     notify(format!("Which instance ?"));
-    let instance_id = select_from_all_instance_cards(app)?;
-    let instance = app.foobar.load_card(instance_id).unwrap();
+    let instance_id = select_from_all_instance_cards(app).await?;
+    let instance = app.foobar.load_card(instance_id).await.unwrap();
 
     notify(format!("Which attribute among the class?"));
-    let attribute_id = select_from_class_attributes(app, instance.parent_class().unwrap())?;
+    let attribute_id = select_from_class_attributes(app, instance.parent_class().unwrap()).await?;
 
-    let attribute = app.foobar.load_attribute(attribute_id).unwrap();
+    let attribute = app.foobar.load_attribute(attribute_id).await.unwrap();
 
     let back = if let Some(back_type) = attribute.back_type {
-        let class_name = app.foobar.load_card(back_type).unwrap().print();
+        let class_name = app.foobar.load_card(back_type).await.unwrap().print().await;
         notify(format!(
             "chosen attribute requires card belonging to this class: {}",
             class_name,
         ));
 
-        let back = select_from_subclass_cards(app, back_type)?;
+        let back = select_from_subclass_cards(app, back_type).await?;
 
         BackSide::Card(back)
     } else {
@@ -219,14 +219,14 @@ fn create_attribute_card(card: &Card<AnyType>, app: &App) -> Option<AttributeCar
     })
 }
 
-fn handle_action(app: &App, card: CardId, action: CardAction) -> ControlFlow<()> {
-    let card = app.foobar.load_card(card).unwrap();
+async fn handle_action(app: &App, card: CardId, action: CardAction) -> ControlFlow<()> {
+    let card = app.foobar.load_card(card).await.unwrap();
 
     match action {
         CardAction::IntoAttribute => match card.card_type() {
             AnyType::Normal(_) | AnyType::Unfinished(_) => {
-                if let Some(attr) = create_attribute_card(&card, app) {
-                    card.into_type(attr);
+                if let Some(attr) = create_attribute_card(&card, app).await {
+                    card.into_type(attr).await;
                 }
             }
             AnyType::Attribute(_) => {}
@@ -237,56 +237,57 @@ fn handle_action(app: &App, card: CardId, action: CardAction) -> ControlFlow<()>
         },
 
         CardAction::IntoInstance => {
-            if let Some(class) = select_from_all_class_cards(app) {
+            if let Some(class) = select_from_all_class_cards(app).await {
                 let instance = InstanceCard {
-                    name: card.print(),
+                    name: card.print().await,
                     class,
                     back: card.back_side().map(ToOwned::to_owned),
                 };
 
-                card.into_type(instance);
+                card.into_type(instance).await;
             }
         }
 
         CardAction::NewDependency => {
             println!("add dependency");
-            if let Some(new_card) = add_any_card(app) {
-                app.set_dependency(card.id(), new_card);
+            if let Some(new_card) = add_any_card(app).await {
+                app.set_dependency(card.id(), new_card).await;
             }
         }
         CardAction::OldDependency => {
-            if let Some(dep) = select_from_all_cards(app) {
-                app.set_dependency(card.id(), dep);
+            if let Some(dep) = select_from_all_cards(app).await {
+                app.set_dependency(card.id(), dep).await;
             }
         }
         CardAction::NewDependent => {
             println!("add dependent");
-            if let Some(new_card) = add_any_card(app) {
-                app.set_dependency(new_card, card.id());
+            if let Some(new_card) = add_any_card(app).await {
+                app.set_dependency(new_card, card.id()).await;
             }
         }
         CardAction::OldDependent => {
-            if let Some(dep) = select_from_all_cards(app) {
-                app.set_dependency(dep, card.id());
+            if let Some(dep) = select_from_all_cards(app).await {
+                app.set_dependency(dep, card.id()).await;
             }
         }
         CardAction::OldClass => {
-            if let Some(concept) = select_from_all_class_cards(app) {
-                app.set_class(card.id(), concept).unwrap();
+            if let Some(concept) = select_from_all_class_cards(app).await {
+                app.set_class(card.id(), concept).await.unwrap();
             }
         }
         CardAction::NewClass => {
-            if let Some(class) = new_class().map(|class| app.new_any(class)) {
-                app.set_class(card.id(), class.id()).unwrap();
+            if let Some(class) = new_class() {
+                let class = app.new_any(class).await;
+                app.set_class(card.id(), class.id()).await.unwrap();
             }
         }
         CardAction::FillAttribute => {
             if card.is_instance() {
-                let attributes = Attribute::load_relevant_attributes(app, card.id());
+                let attributes = Attribute::load_relevant_attributes(app, card.id()).await;
 
                 if let Some(attribute) = select_from_attributes(attributes) {
-                    let attr = app.foobar.load_attribute(attribute).unwrap();
-                    let txt = attr.name(card.id());
+                    let attr = app.foobar.load_attribute(attribute).await.unwrap();
+                    let txt = attr.name(card.id()).await;
 
                     if let Some(back) = opt_input(&txt) {
                         let attr = AttributeCard {
@@ -296,7 +297,7 @@ fn handle_action(app: &App, card: CardId, action: CardAction) -> ControlFlow<()>
                             foobar: app.foobar.clone(),
                         };
 
-                        app.new_any(attr);
+                        app.new_any(attr).await;
                     }
                 }
             }
@@ -304,16 +305,16 @@ fn handle_action(app: &App, card: CardId, action: CardAction) -> ControlFlow<()>
 
         // Marks this card as an attribute
         CardAction::OldAttribute => {
-            if let Some(attr) = new_attribute(app) {
-                card.into_type(attr);
+            if let Some(attr) = new_attribute(app).await {
+                card.into_type(attr).await;
             }
         }
         CardAction::NewAttribute => {
             if let Some(class) = card.parent_class().or(card.is_class().then_some(card.id())) {
                 if let Some(pattern) = opt_input("attribute pattern") {
                     notify("which class should the answer belong to?");
-                    let back_type = select_from_all_class_cards(app);
-                    Attribute::create(app, pattern, class, back_type);
+                    let back_type = select_from_all_class_cards(app).await;
+                    Attribute::create(app, pattern, class, back_type).await;
                     notify("new pattern created");
                 }
             } else {
@@ -322,7 +323,7 @@ fn handle_action(app: &App, card: CardId, action: CardAction) -> ControlFlow<()>
         }
 
         CardAction::IntoClass => {
-            let front = card.print();
+            let front = card.print().await;
             let back = card.back_side().map(ToOwned::to_owned).unwrap_or_default();
             let class = ClassCard {
                 name: front,
@@ -330,35 +331,35 @@ fn handle_action(app: &App, card: CardId, action: CardAction) -> ControlFlow<()>
                 parent_class: None,
             };
 
-            card.into_type(class);
+            card.into_type(class).await;
         }
 
         CardAction::IntoStatement => {
             let statement = StatementCard {
-                front: card.print(),
+                front: card.print().await,
             };
 
-            card.into_type(statement);
+            card.into_type(statement).await;
         }
 
         CardAction::IntoEvent => {
             let event = EventCard {
-                front: card.print(),
-                start_time: get_timestamp(&card.print()),
+                front: card.print().await,
+                start_time: get_timestamp(&card.print().await),
                 end_time: None,
                 parent_event: None,
             };
 
-            card.into_type(event);
+            card.into_type(event).await;
         }
 
         CardAction::ParentClass => {
             if let AnyType::Class(class) = card.card_type() {
-                if let Some(parent_class) = select_from_all_class_cards(app) {
+                if let Some(parent_class) = select_from_all_class_cards(app).await {
                     if parent_class != card.id() {
                         let mut class = class.clone();
                         class.parent_class = Some(parent_class);
-                        card.into_type(class);
+                        card.into_type(class).await;
                     }
                 }
             } else {
@@ -367,15 +368,20 @@ fn handle_action(app: &App, card: CardId, action: CardAction) -> ControlFlow<()>
         }
 
         CardAction::SetBackRef => {
-            if let Some(reff) = select_from_all_cards(app) {
-                app.foobar.load_card(card.id()).unwrap().set_ref(reff);
+            if let Some(reff) = select_from_all_cards(app).await {
+                app.foobar
+                    .load_card(card.id())
+                    .await
+                    .unwrap()
+                    .set_ref(reff)
+                    .await;
             }
         }
         CardAction::Edit => {
             let _ = edit_with_vim(card.id());
         }
         CardAction::Delete => {
-            app.delete_card(card.id());
+            app.delete_card(card.id()).await;
             return ControlFlow::Break(());
         }
 
@@ -387,11 +393,11 @@ fn handle_action(app: &App, card: CardId, action: CardAction) -> ControlFlow<()>
     ControlFlow::Continue(())
 }
 
-pub fn view_card(app: &App, card: CardId, review_mode: bool) -> ControlFlow<()> {
+pub async fn view_card(app: &App, mut card: CardId, mut review_mode: bool) -> ControlFlow<()> {
     let mut show_backside = !review_mode;
 
     loop {
-        if print_card(app, card, show_backside).is_break() {
+        if print_card(app, card, show_backside).await.is_break() {
             return ControlFlow::Continue(());
         }
 
@@ -401,7 +407,7 @@ pub fn view_card(app: &App, card: CardId, review_mode: bool) -> ControlFlow<()> 
 
         if let Ok(action) = txt.parse::<ReviewAction>() {
             if review_mode {
-                match handle_review_action(app, card, action) {
+                match handle_review_action(app, card, action).await {
                     ControlFlow::Continue(_) => continue,
                     ControlFlow::Break(_) => return ControlFlow::Continue(()),
                 }
@@ -409,7 +415,7 @@ pub fn view_card(app: &App, card: CardId, review_mode: bool) -> ControlFlow<()> 
         }
 
         if let Ok(action) = txt.parse::<CardAction>() {
-            match handle_action(app, card, action) {
+            match handle_action(app, card, action).await {
                 ControlFlow::Continue(_) => continue,
                 ControlFlow::Break(_) => return ControlFlow::Continue(()),
             }
@@ -422,8 +428,9 @@ pub fn view_card(app: &App, card: CardId, review_mode: bool) -> ControlFlow<()> 
             }
 
             if txt.contains("find") {
-                if let Some(card) = select_from_all_cards(app) {
-                    view_card(app, card, false);
+                if let Some(newcard) = select_from_all_cards(app).await {
+                    card = newcard;
+                    review_mode = false;
                 }
 
                 continue;
@@ -441,49 +448,59 @@ pub fn view_card(app: &App, card: CardId, review_mode: bool) -> ControlFlow<()> 
     }
 }
 
-fn print_card(app: &App, card: CardId, mut show_backside: bool) -> ControlFlow<()> {
+async fn print_card(app: &App, card: CardId, mut show_backside: bool) -> ControlFlow<()> {
     clear_terminal();
-    let card = app.card_from_id(card);
+    let card = app.card_from_id(card).await;
 
     let var_name = match card.card_type() {
         AnyType::Instance(instance) => match card.back_side() {
             Some(_) => {
-                let parent_class = app.foobar.load_card(instance.class).unwrap();
-                let front = format!("what is: {} ({})", card.print(), parent_class.print());
-                let back = card.display_backside().unwrap_or_default();
+                let parent_class = app.foobar.load_card(instance.class).await.unwrap();
+                let front = format!(
+                    "what is: {} ({})",
+                    card.print().await,
+                    parent_class.print().await
+                );
+                let back = card.display_backside().await.unwrap_or_default();
                 (front, back)
             }
             None => {
-                let front = format!("which class: {}", card.print());
-                let back = app.foobar.load_card(instance.class).unwrap().print();
+                let front = format!("which class: {}", card.print().await);
+                let back = app
+                    .foobar
+                    .load_card(instance.class)
+                    .await
+                    .unwrap()
+                    .print()
+                    .await;
                 (front, back)
             }
         },
 
         AnyType::Normal(_) => {
-            let front = card.print();
-            let back = card.display_backside().unwrap_or_default();
+            let front = card.print().await;
+            let back = card.display_backside().await.unwrap_or_default();
             (front, back)
         }
         AnyType::Unfinished(_) => {
             show_backside = true;
-            let front = card.print();
+            let front = card.print().await;
             let back = String::from("card has no answer yet");
             (front, back)
         }
         AnyType::Attribute(_) => {
-            let front = card.print();
-            let back = card.display_backside().unwrap_or_default();
+            let front = card.print().await;
+            let back = card.display_backside().await.unwrap_or_default();
             (front, back)
         }
         AnyType::Class(_) => {
-            let front = card.print();
-            let back = card.display_backside().unwrap_or_default();
+            let front = card.print().await;
+            let back = card.display_backside().await.unwrap_or_default();
             (front, back)
         }
         AnyType::Statement(_) | AnyType::Event(_) => {
             show_backside = true;
-            let front = card.print();
+            let front = card.print().await;
             let back = String::default();
             (front, back)
         }
@@ -529,11 +546,11 @@ fn print_card(app: &App, card: CardId, mut show_backside: bool) -> ControlFlow<(
 
     println!("{}", &back);
     println!();
-    print_card_info(app, card.id());
+    print_card_info(app, card.id()).await;
     ControlFlow::Continue(())
 }
 
-pub fn review(app: &App, cards: Vec<CardId>) {
+pub async fn review(app: &App, cards: Vec<CardId>) {
     if cards.is_empty() {
         clear_terminal();
         notify("nothing to review!");
@@ -544,7 +561,7 @@ pub fn review(app: &App, cards: Vec<CardId>) {
     }
 
     for card in cards {
-        if view_card(app, card, true).is_break() {
+        if view_card(app, card, true).await.is_break() {
             return;
         }
     }

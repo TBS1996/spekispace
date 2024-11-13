@@ -156,26 +156,56 @@ fn string_to_serde_value(input: &str) -> Value {
     Value::String(input.to_string())
 }
 
+use async_trait::async_trait;
+
+#[async_trait(?Send)]
 pub trait Matcher: std::fmt::Debug {
-    fn get_val(&self, key: &str) -> Option<Value>;
+    async fn get_val(&self, key: &str) -> Option<Value>;
 
-    fn eval(&self, s: String) -> bool {
+    async fn eval(&self, s: String) -> bool {
         let schema = Schema::new(s).unwrap();
-        self.eval_schema(&schema)
+        self.eval_schema(&schema).await
     }
 
-    fn eval_schema(&self, schema: &Schema) -> bool {
-        match schema {
-            Schema::And(exps) => exps.iter().all(|exp| self.eval_schema(exp)),
-            Schema::Or(exps) => exps.iter().any(|exp| self.eval_schema(exp)),
-            Schema::Expr(exp) => self.is_match(exp),
+    async fn eval_schema(&self, schema: &Schema) -> bool {
+        let mut stack = vec![(schema, true)];
+
+        while let Some((schema, should_continue)) = stack.pop() {
+            match schema {
+                Schema::And(exps) => {
+                    if should_continue {
+                        for exp in exps.iter().rev() {
+                            stack.push((exp, true));
+                        }
+                    }
+                }
+                Schema::Or(exps) => {
+                    if !should_continue {
+                        for exp in exps.iter().rev() {
+                            stack.push((exp, false));
+                        }
+                    }
+                }
+                Schema::Expr(exp) => {
+                    let is_match = self.is_match(exp).await;
+                    if should_continue && !is_match {
+                        return false; // fail fast for AND
+                    }
+                    if !should_continue && is_match {
+                        return true; // succeed fast for OR
+                    }
+                }
+                _ => {}
+            }
         }
+
+        true
     }
 
-    fn is_match(&self, x: &Expr) -> bool {
+    async fn is_match(&self, x: &Expr) -> bool {
         let op = x.op;
         let val = x.val.to_owned();
-        let arg = self.get_val(&x.key).unwrap().into();
+        let arg = self.get_val(&x.key).await.unwrap().into();
 
         use Operand as OP;
         use Value::*;
@@ -209,7 +239,7 @@ mod tests {
     use serde_json::json;
 
     impl Matcher for TestStruct {
-        fn get_val(&self, key: &str) -> Option<Value> {
+        async fn get_val(&self, key: &str) -> Option<Value> {
             match key {
                 "age" => Some(json!(5.)),
                 "height" => Some(json!(180)),
@@ -219,17 +249,17 @@ mod tests {
         }
     }
 
-    #[test]
-    fn loltest() {
+    #[tokio::test]
+    async fn loltest() {
         let x = TestStruct {};
         let input = "height > 170 && msg contains worl".to_string();
-        let res = x.eval(input);
+        let res = x.eval(input).await;
         dbg!(res);
         panic!();
     }
 
-    #[test]
-    fn test1() {
+    #[tokio::test]
+    async fn test1() {
         let input = "a>4".to_string();
         assert_eq!(
             Schema::new(input).unwrap(),

@@ -5,11 +5,8 @@ edition = "2021"
 
 [dependencies]
 serde.workspace = true
-dirs.workspace = true
-gkquad.workspace = true
 serde_json.workspace = true
-tokio.workspace = true
-toml.workspace = true
 uuid.workspace = true
 omtrent.workspace = true
-#filecash.workspace = true
+futures.workspace = true
+async-trait = "0.1.83"

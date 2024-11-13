@@ -9,3 +9,7 @@ license = "GPL-2.0-only"
 [dependencies]
 serde_json = "1.0.128"
 nom = "7.0"
+async-trait = "0.1.83"
+
+[dev-dependencies]
+tokio = { version = "1.41.1", features = ["full"] }

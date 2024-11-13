@@ -24,9 +24,10 @@ pub(crate) mod serializing;
 
 pub use card_types::*;
 
+#[async_trait::async_trait(?Send)]
 pub trait CardTrait: Debug + Clone {
-    fn get_dependencies(&self) -> BTreeSet<CardId>;
-    fn display_front(&self) -> String;
+    async fn get_dependencies(&self) -> BTreeSet<CardId>;
+    async fn display_front(&self) -> String;
 }
 
 #[derive(Ord, PartialOrd, Eq, PartialEq, Hash, Debug, Clone)]
@@ -150,28 +151,29 @@ impl AnyType {
     }
 }
 
+#[async_trait::async_trait(?Send)]
 impl CardTrait for AnyType {
-    fn get_dependencies(&self) -> BTreeSet<CardId> {
+    async fn get_dependencies(&self) -> BTreeSet<CardId> {
         match self {
-            AnyType::Instance(card) => card.get_dependencies(),
-            AnyType::Normal(card) => card.get_dependencies(),
-            AnyType::Unfinished(card) => card.get_dependencies(),
-            AnyType::Attribute(card) => card.get_dependencies(),
-            AnyType::Class(card) => card.get_dependencies(),
-            AnyType::Statement(card) => card.get_dependencies(),
-            AnyType::Event(card) => card.get_dependencies(),
+            AnyType::Instance(card) => card.get_dependencies().await,
+            AnyType::Normal(card) => card.get_dependencies().await,
+            AnyType::Unfinished(card) => card.get_dependencies().await,
+            AnyType::Attribute(card) => card.get_dependencies().await,
+            AnyType::Class(card) => card.get_dependencies().await,
+            AnyType::Statement(card) => card.get_dependencies().await,
+            AnyType::Event(card) => card.get_dependencies().await,
         }
     }
 
-    fn display_front(&self) -> String {
+    async fn display_front(&self) -> String {
         match self {
-            AnyType::Instance(card) => card.display_front(),
-            AnyType::Normal(card) => card.display_front(),
-            AnyType::Unfinished(card) => card.display_front(),
-            AnyType::Attribute(card) => card.display_front(),
-            AnyType::Class(card) => card.display_front(),
-            AnyType::Statement(card) => card.display_front(),
-            AnyType::Event(card) => card.display_front(),
+            AnyType::Instance(card) => card.display_front().await,
+            AnyType::Normal(card) => card.display_front().await,
+            AnyType::Unfinished(card) => card.display_front().await,
+            AnyType::Attribute(card) => card.display_front().await,
+            AnyType::Class(card) => card.display_front().await,
+            AnyType::Statement(card) => card.display_front().await,
+            AnyType::Event(card) => card.display_front().await,
         }
     }
 }
@@ -201,9 +203,11 @@ impl<T: CardTrait + ?Sized> Debug for Card<T> {
     }
 }
 
+use futures::executor::block_on;
+
 impl<T: CardTrait> std::fmt::Display for Card<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.data.display_front())
+        write!(f, "{}", block_on(self.data.display_front()))
     }
 }
 
@@ -216,13 +220,13 @@ impl<T: CardTrait> AsRef<CardId> for Card<T> {
 impl Card<AnyType> {
     /// Loads all the ancestor ancestor classes
     /// for example, king, human male, human
-    pub fn load_ancestor_classes(&self) -> Vec<CardId> {
+    pub async fn load_ancestor_classes(&self) -> Vec<CardId> {
         let mut classes = vec![];
         let mut parent_class = self.parent_class();
 
         while let Some(class) = parent_class {
             classes.push(class);
-            parent_class = self.foobar.load_card(class).unwrap().parent_class();
+            parent_class = self.foobar.load_card(class).await.unwrap().parent_class();
         }
 
         classes
@@ -248,7 +252,7 @@ impl Card<AnyType> {
         self.history.lapses_since(day, current_time)
     }
 
-    pub fn from_raw(foobar: FooBar, raw_card: RawCard) -> Card<AnyType> {
+    pub async fn from_raw(foobar: FooBar, raw_card: RawCard) -> Card<AnyType> {
         let id = CardId(raw_card.id);
 
         Card::<AnyType> {
@@ -260,7 +264,7 @@ impl Card<AnyType> {
                 .map(|id| CardId(id))
                 .collect(),
             tags: raw_card.tags,
-            history: Reviews::load(id),
+            history: Reviews::load(id).await,
             suspended: IsSuspended::from(raw_card.suspended),
             foobar,
         }
@@ -299,24 +303,24 @@ impl Card<AnyType> {
         self.data.is_instance()
     }
 
-    pub fn set_ref(mut self, reff: CardId) -> Card<AnyType> {
+    pub async fn set_ref(mut self, reff: CardId) -> Card<AnyType> {
         let backside = BackSide::Card(reff);
         self.data = self.data.set_backside(backside, &self.foobar);
-        self.persist();
+        self.persist().await;
         self
     }
 
-    pub fn rm_dependency(&mut self, dependency: CardId) -> bool {
+    pub async fn rm_dependency(&mut self, dependency: CardId) -> bool {
         let res = self.dependencies.remove(&dependency);
-        self.persist();
+        self.persist().await;
         res
     }
-    pub fn set_dependency(&mut self, dependency: CardId) {
+    pub async fn set_dependency(&mut self, dependency: CardId) {
         if self.id() == dependency {
             return;
         }
         self.dependencies.insert(dependency);
-        self.persist();
+        self.persist().await;
     }
 
     pub fn back_side(&self) -> Option<&BackSide> {
@@ -331,35 +335,35 @@ impl Card<AnyType> {
         }
     }
 
-    pub fn into_type(self, data: impl Into<AnyType>) -> Card<AnyType> {
+    pub async fn into_type(self, data: impl Into<AnyType>) -> Card<AnyType> {
         let id = self.id();
         let mut raw = from_raw_card(self.clone());
         raw.data = from_any(data.into());
-        self.foobar.provider.save_card(raw);
-        self.foobar.load_card(id).unwrap()
+        self.foobar.provider.save_card(raw).await;
+        self.foobar.load_card(id).await.unwrap()
     }
 
     // Call this function every time SavedCard is mutated.
-    pub fn persist(&mut self) {
+    pub async fn persist(&mut self) {
         let raw = from_raw_card(self.clone());
-        self.foobar.provider.save_card(raw);
-        *self = self.foobar.load_card(self.id()).unwrap();
+        self.foobar.provider.save_card(raw).await;
+        *self = self.foobar.load_card(self.id()).await.unwrap();
     }
 
-    pub fn min_rec_recall_rate(&self) -> Option<RecallRate> {
+    pub async fn min_rec_recall_rate(&self) -> Option<RecallRate> {
         let mut recall_rate = self.recall_rate()?;
 
-        for id in self.all_dependencies() {
-            let card = self.foobar.load_card(id).unwrap();
+        for id in self.all_dependencies().await {
+            let card = self.foobar.load_card(id).await.unwrap();
             recall_rate = recall_rate.min(card.recall_rate()?);
         }
 
         Some(recall_rate)
     }
 
-    fn is_resolved(&self) -> bool {
-        for id in self.all_dependencies() {
-            if let Some(card) = self.foobar.load_card(id) {
+    async fn is_resolved(&self) -> bool {
+        for id in self.all_dependencies().await {
+            if let Some(card) = self.foobar.load_card(id).await {
                 if !card.is_finished() {
                     return false;
                 }
@@ -369,38 +373,43 @@ impl Card<AnyType> {
         true
     }
 
-    pub fn all_dependencies(&self) -> Vec<CardId> {
-        fn inner(id: CardId, deps: &mut Vec<CardId>, foobar: &FooBar) {
-            let Some(card) = foobar.load_card(id) else {
-                return;
-            };
+    pub async fn all_dependencies(&self) -> Vec<CardId> {
+        let mut deps = vec![];
+        let mut stack = vec![self.id()];
 
-            for dep in card.dependency_ids() {
-                deps.push(dep);
-                inner(dep, deps, foobar);
+        while let Some(id) = stack.pop() {
+            if let Some(card) = self.foobar.load_card(id).await {
+                deps.push(id);
+
+                for dep in card.dependency_ids().await {
+                    stack.push(dep);
+                }
             }
         }
-
-        let mut deps = vec![];
-
-        inner(self.id(), &mut deps, &self.foobar);
 
         deps
     }
 
-    pub fn display_backside(&self) -> Option<String> {
+    pub async fn display_backside(&self) -> Option<String> {
         Some(match self.back_side()? {
             BackSide::Trivial => format!("…"),
             BackSide::Time(time) => format!("🕒 {}", time),
             BackSide::Text(s) => s.to_owned(),
-            BackSide::Card(id) => format!("→ {}", self.foobar.load_card(*id).unwrap().print()),
-            BackSide::List(list) => format!(
-                "→ [{}]",
-                list.iter()
-                    .map(|id| self.foobar.load_card(*id).unwrap().print())
-                    .collect::<Vec<String>>()
-                    .join(", ")
-            ),
+            BackSide::Card(id) => {
+                format!(
+                    "→ {}",
+                    self.foobar.load_card(*id).await.unwrap().print().await
+                )
+            }
+            BackSide::List(list) => format!("→ [{}]", {
+                let mut res = vec![];
+                for id in list {
+                    let s = self.foobar.load_card(*id).await.unwrap().print().await;
+                    res.push(s);
+                }
+
+                res.join(", ")
+            }),
         })
     }
 }
@@ -410,11 +419,11 @@ impl<T: CardTrait> Card<T> {
         &self.history
     }
 
-    pub fn save_new_reviews(&self) {
+    pub async fn save_new_reviews(&self) {
         if self.history.is_empty() {
             return;
         }
-        self.history.save(self.id());
+        self.history.save(self.id()).await;
     }
 
     fn time_passed_since_last_review(&self) -> Option<Duration> {
@@ -468,8 +477,8 @@ impl<T: CardTrait> Card<T> {
         result as f32
     }
 
-    pub fn print(&self) -> String {
-        self.data.display_front()
+    pub async fn print(&self) -> String {
+        self.data.display_front().await
     }
 
     pub fn reviews(&self) -> &Vec<Review> {
@@ -493,9 +502,9 @@ impl<T: CardTrait> Card<T> {
         self.id
     }
 
-    pub fn dependency_ids(&self) -> BTreeSet<CardId> {
+    pub async fn dependency_ids(&self) -> BTreeSet<CardId> {
         let mut deps = self.dependencies.clone();
-        deps.extend(self.data.get_dependencies());
+        deps.extend(self.data.get_dependencies().await);
         deps
     }
 
@@ -504,14 +513,17 @@ impl<T: CardTrait> Card<T> {
     }
 }
 
+use async_trait::async_trait;
+
+#[async_trait(?Send)]
 impl Matcher for Card<AnyType> {
-    fn get_val(&self, key: &str) -> Option<samsvar::Value> {
+    async fn get_val(&self, key: &str) -> Option<samsvar::Value> {
         match key {
-            "front" => json!(self.data.display_front()),
-            "back" => json!(self.display_backside().unwrap_or_default()),
+            "front" => json!(self.data.display_front().await),
+            "back" => json!(self.display_backside().await.unwrap_or_default()),
             "suspended" => json!(&self.is_suspended()),
             "finished" => json!(&self.is_finished()),
-            "resolved" => json!(&self.is_resolved()),
+            "resolved" => json!(&self.is_resolved().await),
             "id" => json!(&self.id().to_string()),
             "recall" => json!(self.recall_rate().unwrap_or_default()),
             "stability" => json!(self.maturity()),
@@ -526,11 +538,12 @@ impl Matcher for Card<AnyType> {
             ),
             "minrecrecall" => {
                 let mut min_stability = usize::MAX;
-                let selfs = self.all_dependencies();
+                let selfs = self.all_dependencies().await;
                 for id in selfs {
                     let stab = (self
                         .foobar
                         .load_card(id)
+                        .await
                         .unwrap()
                         .recall_rate()
                         .unwrap_or_default()
@@ -542,21 +555,22 @@ impl Matcher for Card<AnyType> {
             }
             "minrecstab" => {
                 let mut min_recall = usize::MAX;
-                let selfs = self.all_dependencies();
+                let selfs = self.all_dependencies().await;
                 for id in selfs {
-                    let stab = (self.foobar.load_card(id).unwrap().maturity() * 1000.) as usize;
+                    let stab =
+                        (self.foobar.load_card(id).await.unwrap().maturity() * 1000.) as usize;
                     min_recall = min_recall.min(stab);
                 }
 
                 json!(min_recall as f32 / 1000.)
             }
-            "dependencies" => json!(self.dependency_ids().len()),
+            "dependencies" => json!(self.dependency_ids().await.len()),
             "dependents" => {
                 let id = self.id();
                 let mut count: usize = 0;
 
-                for card in self.foobar.load_all_cards() {
-                    if card.dependency_ids().contains(&id) {
+                for card in self.foobar.load_all_cards().await {
+                    if card.dependency_ids().await.contains(&id) {
                         count += 1;
                     }
                 }
