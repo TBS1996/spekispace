@@ -9,25 +9,17 @@ license = "GPL-2.0-only"
 
 [dependencies]
 serde.workspace = true
-dirs.workspace = true
-gkquad.workspace = true
 serde_json.workspace = true
-tokio.workspace = true
 toml.workspace = true
 uuid.workspace = true
-sanitize-filename.workspace = true
-graphviz-rust.workspace = true
-git2.workspace = true
-url.workspace = true
-walkdir.workspace = true
-octocrab.workspace = true
-ureq.workspace = true
 futures.workspace = true
 eyre.workspace = true
-rayon.workspace = true
-cli-justify.workspace = true
 samsvar.workspace = true
 omtrent.workspace = true
 speki-dto.workspace = true
-speki-fs.workspace = true
 async-trait = "0.1.83"
+
+[dependencies.gkquad]
+version = "0.0.4"
+default-features = false
+#features = ["single"]

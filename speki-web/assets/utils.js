@@ -69,7 +69,6 @@ export async function loadAllFiles(dirPath) {
 
             files.forEach(file => {
                 const filePath = `${dirPath}/${file}`;
-                console.log(filePath);
                 fs.readFile(filePath, "utf8", (err, data) => {
                     if (err) {
                         console.error(`Error reading file ${filePath}:`, err);
@@ -80,7 +79,6 @@ export async function loadAllFiles(dirPath) {
                     fileContents.push(data);
                     filesRead++;
 
-                    console.log(data);
 
                     if (filesRead === files.length) {
                         resolve(fileContents); // Return contents of all files
@@ -96,7 +94,7 @@ export async function loadAllFiles(dirPath) {
 
 export async function loadFile(path) {
     await initBrowserFS;
-    console.log(path);
+   // console.log(path);
 
     return new Promise((resolve, reject) => {
         fs.readFile(path, "utf8", (err, data) => {

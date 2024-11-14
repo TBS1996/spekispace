@@ -1,20 +1,19 @@
 use speki_dto::Review;
-use speki_dto::{CardId, Recall, SpekiProvider};
-use speki_fs::FileProvider;
+use speki_dto::{CardId, Recall};
 use std::time::Duration;
+
+use crate::Provider;
 
 #[derive(Ord, PartialOrd, Eq, Hash, PartialEq, Debug, Default, Clone)]
 pub struct Reviews(pub Vec<Review>);
 
 impl Reviews {
-    pub async fn load(id: CardId) -> Self {
-        Self(FileProvider.load_reviews(id).await)
+    pub async fn load(provider: &Provider, id: CardId) -> Self {
+        Self(provider.load_reviews(id).await)
     }
 
-    pub async fn save(&self, id: CardId) {
-        FileProvider
-            .save_reviews(id, self.clone().into_inner())
-            .await;
+    pub async fn save(&self, provider: &Provider, id: CardId) {
+        provider.save_reviews(id, self.clone().into_inner()).await;
     }
 
     pub fn is_empty(&self) -> bool {
@@ -33,13 +32,19 @@ impl Reviews {
         Self(reviews)
     }
 
-    pub async fn add_review(&mut self, id: CardId, recall: Recall, now: Duration) {
+    pub async fn add_review(
+        &mut self,
+        provider: &Provider,
+        id: CardId,
+        recall: Recall,
+        now: Duration,
+    ) {
         let review = Review {
             timestamp: now,
             grade: recall,
             time_spent: Default::default(),
         };
-        FileProvider.add_review(id, review).await;
+        provider.add_review(id, review).await;
     }
 
     pub fn lapses_since(&self, dur: Duration, current_time: Duration) -> u32 {

@@ -28,5 +28,7 @@ wasm-cookies = "0.2.1"
 web-sys = "0.3.72"
 
 speki-dto = { path = "../speki-dto" }
+speki-core = { path = "../speki-core" }
 toml = "0.8.19"
 async-trait = "0.1.83"
+async-lock = "3.4.0"

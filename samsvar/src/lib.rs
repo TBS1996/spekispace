@@ -119,19 +119,26 @@ pub enum Schema {
 impl Schema {
     fn new(s: String) -> Option<Self> {
         let mut schema = parser::evaluate(&s).unwrap().1;
-        schema.simplify();
+
+        while schema.simplify() {}
+
         Some(schema)
     }
 
-    fn simplify(&mut self) {
+    fn simplify(&mut self) -> bool {
+        let mut changed = false;
+
         let inner = match self {
-            Schema::Expr(_) => return,
+            Schema::Expr(_) => return false, // No simplification possible for a single expression
             Schema::And(s) | Schema::Or(s) => {
                 if s.len() == 1 {
-                    Some(s.remove(0))
+                    *self = s.remove(0); // Replace with the single child
+                    return true; // Simplification happened
                 } else {
                     for x in s.iter_mut() {
-                        x.simplify();
+                        if x.simplify() {
+                            changed = true; // Mark as changed if any inner element was simplified
+                        }
                     }
                     None
                 }
@@ -140,7 +147,10 @@ impl Schema {
 
         if let Some(i) = inner {
             *self = i;
+            changed = true;
         }
+
+        changed
     }
 }
 
@@ -195,7 +205,6 @@ pub trait Matcher: std::fmt::Debug {
                         return true; // succeed fast for OR
                     }
                 }
-                _ => {}
             }
         }
 
@@ -210,7 +219,7 @@ pub trait Matcher: std::fmt::Debug {
         use Operand as OP;
         use Value::*;
 
-        match (arg, op, val) {
+        let res = match (arg, op, val) {
             (Number(val), OP::GreaterOrEqual, Number(arg)) => val.as_f64() >= arg.as_f64(),
             (Number(val), OP::LessOrEqual, Number(arg)) => val.as_f64() <= arg.as_f64(),
             (Number(val), OP::GreaterThan, Number(arg)) => val.as_f64() > arg.as_f64(),
@@ -225,7 +234,9 @@ pub trait Matcher: std::fmt::Debug {
                     val, op, arg
                 );
             }
-        }
+        };
+
+        res
     }
 }
 
@@ -238,6 +249,7 @@ mod tests {
 
     use serde_json::json;
 
+    #[async_trait(?Send)]
     impl Matcher for TestStruct {
         async fn get_val(&self, key: &str) -> Option<Value> {
             match key {
@@ -252,10 +264,9 @@ mod tests {
     #[tokio::test]
     async fn loltest() {
         let x = TestStruct {};
-        let input = "height > 170 && msg contains worl".to_string();
+        let input = "height > 170 & msg contains worl".to_string();
         let res = x.eval(input).await;
-        dbg!(res);
-        panic!();
+        assert!(res);
     }
 
     #[tokio::test]
@@ -318,8 +329,16 @@ mod tests {
     #[test]
     fn tokentest() {
         let input = "a contains helloworld & (b < 4 | c == true)".to_string();
-        let result = Schema::new(input);
-        dbg!(result);
-        panic!();
+        let result = Schema::new(input).unwrap();
+
+        let expected = Schema::And(vec![
+            Schema::Expr(Expr::new("a", "contains", "helloworld")),
+            Schema::Or(vec![
+                Schema::Expr(Expr::new("b", "<", "4")),
+                Schema::Expr(Expr::new("c", "==", "true")),
+            ]),
+        ]);
+
+        assert_eq!(result, expected);
     }
 }

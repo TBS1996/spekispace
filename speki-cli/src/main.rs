@@ -4,7 +4,7 @@ use console::style;
 use dialoguer::{theme::ColorfulTheme, Input, Select};
 use incread::inc_path;
 use review::{review_menu, view_card};
-use speki_core::App;
+use speki_core::{current_time, App, TimeProvider};
 use speki_core::{
     AnyType, Attribute, AttributeCard, BackSide, CType, Card, CardId, ClassCard, EventCard,
     InstanceCard, NormalCard, SimpleRecall, StatementCard, TimeStamp, UnfinishedCard,
@@ -310,10 +310,18 @@ struct Cli {
     roundtrip: bool,
 }
 
+struct TimeGetter;
+
+impl TimeProvider for TimeGetter {
+    fn current_time(&self) -> std::time::Duration {
+        current_time()
+    }
+}
+
 #[tokio::main]
 async fn main() {
     let cli = Cli::parse();
-    let app = App::new(FileProvider, SimpleRecall);
+    let app = App::new(FileProvider, SimpleRecall, TimeGetter);
 
     if cli.add.is_some() {
         let s = cli.add.unwrap();

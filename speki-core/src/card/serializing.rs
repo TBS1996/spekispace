@@ -206,7 +206,7 @@ impl Serialize for IsSuspended {
     where
         S: serde::ser::Serializer,
     {
-        match self.clone().verify_time() {
+        match self.clone().verify_time(Duration::default()) {
             IsSuspended::False => serializer.serialize_bool(false),
             IsSuspended::True => serializer.serialize_bool(true),
             IsSuspended::TrueUntil(duration) => serializer.serialize_u64(duration.as_secs()),
@@ -225,7 +225,8 @@ impl<'de> Deserialize<'de> for IsSuspended {
             Value::Boolean(b) => Ok(b.into()),
             Value::Integer(i) => {
                 if let Ok(secs) = std::convert::TryInto::<u64>::try_into(i) {
-                    Ok(IsSuspended::TrueUntil(Duration::from_secs(secs)).verify_time())
+                    Ok(IsSuspended::TrueUntil(Duration::from_secs(secs))
+                        .verify_time(Duration::default()))
                 } else {
                     Err(de::Error::custom("Invalid duration format"))
                 }

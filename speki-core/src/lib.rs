@@ -45,10 +45,15 @@ impl Debug for FooBar {
     }
 }
 
+pub trait TimeProvider {
+    fn current_time(&self) -> Duration;
+}
+
 #[derive(Clone)]
 pub struct FooBar {
     provider: Provider,
     recaller: Recaller,
+    time_provider: TimeGetter,
 }
 
 impl FooBar {
@@ -124,6 +129,7 @@ impl FooBar {
 
 pub type Provider = Arc<Box<dyn SpekiProvider + Send>>;
 pub type Recaller = Arc<Box<dyn RecallCalc + Send>>;
+pub type TimeGetter = Arc<Box<dyn TimeProvider + Send>>;
 
 pub struct App {
     pub foobar: FooBar,
@@ -136,14 +142,16 @@ impl Debug for App {
 }
 
 impl App {
-    pub fn new<A, B>(provider: A, recall_calc: B) -> Self
+    pub fn new<A, B, C>(provider: A, recall_calc: B, time_provider: C) -> Self
     where
         A: SpekiProvider + 'static + Send,
         B: RecallCalc + 'static + Send,
+        C: TimeProvider + 'static + Send,
     {
         let foobar = FooBar {
             provider: Arc::new(Box::new(provider)),
             recaller: Arc::new(Box::new(recall_calc)),
+            time_provider: Arc::new(Box::new(time_provider)),
         };
 
         Self { foobar }

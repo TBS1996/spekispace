@@ -1,4 +1,3 @@
-use crate::common::current_time;
 use crate::recall_rate::SimpleRecall;
 use crate::reviews::Reviews;
 use crate::FooBar;
@@ -54,9 +53,9 @@ impl Default for IsSuspended {
 }
 
 impl IsSuspended {
-    fn verify_time(self) -> Self {
+    fn verify_time(self, current_time: Duration) -> Self {
         if let Self::TrueUntil(dur) = self {
-            if dur < current_time() {
+            if dur < current_time {
                 return Self::False;
             }
         }
@@ -233,20 +232,20 @@ impl Card<AnyType> {
     }
 
     pub fn lapses_last_month(&self) -> u32 {
-        let current_time = current_time();
+        let current_time = self.foobar.time_provider.current_time();
         let day = Duration::from_secs(86400 * 30);
 
         self.history.lapses_since(day, current_time)
     }
     pub fn lapses_last_week(&self) -> u32 {
-        let current_time = current_time();
+        let current_time = self.foobar.time_provider.current_time();
         let day = Duration::from_secs(86400 * 7);
 
         self.history.lapses_since(day, current_time)
     }
 
     pub fn lapses_last_day(&self) -> u32 {
-        let current_time = current_time();
+        let current_time = self.foobar.time_provider.current_time();
         let day = Duration::from_secs(86400);
 
         self.history.lapses_since(day, current_time)
@@ -264,7 +263,7 @@ impl Card<AnyType> {
                 .map(|id| CardId(id))
                 .collect(),
             tags: raw_card.tags,
-            history: Reviews::load(id).await,
+            history: Reviews::load(&foobar.provider, id).await,
             suspended: IsSuspended::from(raw_card.suspended),
             foobar,
         }
@@ -379,7 +378,9 @@ impl Card<AnyType> {
 
         while let Some(id) = stack.pop() {
             if let Some(card) = self.foobar.load_card(id).await {
-                deps.push(id);
+                if self.id() != id {
+                    deps.push(id);
+                }
 
                 for dep in card.dependency_ids().await {
                     stack.push(dep);
@@ -423,15 +424,19 @@ impl<T: CardTrait> Card<T> {
         if self.history.is_empty() {
             return;
         }
-        self.history.save(self.id()).await;
+        self.history.save(&self.foobar.provider, self.id()).await;
+    }
+
+    fn current_time(&self) -> Duration {
+        self.foobar.time_provider.current_time()
     }
 
     fn time_passed_since_last_review(&self) -> Option<Duration> {
-        if current_time() < self.history.0.last()?.timestamp {
+        if self.current_time() < self.history.0.last()?.timestamp {
             return Duration::default().into();
         }
 
-        Some(current_time() - self.history.0.last()?.timestamp)
+        Some(self.current_time() - self.history.0.last()?.timestamp)
     }
 
     pub fn recall_rate_at(&self, current_unix: Duration) -> Option<RecallRate> {
@@ -439,14 +444,14 @@ impl<T: CardTrait> Card<T> {
     }
 
     pub fn recall_rate(&self) -> Option<RecallRate> {
-        let now = current_time();
+        let now = self.current_time();
         self.foobar.recaller.recall_rate(&self.history, now)
     }
 
     pub fn maybeturity(&self) -> Option<f32> {
         use gkquad::single::integral;
 
-        let now = current_time();
+        let now = self.current_time();
         let result = integral(
             |x: f64| {
                 self.recall_rate_at(now + Duration::from_secs_f64(x * 86400.))
@@ -463,7 +468,7 @@ impl<T: CardTrait> Card<T> {
     pub fn maturity(&self) -> f32 {
         use gkquad::single::integral;
 
-        let now = current_time();
+        let now = self.current_time();
         let result = integral(
             |x: f64| {
                 self.recall_rate_at(now + Duration::from_secs_f64(x * 86400.))

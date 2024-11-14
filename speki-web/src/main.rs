@@ -1,16 +1,23 @@
 #![allow(non_snake_case)]
 
+use crate::provider::IndexBaseProvider;
 use dioxus::prelude::*;
 use dioxus_logger::tracing::{info, Level};
-use js::load_all_files;
 use serde::Deserialize;
-use speki_dto::SpekiProvider;
-use std::sync::{Arc, Mutex};
+use speki_core::{AnyType, App, Card, TimeProvider};
+use speki_dto::{CardId, Recall, Review, SpekiProvider};
+use std::{
+    sync::{Arc, Mutex},
+    time::Duration,
+};
 use wasm_bindgen::prelude::*;
 use web_sys::console;
 
 mod provider;
 mod utils;
+
+const DEFAULT_FILTER: &'static str =
+    "recall < 0.8 & finished == true & suspended == false & resolved == true & minrecrecall > 0.8 & minrecstab > 10 & lastreview > 0.5 & weeklapses < 3 & monthlapses < 6";
 
 mod cookies {
     use std::collections::HashMap;
@@ -65,17 +72,23 @@ pub fn log_to_console<T: std::fmt::Debug>(val: T) -> T {
 enum Route {
     #[route("/")]
     Home {},
+    #[route("/review")]
+    Review {},
 }
 
 pub mod js {
-    use futures::executor::block_on;
+    use std::time::Duration;
+
     use gloo_utils::format::JsValueSerdeExt;
     use js_sys::Promise;
     use serde_json::Value;
     use wasm_bindgen::prelude::*;
-    use wasm_bindgen_futures::future_to_promise;
 
-    use crate::log_to_console;
+    #[wasm_bindgen]
+    extern "C" {
+        #[wasm_bindgen(js_namespace = Date)]
+        fn now() -> f64;
+    }
 
     #[wasm_bindgen(module = "/assets/utils.js")]
     extern "C" {
@@ -85,6 +98,10 @@ pub mod js {
         fn deleteFile(path: &JsValue);
         fn loadFile(path: &JsValue) -> Promise;
         fn saveFile(path: &JsValue, content: &JsValue);
+    }
+
+    pub fn current_time() -> Duration {
+        Duration::from_millis(now() as u64)
     }
 
     pub fn clone_repo(path: &str, url: &str, token: &str) {
@@ -139,6 +156,14 @@ pub mod js {
     }
 }
 
+struct WasmTime;
+
+impl TimeProvider for WasmTime {
+    fn current_time(&self) -> Duration {
+        js::current_time()
+    }
+}
+
 fn main() {
     dioxus_logger::init(Level::INFO).expect("failed to init logger");
     info!("starting app");
@@ -147,19 +172,10 @@ fn main() {
 
 fn App() -> Element {
     use_context_provider(State::new);
+    use_context_provider(ReviewState::default);
     rsx! {
         Router::<Route> {}
     }
-}
-
-#[derive(Clone, Default)]
-pub struct State {
-    inner: Arc<Mutex<InnerState>>,
-}
-
-#[derive(Deserialize)]
-struct GithubUser {
-    login: String,
 }
 
 #[wasm_bindgen]
@@ -175,9 +191,9 @@ pub async fn fetch_github_username(access_token: String) -> Result<String, JsVal
     }
 
     // Initialize the request
-    let mut opts = RequestInit::new();
-    opts.method("GET");
-    opts.mode(RequestMode::Cors);
+    let opts = RequestInit::new();
+    opts.set_method("GET");
+    opts.set_mode(RequestMode::Cors);
 
     // GitHub API endpoint for the user data
     let url = "https://api.github.com/user";
@@ -236,10 +252,19 @@ async fn load_user_info() -> Option<UserInfo> {
     })
 }
 
+#[derive(Clone)]
+pub struct State {
+    inner: Arc<Mutex<InnerState>>,
+    app: Arc<App>,
+}
+
 impl State {
     pub fn new() -> Self {
-        let selv = Self::default();
-        selv
+        let app = App::new(IndexBaseProvider, speki_core::SimpleRecall, WasmTime);
+        Self {
+            inner: Default::default(),
+            app: Arc::new(app),
+        }
     }
 
     pub fn info(&self) -> Signal<Option<UserInfo>> {
@@ -248,7 +273,7 @@ impl State {
 }
 
 #[derive(Debug)]
-struct UserInfo {
+pub struct UserInfo {
     auth_token: String,
     install_token: String,
     username: String,
@@ -259,10 +284,182 @@ struct InnerState {
     token: Signal<Option<UserInfo>>,
 }
 
+#[derive(Default, Clone)]
+struct ReviewState {
+    card: Signal<Option<Card<AnyType>>>,
+    queue: Arc<Mutex<Vec<CardId>>>,
+    tot_len: Signal<usize>,
+    pos: Signal<usize>,
+    front: Signal<String>,
+    back: Signal<String>,
+}
+
+impl ReviewState {
+    fn id(&self) -> Option<CardId> {
+        Some(self.card.as_ref()?.id())
+    }
+
+    async fn refresh(&self, app: &App, filter: String) {
+        let cards = app.load_non_pending(Some(filter)).await;
+        self.tot_len.clone().set(cards.len());
+        {
+            let mut lock = self.queue.lock().unwrap();
+            *lock = cards;
+        }
+        self.next_card(app).await;
+    }
+
+    async fn make_review(&self, review: Review) {
+        if let Some(id) = self.id() {
+            IndexBaseProvider.add_review(id, review).await;
+        }
+    }
+
+    fn current_pos(&self) -> usize {
+        self.tot_len - self.queue.lock().unwrap().len()
+    }
+
+    async fn do_review(&self, app: &App, review: Review) {
+        self.make_review(review).await;
+        self.next_card(app).await;
+    }
+
+    async fn next_card(&self, app: &App) {
+        let card = self.queue.lock().unwrap().pop();
+
+        let card = match card {
+            Some(id) => {
+                let card = Card::from_raw(
+                    app.foobar.clone(),
+                    IndexBaseProvider.load_card(id).await.unwrap(),
+                )
+                .await;
+                let front = card.print().await;
+                let back = card
+                    .display_backside()
+                    .await
+                    .unwrap_or_else(|| "___".to_string());
+
+                self.front.clone().set(front);
+                self.back.clone().set(back);
+                Some(card)
+            }
+            None => None,
+        };
+
+        self.card.clone().set(card);
+        self.pos.clone().set(self.current_pos());
+    }
+}
+
+fn new_review(recall: Recall) -> Review {
+    Review {
+        timestamp: js::current_time(),
+        grade: recall,
+        time_spent: Duration::default(),
+    }
+}
+
+#[component]
+fn Review() -> Element {
+    let state = use_context::<State>();
+    let review = use_context::<ReviewState>();
+    let card = review.card.clone();
+    let pos = review.pos.clone();
+    let tot = review.tot_len.clone();
+    let mut show_backside = use_signal(|| false);
+
+    let front = review.front.clone();
+    let back = review.back.clone();
+
+    rsx! {
+        div {
+            match card() {
+                Some(_) => rsx! {
+                    div {
+                        h2 { "Reviewing Card {pos} of {tot}" }
+                        p { "Front: {front}" }
+                        if show_backside() {
+                            p { "Back: {back}" }
+                            div {
+                                button {
+                                    onclick: move |_| {
+                                        let review = review.clone();
+                                        let state = state.clone();
+                                        spawn(async move{
+                                            review.do_review(&state.app, new_review(Recall::None)).await;
+                                        });
+                                    },
+                                    "Easy"
+                                }
+                                button {
+                                    onclick: move |_| {
+                                        spawn(async move{
+                                            let state = use_context::<State>();
+                                            let review = use_context::<ReviewState>();
+                                            review.do_review(&state.app, new_review(Recall::Late)).await;
+                                        });
+                                    },
+                                    "Good"
+                                }
+                                button {
+                                    onclick: move |_| {
+                                        spawn(async move{
+                                            let state = use_context::<State>();
+                                            let review = use_context::<ReviewState>();
+                                            review.do_review(&state.app, new_review(Recall::Some)).await;
+                                        });
+                                    },
+                                    "Hard"
+                                }
+                                button {
+                                    onclick: move |_| {
+                                        spawn(async move{
+                                            let state = use_context::<State>();
+                                            let review = use_context::<ReviewState>();
+                                            review.do_review(&state.app, new_review(Recall::Perfect)).await;
+                                        });
+                                    },
+                                    "Again"
+                                }
+                            }
+                        } else {
+                            button {
+                                onclick: move |_| show_backside.set(true),
+                                "show backside"
+                            }
+                        }
+                    }
+                },
+
+                // If there's no card, display the "Start Review" button
+                None => rsx! {
+                    div {
+                        p { "No cards to review." }
+                        button {
+                            onclick: move |_| {
+                                spawn(
+                                    async move {
+                                        let state = use_context::<State>();
+                                        let review = use_context::<ReviewState>();
+                                        review.refresh(&state.app, DEFAULT_FILTER.to_string()).await;
+                                    }
+                                );
+
+                            },
+                            "Start Review"
+                        }
+                    }
+                },
+            }
+        }
+
+    }
+}
+
 #[component]
 fn Home() -> Element {
     let state = use_context::<State>();
-    let state2 = state.clone();
 
     let mut repopath = use_signal(|| "/sup".to_string());
 
@@ -320,5 +517,3 @@ fn Home() -> Element {
         }
     }
 }
-
-use crate::provider::IndexBaseProvider;

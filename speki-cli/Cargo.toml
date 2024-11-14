@@ -10,8 +10,6 @@ license = "GPL-2.0-only"
 [dependencies]
 clap.workspace = true
 skim.workspace = true
-strum.workspace = true
-strum_macros.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 uuid.workspace = true
@@ -20,7 +18,6 @@ dialoguer.workspace = true
 opener.workspace = true
 console.workspace = true
 tokio.workspace = true
-cli-justify.workspace = true
 cli-pdf-to-text.workspace = true
 cli-epub-to-text.workspace = true
 wikipedia.workspace = true
