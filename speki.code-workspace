@@ -10,6 +10,9 @@
 			"path": "speki-core"
 		},
 		{
+			"path": "speki-proxy"
+		},
+		{
 			"path": "speki-fs"
 		},
 		{

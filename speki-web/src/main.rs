@@ -5,7 +5,7 @@ use dioxus::prelude::*;
 use dioxus_logger::tracing::{info, Level};
 use serde::Deserialize;
 use speki_core::{AnyType, App, Card, TimeProvider};
-use speki_dto::{CardId, Recall, Review, SpekiProvider};
+use speki_dto::{CardId, Review, SpekiProvider};
 use std::{
     sync::{Arc, Mutex},
     time::Duration,
@@ -13,11 +13,9 @@ use std::{
 use wasm_bindgen::prelude::*;
 use web_sys::console;
 
+mod pages;
 mod provider;
 mod utils;
-
-const DEFAULT_FILTER: &'static str =
-    "recall < 0.8 & finished == true & suspended == false & resolved == true & minrecrecall > 0.8 & minrecstab > 10 & lastreview > 0.5 & weeklapses < 3 & monthlapses < 6";
 
 mod cookies {
     use std::collections::HashMap;
@@ -68,12 +66,20 @@ pub fn log_to_console<T: std::fmt::Debug>(val: T) -> T {
     val
 }
 
+use crate::pages::{Add, Debug, Home, Review, View};
+
 #[derive(Clone, Routable, Debug, PartialEq)]
 enum Route {
     #[route("/")]
     Home {},
     #[route("/review")]
     Review {},
+    #[route("/view/:id")]
+    View { id: String },
+    #[route("/add")]
+    Add {},
+    #[route("/debug")]
+    Debug {},
 }
 
 pub mod js {
@@ -84,6 +90,8 @@ pub mod js {
     use serde_json::Value;
     use wasm_bindgen::prelude::*;
 
+    use crate::log_to_console;
+
     #[wasm_bindgen]
     extern "C" {
         #[wasm_bindgen(js_namespace = Date)]
@@ -92,23 +100,53 @@ pub mod js {
 
     #[wasm_bindgen(module = "/assets/utils.js")]
     extern "C" {
+        fn cloneRepo(path: &JsValue, url: &JsValue, token: &JsValue, proxy: &JsValue);
+        fn gitClone(path: &JsValue, url: &JsValue, token: &JsValue, proxy: &JsValue);
+        fn fetchRepo(path: &JsValue, url: &JsValue, token: &JsValue, proxy: &JsValue);
+        fn pullRepo(path: &JsValue, token: &JsValue, proxy: &JsValue);
         fn loadAllFiles(path: &JsValue) -> Promise;
-        fn cloneRepo(path: &JsValue, url: &JsValue, token: &JsValue);
+        fn newReviews(path: &JsValue) -> Promise;
         fn listFiles(path: &JsValue);
         fn deleteFile(path: &JsValue);
         fn loadFile(path: &JsValue) -> Promise;
         fn saveFile(path: &JsValue, content: &JsValue);
+        fn validateUpstream(path: &JsValue, token: &JsValue);
     }
 
     pub fn current_time() -> Duration {
         Duration::from_millis(now() as u64)
     }
 
-    pub fn clone_repo(path: &str, url: &str, token: &str) {
+    pub fn fetch_repo(path: &str, url: &str, token: &str, proxy: &str) {
         let path = JsValue::from_str(path);
         let url = JsValue::from_str(url);
         let token = JsValue::from_str(token);
-        cloneRepo(&path, &url, &token);
+        let proxy = JsValue::from_str(proxy);
+        fetchRepo(&path, &url, &token, &proxy);
+    }
+
+    pub fn clone_repo(path: &str, url: &str, token: &str, proxy: &str) {
+        let path = JsValue::from_str(path);
+        let url = JsValue::from_str(url);
+        let token = JsValue::from_str(token);
+        let proxy = JsValue::from_str(proxy);
+        cloneRepo(&path, &url, &token, &proxy);
+        //gitClone(&path, &url, &token, &proxy);
+    }
+
+    pub fn validate_upstream(path: &str, token: &str) {
+        let path = JsValue::from_str(path);
+        let token = JsValue::from_str(token);
+        validateUpstream(&path, &token);
+    }
+
+    pub fn pull_repo(path: &str, token: &str, proxy: &str) {
+        log_to_console("starting pull repo");
+        let path = JsValue::from_str(path);
+        let token = JsValue::from_str(token);
+        let proxy = JsValue::from_str(proxy);
+        pullRepo(&path, &token, &proxy);
+        log_to_console("rs pull repo ended");
     }
 
     pub fn delete_file(path: &str) {
@@ -130,6 +168,16 @@ pub mod js {
         let future = wasm_bindgen_futures::JsFuture::from(promise);
         let jsvalue = future.await.unwrap();
         jsvalue.into_serde().unwrap()
+    }
+
+    pub async fn git_status(path: &str) -> u64 {
+        let path = JsValue::from_str(path);
+        let val = promise_to_val(newReviews(&path)).await;
+        crate::log_to_console(&val);
+        match val {
+            serde_json::Value::Number(s) => s.as_u64().unwrap(),
+            _ => panic!("damn"),
+        }
     }
 
     pub async fn load_all_files(path: &str) -> Vec<String> {
@@ -220,7 +268,7 @@ pub async fn fetch_github_username(access_token: String) -> Result<String, JsVal
     }
 }
 
-async fn load_cached_info() -> Option<UserInfo> {
+pub async fn load_cached_info() -> Option<UserInfo> {
     let auth_token = get_auth_token()?;
     let res = fetch_github_username(auth_token.clone()).await;
     log_to_console(&res);
@@ -349,171 +397,5 @@ impl ReviewState {
 
         self.card.clone().set(card);
         self.pos.clone().set(self.current_pos());
-    }
-}
-
-fn new_review(recall: Recall) -> Review {
-    Review {
-        timestamp: js::current_time(),
-        grade: recall,
-        time_spent: Duration::default(),
-    }
-}
-
-#[component]
-fn Review() -> Element {
-    let state = use_context::<State>();
-    let review = use_context::<ReviewState>();
-    let card = review.card.clone();
-    let pos = review.pos.clone();
-    let tot = review.tot_len.clone();
-    let mut show_backside = use_signal(|| false);
-
-    let front = review.front.clone();
-    let back = review.back.clone();
-
-    rsx! {
-        div {
-            match card() {
-                Some(_) => rsx! {
-                    div {
-                        h2 { "Reviewing Card {pos} of {tot}" }
-                        p { "Front: {front}" }
-                        if show_backside() {
-                            p { "Back: {back}" }
-                            div {
-                                button {
-                                    onclick: move |_| {
-                                        let review = review.clone();
-                                        let state = state.clone();
-                                        spawn(async move{
-                                            review.do_review(&state.app, new_review(Recall::None)).await;
-                                        });
-                                    },
-                                    "Easy"
-                                }
-                                button {
-                                    onclick: move |_| {
-                                        spawn(async move{
-                                            let state = use_context::<State>();
-                                            let review = use_context::<ReviewState>();
-                                            review.do_review(&state.app, new_review(Recall::Late)).await;
-                                        });
-                                    },
-                                    "Good"
-                                }
-                                button {
-                                    onclick: move |_| {
-                                        spawn(async move{
-                                            let state = use_context::<State>();
-                                            let review = use_context::<ReviewState>();
-                                            review.do_review(&state.app, new_review(Recall::Some)).await;
-                                        });
-                                    },
-                                    "Hard"
-                                }
-                                button {
-                                    onclick: move |_| {
-                                        spawn(async move{
-                                            let state = use_context::<State>();
-                                            let review = use_context::<ReviewState>();
-                                            review.do_review(&state.app, new_review(Recall::Perfect)).await;
-                                        });
-                                    },
-                                    "Again"
-                                }
-                            }
-                        } else {
-                            button {
-                                onclick: move |_| show_backside.set(true),
-                                "show backside"
-                            }
-                        }
-                    }
-                },
-
-                // If there's no card, display the "Start Review" button
-                None => rsx! {
-                    div {
-                        p { "No cards to review." }
-                        button {
-                            onclick: move |_| {
-                                spawn(
-                                    async move {
-                                        let state = use_context::<State>();
-                                        let review = use_context::<ReviewState>();
-                                        review.refresh(&state.app, DEFAULT_FILTER.to_string()).await;
-                                    }
-                                );
-
-                            },
-                            "Start Review"
-                        }
-                    }
-                },
-            }
-        }
-
-    }
-}
-
-#[component]
-fn Home() -> Element {
-    let state = use_context::<State>();
-
-    let mut repopath = use_signal(|| "/sup".to_string());
-
-    let mut niceinfo = state.info();
-    use_effect(move || {
-        log_to_console("YY");
-        spawn(async move {
-            let new_info = load_cached_info().await;
-            log_to_console(("EYYY", &new_info));
-            niceinfo.set(new_info);
-        });
-    });
-
-    let flag = state.info();
-
-    rsx! {
-        h1 {"state: {flag:?}"}
-        button { onclick: move |_| {
-            let state = state.clone();
-
-            let mut info = state.info();
-            spawn(async move {
-                log_to_console("XX");
-                let new_info = load_user_info().await;
-                info.set(new_info);
-            });
-
-        }, "log in" }
-        button { onclick:  |_|{
-        }, "update lol" },
-        button { onclick: move |_| {
-            js::list_files(repopath().as_ref());
-        }, "show repo!" }
-        button { onclick: move |_| {
-            if let Some(info) = flag.as_ref(){
-                js::clone_repo(repopath().as_ref(), "https://github.com/tbs1996/remotespeki.git", &info.install_token);
-            }
-
-        }, "clone repo!" }
-
-        button { onclick: move |_| {
-            spawn(async move {
-                for x in IndexBaseProvider.load_all_attributes().await {
-                    let x = format!("{:?}", x) ;
-                    log_to_console(&x);
-                }
-            });
-
-        }, "load cards" }
-        input {
-            // we tell the component what to render
-            value: "{repopath}",
-            // and what to do when the value changes
-            oninput: move |event| repopath.set(event.value())
-        }
     }
 }

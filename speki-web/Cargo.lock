@@ -2198,6 +2198,7 @@ dependencies = [
  "speki-core",
  "speki-dto",
  "toml",
+ "uuid",
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "wasm-cookies",

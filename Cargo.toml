@@ -5,12 +5,15 @@ members = [
     "samsvar",
     "speki-cli",
     "speki-core",
-    "speki-dto", 
+    "speki-dto",
     "speki-fs",
-    "omtrent", "speki-auth",
+    "omtrent",
+    "speki-auth",
+    "speki-web", 
+    "speki-proxy",
 ]
 
-exclude = ["speki-web"]
+#exclude = ["speki-web"]
 
 
 resolver = "2"
@@ -42,5 +45,3 @@ toml = "0.8.19"
 futures = "0.3"
 eyre = "0.6.12"
 rayon = "1.10.0"
-
-
