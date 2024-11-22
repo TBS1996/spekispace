@@ -189,27 +189,20 @@ export async function listFiles(path) {
 }
 
 
-export async function fetchRepo(path, url, token, proxy) {
+export async function fetchRepo(path, token, proxy) {
     const output = document.getElementById("output");
 
     await initBrowserFS;
-
-
-    try {
-        console.log(`starting fetch from ${url} files to ${path} with token ${token} through proxy ${proxy}!`);
-	let cache = {};
+        console.log(`starting fetch from files to ${path} with token ${token} through proxy ${proxy}!`);
         await git.fetch({
             fs,
             http,
-	    cache,
             dir: path, 
-            url: url, 
             corsProxy: proxy,
             singleBranch: true,
             onProgress: (progress) => {
                 console.log(`${progress.phase}: ${progress.loaded} of ${progress.total}`);
               },
-            depth: 1,
             onAuth: () => ({
                 username: 'x-access-token',
                 password: token
@@ -217,9 +210,6 @@ export async function fetchRepo(path, url, token, proxy) {
         });
         console.log(`successsddd nice`);
         output.textContent = "Repository fetched successfully!";
-    } catch (error) {
-        output.textContent = "Failed to fetch repository: " + error;
-    }
 }
 
 export async function cloneRepo(path, url, token, proxy) {
@@ -252,6 +242,8 @@ export async function cloneRepo(path, url, token, proxy) {
         output.textContent = "Failed to clone repository: " + error;
     }
 }
+
+//////////////
 
 async function commit(repoPath, token){
     await initBrowserFS;
@@ -305,7 +297,6 @@ export async function pushRepo(repoPath, token, proxy) {
 
     await initBrowserFS;
 
-    try {
         console.log(`Pushing latest changes in the repository at '${repoPath} with token ${token}'...`);
         const { name, email } = await fetchGitHubUserDetails(token);
         let cache = {};
@@ -316,9 +307,7 @@ export async function pushRepo(repoPath, token, proxy) {
             cache,
             dir: repoPath,
             corsProxy: proxy,
-            singleBranch: true,
             ref: 'main',
-            depth: 1,
             onProgress: (progress) => {
                 console.log(`${progress.phase}: ${progress.loaded} of ${progress.total}`);
               },
@@ -337,12 +326,6 @@ export async function pushRepo(repoPath, token, proxy) {
 
         console.log(resultMessage);
         return resultMessage;
-    } catch (error) {
-        const errorMsg = `Failed to pull repository: ${error}`;
-        output.textContent = errorMsg;
-        console.error(errorMsg);
-        throw new Error(errorMsg);
-    }
 }
 
 export async function syncRepo(repoPath, token, proxy) {
@@ -357,50 +340,69 @@ export async function syncRepo(repoPath, token, proxy) {
 }
 
 
-export async function pullRepo(repoPath, token, proxy) {
-    const output = document.getElementById("output");
-
+async function mergeRepo(repoPath, token) {
     await initBrowserFS;
 
-    try {
-        console.log(`Pulling latest changes in the repository at '${repoPath} with token ${token}'...`);
-        const { name, email } = await fetchGitHubUserDetails(token);
-        let cache = {};
+    console.log(`merging repository at '${repoPath}...`);
+    const { name, email } = await fetchGitHubUserDetails(token);
 
-        await git.pull({
-            fs,
-            http,
-            cache,
-            dir: repoPath,
-            corsProxy: proxy,
-            singleBranch: true,
-            ref: 'main',
-            depth: 1,
-            onProgress: (progress) => {
-                console.log(`${progress.phase}: ${progress.loaded} of ${progress.total}`);
-              },
-            onAuth: () => ({
-                username: 'x-access-token',
-                password: token
-            }),
-            author: {
-                name,
-                email
-            }
-        });
+    const mergeDriver = async ({ contents, path }) => {
+        const baseContent = contents[0];
+        const ourContent = contents[1];
+        const theirContent = contents[2];
 
-        const resultMessage = "Repository successfully updated with latest changes!";
-        output.textContent = resultMessage;
+        console.log(`merging path: ${path}`);
 
-        console.log(resultMessage);
-        return resultMessage;
-    } catch (error) {
-        const errorMsg = `Failed to pull repository: ${error}`;
-        output.textContent = errorMsg;
-        console.error(errorMsg);
-        throw new Error(errorMsg);
-    }
+
+        const pattern = /^\d{10} \d/;
+        let isReview =  pattern.test(baseContent) || pattern.test(ourContent) || pattern.test(theirContent);
+      
+        if (!isReview) {
+            console.log(`choosing upstream commit for file: ${theirContent} `);
+          return { cleanMerge: true, mergedText: theirContent };
+        }
+      
+        const combinedLines = [
+          ...baseContent.split('\n'),
+          ...ourContent.split('\n'),
+          ...theirContent.split('\n'),
+        ];
+        console.log(combinedLines);
+        const uniqueSortedLines = [...new Set(combinedLines)].sort();
+        console.log(uniqueSortedLines);
+
+        let mergedText = uniqueSortedLines.join('\n').trim();
+        console.log(mergedText);
+      
+        return {
+          cleanMerge: true,
+          mergedText,
+        };
+      };
+
+    await git.merge({
+        fs,
+        ours: 'main',
+        theirs: 'remotes/origin/main',
+        dir: repoPath,
+        mergeDriver,
+        author: {
+            name,
+            email
+        }
+    });
+
+    console.log("Repository successfully merged with latest changes!");
 }
+
+
+export async function pullRepo(repoPath, token, proxy) {
+    await fetchRepo(repoPath, token, proxy);
+    await mergeRepo(repoPath, token);
+}
+
+///////////////////////////////////////////////////////////////
+
 
 
 
@@ -566,7 +568,6 @@ export async function validateUpstream(repoPath, token) {
             fs,
             http,
             dir: repoPath,
-            //corsProxy: "http://localhost:8081",
             onAuth: () => ({
                 username: 'x-access-token',
                 password: token

@@ -37,16 +37,10 @@ pub fn Debug() -> Element {
         button { onclick:  |_|{
         }, "update lol" },
         button { onclick: move |_| {
-
-
             spawn(async move{
                 let x = js::list_files(repopath().as_ref()).await;
                 log_to_console(x);
             });
-
-
-
-
         }, "show repo!" }
         button { onclick: move |_| {
             if let Some(info) = flag.as_ref(){
