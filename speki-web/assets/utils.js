@@ -1,5 +1,6 @@
 import * as git from "https://esm.sh/isomorphic-git@1.27.1";
 import http from "https://esm.sh/isomorphic-git@1.27.1/http/web";
+import * as path from "https://esm.sh/path-browserify";
 
 let fs;
 
@@ -95,8 +96,6 @@ export async function loadAllFiles(dirPath) {
 
 export async function loadFile(path) {
     await initBrowserFS;
-   // console.log(path);
-
     return new Promise((resolve, reject) => {
         fs.readFile(path, "utf8", (err, data) => {
             if (err) {
@@ -115,6 +114,52 @@ export async function loadFile(path) {
     });
 }
 
+
+export async function allPaths(repoPath) {
+    const subdirs = ["cards", "attributes", "reviews"];
+    const allFilePaths = [];
+
+    for (const subdir of subdirs) {
+        const fullSubdirPath = `${repoPath}/${subdir}`;
+        console.log(fullSubdirPath);
+        try {
+            const filePaths = await getFilePaths(fullSubdirPath); 
+            console.log(filePaths);
+
+            const relativePaths = filePaths.map((filePath) =>
+                filePath.replace(`${repoPath}/`, '') 
+            );
+
+            console.log(relativePaths);
+
+            allFilePaths.push(...relativePaths);
+        } catch (err) {
+            console.error(`Failed to get files from ${fullSubdirPath}: ${err}`);
+        }
+    }
+
+    return allFilePaths;
+}
+
+
+
+
+async function getFilePaths(folderPath) {
+    await initBrowserFS;
+
+    return new Promise((resolve, reject) => {
+        fs.readdir(folderPath, (err, files) => {
+            if (err) {
+                reject(`Error reading directory: ${err}`);
+                return;
+            }
+
+            // Prepend the folder path to each file name to get the full path
+            const fullPaths = files.map((file) => `${folderPath}/${file}`);
+            resolve(fullPaths);
+        });
+    });
+}
 
 
 
@@ -206,6 +251,109 @@ export async function cloneRepo(path, url, token, proxy) {
     } catch (error) {
         output.textContent = "Failed to clone repository: " + error;
     }
+}
+
+async function commit(repoPath, token){
+    await initBrowserFS;
+        const { name, email } = await fetchGitHubUserDetails(token);
+        await git.commit({
+            fs,
+            dir: repoPath,
+            message: "commit",
+            author: {
+                name,
+                email
+            }
+        });
+}
+
+
+async function modifiedFiles(repopath) {
+    await initBrowserFS;
+    const FILE = 0, HEAD = 1, WORKDIR = 2
+
+    const filenames = (await git.statusMatrix({ fs,dir: repopath }))
+      .filter(row => row[HEAD] !== row[WORKDIR])
+      .map(row => row[FILE]);
+
+      console.log(filenames);
+      return filenames;
+}
+
+
+async function addAllFiles(repopath) {
+    await initBrowserFS;
+
+    let paths = await modifiedFiles(repopath);
+    console.log(paths);
+
+    console.log("Adding all files...");
+    await Promise.all(
+        paths.map((path) => addFile(repopath, path))
+    );
+    console.log("All files added!");
+}
+
+async function addFile(repoPath, filepath) {
+    console.log(`the file to add: ${filepath} `);
+    await git.add({ fs, dir: repoPath, filepath });
+    console.log("adding file...");
+}
+
+export async function pushRepo(repoPath, token, proxy) {
+    const output = document.getElementById("output");
+
+    await initBrowserFS;
+
+    try {
+        console.log(`Pushing latest changes in the repository at '${repoPath} with token ${token}'...`);
+        const { name, email } = await fetchGitHubUserDetails(token);
+        let cache = {};
+
+        await git.push({
+            fs,
+            http,
+            cache,
+            dir: repoPath,
+            corsProxy: proxy,
+            singleBranch: true,
+            ref: 'main',
+            depth: 1,
+            onProgress: (progress) => {
+                console.log(`${progress.phase}: ${progress.loaded} of ${progress.total}`);
+              },
+            onAuth: () => ({
+                username: 'x-access-token',
+                password: token
+            }),
+            author: {
+                name,
+                email
+            }
+        });
+
+        const resultMessage = "Repository successfully updated with latest changes!";
+        output.textContent = resultMessage;
+
+        console.log(resultMessage);
+        return resultMessage;
+    } catch (error) {
+        const errorMsg = `Failed to pull repository: ${error}`;
+        output.textContent = errorMsg;
+        console.error(errorMsg);
+        throw new Error(errorMsg);
+    }
+}
+
+export async function syncRepo(repoPath, token, proxy) {
+    console.log("adding files..");
+    await addAllFiles(repoPath);
+    console.log("commiting files..");
+    await commit(repoPath, token);
+    console.log("pulling repo..");
+    await pullRepo(repoPath, token, proxy);
+    console.log("pushing repo..");
+    await pushRepo(repoPath, token, proxy);
 }
 
 
@@ -501,4 +649,116 @@ console.log('Current HEAD:', head);
 
 
   console.log(`Repository cloned into ${dir}`);
+}
+
+
+
+export async function loadRec(dirPath) {
+  await initBrowserFS;
+
+    const allFiles = [];
+    
+    await new Promise((resolve, reject) => {
+        fs.readdir(dirPath, async (err, entries) => {
+            if (err) {
+                console.error("Error reading directory:", err);
+                reject("Error reading directory: " + err);
+                return;
+            }
+
+            let entriesProcessed = 0;
+
+            if (entries.length === 0) resolve(allFiles); // Return if empty
+
+            entries.forEach(async (entry) => {
+                console.log(dirPath);
+                console.log(entry);
+
+                const entryPath = path.join(dirPath, entry);
+
+                // Check if it's a directory or file
+                fs.stat(entryPath, async (err, stats) => {
+                    if (err) {
+                        console.error(`Error reading file stats ${entryPath}:`, err);
+                        reject("Error reading file stats: " + err);
+                        return;
+                    }
+
+                    if (stats.isDirectory()) {
+                        // Recursive call for directories
+                        const subDirFiles = await loadRec(entryPath);
+                        allFiles.push(...subDirFiles);
+                    } else if (stats.isFile()) {
+                        // Load the file contents
+                        const fileContents = await loadAllFiles(dirPath);
+                        allFiles.push(...fileContents);
+                    }
+
+                    entriesProcessed++;
+                    if (entriesProcessed === entries.length) {
+                        resolve(allFiles);
+                    }
+                });
+            });
+        });
+    });
+
+    return allFiles;
+}
+
+function readdir(dirPath) {
+    return new Promise((resolve, reject) => {
+        fs.readdir(dirPath, (err, files) => {
+            if (err) reject(err);
+            else resolve(files);
+        });
+    });
+}
+
+function stat(filePath) {
+    return new Promise((resolve, reject) => {
+        fs.stat(filePath, (err, stats) => {
+            if (err) reject(err);
+            else resolve(stats);
+        });
+    });
+}
+
+function unlink(filePath) {
+    return new Promise((resolve, reject) => {
+        fs.unlink(filePath, (err) => {
+            if (err) reject(err);
+            else resolve();
+        });
+    });
+}
+
+function rmdir(dirPath) {
+    return new Promise((resolve, reject) => {
+        fs.rmdir(dirPath, (err) => {
+            if (err) reject(err);
+            else resolve();
+        });
+    });
+}
+
+export async function deleteDir(dirPath) {
+    await initBrowserFS;
+    console.log("deleting dir: ${dirPath}");
+
+    const entries = await readdir(dirPath);
+
+    for (const entry of entries) {
+        const fullPath = `${dirPath}/${entry}`;
+        const stats = await stat(fullPath);
+
+        if (stats.isDirectory()) {
+            await deleteDir(fullPath);
+        } else {
+            await unlink(fullPath);
+        }
+    }
+
+    await rmdir(dirPath);
+    console.log("deleted!");
 }

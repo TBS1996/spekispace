@@ -15,7 +15,6 @@ use web_sys::console;
 
 mod pages;
 mod provider;
-mod utils;
 
 mod cookies {
     use std::collections::HashMap;
@@ -104,17 +103,26 @@ pub mod js {
         fn gitClone(path: &JsValue, url: &JsValue, token: &JsValue, proxy: &JsValue);
         fn fetchRepo(path: &JsValue, url: &JsValue, token: &JsValue, proxy: &JsValue);
         fn pullRepo(path: &JsValue, token: &JsValue, proxy: &JsValue);
+        fn syncRepo(path: &JsValue, token: &JsValue, proxy: &JsValue);
         fn loadAllFiles(path: &JsValue) -> Promise;
+        fn loadRec(path: &JsValue) -> Promise;
         fn newReviews(path: &JsValue) -> Promise;
         fn listFiles(path: &JsValue);
+        fn allPaths(path: &JsValue) -> Promise;
         fn deleteFile(path: &JsValue);
         fn loadFile(path: &JsValue) -> Promise;
         fn saveFile(path: &JsValue, content: &JsValue);
         fn validateUpstream(path: &JsValue, token: &JsValue);
+        fn deleteDir(path: &JsValue);
     }
 
     pub fn current_time() -> Duration {
         Duration::from_millis(now() as u64)
+    }
+
+    pub fn delete_dir(path: &str) {
+        let path = JsValue::from_str(path);
+        deleteDir(&path);
     }
 
     pub fn fetch_repo(path: &str, url: &str, token: &str, proxy: &str) {
@@ -140,6 +148,14 @@ pub mod js {
         validateUpstream(&path, &token);
     }
 
+    pub fn sync_repo(path: &str, token: &str, proxy: &str) {
+        log_to_console("lets sync :D");
+        let path = JsValue::from_str(path);
+        let token = JsValue::from_str(token);
+        let proxy = JsValue::from_str(proxy);
+        syncRepo(&path, &token, &proxy);
+    }
+
     pub fn pull_repo(path: &str, token: &str, proxy: &str) {
         log_to_console("starting pull repo");
         let path = JsValue::from_str(path);
@@ -153,9 +169,11 @@ pub mod js {
         let path = JsValue::from_str(path);
         deleteFile(&path);
     }
-    pub fn list_files(path: &str) {
+
+    pub async fn list_files(path: &str) -> Value {
         let path = JsValue::from_str(path);
-        listFiles(&path);
+        let val = promise_to_val(allPaths(&path)).await;
+        val
     }
 
     pub fn save_file(path: &str, content: &str) {
@@ -178,6 +196,18 @@ pub mod js {
             serde_json::Value::Number(s) => s.as_u64().unwrap(),
             _ => panic!("damn"),
         }
+    }
+
+    pub async fn load_all_files_rec(path: &str) -> Vec<String> {
+        let path = JsValue::from_str(path);
+        let val = promise_to_val(loadRec(&path)).await;
+        let arr = val.as_array().unwrap();
+        arr.into_iter()
+            .map(|elm| match elm {
+                Value::String(s) => s.clone(),
+                other => panic!("file isnt textfile damn: {}", other),
+            })
+            .collect()
     }
 
     pub async fn load_all_files(path: &str) -> Vec<String> {
@@ -308,7 +338,11 @@ pub struct State {
 
 impl State {
     pub fn new() -> Self {
-        let app = App::new(IndexBaseProvider, speki_core::SimpleRecall, WasmTime);
+        let app = App::new(
+            IndexBaseProvider::new("/foobar"),
+            speki_core::SimpleRecall,
+            WasmTime,
+        );
         Self {
             inner: Default::default(),
             app: Arc::new(app),
@@ -354,12 +388,12 @@ impl ReviewState {
             let mut lock = self.queue.lock().unwrap();
             *lock = cards;
         }
-        self.next_card(app).await;
+        self.next_card(app, "/foobar").await;
     }
 
-    async fn make_review(&self, review: Review) {
+    async fn make_review(&self, review: Review, repo: &str) {
         if let Some(id) = self.id() {
-            IndexBaseProvider.add_review(id, review).await;
+            IndexBaseProvider::new(repo).add_review(id, review).await;
         }
     }
 
@@ -367,19 +401,19 @@ impl ReviewState {
         self.tot_len - self.queue.lock().unwrap().len()
     }
 
-    async fn do_review(&self, app: &App, review: Review) {
-        self.make_review(review).await;
-        self.next_card(app).await;
+    async fn do_review(&self, app: &App, review: Review, repo: &str) {
+        self.make_review(review, repo).await;
+        self.next_card(app, repo).await;
     }
 
-    async fn next_card(&self, app: &App) {
+    async fn next_card(&self, app: &App, repo: &str) {
         let card = self.queue.lock().unwrap().pop();
 
         let card = match card {
             Some(id) => {
                 let card = Card::from_raw(
                     app.foobar.clone(),
-                    IndexBaseProvider.load_card(id).await.unwrap(),
+                    IndexBaseProvider::new(repo).load_card(id).await.unwrap(),
                 )
                 .await;
                 let front = card.print().await;
