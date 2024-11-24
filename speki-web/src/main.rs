@@ -114,6 +114,8 @@ pub mod js {
         fn saveFile(path: &JsValue, content: &JsValue);
         fn validateUpstream(path: &JsValue, token: &JsValue);
         fn deleteDir(path: &JsValue);
+        fn lastModified(path: &JsValue) -> Promise;
+        fn loadFilenames(path: &JsValue) -> Promise;
     }
 
     pub fn current_time() -> Duration {
@@ -123,6 +125,23 @@ pub mod js {
     pub fn delete_dir(path: &str) {
         let path = JsValue::from_str(path);
         deleteDir(&path);
+    }
+
+    pub async fn load_filenames(path: &str) -> Vec<String> {
+        let path = JsValue::from_str(path);
+        let val = promise_to_val(loadFilenames(&path)).await;
+        log_to_console(&val);
+        val.as_array()
+            .unwrap()
+            .into_iter()
+            .filter_map(|obj| {
+                if let serde_json::Value::String(s) = obj {
+                    Some(s.clone())
+                } else {
+                    None
+                }
+            })
+            .collect()
     }
 
     pub fn fetch_repo(path: &str, url: &str, token: &str, proxy: &str) {
@@ -198,6 +217,22 @@ pub mod js {
         }
     }
 
+    pub async fn last_modified(path: &str) -> Option<Duration> {
+        let path = JsValue::from_str(path);
+        let val = promise_to_val(lastModified(&path)).await;
+        let serde_json::Value::String(s) = val else {
+            return None;
+        };
+
+        let datetime =
+            time::OffsetDateTime::parse(&s, &time::format_description::well_known::Rfc3339)
+                .unwrap();
+        let unix_epoch = time::OffsetDateTime::UNIX_EPOCH;
+        let duration_since_epoch = datetime - unix_epoch;
+        let seconds = duration_since_epoch.whole_seconds();
+        Some(Duration::from_secs(seconds as u64))
+    }
+
     pub async fn load_all_files_rec(path: &str) -> Vec<String> {
         let path = JsValue::from_str(path);
         let val = promise_to_val(loadRec(&path)).await;
@@ -251,6 +286,16 @@ fn main() {
 fn App() -> Element {
     use_context_provider(State::new);
     use_context_provider(ReviewState::default);
+
+    use_effect(|| {
+        spawn(async move {
+            let state = use_context::<State>();
+            log_to_console("filling cache...");
+            state.app.fill_cache().await;
+            log_to_console("cache filled!");
+        });
+    });
+
     rsx! {
         Router::<Route> {}
     }
@@ -383,7 +428,7 @@ impl ReviewState {
 
     async fn refresh(&self, app: &App, filter: String) {
         //let cards = app.load_non_pending(Some(filter)).await;
-        let cards = app.load_non_pending(None).await;
+        let cards = app.load_non_pending(Some(filter)).await;
         self.tot_len.clone().set(cards.len());
         {
             let mut lock = self.queue.lock().unwrap();

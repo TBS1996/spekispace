@@ -764,3 +764,29 @@ export async function deleteDir(dirPath) {
     await rmdir(dirPath);
     console.log("deleted!");
 }
+
+export async function lastModified(filePath) {
+  await initBrowserFS;
+
+  return new Promise((resolve, reject) => {
+      fs.stat(filePath, (err, stats) => {
+        if (err) {
+            return resolve(null);
+        }
+
+        resolve(stats.mtime);
+      });
+    });
+}
+
+export async function loadFilenames(directory) {
+    await initBrowserFS;
+    console.log(directory);
+    return new Promise((resolve, reject) => {
+        fs.readdir(directory, (err, files) => {
+            if (err) reject(err);
+            else resolve(files);
+        });
+    });
+
+}

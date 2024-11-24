@@ -1,7 +1,48 @@
-use crate::card_provider::CardProvider;
 use crate::App;
+use crate::{card_provider::CardProvider, Provider};
 use speki_dto::{AttributeDTO, AttributeId, CardId};
 use uuid::Uuid;
+
+pub struct AttrProvider {
+    provider: Provider,
+    card_provider: CardProvider,
+}
+
+impl AttrProvider {
+    pub fn new(provider: Provider, card_provider: CardProvider) -> Self {
+        Self {
+            provider,
+            card_provider,
+        }
+    }
+
+    pub async fn load_all(&self) -> Vec<Attribute> {
+        self.provider
+            .load_all_attributes()
+            .await
+            .into_iter()
+            .map(|dto| Attribute::from_dto(dto, self.card_provider.clone()))
+            .collect()
+    }
+
+    pub async fn save(&self, attribute: Attribute) {
+        self.provider
+            .save_attribute(Attribute::into_dto(attribute))
+            .await;
+    }
+
+    pub async fn load(&self, id: AttributeId) -> Option<Attribute> {
+        let card_provider = self.card_provider.clone();
+        self.provider
+            .load_attribute(id)
+            .await
+            .map(|dto| Attribute::from_dto(dto, card_provider.clone()))
+    }
+
+    pub async fn delete(&self, id: AttributeId) {
+        self.provider.delete_attribute(id).await;
+    }
+}
 
 /// An attribute of a sub-class or an instance
 /// predefined questions that are valid for all in its class.
@@ -59,7 +100,7 @@ impl Attribute {
     }
 
     pub async fn load_from_class_only(app: &App, class: CardId) -> Vec<Self> {
-        let mut attrs = app.load_all_attributes(app.card_provider.clone()).await;
+        let mut attrs = app.load_all_attributes().await;
         attrs.retain(|attr| attr.class == class);
         attrs
     }
@@ -67,7 +108,7 @@ impl Attribute {
     pub async fn load_relevant_attributes(app: &App, card: CardId) -> Vec<Self> {
         let card = app.load_card(card).await.unwrap();
         let classes = card.load_ancestor_classes().await;
-        let mut attrs = app.load_all_attributes(app.card_provider.clone()).await;
+        let mut attrs = app.load_all_attributes().await;
         attrs.retain(|attr| classes.contains(&attr.class));
         attrs
     }

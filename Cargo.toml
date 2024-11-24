@@ -9,7 +9,7 @@ members = [
     "speki-fs",
     "omtrent",
     "speki-auth",
-    "speki-web", 
+    "speki-web",
     "speki-proxy",
 ]
 

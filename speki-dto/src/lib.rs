@@ -23,6 +23,15 @@ pub trait SpekiProvider: Sync {
     async fn save_reviews(&self, id: CardId, reviews: Vec<Review>);
     async fn load_config(&self) -> Config;
     async fn save_config(&self, config: Config);
+    async fn last_modified_card(&self, id: CardId) -> Duration;
+    async fn last_modified_reviews(&self, id: CardId) -> Option<Duration>;
+    async fn load_card_ids(&self) -> Vec<CardId> {
+        self.load_all_cards()
+            .await
+            .into_iter()
+            .map(|raw| CardId(raw.id))
+            .collect()
+    }
 
     async fn add_review(&self, id: CardId, review: Review) {
         let mut reviews = self.load_reviews(id).await;

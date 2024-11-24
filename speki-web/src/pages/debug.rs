@@ -122,7 +122,7 @@ pub fn Debug() -> Element {
         }, "do review" }
         button { onclick: move |_| {
             spawn(async move {
-                let s = js::load_all_files_rec(repopath().as_ref()).await;
+                let s = js::load_filenames("/foobar/cards").await;
                 log_to_console(s);
             });
         }, "debug" }

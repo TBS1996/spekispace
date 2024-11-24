@@ -184,7 +184,7 @@ pub fn new_normal(normal: NormalCard) -> RawCard {
     }
 }
 
-pub fn from_raw_card(card: Card<AnyType>) -> RawCard {
+pub fn into_raw_card(card: Card<AnyType>) -> RawCard {
     RawCard {
         id: card.id.into_inner(),
         data: from_any(card.data),

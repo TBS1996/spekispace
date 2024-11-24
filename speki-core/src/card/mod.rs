@@ -7,8 +7,8 @@ use crate::TimeGetter;
 use samsvar::json;
 use samsvar::Matcher;
 use serializing::from_any;
-use serializing::from_raw_card;
 use serializing::into_any;
+use serializing::into_raw_card;
 use speki_dto::BackSide;
 use speki_dto::CType;
 use speki_dto::CardId;
@@ -270,7 +270,7 @@ impl Card<AnyType> {
             data: into_any(raw_card.data, &card_provider),
             dependencies: raw_card.dependencies.into_iter().map(CardId).collect(),
             tags: raw_card.tags,
-            history: Reviews::load(&card_provider.provider(), id).await,
+            history: card_provider.load_reviews(id).await,
             suspended: IsSuspended::from(raw_card.suspended),
             card_provider,
             recaller,
@@ -344,16 +344,16 @@ impl Card<AnyType> {
 
     pub async fn into_type(self, data: impl Into<AnyType>) -> Card<AnyType> {
         let id = self.id();
-        let mut raw = from_raw_card(self.clone());
+        let mut raw = into_raw_card(self.clone());
         raw.data = from_any(data.into());
-        self.card_provider.provider().save_card(raw).await;
+        let card = Card::from_raw(raw, self.card_provider.clone(), self.recaller.clone()).await;
+        self.card_provider.save_card(card).await;
         self.card_provider.load(id).await.unwrap()
     }
 
     // Call this function every time SavedCard is mutated.
     pub async fn persist(&mut self) {
-        let raw = from_raw_card(self.clone());
-        self.card_provider.provider().save_card(raw).await;
+        self.card_provider.save_card(self.clone()).await;
         *self = self.card_provider.load(self.id()).await.unwrap();
     }
 
@@ -432,8 +432,9 @@ impl<T: CardTrait> Card<T> {
         if self.history.is_empty() {
             return;
         }
-        self.history
-            .save(&self.card_provider.provider(), self.id())
+
+        self.card_provider
+            .save_reviews(self.id, self.history.clone())
             .await;
     }
 

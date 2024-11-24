@@ -34,3 +34,4 @@ async-trait = "0.1.83"
 async-lock = "3.4.0"
 uuid = "1.11.0"
 manganis = "0.2.2"
+time = { version = "0.3.36", features = ["parsing"] }

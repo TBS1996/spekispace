@@ -47,6 +47,14 @@ impl SpekiProvider for FileProvider {
             .collect()
     }
 
+    async fn last_modified_card(&self, id: CardId) -> Duration {
+        todo!()
+    }
+
+    async fn last_modified_reviews(&self, id: CardId) -> Option<Duration> {
+        todo!()
+    }
+
     async fn save_card(&self, card: RawCard) {
         let s: String = toml::to_string(&card).unwrap();
         let path = paths::get_cards_path().join(card.id.to_string());

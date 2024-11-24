@@ -3,6 +3,7 @@ use std::{path::PathBuf, str::FromStr, time::Duration};
 use speki_dto::{
     AttributeDTO, AttributeId, CardId, Config, RawCard, Recall, Review, SpekiProvider,
 };
+use uuid::Uuid;
 pub struct IndexBaseProvider {
     repo: PathBuf,
 }
@@ -36,6 +37,24 @@ use async_trait::async_trait;
 
 #[async_trait(?Send)]
 impl SpekiProvider for IndexBaseProvider {
+    async fn load_card_ids(&self) -> Vec<CardId> {
+        js::load_filenames(self.cards_path().to_str().unwrap())
+            .await
+            .into_iter()
+            .map(|id| CardId(id.parse().unwrap()))
+            .collect()
+    }
+
+    async fn last_modified_card(&self, id: CardId) -> Duration {
+        let path = self.cards_path().join(id.0.to_string());
+        js::last_modified(path.to_str().unwrap()).await.unwrap()
+    }
+
+    async fn last_modified_reviews(&self, id: CardId) -> Option<Duration> {
+        let path = self.review_path().join(id.0.to_string());
+        js::last_modified(path.to_str().unwrap()).await
+    }
+
     async fn load_all_cards(&self) -> Vec<RawCard> {
         let cards = js::load_all_files(self.cards_path().to_str().unwrap())
             .await

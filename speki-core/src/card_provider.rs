@@ -1,19 +1,19 @@
+use crate::{
+    card::serializing::{into_any, into_raw_card},
+    reviews::Reviews,
+    AnyType, Attribute, Card, Provider, Recaller, TimeGetter,
+};
+use speki_dto::{AttributeId, CardId, Review};
 use std::{
     collections::HashMap,
     fmt::Debug,
-    sync::{Arc, Mutex},
-};
-
-use speki_dto::{AttributeId, CardId};
-
-use crate::{
-    card::serializing::into_any, reviews::Reviews, AnyType, Attribute, Card, Provider, Recaller,
-    TimeGetter,
+    sync::{Arc, RwLock},
+    time::Duration,
 };
 
 #[derive(Clone)]
 pub struct CardProvider {
-    inner: Arc<Mutex<Inner>>,
+    inner: Arc<RwLock<Inner>>,
     provider: Provider,
     time_provider: TimeGetter,
     recaller: Recaller,
@@ -28,22 +28,41 @@ impl Debug for CardProvider {
 }
 
 impl CardProvider {
+    pub async fn load_reviews(&self, id: CardId) -> Reviews {
+        Reviews(self.provider.load_reviews(id).await)
+    }
+
+    pub async fn save_reviews(&self, id: CardId, reviews: Reviews) {
+        self.provider.save_reviews(id, reviews.into_inner()).await;
+    }
+
+    pub async fn add_review(&self, id: CardId, review: Review) {
+        self.provider.add_review(id, review).await;
+    }
+
+    pub async fn delete_card(&self, id: CardId) {
+        self.provider.delete_card(id).await;
+    }
+
+    pub async fn save_card(&self, card: Card<AnyType>) {
+        self.update_cache(card.clone());
+        let raw = into_raw_card(card);
+        self.provider.save_card(raw).await;
+    }
+
     pub fn time_provider(&self) -> TimeGetter {
         self.time_provider.clone()
     }
 
-    pub fn provider(&self) -> Provider {
-        self.provider.clone()
-    }
-
-    pub fn recaller(&self) -> Recaller {
-        self.recaller.clone()
+    pub async fn fill_cache(&self) {
+        self.load_all().await;
     }
 
     pub fn new(provider: Provider, time_provider: TimeGetter, recaller: Recaller) -> Self {
         Self {
-            inner: Arc::new(Mutex::new(Inner {
+            inner: Arc::new(RwLock::new(Inner {
                 cards: Default::default(),
+                reviews: Default::default(),
             })),
             time_provider,
             provider,
@@ -51,7 +70,7 @@ impl CardProvider {
         }
     }
 
-    pub async fn load(&self, id: CardId) -> Option<Card<AnyType>> {
+    async fn load_uncached(&self, id: CardId) -> Option<Card<AnyType>> {
         let raw_card = self.provider.load_card(id).await?;
         let reviews = self.provider.load_reviews(id).await;
         let history = Reviews(reviews);
@@ -71,6 +90,73 @@ impl CardProvider {
         Some(card)
     }
 
+    async fn load_cached_reviews(&self, id: CardId) -> Option<Reviews> {
+        let guard = self.inner.read().unwrap();
+        let cached = guard.reviews.get(&id)?;
+        let last_modified = self.provider.last_modified_card(id).await;
+        if last_modified > cached.fetched {
+            None
+        } else {
+            Some(cached.review.clone())
+        }
+    }
+
+    async fn load_cached_card(&self, id: CardId) -> Option<Card<AnyType>> {
+        let guard = self.inner.read().unwrap();
+        let cached = guard.cards.get(&id)?;
+        let last_modified = self.provider.last_modified_card(id).await;
+        if last_modified > cached.fetched {
+            None
+        } else {
+            Some(cached.card.clone())
+        }
+    }
+
+    fn update_cache(&self, card: Card<AnyType>) {
+        let now = self.time_provider.current_time();
+        let mut guard = self.inner.write().unwrap();
+        let id = card.id;
+
+        let cached_reviews = RevCache {
+            fetched: now,
+            review: card.history.clone(),
+        };
+        let cached_card = CardCache { fetched: now, card };
+
+        guard.cards.insert(id, cached_card);
+        guard.reviews.insert(id, cached_reviews);
+    }
+
+    pub async fn load_all_card_ids(&self) -> Vec<CardId> {
+        self.provider.load_card_ids().await
+    }
+
+    pub async fn load_all(&self) -> Vec<Card<AnyType>> {
+        let card_ids = self.load_all_card_ids().await;
+
+        let mut output = Vec::with_capacity(card_ids.len());
+
+        for id in card_ids {
+            output.push(self.load(id).await.unwrap());
+        }
+
+        output
+    }
+
+    pub async fn load(&self, id: CardId) -> Option<Card<AnyType>> {
+        if let (Some(card), Some(_)) = (
+            self.load_cached_card(id).await,
+            self.load_cached_reviews(id).await,
+        ) {
+            return Some(card);
+        }
+
+        let uncached = self.load_uncached(id).await?;
+        self.update_cache(uncached.clone());
+
+        Some(uncached)
+    }
+
     pub async fn load_attribute(&self, id: AttributeId) -> Option<Attribute> {
         self.provider
             .load_attribute(id)
@@ -79,7 +165,17 @@ impl CardProvider {
     }
 }
 
-#[derive(Clone)]
 struct Inner {
-    cards: HashMap<CardId, Card<AnyType>>,
+    cards: HashMap<CardId, CardCache>,
+    reviews: HashMap<CardId, RevCache>,
+}
+
+struct CardCache {
+    fetched: Duration,
+    card: Card<AnyType>,
+}
+
+struct RevCache {
+    fetched: Duration,
+    review: Reviews,
 }

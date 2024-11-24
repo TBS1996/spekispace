@@ -1,4 +1,4 @@
-use card::serializing::from_raw_card;
+use attribute::AttrProvider;
 use card::RecallRate;
 use card_provider::CardProvider;
 use eyre::Result;
@@ -15,6 +15,7 @@ use std::time::Duration;
 
 //pub mod collections;
 //pub mod github;
+//mod attr_provider;
 mod attribute;
 mod card;
 mod card_provider;
@@ -53,7 +54,7 @@ pub struct App {
     pub card_provider: CardProvider,
     pub time_provider: TimeGetter,
     pub recaller: Recaller,
-    pub provider: Provider,
+    pub attr_provider: AttrProvider,
 }
 
 impl Debug for App {
@@ -76,79 +77,62 @@ impl App {
         let card_provider =
             CardProvider::new(provider.clone(), time_provider.clone(), recaller.clone());
 
+        let attr_provider = AttrProvider::new(provider.clone(), card_provider.clone());
+
         Self {
             card_provider,
             time_provider,
             recaller,
-            provider,
+            attr_provider,
         }
     }
 
+    pub async fn fill_cache(&self) {
+        self.card_provider.fill_cache().await;
+    }
+
     pub async fn load_all_cards(&self) -> Vec<Card<AnyType>> {
-        let card_provider = self.card_provider.clone();
-        let raw_cards = self.provider.load_all_cards().await;
-
-        let tasks = raw_cards.into_iter().map(|card| {
-            let card_provider = card_provider.clone();
-            let recaller = card_provider.recaller();
-            async move { Card::from_raw(card, card_provider, recaller).await }
-        });
-
-        futures::future::join_all(tasks).await
+        self.card_provider.load_all().await
     }
 
     pub async fn save_card(&self, card: Card<AnyType>) {
-        self.provider.save_card(from_raw_card(card)).await;
+        self.card_provider.save_card(card).await;
     }
 
     pub async fn load_card(&self, id: CardId) -> Option<Card<AnyType>> {
-        let card_provider = self.card_provider.clone();
-        let raw = self.provider.load_card(id).await?;
-        let recaller = card_provider.recaller();
-        Some(Card::from_raw(raw, card_provider, recaller).await)
+        self.card_provider.load(id).await
     }
 
     pub async fn delete_card(&self, id: CardId) {
-        self.provider.delete_card(id).await;
+        self.card_provider.delete_card(id).await;
     }
 
-    pub async fn load_all_attributes(&self, card_provider: CardProvider) -> Vec<Attribute> {
-        self.provider
-            .load_all_attributes()
-            .await
-            .into_iter()
-            .map(|dto| Attribute::from_dto(dto, card_provider.clone()))
-            .collect()
+    pub async fn load_all_attributes(&self) -> Vec<Attribute> {
+        self.attr_provider.load_all().await
     }
 
     pub async fn save_attribute(&self, attribute: Attribute) {
-        self.provider
-            .save_attribute(Attribute::into_dto(attribute))
-            .await;
+        self.attr_provider.save(attribute).await;
     }
 
     pub async fn load_attribute(&self, id: AttributeId) -> Option<Attribute> {
-        let card_provider = self.card_provider.clone();
-        self.provider
-            .load_attribute(id)
-            .await
-            .map(|dto| Attribute::from_dto(dto, card_provider.clone()))
+        self.attr_provider.load(id).await
     }
 
     pub async fn delete_attribute(&self, id: AttributeId) {
-        self.provider.delete_attribute(id).await;
+        self.attr_provider.delete(id).await
     }
 
     pub async fn load_reviews(&self, id: CardId) -> Reviews {
-        Reviews(self.provider.load_reviews(id).await)
+        self.card_provider.load_reviews(id).await
     }
 
     pub async fn save_reviews(&self, id: CardId, reviews: Reviews) {
-        self.provider.save_reviews(id, reviews.into_inner()).await;
+        self.card_provider.save_reviews(id, reviews).await;
     }
 
     pub async fn add_review(&self, id: CardId, review: Review) {
-        self.provider.add_review(id, review).await;
+        self.card_provider.add_review(id, review).await;
     }
 
     pub fn load_config(&self) -> Config {
@@ -158,11 +142,7 @@ impl App {
     pub fn save_config(&self, _config: Config) {}
 
     pub async fn load_cards(&self) -> Vec<CardId> {
-        self.load_all_cards()
-            .await
-            .into_iter()
-            .map(|card| card.id())
-            .collect()
+        self.card_provider.load_all_card_ids().await
     }
 
     async fn full_load_cards(&self) -> Vec<Card<AnyType>> {
@@ -298,7 +278,10 @@ impl App {
     pub async fn new_any(&self, any: impl Into<AnyType>) -> Card<AnyType> {
         let raw_card = new_raw_card(any);
         let id = raw_card.id;
-        self.provider.save_card(raw_card).await;
+        let card =
+            Card::from_raw(raw_card, self.card_provider.clone(), self.recaller.clone()).await;
+
+        self.card_provider.save_card(card).await;
         self.card_provider.load(CardId(id)).await.unwrap()
     }
 }
