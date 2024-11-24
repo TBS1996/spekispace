@@ -43,7 +43,7 @@ impl TextFile {
 
         let mut recall_rate: f32 = 1.0;
         for (card, _) in &self.added_cards {
-            let card = app.foobar.load_card(*card).await.unwrap();
+            let card = app.load_card(*card).await.unwrap();
             recall_rate = recall_rate.min(card.min_rec_recall_rate().await?);
         }
 

@@ -78,7 +78,6 @@ async fn new_attribute(app: &App) -> Option<AttributeCard> {
 
     let back: BackSide = {
         let prompt = app
-            .foobar
             .load_attribute(attribute)
             .await
             .unwrap()
@@ -91,7 +90,7 @@ async fn new_attribute(app: &App) -> Option<AttributeCard> {
         attribute,
         back,
         instance,
-        foobar: app.foobar.clone(),
+        card_provider: app.card_provider.clone(),
     })
 }
 
@@ -253,19 +252,19 @@ async fn menu(app: &App) {
 }
 
 async fn print_card_info(app: &App, id: CardId) {
-    let card = app.foobar.load_card(id).await.unwrap();
+    let card = app.load_card(id).await.unwrap();
     let dependencies = card.dependency_ids().await;
     let dependents = app.get_cached_dependents(id);
 
     if let AnyType::Instance(ty) = card.card_type() {
-        let concept = app.foobar.load_card(ty.class).await.unwrap().print().await;
+        let concept = app.load_card(ty.class).await.unwrap().print().await;
         println!("concept: {}", concept);
     }
 
     if !dependencies.is_empty() {
         println!("{}", style("dependencies").bold());
         for id in dependencies {
-            println!("{}", app.foobar.load_card(id).await.unwrap().print().await);
+            println!("{}", app.load_card(id).await.unwrap().print().await);
         }
     }
 
@@ -277,7 +276,7 @@ async fn print_card_info(app: &App, id: CardId) {
         } else {
             println!("{}", style("dependendents").bold());
             for id in dependents {
-                println!("{}", app.foobar.load_card(id).await.unwrap().print().await);
+                println!("{}", app.load_card(id).await.unwrap().print().await);
             }
         }
     }
@@ -344,7 +343,7 @@ async fn main() {
         let id = cli.recall.unwrap();
         let id: uuid::Uuid = id.parse().unwrap();
         let id = CardId(id);
-        let x = app.foobar.load_card(id).await.unwrap().recall_rate();
+        let x = app.load_card(id).await.unwrap().recall_rate();
         dbg!(x);
     } else if cli.concept.is_some() {
     } else if cli.healthcheck {

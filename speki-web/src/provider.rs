@@ -27,18 +27,23 @@ impl IndexBaseProvider {
     }
 }
 
-use crate::js::{self, save_file};
+use crate::{
+    js::{self, save_file},
+    log_to_console,
+};
 
 use async_trait::async_trait;
 
 #[async_trait(?Send)]
 impl SpekiProvider for IndexBaseProvider {
     async fn load_all_cards(&self) -> Vec<RawCard> {
-        js::load_all_files(self.cards_path().to_str().unwrap())
+        let cards = js::load_all_files(self.cards_path().to_str().unwrap())
             .await
             .into_iter()
             .map(|s| toml::from_str(&s).unwrap())
-            .collect()
+            .collect();
+        log_to_console("loaded cards!");
+        cards
     }
 
     async fn save_card(&self, card: RawCard) {

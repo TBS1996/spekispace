@@ -16,7 +16,7 @@ pub async fn unfinished(app: &App) {
 
     for card_id in cards {
         loop {
-            let front = app.foobar.load_card(card_id).await.unwrap().print().await;
+            let front = app.load_card(card_id).await.unwrap().print().await;
             clear_terminal();
 
             let input: String = Input::new()
@@ -39,8 +39,7 @@ pub async fn unfinished(app: &App) {
 
             match selection {
                 0 => {
-                    app.foobar
-                        .load_card(card_id)
+                    app.load_card(card_id)
                         .await
                         .unwrap()
                         .into_type(NormalCard {

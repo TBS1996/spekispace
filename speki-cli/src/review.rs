@@ -159,7 +159,7 @@ pub async fn review_old(app: &App) {
 }
 
 async fn handle_review_action(app: &App, card: CardId, action: ReviewAction) -> ControlFlow<()> {
-    let card = app.foobar.load_card(card).await.unwrap();
+    let card = app.load_card(card).await.unwrap();
     match action {
         ReviewAction::Grade(grade) => {
             app.review(card.id(), grade).await;
@@ -176,15 +176,15 @@ async fn handle_review_action(app: &App, card: CardId, action: ReviewAction) -> 
 async fn create_attribute_card(card: &Card<AnyType>, app: &App) -> Option<AttributeCard> {
     notify(format!("Which instance ?"));
     let instance_id = select_from_all_instance_cards(app).await?;
-    let instance = app.foobar.load_card(instance_id).await.unwrap();
+    let instance = app.load_card(instance_id).await.unwrap();
 
     notify(format!("Which attribute among the class?"));
     let attribute_id = select_from_class_attributes(app, instance.parent_class().unwrap()).await?;
 
-    let attribute = app.foobar.load_attribute(attribute_id).await.unwrap();
+    let attribute = app.load_attribute(attribute_id).await.unwrap();
 
     let back = if let Some(back_type) = attribute.back_type {
-        let class_name = app.foobar.load_card(back_type).await.unwrap().print().await;
+        let class_name = app.load_card(back_type).await.unwrap().print().await;
         notify(format!(
             "chosen attribute requires card belonging to this class: {}",
             class_name,
@@ -215,12 +215,12 @@ async fn create_attribute_card(card: &Card<AnyType>, app: &App) -> Option<Attrib
         attribute: attribute.id,
         back,
         instance: instance_id,
-        foobar: app.foobar.clone(),
+        card_provider: app.card_provider.clone(),
     })
 }
 
 async fn handle_action(app: &App, card: CardId, action: CardAction) -> ControlFlow<()> {
-    let card = app.foobar.load_card(card).await.unwrap();
+    let card = app.load_card(card).await.unwrap();
 
     match action {
         CardAction::IntoAttribute => match card.card_type() {
@@ -286,7 +286,7 @@ async fn handle_action(app: &App, card: CardId, action: CardAction) -> ControlFl
                 let attributes = Attribute::load_relevant_attributes(app, card.id()).await;
 
                 if let Some(attribute) = select_from_attributes(attributes) {
-                    let attr = app.foobar.load_attribute(attribute).await.unwrap();
+                    let attr = app.load_attribute(attribute).await.unwrap();
                     let txt = attr.name(card.id()).await;
 
                     if let Some(back) = opt_input(&txt) {
@@ -294,7 +294,7 @@ async fn handle_action(app: &App, card: CardId, action: CardAction) -> ControlFl
                             attribute,
                             back: back.into(),
                             instance: card.id(),
-                            foobar: app.foobar.clone(),
+                            card_provider: app.card_provider.clone(),
                         };
 
                         app.new_any(attr).await;
@@ -369,12 +369,7 @@ async fn handle_action(app: &App, card: CardId, action: CardAction) -> ControlFl
 
         CardAction::SetBackRef => {
             if let Some(reff) = select_from_all_cards(app).await {
-                app.foobar
-                    .load_card(card.id())
-                    .await
-                    .unwrap()
-                    .set_ref(reff)
-                    .await;
+                app.load_card(card.id()).await.unwrap().set_ref(reff).await;
             }
         }
         CardAction::Edit => {
@@ -455,7 +450,7 @@ async fn print_card(app: &App, card: CardId, mut show_backside: bool) -> Control
     let var_name = match card.card_type() {
         AnyType::Instance(instance) => match card.back_side() {
             Some(_) => {
-                let parent_class = app.foobar.load_card(instance.class).await.unwrap();
+                let parent_class = app.load_card(instance.class).await.unwrap();
                 let front = format!(
                     "what is: {} ({})",
                     card.print().await,
@@ -466,13 +461,7 @@ async fn print_card(app: &App, card: CardId, mut show_backside: bool) -> Control
             }
             None => {
                 let front = format!("which class: {}", card.print().await);
-                let back = app
-                    .foobar
-                    .load_card(instance.class)
-                    .await
-                    .unwrap()
-                    .print()
-                    .await;
+                let back = app.load_card(instance.class).await.unwrap().print().await;
                 (front, back)
             }
         },

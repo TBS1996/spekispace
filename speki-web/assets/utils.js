@@ -71,6 +71,7 @@ export async function loadAllFiles(dirPath) {
 
             files.forEach(file => {
                 const filePath = `${dirPath}/${file}`;
+                console.log("loading..");
                 fs.readFile(filePath, "utf8", (err, data) => {
                     if (err) {
                         console.error(`Error reading file ${filePath}:`, err);

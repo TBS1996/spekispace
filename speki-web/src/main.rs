@@ -382,7 +382,8 @@ impl ReviewState {
     }
 
     async fn refresh(&self, app: &App, filter: String) {
-        let cards = app.load_non_pending(Some(filter)).await;
+        //let cards = app.load_non_pending(Some(filter)).await;
+        let cards = app.load_non_pending(None).await;
         self.tot_len.clone().set(cards.len());
         {
             let mut lock = self.queue.lock().unwrap();
@@ -412,8 +413,9 @@ impl ReviewState {
         let card = match card {
             Some(id) => {
                 let card = Card::from_raw(
-                    app.foobar.clone(),
                     IndexBaseProvider::new(repo).load_card(id).await.unwrap(),
+                    app.card_provider.clone(),
+                    app.recaller.clone(),
                 )
                 .await;
                 let front = card.print().await;

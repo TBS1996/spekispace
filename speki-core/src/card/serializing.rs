@@ -1,22 +1,19 @@
+use super::{
+    AnyType, AttributeCard, Card, ClassCard, EventCard, InstanceCard, IsSuspended, NormalCard,
+    StatementCard, UnfinishedCard,
+};
+use crate::card_provider::CardProvider;
 use omtrent::TimeStamp;
 use serde::de::{self, Deserializer};
 use serde::{Deserialize, Serialize};
 use speki_dto::RawCard;
 use speki_dto::{AttributeId, CardId};
+use speki_dto::{CType, RawType};
 use std::time::Duration;
 use toml::Value;
 use uuid::Uuid;
 
-use speki_dto::{CType, RawType};
-
-use crate::FooBar;
-
-use super::{
-    AnyType, AttributeCard, Card, ClassCard, EventCard, InstanceCard, IsSuspended, NormalCard,
-    StatementCard, UnfinishedCard,
-};
-
-pub fn into_any(raw: RawType, foobar: &FooBar) -> AnyType {
+pub fn into_any(raw: RawType, card_provider: &CardProvider) -> AnyType {
     match raw.ty {
         CType::Instance => InstanceCard {
             name: raw.front.unwrap(),
@@ -37,7 +34,7 @@ pub fn into_any(raw: RawType, foobar: &FooBar) -> AnyType {
             attribute: AttributeId(raw.attribute.unwrap()),
             back: raw.back.unwrap(),
             instance: CardId(raw.instance.unwrap()),
-            foobar: foobar.clone(),
+            card_provider: card_provider.clone(),
         }
         .into(),
         CType::Class => ClassCard {
@@ -87,7 +84,7 @@ pub fn from_any(ty: AnyType) -> RawType {
             attribute,
             back,
             instance,
-            foobar: _,
+            card_provider: _,
         }) => {
             raw.attribute = Some(attribute.into_inner());
             raw.back = Some(back);

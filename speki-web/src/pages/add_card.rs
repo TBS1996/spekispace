@@ -1,3 +1,5 @@
+use crate::Route;
+
 use super::*;
 
 #[component]
@@ -5,9 +7,9 @@ pub fn Add() -> Element {
     let mut frontside = use_signal(|| "".to_string());
     let mut backside = use_signal(|| "".to_string());
     rsx! {
-
             div {
                 style: "padding: 20px; max-width: 600px; margin: 0 auto; font-family: Arial;",
+                Link {to: Route::Home {  }, "back home"}
                 h1 { "Add a Flashcard" }
                 label {
                     "Frontside:"

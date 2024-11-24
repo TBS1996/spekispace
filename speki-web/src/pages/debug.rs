@@ -1,3 +1,5 @@
+use crate::Route;
+
 use super::*;
 
 #[component]
@@ -22,6 +24,7 @@ pub fn Debug() -> Element {
     let flag = state.info();
 
     rsx! {
+        Link {to: Route::Home {  }, "back home"}
         h1 {"state: {flag:?}"}
         button { onclick: move |_| {
             let state = state.clone();

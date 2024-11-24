@@ -1,4 +1,4 @@
-use crate::App;
+use crate::{card_provider::CardProvider, App};
 use omtrent::TimeStamp;
 use speki_dto::{AttributeId, BackSide};
 
@@ -40,7 +40,7 @@ impl CardTrait for AttributeCard {
     }
 
     async fn display_front(&self) -> String {
-        self.foobar
+        self.card_provider
             .load_attribute(self.attribute)
             .await
             .unwrap()
@@ -137,7 +137,7 @@ pub struct AttributeCard {
     pub attribute: AttributeId,
     pub back: BackSide,
     pub instance: CardId,
-    pub foobar: FooBar,
+    pub card_provider: CardProvider,
 }
 
 /// A specific instance of a class
@@ -202,7 +202,7 @@ impl EventCard {
     }
 
     pub async fn valid_sub_event(&self, other: CardId, app: &App) -> bool {
-        let other = app.foobar.load_card(other).await.unwrap();
+        let other = app.load_card(other).await.unwrap();
 
         let AnyType::Event(other) = other.data else {
             panic!("wrong type");
@@ -212,7 +212,7 @@ impl EventCard {
     }
 
     pub async fn valid_parent_event(&self, parent: CardId, app: &App) -> bool {
-        let parent = app.foobar.load_card(parent).await.unwrap();
+        let parent = app.load_card(parent).await.unwrap();
         let AnyType::Event(parent) = parent.data else {
             panic!("wrong type");
         };

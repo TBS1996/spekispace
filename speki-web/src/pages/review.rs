@@ -1,3 +1,5 @@
+use crate::Route;
+
 use super::*;
 
 const DEFAULT_FILTER: &'static str =
@@ -26,6 +28,9 @@ pub fn Review() -> Element {
 
     rsx! {
         div {
+            Link {to: Route::Home {  }, "back home"}
+
+
             match card() {
                 Some(_) => rsx! {
                     div {

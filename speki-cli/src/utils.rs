@@ -18,7 +18,6 @@ pub fn notify(msg: impl Into<String>) {
 
 pub async fn select_from_subclass_cards(app: &App, class: CardId) -> Option<CardId> {
     let cards: Vec<Card<AnyType>> = app
-        .foobar
         .load_all_cards()
         .await
         .into_iter()
@@ -32,7 +31,6 @@ pub async fn select_from_subclass_cards(app: &App, class: CardId) -> Option<Card
 
 pub async fn select_from_all_instance_cards(app: &App) -> Option<CardId> {
     let cards: Vec<Card<AnyType>> = app
-        .foobar
         .load_all_cards()
         .await
         .into_iter()
@@ -46,7 +44,7 @@ pub async fn select_from_all_instance_cards(app: &App) -> Option<CardId> {
 use futures::executor::block_on;
 
 pub async fn select_from_all_class_cards(app: &App) -> Option<CardId> {
-    let cards = app.foobar.load_all_cards().await;
+    let cards = app.load_all_cards().await;
     enumselector::select_item_with_formatter(cards, |card: &Card<AnyType>| block_on(card.print()))?
         .id()
         .into()
@@ -70,10 +68,9 @@ pub fn select_from_attributes(attributes: Vec<Attribute>) -> Option<AttributeId>
 }
 
 pub async fn select_from_all_cards(app: &App) -> Option<CardId> {
-    enumselector::select_item_with_formatter(
-        app.foobar.load_all_cards().await,
-        |card: &Card<AnyType>| block_on(card.print()).to_owned(),
-    )?
+    enumselector::select_item_with_formatter(app.load_all_cards().await, |card: &Card<AnyType>| {
+        block_on(card.print()).to_owned()
+    })?
     .id()
     .into()
 }
