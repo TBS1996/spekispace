@@ -4222,6 +4222,7 @@ name = "speki-core"
 version = "0.1.10"
 dependencies = [
  "async-trait",
+ "dioxus-logger",
  "eyre",
  "futures",
  "gkquad",
@@ -4231,6 +4232,7 @@ dependencies = [
  "serde_json",
  "speki-dto",
  "toml 0.8.19",
+ "tracing",
  "uuid",
 ]
 

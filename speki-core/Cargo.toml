@@ -18,6 +18,8 @@ samsvar.workspace = true
 omtrent.workspace = true
 speki-dto.workspace = true
 async-trait = "0.1.83"
+dioxus-logger = "0.5.1"
+tracing = "0.1.40"
 
 [dependencies.gkquad]
 version = "0.0.4"

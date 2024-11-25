@@ -4,6 +4,7 @@ use card_provider::CardProvider;
 use eyre::Result;
 use reviews::Reviews;
 use samsvar::Matcher;
+use samsvar::Schema;
 use speki_dto::AttributeId;
 use speki_dto::Config;
 use speki_dto::Recall;
@@ -63,6 +64,8 @@ impl Debug for App {
     }
 }
 
+use dioxus_logger::tracing::info;
+
 impl App {
     pub fn new<A, B, C>(provider: A, recall_calc: B, time_provider: C) -> Self
     where
@@ -70,6 +73,8 @@ impl App {
         B: RecallCalc + 'static + Send,
         C: TimeProvider + 'static + Send,
     {
+        info!("initialtize app");
+
         let time_provider: TimeGetter = Arc::new(Box::new(time_provider));
         let recaller: Recaller = Arc::new(Box::new(recall_calc));
         let provider: Provider = Arc::new(Box::new(provider));
@@ -88,10 +93,11 @@ impl App {
     }
 
     pub async fn fill_cache(&self) {
+        info!("filling cache");
         self.card_provider.fill_cache().await;
     }
 
-    pub async fn load_all_cards(&self) -> Vec<Card<AnyType>> {
+    pub async fn load_all_cards(&self) -> Vec<Arc<Card<AnyType>>> {
         self.card_provider.load_all().await
     }
 
@@ -99,7 +105,7 @@ impl App {
         self.card_provider.save_card(card).await;
     }
 
-    pub async fn load_card(&self, id: CardId) -> Option<Card<AnyType>> {
+    pub async fn load_card(&self, id: CardId) -> Option<Arc<Card<AnyType>>> {
         self.card_provider.load(id).await
     }
 
@@ -145,11 +151,12 @@ impl App {
         self.card_provider.load_all_card_ids().await
     }
 
-    async fn full_load_cards(&self) -> Vec<Card<AnyType>> {
+    async fn full_load_cards(&self) -> Vec<Arc<Card<AnyType>>> {
         self.load_all_cards().await
     }
 
     pub async fn load_non_pending(&self, filter: Option<String>) -> Vec<CardId> {
+        info!("loading card ids");
         let iter = self
             .full_load_cards()
             .await
@@ -159,9 +166,16 @@ impl App {
         let mut ids = vec![];
 
         if let Some(ref filter) = filter {
+            let schema = Schema::new(filter.clone()).unwrap();
+
+            info!("applying filters..");
             for card in iter {
-                if card.eval(filter.clone()).await {
+                info!("applying filter");
+                if card.should_review().await {
+                    //    info!("filter match");
                     ids.push(card.id());
+                } else {
+                    //   info!("filter not match");
                 }
             }
         } else {
@@ -173,13 +187,13 @@ impl App {
         ids
     }
 
-    pub async fn card_from_id(&self, id: CardId) -> Card<AnyType> {
+    pub async fn card_from_id(&self, id: CardId) -> Arc<Card<AnyType>> {
         self.card_provider.load(id).await.unwrap()
     }
 
     pub async fn load_and_persist(&self) {
-        for mut card in self.full_load_cards().await {
-            card.persist().await;
+        for card in self.full_load_cards().await {
+            Arc::unwrap_or_clone(card).persist().await;
         }
     }
 
@@ -229,7 +243,7 @@ impl App {
             back: card.back_side().map(ToOwned::to_owned),
             class,
         };
-        card.into_type(instance).await;
+        Arc::unwrap_or_clone(card).into_type(instance).await;
         Ok(())
     }
 
@@ -238,12 +252,12 @@ impl App {
             return;
         }
 
-        let mut card = self.card_from_id(card_id).await;
+        let mut card = Arc::unwrap_or_clone(self.card_from_id(card_id).await);
         card.set_dependency(dependency).await;
         card.persist().await;
     }
 
-    pub async fn load_class_cards(&self) -> Vec<Card<AnyType>> {
+    pub async fn load_class_cards(&self) -> Vec<Arc<Card<AnyType>>> {
         self.full_load_cards()
             .await
             .into_iter()
@@ -282,7 +296,7 @@ impl App {
             Card::from_raw(raw_card, self.card_provider.clone(), self.recaller.clone()).await;
 
         self.card_provider.save_card(card).await;
-        self.card_provider.load(CardId(id)).await.unwrap()
+        Arc::unwrap_or_clone(self.card_provider.load(CardId(id)).await.unwrap())
     }
 }
 

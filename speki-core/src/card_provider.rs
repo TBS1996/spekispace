@@ -3,6 +3,7 @@ use crate::{
     reviews::Reviews,
     AnyType, Attribute, Card, Provider, Recaller, TimeGetter,
 };
+use dioxus_logger::tracing::{info, trace};
 use speki_dto::{AttributeId, CardId, Review};
 use std::{
     collections::HashMap,
@@ -45,7 +46,7 @@ impl CardProvider {
     }
 
     pub async fn save_card(&self, card: Card<AnyType>) {
-        self.update_cache(card.clone());
+        self.update_cache(Arc::new(card.clone()));
         let raw = into_raw_card(card);
         self.provider.save_card(raw).await;
     }
@@ -91,28 +92,48 @@ impl CardProvider {
     }
 
     async fn load_cached_reviews(&self, id: CardId) -> Option<Reviews> {
+        trace!("attempting review cache load for: {}", id);
         let guard = self.inner.read().unwrap();
-        let cached = guard.reviews.get(&id)?;
+        let cached = match guard.reviews.get(&id) {
+            Some(cached) => cached,
+            None => {
+                trace!("cache miss for review: {}", id);
+                return None;
+            }
+        };
         let last_modified = self.provider.last_modified_card(id).await;
         if last_modified > cached.fetched {
+            trace!("review cache outdated for card: {}", id);
             None
         } else {
+            trace!("successfully retrieved review cache for card: {}", id);
             Some(cached.review.clone())
         }
     }
 
-    async fn load_cached_card(&self, id: CardId) -> Option<Card<AnyType>> {
+    async fn load_cached_card(&self, id: CardId) -> Option<Arc<Card<AnyType>>> {
+        trace!("attempting cache load for card: {}", id);
         let guard = self.inner.read().unwrap();
-        let cached = guard.cards.get(&id)?;
+        let cached = match guard.cards.get(&id) {
+            Some(cached) => cached,
+            None => {
+                trace!("cache miss for card: {}", id);
+                return None;
+            }
+        };
+
         let last_modified = self.provider.last_modified_card(id).await;
         if last_modified > cached.fetched {
+            trace!("cache outdated for card: {}", id);
             None
         } else {
+            trace!("successfully retrieved cache for card: {}", id);
             Some(cached.card.clone())
         }
     }
 
-    fn update_cache(&self, card: Card<AnyType>) {
+    fn update_cache(&self, card: Arc<Card<AnyType>>) {
+        trace!("updating cache for card: {}", card.id);
         let now = self.time_provider.current_time();
         let mut guard = self.inner.write().unwrap();
         let id = card.id;
@@ -131,30 +152,35 @@ impl CardProvider {
         self.provider.load_card_ids().await
     }
 
-    pub async fn load_all(&self) -> Vec<Card<AnyType>> {
+    pub async fn load_all(&self) -> Vec<Arc<Card<AnyType>>> {
+        info!("loading card ids");
         let card_ids = self.load_all_card_ids().await;
+        info!("so many ids loaded: {}", card_ids.len());
 
         let mut output = Vec::with_capacity(card_ids.len());
 
         for id in card_ids {
+            info!("loading...");
             output.push(self.load(id).await.unwrap());
         }
 
         output
     }
 
-    pub async fn load(&self, id: CardId) -> Option<Card<AnyType>> {
+    pub async fn load(&self, id: CardId) -> Option<Arc<Card<AnyType>>> {
+        trace!("loading card for id: {}", id);
         if let (Some(card), Some(_)) = (
             self.load_cached_card(id).await,
             self.load_cached_reviews(id).await,
         ) {
-            return Some(card);
+            Some(card)
+        } else {
+            trace!("cache miss for id: {}", id);
+            let uncached = self.load_uncached(id).await?;
+            let uncached = Arc::new(uncached);
+            self.update_cache(uncached.clone());
+            Some(uncached)
         }
-
-        let uncached = self.load_uncached(id).await?;
-        self.update_cache(uncached.clone());
-
-        Some(uncached)
     }
 
     pub async fn load_attribute(&self, id: AttributeId) -> Option<Attribute> {
@@ -172,7 +198,7 @@ struct Inner {
 
 struct CardCache {
     fetched: Duration,
-    card: Card<AnyType>,
+    card: Arc<Card<AnyType>>,
 }
 
 struct RevCache {

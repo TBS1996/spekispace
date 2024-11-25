@@ -17,37 +17,44 @@ pub fn notify(msg: impl Into<String>) {
 }
 
 pub async fn select_from_subclass_cards(app: &App, class: CardId) -> Option<CardId> {
-    let cards: Vec<Card<AnyType>> = app
+    let cards: Vec<Arc<Card<AnyType>>> = app
         .load_all_cards()
         .await
         .into_iter()
         .filter(|card| block_on(card.load_ancestor_classes()).contains(&class))
         .collect();
 
-    enumselector::select_item_with_formatter(cards, |card: &Card<AnyType>| block_on(card.print()))?
-        .id()
-        .into()
+    enumselector::select_item_with_formatter(cards, |card: &Arc<Card<AnyType>>| {
+        block_on(card.print())
+    })?
+    .id()
+    .into()
 }
 
 pub async fn select_from_all_instance_cards(app: &App) -> Option<CardId> {
-    let cards: Vec<Card<AnyType>> = app
+    let cards: Vec<Arc<Card<AnyType>>> = app
         .load_all_cards()
         .await
         .into_iter()
         .filter(|card| card.is_instance())
         .collect();
-    enumselector::select_item_with_formatter(cards, |card: &Card<AnyType>| block_on(card.print()))?
-        .id()
-        .into()
+    enumselector::select_item_with_formatter(cards, |card: &Arc<Card<AnyType>>| {
+        block_on(card.print())
+    })?
+    .id()
+    .into()
 }
 
 use futures::executor::block_on;
+use std::sync::Arc;
 
 pub async fn select_from_all_class_cards(app: &App) -> Option<CardId> {
     let cards = app.load_all_cards().await;
-    enumselector::select_item_with_formatter(cards, |card: &Card<AnyType>| block_on(card.print()))?
-        .id()
-        .into()
+    enumselector::select_item_with_formatter(cards, |card: &Arc<Card<AnyType>>| {
+        block_on(card.print())
+    })?
+    .id()
+    .into()
 }
 
 pub async fn select_from_class_attributes(app: &App, class: CardId) -> Option<AttributeId> {
@@ -68,9 +75,10 @@ pub fn select_from_attributes(attributes: Vec<Attribute>) -> Option<AttributeId>
 }
 
 pub async fn select_from_all_cards(app: &App) -> Option<CardId> {
-    enumselector::select_item_with_formatter(app.load_all_cards().await, |card: &Card<AnyType>| {
-        block_on(card.print()).to_owned()
-    })?
+    enumselector::select_item_with_formatter(
+        app.load_all_cards().await,
+        |card: &Arc<Card<AnyType>>| block_on(card.print()).to_owned(),
+    )?
     .id()
     .into()
 }

@@ -117,7 +117,7 @@ pub enum Schema {
 }
 
 impl Schema {
-    fn new(s: String) -> Option<Self> {
+    pub fn new(s: String) -> Option<Self> {
         let mut schema = parser::evaluate(&s).unwrap().1;
 
         while schema.simplify() {}

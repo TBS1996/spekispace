@@ -3,7 +3,7 @@ use crate::Route;
 use super::*;
 
 const DEFAULT_FILTER: &'static str =
-    "recall < 0.8 & finished == true & suspended == false & resolved == true & minrecrecall > 0.8 & minrecstab > 10 & lastreview > 0.5 & weeklapses < 3 & monthlapses < 6";
+    "recall < 0.8 & finished == true & suspended == false & minrecrecall > 0.8 & lastreview > 0.5 & weeklapses < 3 & monthlapses < 6";
 
 pub fn new_review(recall: Recall) -> Review {
     Review {

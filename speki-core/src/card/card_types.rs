@@ -202,7 +202,8 @@ impl EventCard {
     }
 
     pub async fn valid_sub_event(&self, other: CardId, app: &App) -> bool {
-        let other = app.load_card(other).await.unwrap();
+        use std::sync::Arc;
+        let other = Arc::unwrap_or_clone(app.load_card(other).await.unwrap());
 
         let AnyType::Event(other) = other.data else {
             panic!("wrong type");
@@ -212,7 +213,8 @@ impl EventCard {
     }
 
     pub async fn valid_parent_event(&self, parent: CardId, app: &App) -> bool {
-        let parent = app.load_card(parent).await.unwrap();
+        use std::sync::Arc;
+        let parent = Arc::unwrap_or_clone(app.load_card(parent).await.unwrap());
         let AnyType::Event(parent) = parent.data else {
             panic!("wrong type");
         };

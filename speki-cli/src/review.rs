@@ -219,8 +219,10 @@ async fn create_attribute_card(card: &Card<AnyType>, app: &App) -> Option<Attrib
     })
 }
 
+use std::sync::Arc;
+
 async fn handle_action(app: &App, card: CardId, action: CardAction) -> ControlFlow<()> {
-    let card = app.load_card(card).await.unwrap();
+    let card = Arc::unwrap_or_clone(app.load_card(card).await.unwrap());
 
     match action {
         CardAction::IntoAttribute => match card.card_type() {
@@ -369,7 +371,9 @@ async fn handle_action(app: &App, card: CardId, action: CardAction) -> ControlFl
 
         CardAction::SetBackRef => {
             if let Some(reff) = select_from_all_cards(app).await {
-                app.load_card(card.id()).await.unwrap().set_ref(reff).await;
+                Arc::unwrap_or_clone(app.load_card(card.id()).await.unwrap())
+                    .set_ref(reff)
+                    .await;
             }
         }
         CardAction::Edit => {

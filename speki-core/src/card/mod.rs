@@ -4,6 +4,7 @@ use crate::reviews::Reviews;
 use crate::RecallCalc;
 use crate::Recaller;
 use crate::TimeGetter;
+use core::f32;
 use samsvar::json;
 use samsvar::Matcher;
 use serializing::from_any;
@@ -234,6 +235,51 @@ impl Card<AnyType> {
         classes
     }
 
+    pub async fn min_rec_recall_rate(&self) -> f32 {
+        let mut min_rec = f32::MAX;
+
+        for id in self.all_dependencies().await {
+            let rec = self
+                .card_provider
+                .load(id)
+                .await
+                .unwrap()
+                .recall_rate()
+                .unwrap_or_default();
+            min_rec = min_rec.min(rec);
+        }
+
+        min_rec
+    }
+
+    pub async fn should_review(&self) -> bool {
+        if self.recall_rate().unwrap_or_default() > 0.8 {
+            return false;
+        }
+
+        if self.min_rec_recall_rate().await < 0.8 {
+            return false;
+        }
+
+        if self.is_suspended() {
+            return false;
+        }
+
+        if self.lapses_last_day() > 2 {
+            return false;
+        }
+
+        if self.lapses_last_week() > 5 {
+            return false;
+        }
+
+        if self.lapses_last_month() > 7 {
+            return false;
+        }
+
+        true
+    }
+
     pub fn time_provider(&self) -> TimeGetter {
         self.card_provider.time_provider()
     }
@@ -348,24 +394,12 @@ impl Card<AnyType> {
         raw.data = from_any(data.into());
         let card = Card::from_raw(raw, self.card_provider.clone(), self.recaller.clone()).await;
         self.card_provider.save_card(card).await;
-        self.card_provider.load(id).await.unwrap()
+        (*self.card_provider.load(id).await.unwrap()).clone()
     }
 
     // Call this function every time SavedCard is mutated.
     pub async fn persist(&mut self) {
         self.card_provider.save_card(self.clone()).await;
-        *self = self.card_provider.load(self.id()).await.unwrap();
-    }
-
-    pub async fn min_rec_recall_rate(&self) -> Option<RecallRate> {
-        let mut recall_rate = self.recall_rate()?;
-
-        for id in self.all_dependencies().await {
-            let card = self.card_provider.load(id).await.unwrap();
-            recall_rate = recall_rate.min(card.recall_rate()?);
-        }
-
-        Some(recall_rate)
     }
 
     async fn is_resolved(&self) -> bool {
@@ -385,14 +419,14 @@ impl Card<AnyType> {
         let mut stack = vec![self.id()];
 
         while let Some(id) = stack.pop() {
-            if let Some(card) = self.card_provider.load(id).await {
-                if self.id() != id {
-                    deps.push(id);
-                }
+            let card = self.card_provider.load(id).await.unwrap();
 
-                for dep in card.dependency_ids().await {
-                    stack.push(dep);
-                }
+            if self.id() != id {
+                deps.push(id);
+            }
+
+            for dep in card.dependency_ids().await {
+                stack.push(dep);
             }
         }
 
@@ -530,9 +564,11 @@ impl<T: CardTrait> Card<T> {
 }
 
 use async_trait::async_trait;
+use dioxus_logger::tracing::instrument;
 
 #[async_trait(?Send)]
 impl Matcher for Card<AnyType> {
+    #[instrument]
     async fn get_val(&self, key: &str) -> Option<samsvar::Value> {
         match key {
             "front" => json!(self.data.display_front().await),
@@ -553,10 +589,10 @@ impl Matcher for Card<AnyType> {
                     / 86400.
             ),
             "minrecrecall" => {
-                let mut min_stability = usize::MAX;
+                let mut min_recall = usize::MAX;
                 let selfs = self.all_dependencies().await;
                 for id in selfs {
-                    let stab = (self
+                    let recall = (self
                         .card_provider
                         .load(id)
                         .await
@@ -564,10 +600,10 @@ impl Matcher for Card<AnyType> {
                         .recall_rate()
                         .unwrap_or_default()
                         * 1000.) as usize;
-                    min_stability = min_stability.min(stab);
+                    min_recall = min_recall.min(recall);
                 }
 
-                json!(min_stability as f32 / 1000.)
+                json!(min_recall as f32 / 1000.)
             }
             "minrecstab" => {
                 let mut min_recall = usize::MAX;
