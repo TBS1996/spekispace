@@ -254,7 +254,6 @@ async fn menu(app: &App) {
 async fn print_card_info(app: &App, id: CardId) {
     let card = app.load_card(id).await.unwrap();
     let dependencies = card.dependency_ids().await;
-    let dependents = app.get_cached_dependents(id);
 
     if let AnyType::Instance(ty) = card.card_type() {
         let concept = app.load_card(ty.class).await.unwrap().print().await;
@@ -265,19 +264,6 @@ async fn print_card_info(app: &App, id: CardId) {
         println!("{}", style("dependencies").bold());
         for id in dependencies {
             println!("{}", app.load_card(id).await.unwrap().print().await);
-        }
-    }
-
-    if !dependents.is_empty() {
-        let dpt_qty = dependents.len();
-
-        if dpt_qty > 10 {
-            println!("card has {} dependents", dpt_qty);
-        } else {
-            println!("{}", style("dependendents").bold());
-            for id in dependents {
-                println!("{}", app.load_card(id).await.unwrap().print().await);
-            }
         }
     }
 

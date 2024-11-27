@@ -2,7 +2,6 @@ use crate::utils::{clear_terminal, notify};
 use dialoguer::{theme::ColorfulTheme, Input, Select};
 use rand::seq::SliceRandom;
 use speki_core::{App, NormalCard};
-use std::sync::Arc;
 
 pub async fn unfinished(app: &App) {
     let filter = "finished == false & suspended == false".to_string();
@@ -40,7 +39,9 @@ pub async fn unfinished(app: &App) {
 
             match selection {
                 0 => {
-                    Arc::unwrap_or_clone(app.load_card(card_id).await.unwrap())
+                    app.load_card(card_id)
+                        .await
+                        .unwrap()
                         .into_type(NormalCard {
                             front,
                             back: input.into(),

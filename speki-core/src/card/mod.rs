@@ -18,8 +18,10 @@ use speki_dto::CardId;
 use speki_dto::RawCard;
 use speki_dto::Recall;
 use speki_dto::Review;
+use std::collections::HashMap;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Debug;
+use std::sync::Arc;
 use std::time::Duration;
 
 pub type RecallRate = f32;
@@ -606,21 +608,7 @@ impl Matcher for Card<AnyType> {
                     / 86400.
             ),
             "minrecrecall" => {
-                let mut min_recall = usize::MAX;
-                let selfs = self.all_dependencies().await;
-                for id in selfs {
-                    let recall = (self
-                        .card_provider
-                        .load(id)
-                        .await
-                        .unwrap()
-                        .recall_rate()
-                        .unwrap_or_default()
-                        * 1000.) as usize;
-                    min_recall = min_recall.min(recall);
-                }
-
-                json!(min_recall as f32 / 1000.)
+                json!(1.0)
             }
             "minrecstab" => {
                 let mut min_recall = usize::MAX;
@@ -640,6 +628,55 @@ impl Matcher for Card<AnyType> {
         }
         .into()
     }
+}
+
+pub async fn filter_rec_recall(
+    mut cards: HashMap<CardId, Arc<Card<AnyType>>>,
+    min_recall: f32,
+) -> Vec<Arc<Card<AnyType>>> {
+    let mut output = vec![];
+
+    while !cards.is_empty() {
+        let card = cards.values().next().unwrap();
+        let map = recall_cache(card.clone()).await;
+
+        for (id, rec) in map.into_iter() {
+            if let Some(card) = cards.remove(&id) {
+                if rec > min_recall {
+                    output.push(card);
+                }
+            }
+        }
+    }
+
+    output
+}
+
+pub async fn recall_cache(card: Arc<Card<AnyType>>) -> HashMap<CardId, f32> {
+    use std::future::Future;
+    use std::pin::Pin;
+
+    fn inner(
+        card: Arc<Card<AnyType>>,
+        mut map: HashMap<CardId, f32>,
+        mut min_recall: f32,
+    ) -> Pin<Box<dyn Future<Output = (HashMap<CardId, f32>, f32)>>> {
+        Box::pin(async move {
+            for dep in card.dependency_ids().await {
+                let dep_card = card.card_provider.load(dep).await.unwrap();
+                let (inner_map, inner_recall) = inner(dep_card, map.clone(), min_recall).await;
+                min_recall = min_recall.min(inner_recall);
+                map.extend(inner_map.iter());
+            }
+            map.insert(card.id, min_recall);
+            min_recall = card.recall_rate().unwrap_or_default().min(min_recall);
+            (map, min_recall)
+        })
+    }
+
+    let (map, _) = inner(card, Default::default(), 1.0).await;
+
+    map
 }
 
 #[cfg(test)]
@@ -891,5 +928,35 @@ mod tests {
         let lowest_recall = card3.recall_rate().unwrap();
 
         assert_eq!(card1.min_rec_recall_rate().await, lowest_recall);
+    }
+
+    #[tokio::test]
+    async fn test_recall_cache() {
+        let storage = TestStuff::new();
+
+        let mut card1 = storage.insert_card().await;
+        let mut card2 = storage.insert_card().await;
+        let mut card3 = storage.insert_card().await;
+        let mut card4 = storage.insert_card().await;
+
+        card1.add_review(Recall::None).await;
+        card2.add_review(Recall::Some).await;
+        card3.add_review(Recall::Late).await;
+        card4.add_review(Recall::Perfect).await;
+
+        storage.inc_time(Duration::from_secs(86400));
+
+        card1.set_dependency(card2.id).await;
+        card2.set_dependency(card3.id).await;
+        card3.set_dependency(card4.id).await;
+
+        let mut map = super::recall_cache(Arc::new(card1.clone())).await;
+
+        assert_eq!(map.remove(&card1.id).unwrap(), card3.recall_rate().unwrap());
+        assert_eq!(map.remove(&card2.id).unwrap(), card3.recall_rate().unwrap());
+        assert_eq!(map.remove(&card3.id).unwrap(), card4.recall_rate().unwrap());
+        assert_eq!(map.remove(&card4.id).unwrap(), 1.0);
+
+        assert!(map.is_empty());
     }
 }

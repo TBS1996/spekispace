@@ -159,10 +159,10 @@ pub async fn review_old(app: &App) {
 }
 
 async fn handle_review_action(app: &App, card: CardId, action: ReviewAction) -> ControlFlow<()> {
-    let card = app.load_card(card).await.unwrap();
+    let mut card = app.load_card(card).await.unwrap();
     match action {
         ReviewAction::Grade(grade) => {
-            app.review(card.id(), grade).await;
+            card.add_review(grade).await;
             ControlFlow::Break(())
         }
         ReviewAction::Skip => ControlFlow::Break(()),
@@ -219,10 +219,8 @@ async fn create_attribute_card(card: &Card<AnyType>, app: &App) -> Option<Attrib
     })
 }
 
-use std::sync::Arc;
-
 async fn handle_action(app: &App, card: CardId, action: CardAction) -> ControlFlow<()> {
-    let card = Arc::unwrap_or_clone(app.load_card(card).await.unwrap());
+    let card = app.load_card(card).await.unwrap();
 
     match action {
         CardAction::IntoAttribute => match card.card_type() {
@@ -253,23 +251,39 @@ async fn handle_action(app: &App, card: CardId, action: CardAction) -> ControlFl
         CardAction::NewDependency => {
             println!("add dependency");
             if let Some(new_card) = add_any_card(app).await {
-                app.set_dependency(card.id(), new_card).await;
+                app.load_card(card.id)
+                    .await
+                    .unwrap()
+                    .set_dependency(new_card)
+                    .await;
             }
         }
         CardAction::OldDependency => {
             if let Some(dep) = select_from_all_cards(app).await {
-                app.set_dependency(card.id(), dep).await;
+                app.load_card(card.id())
+                    .await
+                    .unwrap()
+                    .set_dependency(dep)
+                    .await;
             }
         }
         CardAction::NewDependent => {
             println!("add dependent");
             if let Some(new_card) = add_any_card(app).await {
-                app.set_dependency(new_card, card.id()).await;
+                app.load_card(new_card)
+                    .await
+                    .unwrap()
+                    .set_dependency(card.id)
+                    .await;
             }
         }
         CardAction::OldDependent => {
             if let Some(dep) = select_from_all_cards(app).await {
-                app.set_dependency(dep, card.id()).await;
+                app.load_card(dep)
+                    .await
+                    .unwrap()
+                    .set_dependency(card.id)
+                    .await;
             }
         }
         CardAction::OldClass => {
@@ -371,9 +385,7 @@ async fn handle_action(app: &App, card: CardId, action: CardAction) -> ControlFl
 
         CardAction::SetBackRef => {
             if let Some(reff) = select_from_all_cards(app).await {
-                Arc::unwrap_or_clone(app.load_card(card.id()).await.unwrap())
-                    .set_ref(reff)
-                    .await;
+                app.load_card(card.id()).await.unwrap().set_ref(reff).await;
             }
         }
         CardAction::Edit => {
@@ -449,7 +461,7 @@ pub async fn view_card(app: &App, mut card: CardId, mut review_mode: bool) -> Co
 
 async fn print_card(app: &App, card: CardId, mut show_backside: bool) -> ControlFlow<()> {
     clear_terminal();
-    let card = app.card_from_id(card).await;
+    let card = app.load_card(card).await.unwrap();
 
     let var_name = match card.card_type() {
         AnyType::Instance(instance) => match card.back_side() {

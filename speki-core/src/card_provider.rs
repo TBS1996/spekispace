@@ -169,7 +169,6 @@ impl CardProvider {
     }
 
     pub async fn load(&self, id: CardId) -> Option<Arc<Card<AnyType>>> {
-        dbg!();
         trace!("loading card for id: {}", id);
         if let (Some(card), Some(_)) = (
             self.load_cached_card(id).await,
@@ -177,11 +176,8 @@ impl CardProvider {
         ) {
             Some(card)
         } else {
-            dbg!();
             trace!("cache miss for id: {}", id);
-            dbg!();
             let uncached = self.load_uncached(id).await?;
-            dbg!();
             let uncached = Arc::new(uncached);
             self.update_cache(uncached.clone());
             Some(uncached)

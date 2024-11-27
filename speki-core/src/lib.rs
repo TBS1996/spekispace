@@ -1,4 +1,6 @@
+use crate::card::serializing::new_raw_card;
 use attribute::AttrProvider;
+use card::filter_rec_recall;
 use card::RecallRate;
 use card_provider::CardProvider;
 use eyre::Result;
@@ -6,11 +8,8 @@ use reviews::Reviews;
 use samsvar::Matcher;
 use samsvar::Schema;
 use speki_dto::AttributeId;
-use speki_dto::Config;
-use speki_dto::Recall;
-use speki_dto::Review;
 use speki_dto::SpekiProvider;
-use std::collections::BTreeSet;
+use std::collections::HashMap;
 use std::fmt::Debug;
 use std::time::Duration;
 
@@ -105,8 +104,8 @@ impl App {
         self.card_provider.save_card(card).await;
     }
 
-    pub async fn load_card(&self, id: CardId) -> Option<Arc<Card<AnyType>>> {
-        self.card_provider.load(id).await
+    pub async fn load_card(&self, id: CardId) -> Option<Card<AnyType>> {
+        Arc::unwrap_or_clone(self.card_provider.load(id).await?).into()
     }
 
     pub async fn delete_card(&self, id: CardId) {
@@ -129,49 +128,31 @@ impl App {
         self.attr_provider.delete(id).await
     }
 
-    pub async fn load_reviews(&self, id: CardId) -> Reviews {
-        self.card_provider.load_reviews(id).await
-    }
-
-    pub async fn save_reviews(&self, id: CardId, reviews: Reviews) {
-        self.card_provider.save_reviews(id, reviews).await;
-    }
-
-    pub async fn add_review(&self, id: CardId, review: Review) {
-        self.card_provider.add_review(id, review).await;
-    }
-
-    pub fn load_config(&self) -> Config {
-        Config
-    }
-
-    pub fn save_config(&self, _config: Config) {}
-
     pub async fn load_cards(&self) -> Vec<CardId> {
         self.card_provider.load_all_card_ids().await
     }
 
-    async fn full_load_cards(&self) -> Vec<Arc<Card<AnyType>>> {
-        self.load_all_cards().await
-    }
-
     pub async fn load_non_pending(&self, filter: Option<String>) -> Vec<CardId> {
         info!("loading card ids");
-        let iter = self
-            .full_load_cards()
+        let cards: HashMap<_, _> = self
+            .load_all_cards()
             .await
             .into_iter()
-            .filter(|card| !card.history().is_empty());
+            .filter(|card| !card.history().is_empty())
+            .map(|card| (card.id, card))
+            .collect();
+
+        let cards = filter_rec_recall(cards, 0.8).await;
 
         let mut ids = vec![];
 
-        if let Some(ref _filter) = filter {
-            let _schema = Schema::new(_filter.clone()).unwrap();
+        if let Some(ref filter) = filter {
+            let schema = Schema::new(filter.clone()).unwrap();
 
             info!("applying filters..");
-            for card in iter {
+            for card in cards {
                 info!("applying filter");
-                if card.should_review().await {
+                if card.eval_schema(&schema).await {
                     //    info!("filter match");
                     ids.push(card.id());
                 } else {
@@ -179,7 +160,7 @@ impl App {
                 }
             }
         } else {
-            for card in iter {
+            for card in cards {
                 ids.push(card.id());
             }
         }
@@ -187,22 +168,14 @@ impl App {
         ids
     }
 
-    pub async fn card_from_id(&self, id: CardId) -> Arc<Card<AnyType>> {
-        self.card_provider.load(id).await.unwrap()
-    }
-
     pub async fn load_and_persist(&self) {
-        for card in self.full_load_cards().await {
+        for card in self.load_all_cards().await {
             Arc::unwrap_or_clone(card).persist().await;
         }
     }
 
-    pub fn get_cached_dependents(&self, id: CardId) -> BTreeSet<CardId> {
-        Card::<AnyType>::dependents(id)
-    }
-
     pub async fn cards_filtered(&self, filter: String) -> Vec<CardId> {
-        let cards = self.full_load_cards().await;
+        let cards = self.load_all_cards().await;
         let mut ids = vec![];
 
         for card in cards {
@@ -226,17 +199,8 @@ impl App {
         self.new_any(data).await.id()
     }
 
-    pub async fn review(&self, id: CardId, grade: Recall) {
-        let review = Review {
-            timestamp: current_time(),
-            grade,
-            time_spent: Default::default(),
-        };
-        self.add_review(id, review).await;
-    }
-
     pub async fn set_class(&self, card_id: CardId, class: CardId) -> Result<()> {
-        let card = self.card_from_id(card_id).await;
+        let card = self.card_provider.load(card_id).await.unwrap();
 
         let instance = InstanceCard {
             name: card.card_type().display_front().await,
@@ -247,18 +211,8 @@ impl App {
         Ok(())
     }
 
-    pub async fn set_dependency(&self, card_id: CardId, dependency: CardId) {
-        if card_id == dependency {
-            return;
-        }
-
-        let mut card = Arc::unwrap_or_clone(self.card_from_id(card_id).await);
-        card.set_dependency(dependency).await;
-        card.persist().await;
-    }
-
     pub async fn load_class_cards(&self) -> Vec<Arc<Card<AnyType>>> {
-        self.full_load_cards()
+        self.load_all_cards()
             .await
             .into_iter()
             .filter(|card| card.is_class())
@@ -267,7 +221,7 @@ impl App {
 
     pub async fn load_pending(&self, filter: Option<String>) -> Vec<CardId> {
         let iter = self
-            .full_load_cards()
+            .load_all_cards()
             .await
             .into_iter()
             .filter(|card| card.history().is_empty());
@@ -300,8 +254,6 @@ impl App {
     }
 }
 
-use crate::card::serializing::new_raw_card;
-
 pub async fn as_graph(app: &App) -> String {
     graphviz::export(app).await
 }
@@ -314,7 +266,7 @@ mod graphviz {
     pub async fn export(app: &App) -> String {
         let mut dot = String::from("digraph G {\nranksep=2.0;\nrankdir=BT;\n");
         let mut relations = BTreeSet::default();
-        let cards = app.full_load_cards().await;
+        let cards = app.load_all_cards().await;
 
         for card in cards {
             let label = card
