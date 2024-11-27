@@ -18,6 +18,7 @@ pub struct CardProvider {
     provider: Provider,
     time_provider: TimeGetter,
     recaller: Recaller,
+    check_modified: bool,
 }
 
 impl Debug for CardProvider {
@@ -68,6 +69,7 @@ impl CardProvider {
             time_provider,
             provider,
             recaller,
+            check_modified: false,
         }
     }
 
@@ -101,12 +103,17 @@ impl CardProvider {
                 return None;
             }
         };
-        let last_modified = self.provider.last_modified_card(id).await;
-        if last_modified > cached.fetched {
-            trace!("review cache outdated for card: {}", id);
-            None
+
+        if self.check_modified {
+            let last_modified = self.provider.last_modified_card(id).await;
+            if last_modified > cached.fetched {
+                trace!("review cache outdated for card: {}", id);
+                None
+            } else {
+                trace!("successfully retrieved review cache for card: {}", id);
+                Some(cached.review.clone())
+            }
         } else {
-            trace!("successfully retrieved review cache for card: {}", id);
             Some(cached.review.clone())
         }
     }
@@ -122,12 +129,16 @@ impl CardProvider {
             }
         };
 
-        let last_modified = self.provider.last_modified_card(id).await;
-        if last_modified > cached.fetched {
-            trace!("cache outdated for card: {}", id);
-            None
+        if self.check_modified {
+            let last_modified = self.provider.last_modified_card(id).await;
+            if last_modified > cached.fetched {
+                trace!("cache outdated for card: {}", id);
+                None
+            } else {
+                trace!("successfully retrieved cache for card: {}", id);
+                Some(cached.card.clone())
+            }
         } else {
-            trace!("successfully retrieved cache for card: {}", id);
             Some(cached.card.clone())
         }
     }

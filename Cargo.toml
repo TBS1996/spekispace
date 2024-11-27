@@ -45,3 +45,7 @@ toml = "0.8.19"
 futures = "0.3"
 eyre = "0.6.12"
 rayon = "1.10.0"
+dioxus-logger = "0.5.1"
+log = "0.4.22"
+tracing = { version = "0.1.40", features = ["attributes"] }
+tracing-subscriber = "0.3.18"

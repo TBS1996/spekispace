@@ -12,6 +12,7 @@ use speki_dto::SpekiProvider;
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::time::Duration;
+use tracing::instrument;
 
 //pub mod collections;
 //pub mod github;
@@ -96,6 +97,7 @@ impl App {
         self.card_provider.fill_cache().await;
     }
 
+    #[instrument]
     pub async fn load_all_cards(&self) -> Vec<Arc<Card<AnyType>>> {
         self.card_provider.load_all().await
     }
@@ -132,6 +134,7 @@ impl App {
         self.card_provider.load_all_card_ids().await
     }
 
+    #[instrument]
     pub async fn load_non_pending(&self, filter: Option<String>) -> Vec<CardId> {
         info!("loading card ids");
         let cards: HashMap<_, _> = self
@@ -142,6 +145,7 @@ impl App {
             .map(|card| (card.id, card))
             .collect();
 
+        info!("starting filter recall thing");
         let cards = filter_rec_recall(cards, 0.8).await;
 
         let mut ids = vec![];

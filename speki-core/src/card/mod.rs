@@ -630,6 +630,9 @@ impl Matcher for Card<AnyType> {
     }
 }
 
+use tracing::info;
+
+#[instrument]
 pub async fn filter_rec_recall(
     mut cards: HashMap<CardId, Arc<Card<AnyType>>>,
     min_recall: f32,
@@ -662,6 +665,7 @@ pub async fn recall_cache(card: Arc<Card<AnyType>>) -> HashMap<CardId, f32> {
         mut min_recall: f32,
     ) -> Pin<Box<dyn Future<Output = (HashMap<CardId, f32>, f32)>>> {
         Box::pin(async move {
+            info!("damn...");
             for dep in card.dependency_ids().await {
                 let dep_card = card.card_provider.load(dep).await.unwrap();
                 let (inner_map, inner_recall) = inner(dep_card, map.clone(), min_recall).await;

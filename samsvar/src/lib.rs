@@ -167,6 +167,7 @@ fn string_to_serde_value(input: &str) -> Value {
 }
 
 use async_trait::async_trait;
+use tracing::instrument;
 
 #[async_trait(?Send)]
 pub trait Matcher: std::fmt::Debug {
@@ -177,6 +178,7 @@ pub trait Matcher: std::fmt::Debug {
         self.eval_schema(&schema).await
     }
 
+    #[instrument]
     async fn eval_schema(&self, schema: &Schema) -> bool {
         let mut stack = vec![(schema, true)];
 

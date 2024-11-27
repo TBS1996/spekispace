@@ -10,6 +10,7 @@ use std::{
     sync::{Arc, Mutex},
     time::Duration,
 };
+use tracing::instrument;
 use wasm_bindgen::prelude::*;
 use web_sys::console;
 
@@ -279,6 +280,7 @@ impl TimeProvider for WasmTime {
 
 fn main() {
     dioxus_logger::init(Level::INFO).expect("failed to init logger");
+
     info!("starting app");
     launch(App);
 }
@@ -412,7 +414,7 @@ struct InnerState {
     token: Signal<Option<UserInfo>>,
 }
 
-#[derive(Default, Clone)]
+#[derive(Default, Clone, Debug)]
 struct ReviewState {
     card: Signal<Option<Card<AnyType>>>,
     queue: Arc<Mutex<Vec<CardId>>>,
@@ -427,6 +429,7 @@ impl ReviewState {
         Some(self.card.as_ref()?.id())
     }
 
+    #[instrument]
     async fn refresh(&self, app: &App, filter: String) {
         //let cards = app.load_non_pending(Some(filter)).await;
         let cards = app.load_non_pending(Some(filter)).await;
