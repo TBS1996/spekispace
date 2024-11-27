@@ -399,6 +399,7 @@ impl State {
     }
 }
 
+#[allow(dead_code)]
 #[derive(Debug)]
 pub struct UserInfo {
     auth_token: String,

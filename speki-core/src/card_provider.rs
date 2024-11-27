@@ -157,17 +157,19 @@ impl CardProvider {
         let card_ids = self.load_all_card_ids().await;
         info!("so many ids loaded: {}", card_ids.len());
 
-        let mut output = Vec::with_capacity(card_ids.len());
-
-        for id in card_ids {
-            info!("loading...");
-            output.push(self.load(id).await.unwrap());
-        }
+        let output = futures::future::join_all(card_ids.into_iter().map(|id| async move {
+            info!("loading card..");
+            let card = self.load(id).await.unwrap();
+            info!("loaded card");
+            card
+        }))
+        .await;
 
         output
     }
 
     pub async fn load(&self, id: CardId) -> Option<Arc<Card<AnyType>>> {
+        dbg!();
         trace!("loading card for id: {}", id);
         if let (Some(card), Some(_)) = (
             self.load_cached_card(id).await,
@@ -175,8 +177,11 @@ impl CardProvider {
         ) {
             Some(card)
         } else {
+            dbg!();
             trace!("cache miss for id: {}", id);
+            dbg!();
             let uncached = self.load_uncached(id).await?;
+            dbg!();
             let uncached = Arc::new(uncached);
             self.update_cache(uncached.clone());
             Some(uncached)

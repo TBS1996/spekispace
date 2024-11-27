@@ -165,8 +165,8 @@ impl App {
 
         let mut ids = vec![];
 
-        if let Some(ref filter) = filter {
-            let schema = Schema::new(filter.clone()).unwrap();
+        if let Some(ref _filter) = filter {
+            let _schema = Schema::new(_filter.clone()).unwrap();
 
             info!("applying filters..");
             for card in iter {

@@ -1,6 +1,8 @@
+use paths::{get_cards_path, get_review_path};
 use rayon::prelude::*;
 use speki_dto::Config;
 use speki_dto::{AttributeDTO, AttributeId, CardId, RawCard, Recall, Review, SpekiProvider};
+use std::time::SystemTime;
 use std::{
     fs::{self, read_to_string},
     io::{Read, Write},
@@ -48,11 +50,27 @@ impl SpekiProvider for FileProvider {
     }
 
     async fn last_modified_card(&self, id: CardId) -> Duration {
-        todo!()
+        fs::File::open(get_cards_path().join(id.to_string()))
+            .unwrap()
+            .metadata()
+            .unwrap()
+            .modified()
+            .unwrap()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .unwrap()
     }
 
     async fn last_modified_reviews(&self, id: CardId) -> Option<Duration> {
-        todo!()
+        Some(
+            fs::File::open(get_review_path().join(id.to_string()))
+                .ok()?
+                .metadata()
+                .unwrap()
+                .modified()
+                .unwrap()
+                .duration_since(SystemTime::UNIX_EPOCH)
+                .unwrap(),
+        )
     }
 
     async fn save_card(&self, card: RawCard) {

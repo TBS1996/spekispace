@@ -4231,8 +4231,11 @@ dependencies = [
  "serde",
  "serde_json",
  "speki-dto",
+ "speki-fs",
+ "tokio",
  "toml 0.8.19",
  "tracing",
+ "tracing-subscriber",
  "uuid",
 ]
 

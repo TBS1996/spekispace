@@ -200,7 +200,7 @@ pub struct RawType {
     pub parent_event: Option<Uuid>,
 }
 
-#[derive(Serialize, Deserialize, Default, Debug)]
+#[derive(Serialize, Deserialize, Default, Debug, Clone)]
 pub struct RawCard {
     pub id: Uuid,
     #[serde(flatten)]

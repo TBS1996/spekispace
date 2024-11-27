@@ -4,7 +4,9 @@ use crate::reviews::Reviews;
 use crate::RecallCalc;
 use crate::Recaller;
 use crate::TimeGetter;
+use async_trait::async_trait;
 use core::f32;
+use dioxus_logger::tracing::instrument;
 use samsvar::json;
 use samsvar::Matcher;
 use serializing::from_any;
@@ -14,6 +16,7 @@ use speki_dto::BackSide;
 use speki_dto::CType;
 use speki_dto::CardId;
 use speki_dto::RawCard;
+use speki_dto::Recall;
 use speki_dto::Review;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Debug;
@@ -235,17 +238,29 @@ impl Card<AnyType> {
         classes
     }
 
+    pub async fn add_review(&mut self, recall: Recall) {
+        let review = Review {
+            timestamp: self.time_provider().current_time(),
+            grade: recall,
+            time_spent: Default::default(),
+        };
+
+        self.history.0.push(review);
+        self.persist().await;
+    }
+
     pub async fn min_rec_recall_rate(&self) -> f32 {
         let mut min_rec = f32::MAX;
 
+        let dependencies = self.all_dependencies().await;
+        dbg!(dependencies);
+
         for id in self.all_dependencies().await {
-            let rec = self
-                .card_provider
-                .load(id)
-                .await
-                .unwrap()
-                .recall_rate()
-                .unwrap_or_default();
+            let card = self.card_provider.load(id).await.unwrap();
+            dbg!(&card);
+            dbg!(&card.history());
+            let rec = card.recall_rate().unwrap_or_default();
+            dbg!(rec);
             min_rec = min_rec.min(rec);
         }
 
@@ -257,9 +272,11 @@ impl Card<AnyType> {
             return false;
         }
 
+        /*
         if self.min_rec_recall_rate().await < 0.8 {
             return false;
         }
+        */
 
         if self.is_suspended() {
             return false;
@@ -400,6 +417,9 @@ impl Card<AnyType> {
     // Call this function every time SavedCard is mutated.
     pub async fn persist(&mut self) {
         self.card_provider.save_card(self.clone()).await;
+        self.card_provider
+            .save_reviews(self.id, self.history.clone())
+            .await;
     }
 
     async fn is_resolved(&self) -> bool {
@@ -563,9 +583,6 @@ impl<T: CardTrait> Card<T> {
     }
 }
 
-use async_trait::async_trait;
-use dioxus_logger::tracing::instrument;
-
 #[async_trait(?Send)]
 impl Matcher for Card<AnyType> {
     #[instrument]
@@ -622,5 +639,257 @@ impl Matcher for Card<AnyType> {
             }
         }
         .into()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+
+    use super::{AnyType, Card};
+    use crate::{
+        card_provider::CardProvider, Provider, Recaller, SimpleRecall, TimeGetter, TimeProvider,
+    };
+    use async_trait::async_trait;
+    use speki_dto::{
+        AttributeDTO, AttributeId, BackSide, CType, CardId, Config, RawCard, RawType, Recall,
+        Review, SpekiProvider,
+    };
+    use std::{
+        collections::HashMap,
+        sync::{Arc, Mutex},
+        time::Duration,
+    };
+    use uuid::Uuid;
+
+    struct Storage {
+        inner: Arc<Mutex<Inner>>,
+        time: ControlledTime,
+    }
+
+    impl Storage {
+        fn new(time: ControlledTime) -> Self {
+            Self {
+                time,
+                inner: Arc::new(Mutex::new(Inner {
+                    cards: Default::default(),
+                    reviews: Default::default(),
+                    _attrs: Default::default(),
+                })),
+            }
+        }
+    }
+
+    #[derive(Clone)]
+    struct Record<T> {
+        data: T,
+        modified: Duration,
+    }
+
+    impl<T> Record<T> {
+        fn new(data: T, time: ControlledTime) -> Self {
+            Self {
+                data,
+                modified: time.current_time(),
+            }
+        }
+
+        fn into_value(self) -> T {
+            self.data
+        }
+    }
+
+    struct Inner {
+        cards: HashMap<CardId, Record<RawCard>>,
+        reviews: HashMap<CardId, Vec<Review>>,
+        _attrs: HashMap<AttributeId, AttributeDTO>,
+    }
+
+    #[async_trait(?Send)]
+    impl SpekiProvider for Storage {
+        async fn load_all_cards(&self) -> Vec<RawCard> {
+            self.inner
+                .lock()
+                .unwrap()
+                .cards
+                .clone()
+                .into_values()
+                .map(Record::into_value)
+                .collect()
+        }
+        async fn save_card(&self, card: RawCard) {
+            self.inner
+                .lock()
+                .unwrap()
+                .cards
+                .insert(CardId(card.id), Record::new(card, self.time.clone()));
+        }
+
+        async fn load_card(&self, id: CardId) -> Option<RawCard> {
+            self.inner
+                .lock()
+                .unwrap()
+                .cards
+                .get(&id)
+                .map(|card| card.to_owned().into_value())
+        }
+        async fn delete_card(&self, id: CardId) {
+            self.inner.lock().unwrap().cards.remove(&id);
+        }
+
+        async fn load_all_attributes(&self) -> Vec<AttributeDTO> {
+            todo!()
+        }
+        async fn save_attribute(&self, _attribute: AttributeDTO) {
+            todo!()
+        }
+        async fn load_attribute(&self, _id: AttributeId) -> Option<AttributeDTO> {
+            todo!()
+        }
+        async fn delete_attribute(&self, _id: AttributeId) {
+            todo!()
+        }
+        async fn load_reviews(&self, id: CardId) -> Vec<Review> {
+            self.inner
+                .lock()
+                .unwrap()
+                .reviews
+                .get(&id)
+                .map(|revs| revs.to_owned())
+                .unwrap_or_default()
+        }
+        async fn save_reviews(&self, id: CardId, reviews: Vec<Review>) {
+            self.inner.lock().unwrap().reviews.insert(id, reviews);
+        }
+        async fn load_config(&self) -> Config {
+            todo!()
+        }
+        async fn save_config(&self, _config: Config) {
+            todo!()
+        }
+        async fn last_modified_card(&self, id: CardId) -> Duration {
+            self.inner.lock().unwrap().cards.get(&id).unwrap().modified
+        }
+        async fn last_modified_reviews(&self, _id: CardId) -> Option<Duration> {
+            Duration::default().into()
+        }
+        async fn load_card_ids(&self) -> Vec<CardId> {
+            self.inner
+                .lock()
+                .unwrap()
+                .cards
+                .clone()
+                .into_keys()
+                .collect()
+        }
+    }
+
+    #[derive(Clone, Default)]
+    struct ControlledTime {
+        time: Arc<Mutex<Duration>>,
+    }
+
+    impl ControlledTime {
+        fn inc(&self, inc: Duration) {
+            *self.time.lock().unwrap() += inc;
+        }
+    }
+
+    impl TimeProvider for ControlledTime {
+        fn current_time(&self) -> Duration {
+            *self.time.lock().unwrap()
+        }
+    }
+
+    struct TestStuff {
+        recaller: Recaller,
+        card_provider: CardProvider,
+        time_provider: ControlledTime,
+    }
+
+    impl TestStuff {
+        fn new() -> Self {
+            let timed = ControlledTime::default();
+            let time_provider: TimeGetter = Arc::new(Box::new(timed.clone()));
+            let recaller: Recaller = Arc::new(Box::new(SimpleRecall));
+            let provider: Provider = Arc::new(Box::new(Storage::new(timed.clone())));
+            let card_provider = CardProvider::new(provider, time_provider, recaller.clone());
+
+            Self {
+                recaller,
+                card_provider,
+                time_provider: timed,
+            }
+        }
+
+        fn inc_time(&self, inc: Duration) {
+            self.time_provider.inc(inc);
+        }
+
+        async fn insert_card(&self) -> Card<AnyType> {
+            let raw = raw_dummy().await;
+            let card = Card::from_raw(raw, self.card_provider.clone(), self.recaller.clone()).await;
+            let id = card.id;
+            self.card_provider.save_card(card).await;
+            (*self.card_provider.load(id).await.unwrap()).clone()
+        }
+    }
+
+    async fn raw_dummy() -> RawCard {
+        let data = RawType {
+            ty: CType::Normal,
+            front: "front1".to_string().into(),
+            back: Some(BackSide::Text("back1".to_string())),
+            class: None,
+            instance: None,
+            attribute: None,
+            start_time: None,
+            end_time: None,
+            parent_event: None,
+        };
+
+        let raw = RawCard {
+            id: Uuid::new_v4(),
+            data,
+            dependencies: Default::default(),
+            ..Default::default()
+        };
+
+        raw
+    }
+
+    #[tokio::test]
+    async fn test_recall() {
+        let storage = TestStuff::new();
+        let mut card = storage.insert_card().await;
+        assert!(card.recall_rate().is_none());
+
+        card.add_review(Recall::Perfect).await;
+        assert_eq!(card.recall_rate().unwrap(), 1.0);
+        storage.inc_time(Duration::from_secs(100));
+        assert!(card.recall_rate().unwrap() < 1.0);
+    }
+
+    #[tokio::test]
+    async fn test_min_recall() {
+        let storage = TestStuff::new();
+        let mut card1 = storage.insert_card().await;
+        let mut card2 = storage.insert_card().await;
+        let mut card3 = storage.insert_card().await;
+        let mut card4 = storage.insert_card().await;
+
+        card1.add_review(Recall::Perfect).await;
+        card2.add_review(Recall::Some).await;
+        card3.add_review(Recall::None).await;
+        card4.add_review(Recall::Late).await;
+
+        storage.inc_time(Duration::from_secs(86400));
+
+        card1.set_dependency(card2.id).await;
+        card2.set_dependency(card3.id).await;
+        card3.set_dependency(card4.id).await;
+
+        let lowest_recall = card3.recall_rate().unwrap();
+
+        assert_eq!(card1.min_rec_recall_rate().await, lowest_recall);
     }
 }

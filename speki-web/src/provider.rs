@@ -1,9 +1,8 @@
-use std::{path::PathBuf, str::FromStr, time::Duration};
-
 use speki_dto::{
     AttributeDTO, AttributeId, CardId, Config, RawCard, Recall, Review, SpekiProvider,
 };
-use uuid::Uuid;
+use std::{path::PathBuf, str::FromStr, time::Duration};
+
 pub struct IndexBaseProvider {
     repo: PathBuf,
 }

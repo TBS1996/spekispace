@@ -15,7 +15,6 @@ pub fn new_review(recall: Recall) -> Review {
 
 #[component]
 pub fn Review() -> Element {
-    let state = use_context::<State>();
     let review = use_context::<ReviewState>();
     let card = review.card.clone();
     let pos = review.pos.clone();
@@ -41,10 +40,11 @@ pub fn Review() -> Element {
                             div {
                                 button {
                                     onclick: move |_| {
-                                        let review = review.clone();
-                                        let state = state.clone();
                                         spawn(async move{
+                                            let state = use_context::<State>();
+                                            let review = use_context::<ReviewState>();
                                             review.do_review(&state.app, new_review(Recall::None), path).await;
+                                            show_backside.set(false);
                                         });
                                     },
                                     "No recall"
@@ -55,6 +55,7 @@ pub fn Review() -> Element {
                                             let state = use_context::<State>();
                                             let review = use_context::<ReviewState>();
                                             review.do_review(&state.app, new_review(Recall::Late), path).await;
+                                            show_backside.set(false);
                                         });
                                     },
                                     "Bad recall"
@@ -65,6 +66,7 @@ pub fn Review() -> Element {
                                             let state = use_context::<State>();
                                             let review = use_context::<ReviewState>();
                                             review.do_review(&state.app, new_review(Recall::Some),path).await;
+                                            show_backside.set(false);
                                         });
                                     },
                                     "Good recall"
@@ -75,6 +77,7 @@ pub fn Review() -> Element {
                                             let state = use_context::<State>();
                                             let review = use_context::<ReviewState>();
                                             review.do_review(&state.app, new_review(Recall::Perfect), path).await;
+                                            show_backside.set(false);
                                         });
                                     },
                                     "Perfect recall"
@@ -110,6 +113,5 @@ pub fn Review() -> Element {
                 },
             }
         }
-
     }
 }
