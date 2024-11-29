@@ -1,4 +1,6 @@
-use crate::Route;
+use tracing::info;
+
+use crate::{Route, REPO_PATH};
 
 use super::*;
 
@@ -20,16 +22,96 @@ pub fn Review() -> Element {
     let pos = review.pos.clone();
     let tot = review.tot_len.clone();
     let mut show_backside = use_signal(|| false);
-    let path = "/foobar";
 
     let front = review.front.clone();
     let back = review.back.clone();
+    let cloned_show = show_backside.clone();
+    /*
+    use_effect(move || {
+        use wasm_bindgen::{prelude::Closure, JsCast};
+        let mut show_backside = cloned_show;
+
+        let callback = Closure::wrap(Box::new(move |e: web_sys::KeyboardEvent| {
+            match e.key().as_str() {
+                " " => {
+                    spawn(async move {
+                        show_backside.set(true);
+                    });
+                }
+                "1" => {
+                    spawn(async move {
+                        let state = use_context::<State>();
+                        let review = use_context::<ReviewState>();
+                        review
+                            .do_review(&state.app, new_review(Recall::Late), REPO_PATH)
+                            .await;
+                    });
+                }
+                "2" => {
+                    spawn(async move {
+                        if !*show_backside.read() {
+                            return;
+                        }
+                        let state = use_context::<State>();
+                        let review = use_context::<ReviewState>();
+                        review
+                            .do_review(&state.app, new_review(Recall::Late), REPO_PATH)
+                            .await;
+                        show_backside.set(false);
+                    });
+                }
+                "3" => {
+                    spawn(async move {
+                        if !*show_backside.read() {
+                            return;
+                        }
+                        let state = use_context::<State>();
+                        let review = use_context::<ReviewState>();
+                        review
+                            .do_review(&state.app, new_review(Recall::Some), REPO_PATH)
+                            .await;
+                        show_backside.set(false);
+                    });
+                }
+                "4" => {
+                    spawn(async move {
+                        if !*show_backside.read() {
+                            return;
+                        }
+
+                        let state = use_context::<State>();
+                        let review = use_context::<ReviewState>();
+                        review
+                            .do_review(&state.app, new_review(Recall::Perfect), REPO_PATH)
+                            .await;
+                        show_backside.set(false);
+                    });
+                }
+                _ => {}
+            }
+
+            info!("Key pressed: {}", e.key());
+        }) as Box<dyn FnMut(_)>);
+
+        web_sys::window()
+            .unwrap()
+            .add_event_listener_with_callback("keydown", callback.as_ref().unchecked_ref())
+            .unwrap();
+
+        callback.forget();
+    });
+    */
 
     rsx! {
         div {
+            div {
+                tabindex: 0, // Ensures the div can capture keyboard events
+                onkeydown: move |event| {
+                    info!("Key pressed: {}", event.key());
+                },
+                "Press any key and check the console log."
+            }
             Link {to: Route::Home {  }, "back home"}
-
-
             match card() {
                 Some(_) => rsx! {
                     div {
@@ -43,7 +125,7 @@ pub fn Review() -> Element {
                                         spawn(async move{
                                             let state = use_context::<State>();
                                             let review = use_context::<ReviewState>();
-                                            review.do_review(&state.app, new_review(Recall::None), path).await;
+                                            review.do_review(&state.app, new_review(Recall::None), REPO_PATH).await;
                                             show_backside.set(false);
                                         });
                                     },
@@ -54,7 +136,7 @@ pub fn Review() -> Element {
                                         spawn(async move{
                                             let state = use_context::<State>();
                                             let review = use_context::<ReviewState>();
-                                            review.do_review(&state.app, new_review(Recall::Late), path).await;
+                                            review.do_review(&state.app, new_review(Recall::Late), REPO_PATH).await;
                                             show_backside.set(false);
                                         });
                                     },
@@ -65,7 +147,7 @@ pub fn Review() -> Element {
                                         spawn(async move{
                                             let state = use_context::<State>();
                                             let review = use_context::<ReviewState>();
-                                            review.do_review(&state.app, new_review(Recall::Some),path).await;
+                                            review.do_review(&state.app, new_review(Recall::Some), REPO_PATH).await;
                                             show_backside.set(false);
                                         });
                                     },
@@ -76,7 +158,7 @@ pub fn Review() -> Element {
                                         spawn(async move{
                                             let state = use_context::<State>();
                                             let review = use_context::<ReviewState>();
-                                            review.do_review(&state.app, new_review(Recall::Perfect), path).await;
+                                            review.do_review(&state.app, new_review(Recall::Perfect), REPO_PATH).await;
                                             show_backside.set(false);
                                         });
                                     },

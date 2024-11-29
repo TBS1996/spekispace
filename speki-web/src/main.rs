@@ -17,6 +17,29 @@ use web_sys::console;
 mod pages;
 mod provider;
 
+pub const REPO_PATH: &'static str = "/foobar";
+pub const PROXY: &'static str = "http://127.0.0.1:8081";
+
+const _TAILWIND_URL: &str = manganis::mg!(file("public/tailwind.css"));
+
+fn main() {
+    dioxus_logger::init(Level::INFO).expect("failed to init logger");
+    info!("starting app");
+
+    dioxus::launch(|| {
+        rsx! {
+            document::Link {
+                rel: "stylesheet",
+                href: asset!("/public/tailwind.css")
+            }
+
+            Router::<Route> {}
+        }
+    });
+
+    //    launch(App);
+}
+
 mod cookies {
     use std::collections::HashMap;
     use wasm_bindgen::prelude::*;
@@ -278,13 +301,6 @@ impl TimeProvider for WasmTime {
     }
 }
 
-fn main() {
-    dioxus_logger::init(Level::INFO).expect("failed to init logger");
-
-    info!("starting app");
-    launch(App);
-}
-
 fn App() -> Element {
     use_context_provider(State::new);
     use_context_provider(ReviewState::default);
@@ -293,7 +309,7 @@ fn App() -> Element {
         spawn(async move {
             let state = use_context::<State>();
             log_to_console("filling cache...");
-            state.app.fill_cache().await;
+            //state.app.fill_cache().await;
             log_to_console("cache filled!");
         });
     });
@@ -353,7 +369,7 @@ pub async fn load_cached_info() -> Option<UserInfo> {
     let install_token = get_install_token().unwrap();
     Some(UserInfo {
         auth_token,
-        username,
+        username: Signal::new(username),
         install_token,
     })
 }
@@ -372,7 +388,7 @@ async fn load_user_info() -> Option<UserInfo> {
     let install_token = get_install_token().unwrap();
     Some(UserInfo {
         auth_token,
-        username,
+        username: Signal::new(username),
         install_token,
     })
 }
@@ -380,24 +396,36 @@ async fn load_user_info() -> Option<UserInfo> {
 #[derive(Clone)]
 pub struct State {
     inner: Arc<Mutex<InnerState>>,
+    username: Signal<String>,
     app: Arc<App>,
 }
 
 impl State {
     pub fn new() -> Self {
         let app = App::new(
-            IndexBaseProvider::new("/foobar"),
+            IndexBaseProvider::new(REPO_PATH),
             speki_core::SimpleRecall,
             WasmTime,
         );
         Self {
             inner: Default::default(),
             app: Arc::new(app),
+            username: Signal::new("".to_string()),
         }
+    }
+
+    pub fn username(&self) -> Signal<String> {
+        self.username.clone()
     }
 
     pub fn info(&self) -> Signal<Option<UserInfo>> {
         self.inner.lock().unwrap().token.clone()
+    }
+
+    pub async fn load_user_info(&self) {
+        if let Some(info) = load_user_info().await {
+            self.inner.lock().unwrap().token.set(Some(info));
+        }
     }
 }
 
@@ -406,12 +434,13 @@ impl State {
 pub struct UserInfo {
     auth_token: String,
     install_token: String,
-    username: String,
+    username: Signal<String>,
 }
 
 #[derive(Default)]
 struct InnerState {
     token: Signal<Option<UserInfo>>,
+    username: Signal<Option<String>>,
 }
 
 #[derive(Default, Clone, Debug)]
@@ -438,7 +467,7 @@ impl ReviewState {
             let mut lock = self.queue.lock().unwrap();
             *lock = cards;
         }
-        self.next_card(app, "/foobar").await;
+        self.next_card(app, REPO_PATH).await;
     }
 
     async fn make_review(&self, review: Review, repo: &str) {
