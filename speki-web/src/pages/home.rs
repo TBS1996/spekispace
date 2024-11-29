@@ -1,6 +1,5 @@
-use super::*;
-
-use crate::{Route, PROXY, REPO_PATH};
+use crate::{js, load_cached_info, log_to_console, Route, State, PROXY, REPO_PATH};
+use dioxus::prelude::*;
 
 #[component]
 pub fn Home() -> Element {

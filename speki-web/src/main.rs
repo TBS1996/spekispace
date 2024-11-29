@@ -5,7 +5,7 @@ use dioxus::prelude::*;
 use dioxus_logger::tracing::{info, Level};
 use serde::Deserialize;
 use speki_core::{AnyType, App, Card, TimeProvider};
-use speki_dto::{CardId, Review, SpekiProvider};
+use speki_dto::{CardId, Review as ReviewDTO, SpekiProvider};
 use std::{
     sync::{Arc, Mutex},
     time::Duration,
@@ -20,13 +20,14 @@ mod provider;
 pub const REPO_PATH: &'static str = "/foobar";
 pub const PROXY: &'static str = "http://127.0.0.1:8081";
 
-const _TAILWIND_URL: &str = manganis::mg!(file("public/tailwind.css"));
-
 fn main() {
     dioxus_logger::init(Level::INFO).expect("failed to init logger");
     info!("starting app");
 
     dioxus::launch(|| {
+        use_context_provider(State::new);
+        use_context_provider(ReviewState::default);
+
         rsx! {
             document::Link {
                 rel: "stylesheet",
@@ -301,24 +302,6 @@ impl TimeProvider for WasmTime {
     }
 }
 
-fn App() -> Element {
-    use_context_provider(State::new);
-    use_context_provider(ReviewState::default);
-
-    use_effect(|| {
-        spawn(async move {
-            let state = use_context::<State>();
-            log_to_console("filling cache...");
-            //state.app.fill_cache().await;
-            log_to_console("cache filled!");
-        });
-    });
-
-    rsx! {
-        Router::<Route> {}
-    }
-}
-
 #[wasm_bindgen]
 pub async fn fetch_github_username(access_token: String) -> Result<String, JsValue> {
     // Import necessary items within the function for encapsulation
@@ -440,6 +423,7 @@ pub struct UserInfo {
 #[derive(Default)]
 struct InnerState {
     token: Signal<Option<UserInfo>>,
+    #[allow(dead_code)]
     username: Signal<Option<String>>,
 }
 
@@ -470,7 +454,7 @@ impl ReviewState {
         self.next_card(app, REPO_PATH).await;
     }
 
-    async fn make_review(&self, review: Review, repo: &str) {
+    async fn make_review(&self, review: ReviewDTO, repo: &str) {
         if let Some(id) = self.id() {
             IndexBaseProvider::new(repo).add_review(id, review).await;
         }
@@ -480,7 +464,7 @@ impl ReviewState {
         self.tot_len - self.queue.lock().unwrap().len()
     }
 
-    async fn do_review(&self, app: &App, review: Review, repo: &str) {
+    async fn do_review(&self, app: &App, review: ReviewDTO, repo: &str) {
         self.make_review(review, repo).await;
         self.next_card(app, repo).await;
     }

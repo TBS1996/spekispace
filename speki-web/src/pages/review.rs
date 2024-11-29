@@ -1,14 +1,16 @@
+use std::time::Duration;
+
+use speki_dto::{Recall, Review as ReviewDTO};
 use tracing::info;
 
-use crate::{Route, REPO_PATH};
-
-use super::*;
+use crate::{js, ReviewState, Route, State, REPO_PATH};
+use dioxus::prelude::*;
 
 const DEFAULT_FILTER: &'static str =
     "recall < 0.8 & finished == true & suspended == false & minrecrecall > 0.8 & lastreview > 0.5 & weeklapses < 3 & monthlapses < 6";
 
-pub fn new_review(recall: Recall) -> Review {
-    Review {
+pub fn new_review(recall: Recall) -> ReviewDTO {
+    ReviewDTO {
         timestamp: js::current_time(),
         grade: recall,
         time_spent: Duration::default(),
@@ -25,7 +27,7 @@ pub fn Review() -> Element {
 
     let front = review.front.clone();
     let back = review.back.clone();
-    let cloned_show = show_backside.clone();
+    //    let cloned_show = show_backside.clone();
     /*
     use_effect(move || {
         use wasm_bindgen::{prelude::Closure, JsCast};

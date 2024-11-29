@@ -1,4 +1,8 @@
-use super::*;
+use crate::provider::IndexBaseProvider;
+use dioxus::prelude::*;
+use speki_dto::CardId;
+use speki_dto::SpekiProvider;
+use uuid::Uuid;
 
 #[component]
 pub fn View(id: String) -> Element {

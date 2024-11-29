@@ -1,14 +1,18 @@
-use crate::Route;
-
-use super::*;
+use crate::{
+    js, load_cached_info, load_user_info, log_to_console, provider::IndexBaseProvider, Route,
+    State, PROXY, REPO_PATH,
+};
+use dioxus::prelude::*;
+use speki_dto::{CardId, Recall, SpekiProvider};
+use uuid::Uuid;
 
 #[component]
 pub fn Debug() -> Element {
     let state = use_context::<State>();
 
     let mut repopath = use_signal(|| uuid::Uuid::new_v4().simple().to_string());
-    let mut remotepath = use_signal(|| REMOTE.to_string());
-    let mut proxy = use_signal(|| "http://127.0.0.1:8081".to_string());
+    let mut remotepath = use_signal(|| "remote...".to_string());
+    let mut proxy = use_signal(|| PROXY.to_string());
     let mut card_id = use_signal(|| "card_id".to_string());
 
     let mut niceinfo = state.info();
@@ -66,7 +70,7 @@ pub fn Debug() -> Element {
 
         button { onclick: move |_| {
             spawn(async move {
-                for x in IndexBaseProvider::new("/foobar").load_all_attributes().await {
+                for x in IndexBaseProvider::new(REPO_PATH).load_all_attributes().await {
                     let x = format!("{:?}", x) ;
                     log_to_console(&x);
                 }
