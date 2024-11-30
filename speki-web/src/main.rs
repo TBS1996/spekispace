@@ -36,6 +36,9 @@ impl App {
     }
 }
 
+pub const DEFAULT_FILTER: &'static str =
+    "recall < 0.8 & finished == true & suspended == false & minrecrecall > 0.8 & lastreview > 0.5 & weeklapses < 3 & monthlapses < 6";
+
 fn main() {
     dioxus_logger::init(Level::INFO).expect("failed to init logger");
     info!("starting app");
@@ -44,6 +47,11 @@ fn main() {
         use_context_provider(App::new);
         use_context_provider(ReviewState::default);
         use_context_provider(LoginState::default);
+
+        spawn(async move {
+            let rev = use_context::<App>();
+            rev.0.fill_cache().await;
+        });
 
         rsx! {
             document::Link {

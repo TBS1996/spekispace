@@ -1,12 +1,13 @@
+use std::rc::Rc;
 use std::time::Duration;
 
+use dioxus::prelude::*;
 use speki_dto::{Recall, Review as ReviewDTO};
 
+use crate::js;
 use crate::review_state::ReviewState;
-use crate::{js, REPO_PATH};
-use dioxus::prelude::*;
 
-const DEFAULT_FILTER: &'static str =
+pub const DEFAULT_FILTER: &'static str =
     "recall < 0.8 & finished == true & suspended == false & minrecrecall > 0.8 & lastreview > 0.5 & weeklapses < 3 & monthlapses < 6";
 
 pub fn new_review(recall: Recall) -> ReviewDTO {
@@ -17,40 +18,25 @@ pub fn new_review(recall: Recall) -> ReviewDTO {
     }
 }
 
-struct RecallButton {
-    backside: Signal<bool>,
-}
+fn recall_button(recall: Recall) -> Element {
+    let label = match recall {
+        Recall::None => "unfamiliar",
+        Recall::Late => "recognized",
+        Recall::Some => "recalled",
+        Recall::Perfect => "mastered",
+    };
 
-impl RecallButton {
-    fn new(backside: Signal<bool>) -> Self {
-        Self { backside }
-    }
+    rsx! {
+        button {
+            class: "mt-6 inline-flex items-center text-white bg-gray-800 border-0 py-1 px-3 focus:outline-none hover:bg-gray-700 rounded text-base md:mt-0",
+            onclick: move |_| {
+                spawn(async move{
+                    let mut review = use_context::<ReviewState>();
+                    review.do_review(new_review(recall)).await;
+                });
+            },
+            "{label}"
 
-    fn create(&self, recall: Recall) -> Element {
-        let mut show_backside = self.backside.clone();
-
-        let label = match recall {
-            Recall::None => "unfamiliar",
-            Recall::Late => "recognized",
-            Recall::Some => "recalled",
-            Recall::Perfect => "mastered",
-        };
-
-        rsx! {
-            button {
-             //   class: "bg-gray-800 text-white rounded",
-                //class: "bg-gray-800 text-white rounded-lg px-4 py-2 text-lg font-semibold shadow-md hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-500 transition-transform transform hover:scale-105",
-                class: "mt-6 inline-flex items-center text-white bg-gray-800 border-0 py-1 px-3 focus:outline-none hover:bg-gray-700 rounded text-base md:mt-0",
-                onclick: move |_| {
-                    spawn(async move{
-                        let review = use_context::<ReviewState>();
-                        review.do_review(new_review(recall), REPO_PATH).await;
-                        show_backside.set(false);
-                    });
-                },
-                "{label}"
-
-            }
         }
     }
 }
@@ -63,7 +49,7 @@ fn review_start() -> Element {
                 class: "mt-6 inline-flex items-center text-white bg-gray-800 border-0 py-1 px-3 focus:outline-none hover:bg-gray-700 rounded text-base md:mt-0",
                 onclick: move |_| {
                     spawn(async move {
-                        let review = use_context::<ReviewState>();
+                        let mut review = use_context::<ReviewState>();
                         review.refresh(DEFAULT_FILTER.to_string()).await;
                     });
                 },
@@ -73,14 +59,14 @@ fn review_start() -> Element {
     }
 }
 
-fn review_buttons(recall_button_builder: RecallButton) -> Element {
+fn review_buttons() -> Element {
     rsx! {
         div {
             style: "display: flex; gap: 16px; justify-content: center; align-items: center;",
-            { recall_button_builder.create(Recall::None) }
-            { recall_button_builder.create(Recall::Late) }
-            { recall_button_builder.create(Recall::Some) }
-            { recall_button_builder.create(Recall::Perfect) }
+            { recall_button(Recall::None) }
+            { recall_button(Recall::Late) }
+            { recall_button(Recall::Some) }
+            { recall_button(Recall::Perfect) }
         }
     }
 }
@@ -92,17 +78,32 @@ pub fn Review() -> Element {
     let pos = review.pos.clone();
     let tot = review.tot_len.clone();
     let reviewing = card().is_some();
-    let mut show_backside = use_signal(|| false);
+    let mut show_backside = review.show_backside.clone();
 
     let front = review.front.clone();
     let back = review.back.clone();
 
-    let recall_button_builder = RecallButton::new(show_backside.clone());
+    let log_event = move |event: Rc<KeyboardData>| {
+        spawn(async move {
+            let mut rev = use_context::<ReviewState>();
+            match event.key().to_string().as_str() {
+                "1" => rev.do_review(new_review(Recall::None)).await,
+                "2" => rev.do_review(new_review(Recall::Late)).await,
+                "3" => rev.do_review(new_review(Recall::Some)).await,
+                "4" => rev.do_review(new_review(Recall::Perfect)).await,
+                " " => rev.show_backside.set(true),
+                _ => {}
+            }
+        });
+    };
 
     rsx! {
 
         { crate::nav::nav() }
-        div {
+
+        div { id: "receiver", tabindex: 0,
+            onkeydown: move |event| log_event(event.data()),
+
             if reviewing {
                 div {
                     class: "w-full max-w-lg text-center",
@@ -125,7 +126,7 @@ pub fn Review() -> Element {
                             style: "margin-bottom: 24px;",
                             "{back}"
                         }
-                        { review_buttons(recall_button_builder) }
+                        { review_buttons() }
                     } else {
                         button {
                             class: "mt-6 inline-flex items-center text-white bg-gray-800 border-0 py-1 px-3 focus:outline-none hover:bg-gray-700 rounded text-base md:mt-0",

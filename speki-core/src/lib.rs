@@ -94,7 +94,8 @@ impl App {
 
     pub async fn fill_cache(&self) {
         info!("filling cache");
-        self.card_provider.fill_cache().await;
+        self.card_provider.load_all().await;
+        info!("cache filled!");
     }
 
     #[instrument]

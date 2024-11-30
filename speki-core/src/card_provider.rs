@@ -56,10 +56,6 @@ impl CardProvider {
         self.time_provider.clone()
     }
 
-    pub async fn fill_cache(&self) {
-        self.load_all().await;
-    }
-
     pub fn new(provider: Provider, time_provider: TimeGetter, recaller: Recaller) -> Self {
         Self {
             inner: Arc::new(RwLock::new(Inner {

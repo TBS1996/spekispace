@@ -101,8 +101,6 @@ export async function loadFile(path) {
         fs.readFile(path, "utf8", (err, data) => {
             if (err) {
                 if (err.code === "ENOENT") {
-                    // If file does not exist, return null
-                    console.warn(`File not found: ${path}`);
                     resolve(null);
                 } else {
                     console.error("Error reading file:", err);

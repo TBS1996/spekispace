@@ -13,6 +13,7 @@ pub struct ReviewState {
     pub pos: Signal<usize>,
     pub front: Signal<String>,
     pub back: Signal<String>,
+    pub show_backside: Signal<bool>,
 }
 
 impl ReviewState {
@@ -21,7 +22,7 @@ impl ReviewState {
     }
 
     #[instrument]
-    pub async fn refresh(&self, filter: String) {
+    pub async fn refresh(&mut self, filter: String) {
         let app = use_context::<App>();
         let cards = app.0.load_non_pending(Some(filter)).await;
         self.tot_len.clone().set(cards.len());
@@ -42,12 +43,13 @@ impl ReviewState {
         self.tot_len - self.queue.lock().unwrap().len()
     }
 
-    pub async fn do_review(&self, review: ReviewDTO, repo: &str) {
+    pub async fn do_review(&mut self, review: ReviewDTO) {
+        let repo = REPO_PATH;
         self.make_review(review, repo).await;
         self.next_card(repo).await;
     }
 
-    async fn next_card(&self, repo: &str) {
+    async fn next_card(&mut self, repo: &str) {
         let app = use_context::<App>();
         let card = self.queue.lock().unwrap().pop();
 
@@ -74,5 +76,6 @@ impl ReviewState {
 
         self.card.clone().set(card);
         self.pos.clone().set(self.current_pos());
+        self.show_backside.set(false);
     }
 }

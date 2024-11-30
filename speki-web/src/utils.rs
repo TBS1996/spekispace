@@ -1,10 +1,6 @@
 use dioxus::hooks::use_context;
 
-use crate::{
-    js,
-    login::{LoginState, UserInfo},
-    PROXY, REPO_PATH,
-};
+use crate::{js, login::LoginState, PROXY, REPO_PATH};
 
 pub mod cookies {
     use std::collections::HashMap;
