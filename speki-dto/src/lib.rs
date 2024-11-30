@@ -247,7 +247,9 @@ pub struct Review {
     pub time_spent: Duration,
 }
 
-#[derive(Ord, PartialOrd, Eq, PartialEq, Hash, Deserialize, Serialize, Debug, Default, Clone)]
+#[derive(
+    Ord, PartialOrd, Eq, PartialEq, Hash, Deserialize, Serialize, Debug, Default, Clone, Copy,
+)]
 #[serde(rename_all = "lowercase")]
 pub enum Recall {
     // No recall, not even when you saw the answer.

@@ -1,6 +1,8 @@
 use crate::{
-    js, load_cached_info, load_user_info, log_to_console, provider::IndexBaseProvider, Route,
-    State, PROXY, REPO_PATH,
+    js, log_to_console,
+    login::{LoginState, UserInfo},
+    provider::IndexBaseProvider,
+    Route, PROXY, REPO_PATH,
 };
 use dioxus::prelude::*;
 use speki_dto::{CardId, Recall, SpekiProvider};
@@ -8,36 +10,20 @@ use uuid::Uuid;
 
 #[component]
 pub fn Debug() -> Element {
-    let state = use_context::<State>();
-
     let mut repopath = use_signal(|| uuid::Uuid::new_v4().simple().to_string());
     let mut remotepath = use_signal(|| "remote...".to_string());
     let mut proxy = use_signal(|| PROXY.to_string());
     let mut card_id = use_signal(|| "card_id".to_string());
 
-    let mut niceinfo = state.info();
-    use_effect(move || {
-        log_to_console("YY");
-        spawn(async move {
-            let new_info = load_cached_info().await;
-            log_to_console(("EYYY", &new_info));
-            niceinfo.set(new_info);
-        });
-    });
-
-    let flag = state.info();
+    let flag = use_signal(|| Option::<UserInfo>::None);
 
     rsx! {
         Link {to: Route::Home {  }, "back home"}
         h1 {"state: {flag:?}"}
         button { onclick: move |_| {
-            let state = state.clone();
-
-            let mut info = state.info();
             spawn(async move {
-                log_to_console("XX");
-                let new_info = load_user_info().await;
-                info.set(new_info);
+                let mut login = use_context::<LoginState>();
+                login.load_uncached().await;
             });
 
         }, "log in" }

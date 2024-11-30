@@ -191,8 +191,6 @@ export async function listFiles(path) {
 
 
 export async function fetchRepo(path, token, proxy) {
-    const output = document.getElementById("output");
-
     await initBrowserFS;
         console.log(`starting fetch from files to ${path} with token ${token} through proxy ${proxy}!`);
         await git.fetch({
@@ -210,7 +208,6 @@ export async function fetchRepo(path, token, proxy) {
             })
         });
         console.log(`successsddd nice`);
-        output.textContent = "Repository fetched successfully!";
 }
 
 export async function cloneRepo(path, url, token, proxy) {
@@ -294,8 +291,6 @@ async function addFile(repoPath, filepath) {
 }
 
 export async function pushRepo(repoPath, token, proxy) {
-    const output = document.getElementById("output");
-
     await initBrowserFS;
 
         console.log(`Pushing latest changes in the repository at '${repoPath} with token ${token}'...`);
@@ -323,8 +318,6 @@ export async function pushRepo(repoPath, token, proxy) {
         });
 
         const resultMessage = "Repository successfully updated with latest changes!";
-        output.textContent = resultMessage;
-
         console.log(resultMessage);
         return resultMessage;
 }

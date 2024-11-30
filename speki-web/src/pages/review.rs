@@ -1,9 +1,9 @@
 use std::time::Duration;
 
 use speki_dto::{Recall, Review as ReviewDTO};
-use tracing::info;
 
-use crate::{js, ReviewState, Route, State, REPO_PATH};
+use crate::review_state::ReviewState;
+use crate::{js, REPO_PATH};
 use dioxus::prelude::*;
 
 const DEFAULT_FILTER: &'static str =
@@ -17,184 +17,125 @@ pub fn new_review(recall: Recall) -> ReviewDTO {
     }
 }
 
+struct RecallButton {
+    backside: Signal<bool>,
+}
+
+impl RecallButton {
+    fn new(backside: Signal<bool>) -> Self {
+        Self { backside }
+    }
+
+    fn create(&self, recall: Recall) -> Element {
+        let mut show_backside = self.backside.clone();
+
+        let label = match recall {
+            Recall::None => "unfamiliar",
+            Recall::Late => "recognized",
+            Recall::Some => "recalled",
+            Recall::Perfect => "mastered",
+        };
+
+        rsx! {
+            button {
+             //   class: "bg-gray-800 text-white rounded",
+                //class: "bg-gray-800 text-white rounded-lg px-4 py-2 text-lg font-semibold shadow-md hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-500 transition-transform transform hover:scale-105",
+                class: "mt-6 inline-flex items-center text-white bg-gray-800 border-0 py-1 px-3 focus:outline-none hover:bg-gray-700 rounded text-base md:mt-0",
+                onclick: move |_| {
+                    spawn(async move{
+                        let review = use_context::<ReviewState>();
+                        review.do_review(new_review(recall), REPO_PATH).await;
+                        show_backside.set(false);
+                    });
+                },
+                "{label}"
+
+            }
+        }
+    }
+}
+
+fn review_start() -> Element {
+    rsx! {
+        div {
+            class: "flex items-center justify-center h-screen",
+            button {
+                class: "mt-6 inline-flex items-center text-white bg-gray-800 border-0 py-1 px-3 focus:outline-none hover:bg-gray-700 rounded text-base md:mt-0",
+                onclick: move |_| {
+                    spawn(async move {
+                        let review = use_context::<ReviewState>();
+                        review.refresh(DEFAULT_FILTER.to_string()).await;
+                    });
+                },
+                "Start review"
+            }
+        }
+    }
+}
+
+fn review_buttons(recall_button_builder: RecallButton) -> Element {
+    rsx! {
+        div {
+            style: "display: flex; gap: 16px; justify-content: center; align-items: center;",
+            { recall_button_builder.create(Recall::None) }
+            { recall_button_builder.create(Recall::Late) }
+            { recall_button_builder.create(Recall::Some) }
+            { recall_button_builder.create(Recall::Perfect) }
+        }
+    }
+}
+
 #[component]
 pub fn Review() -> Element {
     let review = use_context::<ReviewState>();
     let card = review.card.clone();
     let pos = review.pos.clone();
     let tot = review.tot_len.clone();
+    let reviewing = card().is_some();
     let mut show_backside = use_signal(|| false);
 
     let front = review.front.clone();
     let back = review.back.clone();
-    //    let cloned_show = show_backside.clone();
-    /*
-    use_effect(move || {
-        use wasm_bindgen::{prelude::Closure, JsCast};
-        let mut show_backside = cloned_show;
 
-        let callback = Closure::wrap(Box::new(move |e: web_sys::KeyboardEvent| {
-            match e.key().as_str() {
-                " " => {
-                    spawn(async move {
-                        show_backside.set(true);
-                    });
-                }
-                "1" => {
-                    spawn(async move {
-                        let state = use_context::<State>();
-                        let review = use_context::<ReviewState>();
-                        review
-                            .do_review(&state.app, new_review(Recall::Late), REPO_PATH)
-                            .await;
-                    });
-                }
-                "2" => {
-                    spawn(async move {
-                        if !*show_backside.read() {
-                            return;
-                        }
-                        let state = use_context::<State>();
-                        let review = use_context::<ReviewState>();
-                        review
-                            .do_review(&state.app, new_review(Recall::Late), REPO_PATH)
-                            .await;
-                        show_backside.set(false);
-                    });
-                }
-                "3" => {
-                    spawn(async move {
-                        if !*show_backside.read() {
-                            return;
-                        }
-                        let state = use_context::<State>();
-                        let review = use_context::<ReviewState>();
-                        review
-                            .do_review(&state.app, new_review(Recall::Some), REPO_PATH)
-                            .await;
-                        show_backside.set(false);
-                    });
-                }
-                "4" => {
-                    spawn(async move {
-                        if !*show_backside.read() {
-                            return;
-                        }
-
-                        let state = use_context::<State>();
-                        let review = use_context::<ReviewState>();
-                        review
-                            .do_review(&state.app, new_review(Recall::Perfect), REPO_PATH)
-                            .await;
-                        show_backside.set(false);
-                    });
-                }
-                _ => {}
-            }
-
-            info!("Key pressed: {}", e.key());
-        }) as Box<dyn FnMut(_)>);
-
-        web_sys::window()
-            .unwrap()
-            .add_event_listener_with_callback("keydown", callback.as_ref().unchecked_ref())
-            .unwrap();
-
-        callback.forget();
-    });
-    */
+    let recall_button_builder = RecallButton::new(show_backside.clone());
 
     rsx! {
+
+        { crate::nav::nav() }
         div {
-            div {
-                tabindex: 0, // Ensures the div can capture keyboard events
-                onkeydown: move |event| {
-                    info!("Key pressed: {}", event.key());
-                },
-                "Press any key and check the console log."
-            }
-            Link {to: Route::Home {  }, "back home"}
-            match card() {
-                Some(_) => rsx! {
-                    div {
-                        h2 { "Reviewing Card {pos} of {tot}" }
-                        p { "Front: {front}" }
-                        if show_backside() {
-                            p { "Back: {back}" }
-                            div {
-                                button {
-                                    onclick: move |_| {
-                                        spawn(async move{
-                                            let state = use_context::<State>();
-                                            let review = use_context::<ReviewState>();
-                                            review.do_review(&state.app, new_review(Recall::None), REPO_PATH).await;
-                                            show_backside.set(false);
-                                        });
-                                    },
-                                    "No recall"
-                                }
-                                button {
-                                    onclick: move |_| {
-                                        spawn(async move{
-                                            let state = use_context::<State>();
-                                            let review = use_context::<ReviewState>();
-                                            review.do_review(&state.app, new_review(Recall::Late), REPO_PATH).await;
-                                            show_backside.set(false);
-                                        });
-                                    },
-                                    "Bad recall"
-                                }
-                                button {
-                                    onclick: move |_| {
-                                        spawn(async move{
-                                            let state = use_context::<State>();
-                                            let review = use_context::<ReviewState>();
-                                            review.do_review(&state.app, new_review(Recall::Some), REPO_PATH).await;
-                                            show_backside.set(false);
-                                        });
-                                    },
-                                    "Good recall"
-                                }
-                                button {
-                                    onclick: move |_| {
-                                        spawn(async move{
-                                            let state = use_context::<State>();
-                                            let review = use_context::<ReviewState>();
-                                            review.do_review(&state.app, new_review(Recall::Perfect), REPO_PATH).await;
-                                            show_backside.set(false);
-                                        });
-                                    },
-                                    "Perfect recall"
-                                }
-                            }
-                        } else {
-                            button {
-                                onclick: move |_| show_backside.set(true),
-                                "show backside"
-                            }
-                        }
-                    }
-                },
+            if reviewing {
+                div {
+                    class: "w-full max-w-lg text-center",
 
-                // If there's no card, display the "Start Review" button
-                None => rsx! {
-                    div {
-                        p { "No cards to review." }
+                    h2 {
+                        class: "text-2xl text-gray-700 mb-6",
+                        style: "width: 50%; margin: 0 auto; text-align: left;",
+                        "{pos}/{tot}"
+                    }
+                    p {
+                        class: "text-lg text-gray-800 mb-8",
+                        "{front}"
+                    }
+                    if show_backside() {
+                        div {
+                            style: "width: 50%; border-top: 2px solid #d1d5db; margin: 24px auto;",
+                        }
+                        p {
+                            class: "text-lg text-gray-700 mb-6",
+                            style: "margin-bottom: 24px;",
+                            "{back}"
+                        }
+                        { review_buttons(recall_button_builder) }
+                    } else {
                         button {
-                            onclick: move |_| {
-                                spawn(
-                                    async move {
-                                        let state = use_context::<State>();
-                                        let review = use_context::<ReviewState>();
-                                        review.refresh(&state.app, DEFAULT_FILTER.to_string()).await;
-                                    }
-                                );
-
-                            },
-                            "Start Review"
+                            class: "mt-6 inline-flex items-center text-white bg-gray-800 border-0 py-1 px-3 focus:outline-none hover:bg-gray-700 rounded text-base md:mt-0",
+                            onclick: move |_| show_backside.set(true),
+                            "show backside"
                         }
                     }
-                },
+                }
+            } else {
+                { review_start() }
             }
         }
     }
