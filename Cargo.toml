@@ -11,6 +11,7 @@ members = [
     "speki-auth",
     "speki-web",
     "speki-proxy",
+    "speki-idb",
 ]
 
 #exclude = ["speki-web"]
@@ -49,3 +50,19 @@ dioxus-logger = "0.5.1"
 log = "0.4.22"
 tracing = { version = "0.1.40", features = ["attributes"] }
 tracing-subscriber = "0.3.18"
+wasm-bindgen = "0.2.95"
+tracing-tree = "0.4.0"
+futures-util = "0.3"
+gloo = "0.11.0"
+gloo-net = "0.6.0"
+gloo-timers = { version = "0.3", features = ["futures"] }
+gloo-utils = "0.2.0"
+js-sys = "0.3.72"
+serde-wasm-bindgen = "0.6.5"
+wasm-bindgen-futures = "0.4.45"
+wasm-cookies = "0.2.1"
+web-sys = "0.3.72"
+async-trait = "0.1.83"
+async-lock = "3.4.0"
+manganis = "0.2.2"
+time = { version = "0.3.36", features = ["parsing"] }

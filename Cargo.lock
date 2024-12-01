@@ -3966,6 +3966,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "speki-idb"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "gloo-utils",
+ "js-sys",
+ "serde_json",
+ "speki-dto",
+ "time",
+ "toml 0.8.19",
+ "tracing",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
+]
+
+[[package]]
 name = "speki-proxy"
 version = "0.1.0"
 dependencies = [
@@ -3996,6 +4012,7 @@ dependencies = [
  "serde_json",
  "speki-core",
  "speki-dto",
+ "speki-idb",
  "time",
  "toml 0.8.19",
  "tracing",

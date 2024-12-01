@@ -1,8 +1,7 @@
-use std::time::Duration;
-
 use gloo_utils::format::JsValueSerdeExt;
 use js_sys::Promise;
 use serde_json::Value;
+use std::time::Duration;
 use wasm_bindgen::prelude::*;
 
 use crate::log_to_console;
@@ -100,21 +99,10 @@ pub fn pull_repo(path: &str, token: &str, proxy: &str) {
     log_to_console("rs pull repo ended");
 }
 
-pub fn delete_file(path: &str) {
-    let path = JsValue::from_str(path);
-    deleteFile(&path);
-}
-
 pub async fn list_files(path: &str) -> Value {
     let path = JsValue::from_str(path);
     let val = promise_to_val(allPaths(&path)).await;
     val
-}
-
-pub fn save_file(path: &str, content: &str) {
-    let path = JsValue::from_str(path);
-    let content = JsValue::from_str(content);
-    saveFile(&path, &content);
 }
 
 async fn promise_to_val(promise: Promise) -> Value {
@@ -130,43 +118,5 @@ pub async fn git_status(path: &str) -> u64 {
     match val {
         serde_json::Value::Number(s) => s.as_u64().unwrap(),
         _ => panic!("damn"),
-    }
-}
-
-pub async fn last_modified(path: &str) -> Option<Duration> {
-    let path = JsValue::from_str(path);
-    let val = promise_to_val(lastModified(&path)).await;
-    let serde_json::Value::String(s) = val else {
-        return None;
-    };
-
-    let datetime =
-        time::OffsetDateTime::parse(&s, &time::format_description::well_known::Rfc3339).unwrap();
-    let unix_epoch = time::OffsetDateTime::UNIX_EPOCH;
-    let duration_since_epoch = datetime - unix_epoch;
-    let seconds = duration_since_epoch.whole_seconds();
-    Some(Duration::from_secs(seconds as u64))
-}
-
-pub async fn load_all_files(path: &str) -> Vec<String> {
-    let path = JsValue::from_str(path);
-    let val = promise_to_val(loadAllFiles(&path)).await;
-    let arr = val.as_array().unwrap();
-    arr.into_iter()
-        .map(|elm| match elm {
-            Value::String(s) => s.clone(),
-            other => panic!("file isnt textfile damn: {}", other),
-        })
-        .collect()
-}
-
-pub async fn load_file(path: &str) -> Option<String> {
-    let path = JsValue::from_str(path);
-    let val = promise_to_val(loadFile(&path)).await;
-
-    match val {
-        Value::Null => None,
-        Value::String(s) => Some(s.clone()),
-        other => panic!("invalid type: {}", other),
     }
 }

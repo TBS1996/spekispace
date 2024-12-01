@@ -1,9 +1,11 @@
-use crate::{provider::IndexBaseProvider, App, REPO_PATH};
+use crate::{App, REPO_PATH};
 use dioxus::prelude::*;
 use speki_core::{AnyType, Card};
 use speki_dto::{CardId, Review as ReviewDTO, SpekiProvider};
 use std::sync::{Arc, Mutex};
 use tracing::instrument;
+
+use speki_idb::IndexBaseProvider;
 
 #[derive(Default, Clone, Debug)]
 pub struct ReviewState {

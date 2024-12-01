@@ -4,38 +4,39 @@ version = "0.1.0"
 authors = ["tor <tor.saebjornsen@cognite.com>"]
 edition = "2021"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
 [dependencies]
 
 #dioxus = { version = "0.6.0-alpha.5", features = ["web", "router"] }
-dioxus = { git = "https://github.com/DioxusLabs/dioxus.git", features = ["router", "web"] }
+dioxus = { git = "https://github.com/DioxusLabs/dioxus.git", features = [
+    "router",
+    "web",
+] }
 
-# Debug
 dioxus-logger.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
-tracing-tree = "0.4.0"
-futures = "0.3.31"
-futures-util = "0.3"
-gloo = "0.11.0"
-gloo-net = "0.6.0"
-gloo-timers = { version = "0.3", features = ["futures"] }
-gloo-utils = "0.2.0"
-js-sys = "0.3.72"
-serde = "1.0.214"
-serde-wasm-bindgen = "0.6.5"
-serde_json = "1.0.132"
-wasm-bindgen = "0.2.95"
-wasm-bindgen-futures = "0.4.45"
-wasm-cookies = "0.2.1"
-web-sys = "0.3.72"
+wasm-bindgen.workspace = true
+tracing-tree.workspace = true
+futures.workspace = true
+futures-util.workspace = true
+gloo.workspace = true
+gloo-net.workspace = true
+gloo-timers.workspace = true
+gloo-utils.workspace = true
+js-sys.workspace = true
+serde.workspace = true
+serde-wasm-bindgen.workspace = true
+serde_json.workspace = true
+wasm-bindgen-futures.workspace = true
+wasm-cookies.workspace = true
+web-sys.workspace = true
+toml.workspace = true
+async-trait.workspace = true
+async-lock.workspace = true
+uuid.workspace = true
+manganis.workspace = true
+time.workspace = true
 
 speki-dto = { path = "../speki-dto" }
 speki-core = { path = "../speki-core" }
-toml = "0.8.19"
-async-trait = "0.1.83"
-async-lock = "3.4.0"
-uuid = "1.11.0"
-manganis = "0.2.2"
-time = { version = "0.3.36", features = ["parsing"] }
+speki-idb = { path = "../speki-idb" }

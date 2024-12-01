@@ -1,7 +1,11 @@
+use async_trait::async_trait;
 use speki_dto::{
     AttributeDTO, AttributeId, CardId, Config, RawCard, Recall, Review, SpekiProvider,
 };
-use std::{path::PathBuf, str::FromStr, time::Duration};
+use std::time::Duration;
+use std::{path::PathBuf, str::FromStr};
+
+mod js;
 
 pub struct IndexBaseProvider {
     repo: PathBuf,
@@ -26,13 +30,6 @@ impl IndexBaseProvider {
         self.repo.join("cards")
     }
 }
-
-use crate::{
-    js::{self, save_file},
-    log_to_console,
-};
-
-use async_trait::async_trait;
 
 #[async_trait(?Send)]
 impl SpekiProvider for IndexBaseProvider {
@@ -60,7 +57,6 @@ impl SpekiProvider for IndexBaseProvider {
             .into_iter()
             .map(|s| toml::from_str(&s).unwrap())
             .collect();
-        log_to_console("loaded cards!");
         cards
     }
 
@@ -144,7 +140,7 @@ impl SpekiProvider for IndexBaseProvider {
         }
 
         let path = self.review_path().join(id.to_string());
-        save_file(path.to_str().unwrap(), &s);
+        js::save_file(path.to_str().unwrap(), &s);
     }
 
     async fn load_config(&self) -> Config {

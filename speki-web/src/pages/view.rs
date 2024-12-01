@@ -1,7 +1,7 @@
-use crate::provider::IndexBaseProvider;
 use dioxus::prelude::*;
 use speki_dto::CardId;
 use speki_dto::SpekiProvider;
+use speki_idb::IndexBaseProvider;
 use uuid::Uuid;
 
 #[component]

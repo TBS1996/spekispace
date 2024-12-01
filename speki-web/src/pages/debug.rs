@@ -1,12 +1,13 @@
 use crate::{
     js, log_to_console,
     login::{LoginState, UserInfo},
-    provider::IndexBaseProvider,
     Route, PROXY, REPO_PATH,
 };
 use dioxus::prelude::*;
 use speki_dto::{CardId, Recall, SpekiProvider};
 use uuid::Uuid;
+
+use speki_idb::IndexBaseProvider;
 
 #[component]
 pub fn Debug() -> Element {

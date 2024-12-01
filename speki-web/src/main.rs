@@ -10,13 +10,13 @@ use wasm_bindgen::prelude::*;
 use web_sys::console;
 
 use crate::pages::{Add, Browse, Debug, Home, Review, View};
-use crate::provider::IndexBaseProvider;
+
+use speki_idb::IndexBaseProvider;
 
 mod js;
 mod login;
 mod nav;
 mod pages;
-mod provider;
 mod review_state;
 mod utils;
 
