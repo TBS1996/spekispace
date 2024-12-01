@@ -6,7 +6,7 @@ use crate::{
 use dioxus_logger::tracing::{info, trace};
 use speki_dto::{AttributeId, CardId, Review};
 use std::{
-    collections::HashMap,
+    collections::{BTreeSet, HashMap, HashSet},
     fmt::Debug,
     sync::{Arc, RwLock},
     time::Duration,
@@ -61,6 +61,7 @@ impl CardProvider {
             inner: Arc::new(RwLock::new(Inner {
                 cards: Default::default(),
                 reviews: Default::default(),
+                dependents: Default::default(),
             })),
             time_provider,
             provider,
@@ -111,6 +112,13 @@ impl CardProvider {
             }
         } else {
             Some(cached.review.clone())
+        }
+    }
+
+    async fn update_dependents(&self, card: Arc<Card<AnyType>>) {
+        let mut guard = self.inner.write().unwrap();
+        for dep in card.dependency_ids().await {
+            guard.dependents.entry(dep).or_default().insert(card.id);
         }
     }
 
@@ -175,6 +183,26 @@ impl CardProvider {
         output
     }
 
+    pub async fn dependents(&self, id: CardId) -> BTreeSet<Arc<Card<AnyType>>> {
+        let mut out = BTreeSet::default();
+        let deps = self
+            .inner
+            .read()
+            .unwrap()
+            .dependents
+            .get(&id)
+            .cloned()
+            .unwrap_or_default();
+
+        for dep in deps {
+            if let Some(card) = self.load(dep).await {
+                out.insert(card);
+            }
+        }
+
+        out
+    }
+
     pub async fn load(&self, id: CardId) -> Option<Arc<Card<AnyType>>> {
         trace!("loading card for id: {}", id);
         if let (Some(card), Some(_)) = (
@@ -186,6 +214,7 @@ impl CardProvider {
             trace!("cache miss for id: {}", id);
             let uncached = self.load_uncached(id).await?;
             let uncached = Arc::new(uncached);
+            self.update_dependents(uncached.clone()).await;
             self.update_cache(uncached.clone());
             Some(uncached)
         }
@@ -202,6 +231,7 @@ impl CardProvider {
 struct Inner {
     cards: HashMap<CardId, CardCache>,
     reviews: HashMap<CardId, RevCache>,
+    dependents: HashMap<CardId, HashSet<CardId>>,
 }
 
 struct CardCache {

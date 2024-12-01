@@ -4,7 +4,30 @@ use dioxus::prelude::*;
 use speki_core::{AnyType, Card};
 use tracing::info;
 
-use crate::App;
+use crate::{
+    graph::connected_nodes_and_edges,
+    js::{add_edge, add_node, create_cyto_instance, run_layout},
+    App,
+};
+
+fn set_cyto(card: Arc<Card<AnyType>>) {
+    spawn(async move {
+        info!("creating cyto isntance");
+        create_cyto_instance("browcy");
+        let (edges, nodes) = connected_nodes_and_edges(card).await;
+        info!("adding nodes");
+        for node in nodes {
+            add_node("browcy", &node.id, &node.label, &node.color);
+        }
+
+        info!("adding edges");
+        for edge in edges {
+            add_edge("browcy", &edge.from, &edge.to);
+        }
+
+        run_layout("browcy");
+    });
+}
 
 #[derive(Clone)]
 struct CardEntry {
@@ -12,12 +35,27 @@ struct CardEntry {
     card: Arc<Card<AnyType>>,
 }
 
+#[derive(Clone, Default)]
+pub struct BrowseState {
+    pub selected_card: Signal<Option<Arc<Card<AnyType>>>>,
+}
+
+impl BrowseState {
+    pub fn new() -> Self {
+        info!("creating browse state!");
+        let selv = Self::default();
+        speki_web::set_signal(selv.selected_card.clone());
+        selv
+    }
+}
+
 #[component]
 pub fn Browse() -> Element {
+    let browse_state = use_context::<BrowseState>();
     let cards: Signal<Vec<CardEntry>> = use_signal(|| vec![]);
     let mut search = use_signal(String::default);
 
-    let mut selected_card: Signal<Option<Arc<Card<AnyType>>>> = use_signal(|| None);
+    let mut selected_card = browse_state.selected_card.clone();
 
     use_effect(move || {
         let mut cards = cards.clone();
@@ -47,9 +85,33 @@ pub fn Browse() -> Element {
     let mut front_input = use_signal(String::default);
     let mut back_input = use_signal(String::default);
 
+    let sel = selected_card.clone();
+    use_effect(move || {
+        let _ = sel.as_ref().is_some();
+        spawn(async move {
+            if let Some(card) = sel.as_ref() {
+                set_cyto(card.clone());
+                let raw = card.to_raw();
+                let front = raw.data.front.unwrap_or_default();
+                let back = raw
+                    .data
+                    .back
+                    .map(|back| back.to_string())
+                    .unwrap_or_default();
+                front_input.set(front);
+                back_input.set(back);
+            }
+        });
+    });
+
     rsx! {
 
         crate::nav::nav {}
+
+        div {
+            id: "browcy",
+            style: "width: 800px; height: 600px; border: 1px solid black;",
+        }
 
         if flag {
             input {
@@ -101,7 +163,6 @@ pub fn Browse() -> Element {
 
                         selected_card.set(None);
 
-
                         });
                     },
                     "save"
@@ -122,6 +183,7 @@ pub fn Browse() -> Element {
                     button {
                         style: "text-align: left;",
                         onclick: move |_| {
+                            set_cyto(card.card.clone());
                             selected_card.set(Some(card.card.clone()));
                             info!("selected: {selected_card:?}");
                             let raw = card.card.to_raw();

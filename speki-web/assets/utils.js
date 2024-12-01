@@ -1,8 +1,180 @@
 import * as git from "https://esm.sh/isomorphic-git@1.27.1";
 import http from "https://esm.sh/isomorphic-git@1.27.1/http/web";
 import * as path from "https://esm.sh/path-browserify";
+import cytoscape from "https://esm.sh/cytoscape@3.23.0";
+import dagre from "https://esm.sh/cytoscape-dagre@2.4.0";
+import coseBilkent from "https://esm.sh/cytoscape-cose-bilkent@4.1.0";
+
+import { onNodeClick } from '/wasm/speki-web.js';
+
+console.log("utils.js loaded!!!");
+
+cytoscape.use(dagre);
+
+const instances = new Map();
+const charWidth = 15;
+const lineLen = 10;
 
 let fs;
+
+export function createCytoInstance(id) {
+    if (instances.has(id)) {
+        console.log("cyto instance already exist");
+        const existingInstance = instances.get(id);
+        console.log(`Cytoscape instance with ID "${id}" already exists. Clearing it.`);
+        existingInstance.destroy(); 
+    }
+
+    console.log("creating cyto instance");
+    const cy = cytoscape({
+        container: document.getElementById(id),
+        elements: [],
+        style: [
+            {
+                selector: "node",
+                style: {
+                    "shape": "rectangle",        
+                    "background-color": "data(backgroundColor)", 
+                    "border-color": "#000",      
+                    "border-width": 1,           
+                    "label": "data(label)",      
+                    "color": "#000",             
+                    "text-wrap": "wrap",         
+                    "text-valign": "center",     
+                    "text-halign": "center",     
+                    "width": (ele) => calculateNodeWidth(ele.data("label"), lineLen),
+                    "height": (ele) => calculateNodeHeight(ele.data("label"), lineLen),
+                    "font-size": "6px",
+                },
+            },
+            {
+                selector: "edge",
+                style: {
+                    "line-color": "#f59842",               // Edge line color
+                    "target-arrow-color": "#ccc",       // Arrow color
+                    "target-arrow-shape": "triangle",   // Arrow shape
+                    "arrow-scale": 1.2,                 // Slightly larger arrow size
+                    "target-distance-from-node": 10,    // Add space between arrow and node
+                    "curve-style": "bezier",            // Smooth edges
+                },
+            },
+        ],
+        layout: {
+            name: "dagre",
+            rankDir: "TB",     
+            directed: true,
+            padding: 50,
+        },
+    });
+
+    cy.on('tap', 'node', (event) => {
+        const node = event.target; 
+        const nodeId = node.id(); 
+        console.log(`Node clicked: ${nodeId}`);
+        onNodeClick(nodeId); 
+    });
+
+    console.log("setting instance");
+    instances.set(id, cy);
+    return cy;
+}
+
+function calculateNodeWidth(label, maxCharsPerLine) {
+    let first = maxCharsPerLine * charWidth;
+    let sec = label.length * charWidth;
+
+    console.log(label);
+    console.log(`label len: ${label.length}`);
+    console.log(`maxchars: ${maxCharsPerLine}`);
+    console.log(`width: ${charWidth}`);
+    console.log(`first: ${first}`);
+    console.log(`sec: ${first}`);
+
+    return Math.min(maxCharsPerLine * charWidth, label.length * charWidth);
+}
+
+function calculateNodeHeight(label, maxCharsPerLine) {
+    const lines = Math.ceil(label.length / maxCharsPerLine);
+    const lineHeight = 20; 
+    return lines * lineHeight + 10; 
+}
+
+export function getCytoInstance(id) {
+    return instances.get(id);
+}
+
+export function runLayout(id) {
+    const cy = getCytoInstance(id);
+    if (cy) {
+        cy.layout({
+            name: "dagre", 
+            fit: true,            
+            padding: 50,
+            animate: false,
+        }).run();
+    } else {
+        console.warn(`Cytoscape instance with ID "${id}" not found.`);
+    }
+}
+
+export function clearGraph(id) {
+    const cy = getCytoInstance(id);
+    if (cy) {
+        cy.elements().remove(); 
+    } else {
+        console.warn(`Cytoscape instance with ID "${id}" not found.`);
+    }
+}
+
+export function addEdge(id, source, target) {
+    const cy = getCytoInstance(id);
+    if (cy) {
+        cy.add({ data: { source, target } });
+    }
+}
+
+export function addNode(cyto_id, id, label, backgroundColor) {
+    const cy = getCytoInstance(cyto_id);
+    if (cy) {
+        const wrappedLabel = wrapText(label); 
+        const node = cy.add({ data: { id, label: wrappedLabel, backgroundColor } });
+
+        resizeNodeToFitLabel(node);
+    }
+}
+
+function wrapText(text) {
+    const words = text.split(" ");
+    let lines = [];
+    let currentLine = "";
+
+    words.forEach((word) => {
+        if ((currentLine + word).length > lineLen) {
+            lines.push(currentLine.trim());
+            currentLine = word + " ";
+        } else {
+            currentLine += word + " ";
+        }
+    });
+
+    if (currentLine.trim()) {
+        lines.push(currentLine.trim());
+    }
+
+    return lines.join("\n");
+}
+
+function resizeNodeToFitLabel(node) {
+    const label = node.data("label");
+    const lines = label.split("\n").length;
+
+    // Adjust node size based on the number of lines
+    node.style({
+        "height": 20 + lines * 10, // Base height + height per line
+        "width": 20 + lines * 10,  // Base width to keep circle aspect ratio
+    });
+}
+
 
 const initBrowserFS = new Promise((resolve, reject) => {
     BrowserFS.configure({ fs: "IndexedDB", options: {} }, (err) => {
@@ -48,51 +220,6 @@ export async function saveFile(path, content) {
         });
     });
 }
-
-
-
-export async function loadAllFiles(dirPath) {
-    await initBrowserFS;
-    console.log(dirPath);
-
-    return new Promise((resolve, reject) => {
-        fs.readdir( dirPath, (err, files) => {
-            if (err) {
-                console.error("Error reading directory:", err);
-                reject("Error reading directory: " + err);
-                return;
-            }
-
-            const fileContents = [];
-            let filesRead = 0;
-
-            console.log("sup");
-            if (files.length === 0) resolve(fileContents); // Return empty array if no files
-
-            files.forEach(file => {
-                const filePath = `${dirPath}/${file}`;
-                console.log("loading..");
-                fs.readFile(filePath, "utf8", (err, data) => {
-                    if (err) {
-                        console.error(`Error reading file ${filePath}:`, err);
-                        reject("Error reading file: " + err);
-                        return;
-                    }
-
-                    fileContents.push(data);
-                    filesRead++;
-
-
-                    if (filesRead === files.length) {
-                        resolve(fileContents); // Return contents of all files
-                    }
-                });
-            });
-        });
-    });
-}
-
-
 
 
 export async function loadFile(path) {
@@ -188,25 +315,6 @@ export async function listFiles(path) {
 }
 
 
-export async function fetchRepo(path, token, proxy) {
-    await initBrowserFS;
-        console.log(`starting fetch from files to ${path} with token ${token} through proxy ${proxy}!`);
-        await git.fetch({
-            fs,
-            http,
-            dir: path, 
-            corsProxy: proxy,
-            singleBranch: true,
-            onProgress: (progress) => {
-                console.log(`${progress.phase}: ${progress.loaded} of ${progress.total}`);
-              },
-            onAuth: () => ({
-                username: 'x-access-token',
-                password: token
-            })
-        });
-        console.log(`successsddd nice`);
-}
 
 export async function cloneRepo(path, url, token, proxy) {
     const output = document.getElementById("output");
@@ -241,46 +349,9 @@ export async function cloneRepo(path, url, token, proxy) {
 
 //////////////
 
-async function commit(repoPath, token){
-    await initBrowserFS;
-        const { name, email } = await fetchGitHubUserDetails(token);
-        await git.commit({
-            fs,
-            dir: repoPath,
-            message: "commit",
-            author: {
-                name,
-                email
-            }
-        });
-}
 
 
-async function modifiedFiles(repopath) {
-    await initBrowserFS;
-    const FILE = 0, HEAD = 1, WORKDIR = 2
 
-    const filenames = (await git.statusMatrix({ fs,dir: repopath }))
-      .filter(row => row[HEAD] !== row[WORKDIR])
-      .map(row => row[FILE]);
-
-      console.log(filenames);
-      return filenames;
-}
-
-
-async function addAllFiles(repopath) {
-    await initBrowserFS;
-
-    let paths = await modifiedFiles(repopath);
-    console.log(paths);
-
-    console.log("Adding all files...");
-    await Promise.all(
-        paths.map((path) => addFile(repopath, path))
-    );
-    console.log("All files added!");
-}
 
 async function addFile(repoPath, filepath) {
     console.log(`the file to add: ${filepath} `);
@@ -288,110 +359,8 @@ async function addFile(repoPath, filepath) {
     console.log("adding file...");
 }
 
-export async function pushRepo(repoPath, token, proxy) {
-    await initBrowserFS;
-
-        console.log(`Pushing latest changes in the repository at '${repoPath} with token ${token}'...`);
-        const { name, email } = await fetchGitHubUserDetails(token);
-        let cache = {};
-
-        await git.push({
-            fs,
-            http,
-            cache,
-            dir: repoPath,
-            corsProxy: proxy,
-            ref: 'main',
-            onProgress: (progress) => {
-                console.log(`${progress.phase}: ${progress.loaded} of ${progress.total}`);
-              },
-            onAuth: () => ({
-                username: 'x-access-token',
-                password: token
-            }),
-            author: {
-                name,
-                email
-            }
-        });
-
-        const resultMessage = "Repository successfully updated with latest changes!";
-        console.log(resultMessage);
-        return resultMessage;
-}
-
-export async function syncRepo(repoPath, token, proxy) {
-    console.log("adding files..");
-    await addAllFiles(repoPath);
-    console.log("commiting files..");
-    await commit(repoPath, token);
-    console.log("pulling repo..");
-    await pullRepo(repoPath, token, proxy);
-    console.log("pushing repo..");
-    await pushRepo(repoPath, token, proxy);
-}
 
 
-async function mergeRepo(repoPath, token) {
-    await initBrowserFS;
-
-    console.log(`merging repository at '${repoPath}...`);
-    const { name, email } = await fetchGitHubUserDetails(token);
-
-    const mergeDriver = async ({ contents, path }) => {
-        const baseContent = contents[0];
-        const ourContent = contents[1];
-        const theirContent = contents[2];
-
-        console.log(`merging path: ${path}`);
-
-
-        const pattern = /^\d{10} \d/;
-        let isReview =  pattern.test(baseContent) || pattern.test(ourContent) || pattern.test(theirContent);
-      
-        if (!isReview) {
-            console.log(`choosing upstream commit for file: ${theirContent} `);
-          return { cleanMerge: true, mergedText: theirContent };
-        }
-      
-        const combinedLines = [
-          ...baseContent.split('\n'),
-          ...ourContent.split('\n'),
-          ...theirContent.split('\n'),
-        ];
-        console.log(combinedLines);
-        const uniqueSortedLines = [...new Set(combinedLines)].sort();
-        console.log(uniqueSortedLines);
-
-        let mergedText = uniqueSortedLines.join('\n').trim();
-        console.log(mergedText);
-      
-        return {
-          cleanMerge: true,
-          mergedText,
-        };
-      };
-
-    await git.merge({
-        fs,
-        ours: 'main',
-        theirs: 'remotes/origin/main',
-        dir: repoPath,
-        mergeDriver,
-        author: {
-            name,
-            email
-        }
-    });
-
-    console.log("Repository successfully merged with latest changes!");
-}
-
-
-export async function pullRepo(repoPath, token, proxy) {
-    await fetchRepo(repoPath, token, proxy);
-    await mergeRepo(repoPath, token);
-}
 
 ///////////////////////////////////////////////////////////////
 
@@ -498,30 +467,6 @@ function gitCreds(){
 }
 
 
-async function fetchGitHubUserDetails(token) {
-    return {
-        name: "unknown user",
-        email: "unknown@example.com"
-    }
-
-    const response = await fetch("https://api.github.com/user", {
-        headers: {
-            Authorization: `Bearer ${token}`,
-            Accept: "application/vnd.github.v3+json"
-        }
-    });
-
-    if (!response.ok) {
-        throw new Error(`Failed to fetch user details: ${response.statusText}`);
-    }
-
-    const userData = await response.json();
-
-    return {
-        name: userData.name || "Unknown User",
-        email: userData.email || "unknown@example.com" 
-    };
-}
 
 
 
@@ -781,3 +726,198 @@ export async function loadFilenames(directory) {
     });
 
 }
+
+
+//////////////////////////////////////////////////////////////////////
+
+export async function syncRepo(repoPath, token, proxy) {
+    console.log("adding files..");
+    await addAllFiles(repoPath);
+    console.log("commiting files..");
+    await commit(repoPath, token);
+    console.log("pulling repo..");
+    await pullRepo(repoPath, token, proxy);
+    console.log("pushing repo..");
+    await pushRepo(repoPath, token, proxy);
+}
+
+async function addAllFiles(repopath) {
+    await initBrowserFS;
+
+    let paths = await modifiedFiles(repopath);
+    console.log(paths);
+
+    console.log("Adding all files...");
+    await Promise.all(
+        paths.map((path) => addFile(repopath, path))
+    );
+    console.log("All files added!");
+}
+
+async function modifiedFiles(repopath) {
+    await initBrowserFS;
+    const FILE = 0, HEAD = 1, WORKDIR = 2
+
+    const filenames = (await git.statusMatrix({ fs,dir: repopath }))
+      .filter(row => row[HEAD] !== row[WORKDIR])
+      .map(row => row[FILE]);
+
+      console.log(filenames);
+      return filenames;
+}
+
+async function commit(repoPath, token){
+    await initBrowserFS;
+        const { name, email } = await fetchGitHubUserDetails(token);
+        await git.commit({
+            fs,
+            dir: repoPath,
+            message: "commit",
+            author: {
+                name,
+                email
+            }
+        });
+}
+
+async function fetchGitHubUserDetails(token) {
+    return {
+        name: "unknown user",
+        email: "unknown@example.com"
+    }
+
+    const response = await fetch("https://api.github.com/user", {
+        headers: {
+            Authorization: `Bearer ${token}`,
+            Accept: "application/vnd.github.v3+json"
+        }
+    });
+
+    if (!response.ok) {
+        throw new Error(`Failed to fetch user details: ${response.statusText}`);
+    }
+
+    const userData = await response.json();
+
+    return {
+        name: userData.name || "Unknown User",
+        email: userData.email || "unknown@example.com" 
+    };
+}
+
+
+
+
+
+export async function pullRepo(repoPath, token, proxy) {
+    await fetchRepo(repoPath, token, proxy);
+    await mergeRepo(repoPath, token);
+}
+
+export async function fetchRepo(path, token, proxy) {
+    await initBrowserFS;
+        console.log(`starting fetch from files to ${path} with token ${token} through proxy ${proxy}!`);
+        await git.fetch({
+            fs,
+            http,
+            dir: path, 
+            corsProxy: proxy,
+            singleBranch: true,
+            onProgress: (progress) => {
+                console.log(`${progress.phase}: ${progress.loaded} of ${progress.total}`);
+              },
+            onAuth: () => ({
+                username: 'x-access-token',
+                password: token
+            })
+        });
+        console.log(`successsddd nice`);
+}
+
+async function mergeRepo(repoPath, token) {
+    await initBrowserFS;
+
+    console.log(`merging repository at '${repoPath}...`);
+    const { name, email } = await fetchGitHubUserDetails(token);
+
+    const mergeDriver = async ({ contents, path }) => {
+        const baseContent = contents[0];
+        const ourContent = contents[1];
+        const theirContent = contents[2];
+
+        console.log(`merging path: ${path}`);
+
+
+        const pattern = /^\d{10} \d/;
+        let isReview =  pattern.test(baseContent) || pattern.test(ourContent) || pattern.test(theirContent);
+      
+        if (!isReview) {
+            console.log(`choosing upstream commit for file: ${theirContent} `);
+          return { cleanMerge: true, mergedText: theirContent };
+        }
+      
+        const combinedLines = [
+          ...baseContent.split('\n'),
+          ...ourContent.split('\n'),
+          ...theirContent.split('\n'),
+        ];
+        console.log(combinedLines);
+        const uniqueSortedLines = [...new Set(combinedLines)].sort();
+        console.log(uniqueSortedLines);
+
+        let mergedText = uniqueSortedLines.join('\n').trim();
+        console.log(mergedText);
+      
+        return {
+          cleanMerge: true,
+          mergedText,
+        };
+      };
+
+    await git.merge({
+        fs,
+        ours: 'main',
+        theirs: 'remotes/origin/main',
+        dir: repoPath,
+        mergeDriver,
+        author: {
+            name,
+            email
+        }
+    });
+
+    console.log("Repository successfully merged with latest changes!");
+}
+
+export async function pushRepo(repoPath, token, proxy) {
+    await initBrowserFS;
+
+        console.log(`Pushing latest changes in the repository at '${repoPath} with token ${token}'...`);
+        const { name, email } = await fetchGitHubUserDetails(token);
+        let cache = {};
+
+        await git.push({
+            fs,
+            http,
+            cache,
+            dir: repoPath,
+            corsProxy: proxy,
+            ref: 'main',
+            onProgress: (progress) => {
+                console.log(`${progress.phase}: ${progress.loaded} of ${progress.total}`);
+              },
+            onAuth: () => ({
+                username: 'x-access-token',
+                password: token
+            }),
+            author: {
+                name,
+                email
+            }
+        });
+
+        const resultMessage = "Repository successfully updated with latest changes!";
+        console.log(resultMessage);
+        return resultMessage;
+}
+

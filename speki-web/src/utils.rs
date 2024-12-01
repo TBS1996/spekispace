@@ -1,6 +1,11 @@
+use std::{sync::Arc, time::Duration};
+
 use dioxus::hooks::use_context;
+use speki_core::TimeProvider;
 
 use crate::{js, login::LoginState, PROXY, REPO_PATH};
+
+use speki_idb::IndexBaseProvider;
 
 pub mod cookies {
     use std::collections::HashMap;
@@ -49,5 +54,32 @@ pub fn sync_repo() {
 
     if let Some(token) = info.auth_token() {
         js::sync_repo(REPO_PATH, &token, PROXY);
+    }
+}
+
+#[derive(Clone)]
+pub struct App(pub Arc<speki_core::App>);
+
+impl AsRef<speki_core::App> for App {
+    fn as_ref(&self) -> &speki_core::App {
+        &self.0
+    }
+}
+
+struct WasmTime;
+
+impl TimeProvider for WasmTime {
+    fn current_time(&self) -> Duration {
+        js::current_time()
+    }
+}
+
+impl App {
+    pub fn new() -> Self {
+        Self(Arc::new(speki_core::App::new(
+            IndexBaseProvider::new(REPO_PATH),
+            speki_core::SimpleRecall,
+            WasmTime,
+        )))
     }
 }

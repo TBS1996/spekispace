@@ -18,6 +18,8 @@ use speki_dto::CardId;
 use speki_dto::RawCard;
 use speki_dto::Recall;
 use speki_dto::Review;
+use std::cmp::Ord;
+use std::cmp::PartialEq;
 use std::collections::HashMap;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Debug;
@@ -201,6 +203,28 @@ pub struct Card<T: CardTrait + ?Sized> {
     pub recaller: Recaller,
 }
 
+impl<T: CardTrait + ?Sized> PartialEq for Card<T> {
+    fn eq(&self, other: &Self) -> bool {
+        self.id == other.id
+    }
+}
+
+use std::cmp::Ordering;
+
+impl<T: CardTrait + ?Sized> Ord for Card<T> {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.id.cmp(&other.id)
+    }
+}
+
+impl<T: CardTrait + ?Sized> PartialOrd for Card<T> {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        self.id.partial_cmp(&other.id)
+    }
+}
+
+impl<T: CardTrait + ?Sized> Eq for Card<T> {}
+
 impl<T: CardTrait + ?Sized> Debug for Card<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let mut s = String::new();
@@ -238,6 +262,10 @@ impl Card<AnyType> {
         }
 
         classes
+    }
+
+    pub async fn dependents(&self) -> BTreeSet<Arc<Self>> {
+        self.card_provider.dependents(self.id).await
     }
 
     pub fn to_raw(&self) -> RawCard {
@@ -369,10 +397,6 @@ impl Card<AnyType> {
         }
     }
 
-    pub fn dependents(_id: CardId) -> BTreeSet<CardId> {
-        Default::default()
-    }
-
     pub fn is_finished(&self) -> bool {
         self.data.is_finished()
     }
@@ -444,6 +468,25 @@ impl Card<AnyType> {
         }
 
         true
+    }
+
+    pub async fn all_dependents(&self) -> Vec<CardId> {
+        let mut deps = vec![];
+        let mut stack = vec![self.id()];
+
+        while let Some(id) = stack.pop() {
+            let card = self.card_provider.load(id).await.unwrap();
+
+            if self.id() != id {
+                deps.push(id);
+            }
+
+            for dep in card.dependents().await.into_iter().map(|card| card.id) {
+                stack.push(dep);
+            }
+        }
+
+        deps
     }
 
     pub async fn all_dependencies(&self) -> Vec<CardId> {

@@ -1,18 +1,16 @@
 #![allow(non_snake_case)]
 
+use crate::pages::{Add, Browse, Home, Review};
+use crate::utils::App;
 use dioxus::prelude::*;
 use dioxus_logger::tracing::{info, Level};
 use login::LoginState;
+use pages::BrowseState;
 use review_state::ReviewState;
-use speki_core::TimeProvider;
-use std::{sync::Arc, time::Duration};
 use wasm_bindgen::prelude::*;
 use web_sys::console;
 
-use crate::pages::{Add, Browse, Debug, Home, Review, View};
-
-use speki_idb::IndexBaseProvider;
-
+mod graph;
 mod js;
 mod login;
 mod nav;
@@ -23,29 +21,12 @@ mod utils;
 pub const REPO_PATH: &'static str = "/foobar";
 pub const PROXY: &'static str = "http://127.0.0.1:8081";
 
-#[derive(Clone)]
-pub struct App(pub Arc<speki_core::App>);
-
-impl AsRef<speki_core::App> for App {
-    fn as_ref(&self) -> &speki_core::App {
-        &self.0
-    }
-}
-
-impl App {
-    fn new() -> Self {
-        Self(Arc::new(speki_core::App::new(
-            IndexBaseProvider::new(REPO_PATH),
-            speki_core::SimpleRecall,
-            WasmTime,
-        )))
-    }
-}
-
 pub const DEFAULT_FILTER: &'static str =
     "recall < 0.8 & finished == true & suspended == false & minrecrecall > 0.8 & lastreview > 0.5 & weeklapses < 3 & monthlapses < 6";
 
 fn main() {
+    speki_web::say_hello();
+
     dioxus_logger::init(Level::INFO).expect("failed to init logger");
     info!("starting app");
 
@@ -53,10 +34,12 @@ fn main() {
         use_context_provider(App::new);
         use_context_provider(ReviewState::default);
         use_context_provider(LoginState::default);
+        use_context_provider(BrowseState::new);
 
         spawn(async move {
             let rev = use_context::<App>();
             rev.0.fill_cache().await;
+            speki_web::set_app(rev.0.clone());
         });
 
         rsx! {
@@ -82,12 +65,8 @@ pub enum Route {
     Home {},
     #[route("/review")]
     Review {},
-    #[route("/view/:id")]
-    View { id: String },
     #[route("/add")]
     Add {},
-    #[route("/debug")]
-    Debug {},
     #[route("/browse")]
     Browse {},
 }
@@ -97,18 +76,8 @@ impl Route {
         match self {
             Route::Home {} => "home",
             Route::Review {} => "review",
-            Route::View { .. } => "view card",
             Route::Add {} => "add cards",
-            Route::Debug {} => "debug",
             Route::Browse {} => "browse",
         }
-    }
-}
-
-struct WasmTime;
-
-impl TimeProvider for WasmTime {
-    fn current_time(&self) -> Duration {
-        js::current_time()
     }
 }

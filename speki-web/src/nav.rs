@@ -41,13 +41,13 @@ fn route_elm(route: Route) -> Element {
 
 pub fn nav() -> Element {
     let login = use_context::<LoginState>();
-    let sig = login.inner.clone();
+    let flag = login.inner.as_ref().is_some();
     rsx! {
         section { class: "relative",
             nav { class: "flex justify-between",
                 div { class: "px-12 py-8 flex w-full items-center",
                     ul { class: "flex flex-row font-semibold font-heading",
-                        if let Some(_) = sig.as_ref() {
+                        if flag {
                             button {
                                 onclick: |_| {
                                     utils::sync_repo();
