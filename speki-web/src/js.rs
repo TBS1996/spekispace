@@ -9,14 +9,17 @@ extern "C" {
     fn now() -> f64;
 }
 
-#[wasm_bindgen(module = "/assets/utils.js")]
+#[wasm_bindgen(module = "/assets/cyto.js")]
 extern "C" {
-    fn syncRepo(path: &JsValue, token: &JsValue, proxy: &JsValue);
-
     fn createCytoInstance(id: &str);
     fn addNode(cyto_id: &str, id: &str, label: &str, color: &str);
     fn addEdge(cyto_id: &str, source: &str, target: &str);
     fn runLayout(cyto_id: &str);
+}
+
+#[wasm_bindgen(module = "/assets/git.js")]
+extern "C" {
+    fn syncRepo(path: &JsValue, token: &JsValue, proxy: &JsValue);
 }
 
 pub fn run_layout(id: &str) {

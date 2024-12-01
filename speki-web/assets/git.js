@@ -1,179 +1,11 @@
 import * as git from "https://esm.sh/isomorphic-git@1.27.1";
 import http from "https://esm.sh/isomorphic-git@1.27.1/http/web";
 import * as path from "https://esm.sh/path-browserify";
-import cytoscape from "https://esm.sh/cytoscape@3.23.0";
-import dagre from "https://esm.sh/cytoscape-dagre@2.4.0";
-import coseBilkent from "https://esm.sh/cytoscape-cose-bilkent@4.1.0";
-
-import { onNodeClick } from '/wasm/speki-web.js';
-
-console.log("utils.js loaded!!!");
-
-cytoscape.use(dagre);
-
-const instances = new Map();
-const charWidth = 15;
-const lineLen = 10;
 
 let fs;
 
-export function createCytoInstance(id) {
-    if (instances.has(id)) {
-        console.log("cyto instance already exist");
-        const existingInstance = instances.get(id);
-        console.log(`Cytoscape instance with ID "${id}" already exists. Clearing it.`);
-        existingInstance.destroy(); 
-    }
+console.log("utils.js loaded!!!");
 
-    console.log("creating cyto instance");
-    const cy = cytoscape({
-        container: document.getElementById(id),
-        elements: [],
-        style: [
-            {
-                selector: "node",
-                style: {
-                    "shape": "rectangle",        
-                    "background-color": "data(backgroundColor)", 
-                    "border-color": "#000",      
-                    "border-width": 1,           
-                    "label": "data(label)",      
-                    "color": "#000",             
-                    "text-wrap": "wrap",         
-                    "text-valign": "center",     
-                    "text-halign": "center",     
-                    "width": (ele) => calculateNodeWidth(ele.data("label"), lineLen),
-                    "height": (ele) => calculateNodeHeight(ele.data("label"), lineLen),
-                    "font-size": "6px",
-                },
-            },
-            {
-                selector: "edge",
-                style: {
-                    "line-color": "#f59842",               // Edge line color
-                    "target-arrow-color": "#ccc",       // Arrow color
-                    "target-arrow-shape": "triangle",   // Arrow shape
-                    "arrow-scale": 1.2,                 // Slightly larger arrow size
-                    "target-distance-from-node": 10,    // Add space between arrow and node
-                    "curve-style": "bezier",            // Smooth edges
-                },
-            },
-        ],
-        layout: {
-            name: "dagre",
-            rankDir: "TB",     
-            directed: true,
-            padding: 50,
-        },
-    });
-
-    cy.on('tap', 'node', (event) => {
-        const node = event.target; 
-        const nodeId = node.id(); 
-        console.log(`Node clicked: ${nodeId}`);
-        onNodeClick(nodeId); 
-    });
-
-    console.log("setting instance");
-    instances.set(id, cy);
-    return cy;
-}
-
-function calculateNodeWidth(label, maxCharsPerLine) {
-    let first = maxCharsPerLine * charWidth;
-    let sec = label.length * charWidth;
-
-    console.log(label);
-    console.log(`label len: ${label.length}`);
-    console.log(`maxchars: ${maxCharsPerLine}`);
-    console.log(`width: ${charWidth}`);
-    console.log(`first: ${first}`);
-    console.log(`sec: ${first}`);
-
-    return Math.min(maxCharsPerLine * charWidth, label.length * charWidth);
-}
-
-function calculateNodeHeight(label, maxCharsPerLine) {
-    const lines = Math.ceil(label.length / maxCharsPerLine);
-    const lineHeight = 20; 
-    return lines * lineHeight + 10; 
-}
-
-export function getCytoInstance(id) {
-    return instances.get(id);
-}
-
-export function runLayout(id) {
-    const cy = getCytoInstance(id);
-    if (cy) {
-        cy.layout({
-            name: "dagre", 
-            fit: true,            
-            padding: 50,
-            animate: false,
-        }).run();
-    } else {
-        console.warn(`Cytoscape instance with ID "${id}" not found.`);
-    }
-}
-
-export function clearGraph(id) {
-    const cy = getCytoInstance(id);
-    if (cy) {
-        cy.elements().remove(); 
-    } else {
-        console.warn(`Cytoscape instance with ID "${id}" not found.`);
-    }
-}
-
-export function addEdge(id, source, target) {
-    const cy = getCytoInstance(id);
-    if (cy) {
-        cy.add({ data: { source, target } });
-    }
-}
-
-export function addNode(cyto_id, id, label, backgroundColor) {
-    const cy = getCytoInstance(cyto_id);
-    if (cy) {
-        const wrappedLabel = wrapText(label); 
-        const node = cy.add({ data: { id, label: wrappedLabel, backgroundColor } });
-
-        resizeNodeToFitLabel(node);
-    }
-}
-
-function wrapText(text) {
-    const words = text.split(" ");
-    let lines = [];
-    let currentLine = "";
-
-    words.forEach((word) => {
-        if ((currentLine + word).length > lineLen) {
-            lines.push(currentLine.trim());
-            currentLine = word + " ";
-        } else {
-            currentLine += word + " ";
-        }
-    });
-
-    if (currentLine.trim()) {
-        lines.push(currentLine.trim());
-    }
-
-    return lines.join("\n");
-}
-
-function resizeNodeToFitLabel(node) {
-    const label = node.data("label");
-    const lines = label.split("\n").length;
-
-    // Adjust node size based on the number of lines
-    node.style({
-        "height": 20 + lines * 10, // Base height + height per line
-        "width": 20 + lines * 10,  // Base width to keep circle aspect ratio
-    });
-}
 
 
 const initBrowserFS = new Promise((resolve, reject) => {
@@ -188,38 +20,6 @@ const initBrowserFS = new Promise((resolve, reject) => {
         }
     });
 });
-
-
-export async function deleteFile(path) {
-    await initBrowserFS;
-
-    return new Promise((resolve, reject) => {
-        fs.unlink(path, (err) => {
-            if (err) {
-                console.error("Error deleting file:", err);
-                reject("Error deleting file: " + err);
-            } else {
-                resolve("File deleted successfully");
-            }
-        });
-    });
-}
-
-
-export async function saveFile(path, content) {
-    await initBrowserFS;
-
-    return new Promise((resolve, reject) => {
-        fs.writeFile(path, content, "utf8", (err) => {
-            if (err) {
-                console.error("Error writing file:", err);
-                reject("Error writing file: " + err);
-            } else {
-                resolve("File written successfully");
-            }
-        });
-    });
-}
 
 
 export async function loadFile(path) {
@@ -287,32 +87,6 @@ async function getFilePaths(folderPath) {
     });
 }
 
-
-
-
-export async function listFiles(path) {
-    const output = document.getElementById("output");
-
-    await initBrowserFS;
-
-    console.log(`Listing files from ${path}!`);
-    let s = await loadFile("/foobar/.git/config");
-    console.log(s);
-
-    try {
-        // List files in the specified directory
-        fs.readdir(path, (err, files) => {
-            if (err) {
-                output.textContent = "Error reading directory: " + err;
-                return;
-            }
-
-            output.textContent += `\nFiles in ${path}:\n` + files.join("\n");
-        });
-    } catch (error) {
-        output.textContent = "Failed to read repository: " + error;
-    }
-}
 
 
 
@@ -726,9 +500,6 @@ export async function loadFilenames(directory) {
     });
 
 }
-
-
-//////////////////////////////////////////////////////////////////////
 
 export async function syncRepo(repoPath, token, proxy) {
     console.log("adding files..");

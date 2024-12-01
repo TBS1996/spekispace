@@ -7,13 +7,9 @@ use wasm_bindgen::prelude::*;
 #[wasm_bindgen(module = "/utils.js")]
 extern "C" {
     fn loadAllFiles(path: &JsValue) -> Promise;
-    fn listFiles(path: &JsValue);
-    fn allPaths(path: &JsValue) -> Promise;
     fn deleteFile(path: &JsValue);
     fn loadFile(path: &JsValue) -> Promise;
     fn saveFile(path: &JsValue, content: &JsValue);
-    fn validateUpstream(path: &JsValue, token: &JsValue);
-    fn deleteDir(path: &JsValue);
     fn lastModified(path: &JsValue) -> Promise;
     fn loadFilenames(path: &JsValue) -> Promise;
 }
