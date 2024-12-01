@@ -3949,6 +3949,7 @@ dependencies = [
  "omtrent",
  "serde",
  "serde_json",
+ "tracing",
  "uuid",
 ]
 

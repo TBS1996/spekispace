@@ -240,6 +240,16 @@ impl Card<AnyType> {
         classes
     }
 
+    pub fn to_raw(&self) -> RawCard {
+        into_raw_card(self.clone())
+    }
+
+    pub async fn update_with_raw(&mut self, raw: RawCard) {
+        assert_eq!(self.id.into_inner(), raw.id);
+        *self = Self::from_raw(raw, self.card_provider.clone(), self.recaller.clone()).await;
+        self.persist().await;
+    }
+
     pub async fn add_review(&mut self, recall: Recall) {
         let review = Review {
             timestamp: self.time_provider().current_time(),

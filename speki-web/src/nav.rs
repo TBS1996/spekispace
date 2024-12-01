@@ -25,6 +25,20 @@ pub fn tooltip_image(src: &str, msg: &str, img_size: usize, text_size: f32) -> E
     }
 }
 
+fn route_elm(route: Route) -> Element {
+    let label = route.label();
+    rsx! {
+        li {
+            class: "mr-12",
+
+            Link {
+                class: "hover:text-gray-600",
+                to: route, "{label}"
+            }
+        }
+    }
+}
+
 pub fn nav() -> Element {
     let login = use_context::<LoginState>();
     let sig = login.inner.clone();
@@ -52,22 +66,10 @@ pub fn nav() -> Element {
                                 { tooltip_image("login.svg", "nice", 34, 1.0) }
                             }
                         }
+                        { route_elm(Route::Review {}) }
+                        { route_elm(Route::Add {}) }
+                        { route_elm(Route::Browse {}) }
 
-                        li {
-                            class: "mr-12",
-                            Link {
-                                class: "hover:text-gray-600",
-                                to: Route::Review {}, "review"
-                            }
-                        }
-                        li {
-                            class: "mr-12",
-
-                            Link {
-                                class: "hover:text-gray-600",
-                                to: Route::Add {}, "add cards"
-                            }
-                        }
                     }
                 }
             }

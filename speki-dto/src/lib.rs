@@ -114,6 +114,13 @@ impl From<String> for BackSide {
 }
 
 impl BackSide {
+    pub fn to_string(&self) -> String {
+        let mut s = serde_json::to_string(self).unwrap();
+        s.remove(0);
+        s.pop();
+        s
+    }
+
     pub fn dependencies(&self) -> BTreeSet<CardId> {
         let mut set = BTreeSet::default();
         match self {
