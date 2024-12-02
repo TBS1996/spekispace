@@ -7,8 +7,6 @@ use dioxus_logger::tracing::{info, Level};
 use login::LoginState;
 use pages::BrowseState;
 use review_state::ReviewState;
-use wasm_bindgen::prelude::*;
-use web_sys::console;
 
 mod graph;
 mod js;
@@ -51,12 +49,6 @@ fn main() {
             Router::<Route> {}
         }
     });
-}
-
-pub fn log_to_console<T: std::fmt::Debug>(val: T) -> T {
-    let message = format!("{:?}", &val);
-    console::log_1(&JsValue::from_str(&message));
-    val
 }
 
 #[derive(Clone, Routable, Debug, PartialEq)]

@@ -1,8 +1,3 @@
-
-import * as git from "https://esm.sh/isomorphic-git@1.27.1";
-import http from "https://esm.sh/isomorphic-git@1.27.1/http/web";
-import * as path from "https://esm.sh/path-browserify";
-
 let fs;
 
 const initBrowserFS = new Promise((resolve, reject) => {
@@ -17,7 +12,6 @@ const initBrowserFS = new Promise((resolve, reject) => {
         }
     });
 });
-
 
 export async function deleteFile(path) {
     await initBrowserFS;
@@ -34,7 +28,6 @@ export async function deleteFile(path) {
     });
 }
 
-
 export async function saveFile(path, content) {
     await initBrowserFS;
 
@@ -49,8 +42,6 @@ export async function saveFile(path, content) {
         });
     });
 }
-
-
 
 export async function loadAllFiles(dirPath) {
     await initBrowserFS;
@@ -93,9 +84,6 @@ export async function loadAllFiles(dirPath) {
     });
 }
 
-
-
-
 export async function loadFile(path) {
     await initBrowserFS;
     return new Promise((resolve, reject) => {
@@ -113,10 +101,6 @@ export async function loadFile(path) {
         });
     });
 }
-
-
-
-
 
 export async function lastModified(filePath) {
   await initBrowserFS;

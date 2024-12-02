@@ -4,30 +4,7 @@ use dioxus::prelude::*;
 use speki_core::{AnyType, Card};
 use tracing::info;
 
-use crate::{
-    graph::connected_nodes_and_edges,
-    js::{add_edge, add_node, create_cyto_instance, run_layout},
-    App,
-};
-
-fn set_cyto(card: Arc<Card<AnyType>>) {
-    spawn(async move {
-        info!("creating cyto isntance");
-        create_cyto_instance("browcy");
-        let (edges, nodes) = connected_nodes_and_edges(card).await;
-        info!("adding nodes");
-        for node in nodes {
-            add_node("browcy", &node.id, &node.label, &node.color);
-        }
-
-        info!("adding edges");
-        for edge in edges {
-            add_edge("browcy", &edge.from, &edge.to);
-        }
-
-        run_layout("browcy");
-    });
-}
+use crate::{graph, App};
 
 #[derive(Clone)]
 struct CardEntry {
@@ -90,7 +67,7 @@ pub fn Browse() -> Element {
         let _ = sel.as_ref().is_some();
         spawn(async move {
             if let Some(card) = sel.as_ref() {
-                set_cyto(card.clone());
+                graph::cyto_graph(card.clone()).await;
                 let raw = card.to_raw();
                 let front = raw.data.front.unwrap_or_default();
                 let back = raw
@@ -108,12 +85,9 @@ pub fn Browse() -> Element {
 
         crate::nav::nav {}
 
-        div {
-            id: "browcy",
-            style: "width: 800px; height: 600px; border: 1px solid black;",
-        }
 
         if flag {
+
             input {
                 class: "w-full border border-gray-300 rounded-md p-2 mb-4 text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent",
                 value: "{front_input}",
@@ -169,6 +143,11 @@ pub fn Browse() -> Element {
                 }
             }
 
+            div {
+                id: "browcy",
+                style: "width: 800px; height: 600px; border: 1px solid black;",
+            }
+
         } else {
             input {
                 class: "w-full border border-gray-300 rounded-md p-2 mb-4 text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent",
@@ -183,14 +162,17 @@ pub fn Browse() -> Element {
                     button {
                         style: "text-align: left;",
                         onclick: move |_| {
-                            set_cyto(card.card.clone());
-                            selected_card.set(Some(card.card.clone()));
-                            info!("selected: {selected_card:?}");
-                            let raw = card.card.to_raw();
-                            let front = raw.data.front.unwrap_or_default();
-                            let back = raw.data.back.map(|back|back.to_string()).unwrap_or_default();
-                            front_input.set(front);
-                            back_input.set(back);
+                            let card = card.clone();
+                            spawn(async move{
+                           //     graph::cyto_graph(card.card.clone()).await;
+                                selected_card.set(Some(card.card.clone()));
+                                info!("selected: {selected_card:?}");
+                                let raw = card.card.to_raw();
+                                let front = raw.data.front.unwrap_or_default();
+                                let back = raw.data.back.map(|back|back.to_string()).unwrap_or_default();
+                                front_input.set(front);
+                                back_input.set(back);
+                            });
                         },
                         "{card.front}"
                     }

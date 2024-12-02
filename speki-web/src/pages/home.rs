@@ -1,11 +1,11 @@
-use crate::{log_to_console, login::LoginState};
+use crate::login::LoginState;
 use dioxus::prelude::*;
 use tracing::info;
 
 #[component]
 pub fn Home() -> Element {
     use_effect(move || {
-        log_to_console("YY");
+        info!("YY");
         spawn(async move {
             return;
             let mut login = use_context::<LoginState>();

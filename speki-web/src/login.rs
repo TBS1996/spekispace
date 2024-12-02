@@ -1,4 +1,4 @@
-use crate::{log_to_console, utils};
+use crate::utils;
 use tracing::{debug, info};
 use wasm_bindgen_futures::JsFuture;
 
@@ -68,7 +68,7 @@ async fn load_user_info() -> Option<UserInfo> {
         .unwrap();
     let auth_token = utils::get_auth_token()?;
     let res = fetch_github_username(auth_token.clone()).await;
-    log_to_console(&res);
+    info!("{:?}", &res);
     let username = res.ok()?;
     let install_token = utils::get_install_token().unwrap();
     Some(UserInfo {

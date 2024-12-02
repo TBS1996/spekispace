@@ -1,88 +1,349 @@
-use std::{collections::BTreeSet, sync::Arc};
-
+use crate::js;
+use crate::App;
 use dioxus::hooks::use_context;
+use petgraph::algo::is_cyclic_directed;
+use petgraph::graph::{DiGraph, NodeIndex};
+use petgraph::visit::EdgeRef;
 use speki_core::{AnyType, Card};
+use std::collections::HashSet;
+use std::{collections::HashMap, sync::Arc};
 use tracing::info;
 
-use crate::App;
+pub async fn cyto_graph(card: Arc<Card<AnyType>>) {
+    let mut graph = create_graph(card.clone()).await;
+    transitive_reduction(&mut graph);
 
-#[derive(Eq, PartialEq, Ord, PartialOrd, Debug)]
-pub struct Node {
-    pub id: String,
-    pub label: String,
-    pub color: String,
+    assert!(!is_cyclic_directed(&graph));
+
+    create_cyto_graph(graph);
+    adjust_graph(card);
 }
 
-#[derive(Eq, PartialEq, Ord, PartialOrd, Debug)]
-pub struct Edge {
-    pub from: String,
-    pub to: String,
+fn transitive_reduction(graph: &mut DiGraph<NodeMetadata, ()>) {
+    use petgraph::algo::has_path_connecting;
+    use petgraph::visit::EdgeRef;
+
+    let all_edges: Vec<_> = graph
+        .edge_references()
+        .map(|edge| (edge.source(), edge.target()))
+        .collect();
+
+    for &(source, target) in &all_edges {
+        let mut temp_graph = graph.clone();
+        temp_graph.remove_edge(temp_graph.find_edge(source, target).unwrap());
+
+        if has_path_connecting(&temp_graph, source, target, None) {
+            graph.remove_edge(graph.find_edge(source, target).unwrap());
+        }
+    }
 }
 
-/// Loads all the recursive dependents and dependencies of a given card.
-pub async fn connected_nodes_and_edges(
-    card: Arc<Card<AnyType>>,
-) -> (BTreeSet<Edge>, BTreeSet<Node>) {
+#[derive(Clone, Debug)]
+struct NodeMetadata {
+    id: String,
+    label: String,
+    color: String,
+}
+
+fn adjust_graph(card: Arc<Card<AnyType>>) {
+    info!("adjust graph");
+    let cyto_id = "browcy";
+    let id = card.id.into_inner().to_string();
+    js::run_layout(cyto_id, &id);
+    js::zoom_to_node(cyto_id, &id);
+}
+
+fn create_cyto_graph(graph: DiGraph<NodeMetadata, ()>) {
+    let cyto_id = "browcy";
+
+    info!("creating cyto isntance");
+    js::create_cyto_instance("browcy");
+    info!("adding nodes");
+
+    for idx in graph.node_indices() {
+        let node = &graph[idx];
+        js::add_node(cyto_id, &node.id, &node.label, &node.color);
+    }
+
+    info!("adding edges");
+    for edge in graph.edge_references() {
+        let source = &graph[edge.source()];
+        let target = &graph[edge.target()];
+
+        js::add_edge(cyto_id, &source.id, &target.id);
+    }
+}
+
+async fn create_graph(card: Arc<Card<AnyType>>) -> DiGraph<NodeMetadata, ()> {
+    info!("creating graph from card: {}", card.print().await);
+
     let app = use_context::<App>();
-    let mut all_cards = BTreeSet::default();
-    let mut edges = BTreeSet::default();
-    let mut nodes = BTreeSet::default();
+    let mut graph = DiGraph::new();
+    let mut node_map: HashMap<String, NodeIndex> = HashMap::new();
 
-    for card in card.all_dependencies().await {
-        let card = app.as_ref().load_card(card).await.unwrap();
-        all_cards.insert(card);
+    let mut all_cards = Vec::new();
+
+    for dependency in card.all_dependencies().await {
+        if let Some(dep_card) = app.as_ref().load_card(dependency).await {
+            all_cards.push(Arc::new(dep_card));
+        }
     }
 
-    for card in card.all_dependents().await {
-        let card = app.as_ref().load_card(card).await.unwrap();
-        all_cards.insert(card);
+    for dependent in card.all_dependents().await {
+        if let Some(dep_card) = app.as_ref().load_card(dependent).await {
+            all_cards.push(Arc::new(dep_card));
+        }
     }
 
-    for card in &all_cards {
-        let node = Node {
-            id: card.id.into_inner().to_string(),
-            label: card.print().await,
-            color: "#32a852".to_string(),
-        };
+    all_cards.push(card.clone());
 
-        nodes.insert(node);
-    }
-
-    let node = Node {
-        id: card.id.into_inner().to_string(),
-        label: card.print().await,
-        color: "#34ebdb".to_string(),
-    };
-
-    nodes.insert(node);
-    all_cards.insert((*card).clone());
-
-    for card in &all_cards {
-        let from = card.id.into_inner().to_string();
-
-        for dep in card.dependency_ids().await {
-            let to = dep.into_inner().to_string();
-
-            let edge = Edge {
-                from: from.clone(),
-                to: to.clone(),
+    for card_ref in &all_cards {
+        let id = card_ref.id.into_inner().to_string();
+        if !node_map.contains_key(&id) {
+            let label = card_ref.print().await;
+            let color = if Arc::ptr_eq(&card, card_ref) {
+                "#34ebdb".to_string()
+            } else {
+                "#32a852".to_string()
             };
 
-            if nodes.iter().find(|node| &node.id == &to).is_some() {
-                edges.insert(edge);
+            let metadata = NodeMetadata {
+                id: id.clone(),
+                label,
+                color,
+            };
+
+            let node_index = graph.add_node(metadata);
+            node_map.insert(id, node_index);
+        }
+    }
+
+    let mut edges = HashSet::<(NodeIndex, NodeIndex)>::default();
+
+    for card_ref in &all_cards {
+        let from_id = card_ref.id.into_inner().to_string();
+        if let Some(&from_idx) = node_map.get(&from_id) {
+            for dependency in card_ref.dependency_ids().await {
+                let to_id = dependency.into_inner().to_string();
+                if let Some(&to_idx) = node_map.get(&to_id) {
+                    edges.insert((from_idx, to_idx));
+                }
             }
         }
     }
 
-    info!("nodes:");
-    for node in &nodes {
-        info!("node: {}", node.id);
+    for (from_idx, to_idx) in edges {
+        graph.add_edge(from_idx, to_idx, ());
     }
 
-    info!("edges:");
-    for edge in &edges {
-        info!("from: {}; to: {}", edge.from, edge.to);
+    graph
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn dummy_meta(id: &str) -> NodeMetadata {
+        NodeMetadata {
+            id: id.to_string(),
+            label: Default::default(),
+            color: Default::default(),
+        }
     }
 
-    (edges, nodes)
+    #[test]
+    fn test_transitive_reduction_no_edges() {
+        let mut graph = DiGraph::<NodeMetadata, ()>::new();
+
+        // Graph with no nodes or edges
+        transitive_reduction(&mut graph);
+
+        // Assert that the graph remains empty
+        assert_eq!(graph.node_count(), 0);
+        assert_eq!(graph.edge_count(), 0);
+    }
+
+    #[test]
+    fn test_transitive_reduction_simple() {
+        let mut graph = DiGraph::<NodeMetadata, ()>::new();
+
+        // Add nodes
+        let a = graph.add_node(dummy_meta("A"));
+        let b = graph.add_node(dummy_meta("B"));
+        let c = graph.add_node(dummy_meta("C"));
+
+        // Add edges
+        graph.add_edge(a, b, ());
+        graph.add_edge(b, c, ());
+        graph.add_edge(a, c, ());
+
+        // Before reduction
+        assert_eq!(graph.edge_count(), 3);
+
+        // Perform transitive reduction
+        transitive_reduction(&mut graph);
+
+        // After reduction
+        assert_eq!(graph.edge_count(), 2);
+        assert!(graph.find_edge(a, b).is_some());
+        assert!(graph.find_edge(b, c).is_some());
+        assert!(graph.find_edge(a, c).is_none());
+    }
+
+    #[test]
+    fn test_transitive_reduction_no_reduction_needed() {
+        let mut graph = DiGraph::<NodeMetadata, ()>::new();
+
+        let a = graph.add_node(dummy_meta("A"));
+        let b = graph.add_node(dummy_meta("B"));
+
+        // Add a single edge
+        graph.add_edge(a, b, ());
+
+        // Perform transitive reduction
+        transitive_reduction(&mut graph);
+
+        // Assert no edges were removed
+        assert_eq!(graph.edge_count(), 1);
+        assert!(graph.find_edge(a, b).is_some());
+    }
+
+    #[test]
+    fn test_transitive_reduction_complex() {
+        let mut graph = DiGraph::<NodeMetadata, ()>::new();
+
+        let a = graph.add_node(dummy_meta("A"));
+        let b = graph.add_node(dummy_meta("B"));
+        let c = graph.add_node(dummy_meta("C"));
+        let d = graph.add_node(dummy_meta("D"));
+
+        graph.add_edge(a, b, ());
+        graph.add_edge(b, c, ());
+        graph.add_edge(c, d, ());
+        graph.add_edge(a, c, ());
+        graph.add_edge(a, d, ());
+
+        // Before reduction
+        assert_eq!(graph.edge_count(), 5);
+
+        // Perform transitive reduction
+        transitive_reduction(&mut graph);
+
+        // After reduction
+        assert_eq!(graph.edge_count(), 3);
+        assert!(graph.find_edge(a, b).is_some());
+        assert!(graph.find_edge(b, c).is_some());
+        assert!(graph.find_edge(c, d).is_some());
+        assert!(graph.find_edge(a, c).is_none());
+        assert!(graph.find_edge(a, d).is_none());
+    }
+
+    #[test]
+    fn test_transitive_reduction_complex_large() {
+        let mut graph = DiGraph::<NodeMetadata, ()>::new();
+
+        // Add nodes
+        let a = graph.add_node(dummy_meta("A"));
+        let b = graph.add_node(dummy_meta("B"));
+        let c = graph.add_node(dummy_meta("C"));
+        let d = graph.add_node(dummy_meta("D"));
+        let e = graph.add_node(dummy_meta("E"));
+        let f = graph.add_node(dummy_meta("F"));
+        let g = graph.add_node(dummy_meta("G"));
+        let h = graph.add_node(dummy_meta("H"));
+
+        // Add edges (with some redundant paths)
+        graph.add_edge(a, b, ());
+        graph.add_edge(b, c, ());
+        graph.add_edge(c, d, ());
+        graph.add_edge(a, c, ());
+        graph.add_edge(a, d, ());
+        graph.add_edge(b, d, ());
+        graph.add_edge(d, e, ());
+        graph.add_edge(e, f, ());
+        graph.add_edge(c, f, ());
+        graph.add_edge(a, f, ());
+        graph.add_edge(f, g, ());
+        graph.add_edge(d, g, ());
+        graph.add_edge(e, g, ());
+        graph.add_edge(g, h, ());
+
+        // Before reduction
+        assert_eq!(graph.edge_count(), 14);
+
+        // Perform transitive reduction
+        transitive_reduction(&mut graph); // or transitive_reduction(&mut graph);
+
+        for edge in graph.edge_references() {
+            let source = graph.node_weight(edge.source()).unwrap().id.clone();
+            let target = graph.node_weight(edge.target()).unwrap().id.clone();
+            dbg!((source, target));
+        }
+
+        // After reduction
+        assert_eq!(graph.edge_count(), 7);
+
+        // Check expected edges are present
+        assert!(graph.find_edge(a, b).is_some());
+        assert!(graph.find_edge(b, c).is_some());
+        assert!(graph.find_edge(c, d).is_some());
+        assert!(graph.find_edge(d, e).is_some());
+        assert!(graph.find_edge(e, f).is_some());
+        assert!(graph.find_edge(f, g).is_some());
+        assert!(graph.find_edge(g, h).is_some());
+
+        // Check redundant edges are removed
+        assert!(graph.find_edge(a, c).is_none());
+        assert!(graph.find_edge(a, d).is_none());
+        assert!(graph.find_edge(a, f).is_none());
+        assert!(graph.find_edge(b, d).is_none());
+        assert!(graph.find_edge(c, f).is_none());
+        assert!(graph.find_edge(d, g).is_none());
+        assert!(graph.find_edge(e, g).is_none());
+    }
+
+    #[test]
+    fn test_transitive_reduction_balfour() {
+        let mut graph = DiGraph::<NodeMetadata, ()>::new();
+
+        let why = graph.add_node(dummy_meta(
+            "why was the publication of lord balfour's letter delayed?",
+        ));
+        let balfour = graph.add_node(dummy_meta("balfour declaration"));
+        let palestine = graph.add_node(dummy_meta("Palestine"));
+        let zionism = graph.add_node(dummy_meta("What is zionism?"));
+        let public = graph.add_node(dummy_meta("public statement"));
+        let jews = graph.add_node(dummy_meta("who are the jews?"));
+        let judaism = graph.add_node(dummy_meta("what is judaism?"));
+        let religion = graph.add_node(dummy_meta("religion"));
+        let country = graph.add_node(dummy_meta("country 2"));
+        let allencamp = graph.add_node(dummy_meta("allenbys campaign"));
+
+        graph.add_edge(why, allencamp, ());
+        graph.add_edge(why, balfour, ());
+
+        graph.add_edge(balfour, palestine, ());
+        graph.add_edge(balfour, zionism, ());
+        graph.add_edge(balfour, public, ());
+        graph.add_edge(balfour, jews, ());
+
+        graph.add_edge(zionism, palestine, ());
+        graph.add_edge(zionism, jews, ());
+
+        graph.add_edge(jews, judaism, ());
+
+        graph.add_edge(judaism, religion, ());
+
+        graph.add_edge(palestine, country, ());
+
+        assert_eq!(graph.edge_count(), 11);
+
+        transitive_reduction(&mut graph);
+
+        assert_eq!(graph.edge_count(), 9);
+
+        // These are redunant because balfour depends on zionism which depends on palestine and jews
+        assert!(graph.find_edge(balfour, palestine).is_none());
+        assert!(graph.find_edge(balfour, jews).is_none());
+    }
 }
