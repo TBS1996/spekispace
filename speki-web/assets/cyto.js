@@ -10,31 +10,34 @@ const lineLen = 20;
 
 export function createCytoInstance(id) {
     if (instances.has(id)) {
-        console.log("cyto instance already exist");
-        const existingInstance = instances.get(id);
-        console.log(`Cytoscape instance with ID "${id}" already exists. Clearing it.`);
-        existingInstance.destroy(); 
+        console.log(`Cytoscape instance with ID "${id}" already exists. Destroying it...`);
+        const cy = instances.get(id);
+        cy.destroy(); 
+        instances.delete(id); 
     }
 
-    console.log("creating cyto instance");
+    let container = document.getElementById(id);
+
+    console.log(`Creating new Cytoscape instance for container id ${id}, w container: ${container}`);
+
     const cy = cytoscape({
-        container: document.getElementById(id),
-        elements: [],
-        minZoom: 0.5, 
-        maxZoom: 4,   
+        container, 
+        elements: [], 
+        minZoom: 0.5,
+        maxZoom: 4,
         style: [
             {
                 selector: "node",
                 style: {
-                    "shape": "circle",        
-                    "background-color": "data(backgroundColor)", 
-                    "border-color": "#000",      
-                    "border-width": 1,           
-                    "label": "data(label)",      
-                    "color": "#000",             
-                    "text-wrap": "wrap",         
-                    "text-valign": "center",     
-                    "text-halign": "center",     
+                    "shape": "circle",
+                    "background-color": "data(backgroundColor)",
+                    "border-color": "#000",
+                    "border-width": 1,
+                    "label": "data(label)",
+                    "color": "#000",
+                    "text-wrap": "wrap",
+                    "text-valign": "center",
+                    "text-halign": "center",
                     "width": (ele) => calculateNodeWidth(ele.data("label"), lineLen),
                     "height": (ele) => calculateNodeHeight(ele.data("label"), lineLen),
                     "font-size": "6px",
@@ -42,37 +45,53 @@ export function createCytoInstance(id) {
             },
             {
                 selector: "edge",
-                    style: {
-                        "line-color": "#000",               // Line color
-                        "width": 1,                         // Line thickness (reduce for thinner lines)
-                        "target-arrow-color": "#ccc",       // Arrowhead color
-                        "target-arrow-shape": "triangle",   // Arrowhead shape
-                        "arrow-scale": 0.5,                 // Smaller arrow size (reduce for thinner arrows)
-                        "target-distance-from-node": 3,    // Distance of the arrowhead from the node
-                        "curve-style": "bezier",            // Style of the line
-                    },
+                style: {
+                    "line-color": "#000",
+                    "width": 1,
+                    "target-arrow-color": "#ccc",
+                    "target-arrow-shape": "triangle",
+                    "arrow-scale": 0.5,
+                    "target-distance-from-node": 3,
+                    "curve-style": "bezier",
                 },
+            },
         ],
         layout: {
             name: "dagre",
-            rankDir: "BT",     
-            nodeSep: 5,  // Minimum spacing between nodes on the same rank (default: 50)
-            rankSep: 10,  // Minimum spacing between adjacent ranks (default: 50)
+            rankDir: "BT",
+            nodeSep: 5,
+            rankSep: 10,
             directed: true,
             padding: 10,
         },
     });
 
-    cy.on('tap', 'node', (event) => {
-        const node = event.target; 
-        const nodeId = node.id(); 
+    console.log(`adding on tap`);
+
+    cy.on("tap", "node", (event) => {
+        const node = event.target;
+        const nodeId = node.id();
         console.log(`Node clicked: ${nodeId}`);
-        onNodeClick(nodeId); 
+        onNodeClick(nodeId);
     });
 
-    console.log("setting instance");
+
+    console.log(`setting instance`);
+
     instances.set(id, cy);
     return cy;
+}
+
+export function setContainer(cy_id) {
+    const cy = getCytoInstance(cy_id); // Retrieve the Cytoscape instance
+    const container = document.getElementById(cy_id); // Get the container by ID
+
+    if (container) {
+        console.log(`Setting container for Cytoscape instance with ID "${cy_id}"`);
+        cy.mount(container); // Mount Cytoscape to the new container
+    } else {
+        console.error(`Container with ID "${cy_id}" not found.`);
+    }
 }
 
 export function zoomToNode(cy_id, node_id) {
@@ -88,16 +107,6 @@ export function zoomToNode(cy_id, node_id) {
 
 
 function calculateNodeWidth(label, maxCharsPerLine) {
-    let first = maxCharsPerLine * charWidth;
-    let sec = label.length * charWidth;
-
-    console.log(label);
-    console.log(`label len: ${label.length}`);
-    console.log(`maxchars: ${maxCharsPerLine}`);
-    console.log(`width: ${charWidth}`);
-    console.log(`first: ${first}`);
-    console.log(`sec: ${first}`);
-
     return Math.min(maxCharsPerLine * charWidth, label.length * charWidth);
 }
 
@@ -131,6 +140,8 @@ export function runLayout(id, targetNodeId) {
 
         // Adjust node proximity with directionality
         adjustProximityToTargetWithDirection(cy, targetNodeId);
+        cy.reset();
+        cy.fit();
     } else {
         console.warn(`Cytoscape instance with ID "${id}" not found.`);
     }

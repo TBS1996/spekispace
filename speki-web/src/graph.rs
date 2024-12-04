@@ -1,6 +1,5 @@
 use crate::js;
 use crate::App;
-use dioxus::hooks::use_context;
 use petgraph::algo::is_cyclic_directed;
 use petgraph::graph::{DiGraph, NodeIndex};
 use petgraph::visit::EdgeRef;
@@ -9,14 +8,15 @@ use std::collections::HashSet;
 use std::{collections::HashMap, sync::Arc};
 use tracing::info;
 
-pub async fn cyto_graph(card: Arc<Card<AnyType>>) {
-    let mut graph = create_graph(card.clone()).await;
+pub async fn cyto_graph(cyto_id: &str, app: App, card: Arc<Card<AnyType>>) {
+    let card = (*card).clone().refresh().await;
+    let mut graph = create_graph(app, card.clone()).await;
     transitive_reduction(&mut graph);
 
     assert!(!is_cyclic_directed(&graph));
 
-    create_cyto_graph(graph);
-    adjust_graph(card);
+    create_cyto_graph(cyto_id, graph);
+    adjust_graph(cyto_id, card);
 }
 
 fn transitive_reduction(graph: &mut DiGraph<NodeMetadata, ()>) {
@@ -45,19 +45,9 @@ struct NodeMetadata {
     color: String,
 }
 
-fn adjust_graph(card: Arc<Card<AnyType>>) {
-    info!("adjust graph");
-    let cyto_id = "browcy";
-    let id = card.id.into_inner().to_string();
-    js::run_layout(cyto_id, &id);
-    js::zoom_to_node(cyto_id, &id);
-}
-
-fn create_cyto_graph(graph: DiGraph<NodeMetadata, ()>) {
-    let cyto_id = "browcy";
-
+fn create_cyto_graph(cyto_id: &str, graph: DiGraph<NodeMetadata, ()>) {
     info!("creating cyto isntance");
-    js::create_cyto_instance("browcy");
+    js::create_cyto_instance(cyto_id);
     info!("adding nodes");
 
     for idx in graph.node_indices() {
@@ -74,10 +64,15 @@ fn create_cyto_graph(graph: DiGraph<NodeMetadata, ()>) {
     }
 }
 
-async fn create_graph(card: Arc<Card<AnyType>>) -> DiGraph<NodeMetadata, ()> {
-    info!("creating graph from card: {}", card.print().await);
+fn adjust_graph(cyto_id: &str, card: Arc<Card<AnyType>>) {
+    info!("adjust graph");
+    let id = card.id.into_inner().to_string();
+    js::run_layout(cyto_id, &id);
+    js::zoom_to_node(cyto_id, &id);
+}
 
-    let app = use_context::<App>();
+async fn create_graph(app: App, card: Arc<Card<AnyType>>) -> DiGraph<NodeMetadata, ()> {
+    info!("creating graph from card: {}", card.print().await);
     let mut graph = DiGraph::new();
     let mut node_map: HashMap<String, NodeIndex> = HashMap::new();
 

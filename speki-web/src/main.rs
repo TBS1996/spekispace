@@ -8,6 +8,7 @@ use login::LoginState;
 use pages::BrowseState;
 use review_state::ReviewState;
 
+mod components;
 mod graph;
 mod js;
 mod login;
@@ -23,32 +24,32 @@ pub const DEFAULT_FILTER: &'static str =
     "recall < 0.8 & finished == true & suspended == false & minrecrecall > 0.8 & lastreview > 0.5 & weeklapses < 3 & monthlapses < 6";
 
 fn main() {
-    speki_web::say_hello();
-
     dioxus_logger::init(Level::INFO).expect("failed to init logger");
     info!("starting app");
 
-    dioxus::launch(|| {
-        use_context_provider(App::new);
-        use_context_provider(ReviewState::default);
-        use_context_provider(LoginState::default);
-        use_context_provider(BrowseState::new);
+    dioxus::launch(TheApp);
+}
 
-        spawn(async move {
-            let rev = use_context::<App>();
-            rev.0.fill_cache().await;
-            speki_web::set_app(rev.0.clone());
-        });
+#[component]
+pub fn TheApp() -> Element {
+    let rev = use_context_provider(App::new);
+    use_context_provider(ReviewState::default);
+    use_context_provider(LoginState::default);
+    use_context_provider(BrowseState::new);
 
-        rsx! {
-            document::Link {
-                rel: "stylesheet",
-                href: asset!("/public/tailwind.css")
-            }
-
-            Router::<Route> {}
-        }
+    spawn(async move {
+        rev.0.fill_cache().await;
+        speki_web::set_app(rev.0.clone());
     });
+
+    rsx! {
+        document::Link {
+            rel: "stylesheet",
+            href: asset!("/public/tailwind.css")
+        }
+
+        Router::<Route> {}
+    }
 }
 
 #[derive(Clone, Routable, Debug, PartialEq)]

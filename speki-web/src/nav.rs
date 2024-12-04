@@ -39,9 +39,11 @@ fn route_elm(route: Route) -> Element {
     }
 }
 
+#[component]
 pub fn nav() -> Element {
     let login = use_context::<LoginState>();
     let flag = login.inner.as_ref().is_some();
+
     rsx! {
         section { class: "relative",
             nav { class: "flex justify-between",
@@ -49,8 +51,8 @@ pub fn nav() -> Element {
                     ul { class: "flex flex-row font-semibold font-heading",
                         if flag {
                             button {
-                                onclick: |_| {
-                                    utils::sync_repo();
+                                onclick: move |_| {
+                                    utils::sync_repo(login.clone());
                                 },
                                 { tooltip_image("sync.svg", "nice", 34, 1.0) }
                             }

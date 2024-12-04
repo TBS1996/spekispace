@@ -421,7 +421,13 @@ impl Card<AnyType> {
         self.persist().await;
         res
     }
+
+    pub async fn refresh(self) -> Arc<Self> {
+        self.card_provider.load(self.id).await.unwrap()
+    }
+
     pub async fn set_dependency(&mut self, dependency: CardId) {
+        info!("for card: {} inserting dependency: {}", self.id, dependency);
         if self.id() == dependency {
             return;
         }
@@ -452,6 +458,7 @@ impl Card<AnyType> {
 
     // Call this function every time SavedCard is mutated.
     pub async fn persist(&mut self) {
+        info!("persisting card: {}", self.id);
         self.card_provider.save_card(self.clone()).await;
         self.card_provider
             .save_reviews(self.id, self.history.clone())

@@ -1,6 +1,5 @@
 use std::{sync::Arc, time::Duration};
 
-use dioxus::hooks::use_context;
 use speki_core::TimeProvider;
 
 use crate::{js, login::LoginState, PROXY, REPO_PATH};
@@ -49,9 +48,7 @@ pub fn get_auth_token() -> Option<String> {
     cookies::get("auth-token")
 }
 
-pub fn sync_repo() {
-    let info = use_context::<LoginState>();
-
+pub fn sync_repo(info: LoginState) {
     if let Some(token) = info.auth_token() {
         js::sync_repo(REPO_PATH, &token, PROXY);
     }

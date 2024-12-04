@@ -15,6 +15,7 @@ extern "C" {
     fn addEdge(cyto_id: &str, source: &str, target: &str);
     fn runLayout(cyto_id: &str, node: &str);
     fn zoomToNode(cyto_id: &str, node_id: &str);
+    fn setContainer(cyto_id: &str);
 }
 
 #[wasm_bindgen(module = "/assets/git.js")]

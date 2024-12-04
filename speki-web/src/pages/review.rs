@@ -84,8 +84,9 @@ pub fn Review() -> Element {
     let back = review.back.clone();
 
     let log_event = move |event: Rc<KeyboardData>| {
+        let _review = review.clone();
         spawn(async move {
-            let mut rev = use_context::<ReviewState>();
+            let mut rev = _review.clone();
             match event.key().to_string().as_str() {
                 "1" => rev.do_review(new_review(Recall::None)).await,
                 "2" => rev.do_review(new_review(Recall::Late)).await,
@@ -99,7 +100,7 @@ pub fn Review() -> Element {
 
     rsx! {
 
-        { crate::nav::nav() }
+        crate::nav::nav{}
 
         div { id: "receiver", tabindex: 0,
             onkeydown: move |event| log_event(event.data()),
