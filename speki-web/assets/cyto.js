@@ -139,15 +139,17 @@ export function getCytoInstance(id) {
 
 export function runLayout(id, targetNodeId) {
     const cy = getCytoInstance(id);
+    console.log("8 @@@@@@@@@@@@@@@@@@@@@@@@@@@@");
     if (cy) {
         // Run the Dagre layout
         cy.layout({
             name: "dagre",
-            rankDir: "TB",          // Top-to-bottom flow
+            rankDir: "BT",          // Top-to-bottom flow
+        //    rankdir: "BT",          // Top-to-bottom flow
             fit: true,              // Fit the graph in the viewport
             padding: 50,            // Padding around the graph
             nodeSep: 50,            // Adjust spacing for better visibility
-            rankSep: 75,            // Adjust rank separation
+            rankSep: 25,            // Adjust rank separation
             edgeWeight: (edge) => {
                 const connectedToTarget = edge.source().id() === targetNodeId || edge.target().id() === targetNodeId;
                 return connectedToTarget ? 3 : 1; // Moderate weight for target-connected edges
@@ -163,32 +165,36 @@ export function runLayout(id, targetNodeId) {
     }
 }
 
+
 function adjustProximityToTargetWithDirection(cy, targetNodeId) {
     const targetNode = cy.getElementById(targetNodeId);
     const targetPos = targetNode.position();
-    const incomingNeighbors = targetNode.incomers("node");
-    const outgoingNeighbors = targetNode.outgoers("node");
+    const incomingNeighbors = targetNode.incomers("node"); // Now dependents
+    const outgoingNeighbors = targetNode.outgoers("node"); // Now dependencies
 
-    const horizontalSpacing = 50; // Increased left-right spacing
-    const verticalDistance = 60; // Reduced up-down distance
+    const horizontalSpacing = 50; // Adjust spacing as needed
+    const verticalDistance = 60;  // Adjust vertical distance as needed
 
-
-    incomingNeighbors.forEach((node, index) => {
+    // Outgoing nodes (dependencies) are placed above
+    outgoingNeighbors.forEach((node, index) => {
         node.position({
-            x: targetPos.x + index * horizontalSpacing - (incomingNeighbors.length * horizontalSpacing) / 2,
+            x: targetPos.x + index * horizontalSpacing - (outgoingNeighbors.length * horizontalSpacing) / 2,
             y: targetPos.y - verticalDistance, 
         });
     });
 
-    outgoingNeighbors.forEach((node, index) => {
+    // Incoming nodes (dependents) are placed below
+    incomingNeighbors.forEach((node, index) => {
         node.position({
-            x: targetPos.x + index * horizontalSpacing - (outgoingNeighbors.length * horizontalSpacing) / 2,
+            x: targetPos.x + index * horizontalSpacing - (incomingNeighbors.length * horizontalSpacing) / 2,
             y: targetPos.y + verticalDistance, 
         });
     });
 
     cy.fit(); 
 }
+
+
 
 
 export function addEdge(id, source, target) {
