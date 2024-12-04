@@ -125,6 +125,7 @@ impl CardProvider {
     async fn load_cached_card(&self, id: CardId) -> Option<Arc<Card<AnyType>>> {
         trace!("attempting cache load for card: {}", id);
         let guard = self.inner.read().unwrap();
+        trace!("cache size: {}", guard.cards.len());
         let cached = match guard.cards.get(&id) {
             Some(cached) => cached,
             None => {
@@ -136,10 +137,10 @@ impl CardProvider {
         if self.check_modified {
             let last_modified = self.provider.last_modified_card(id).await;
             if last_modified > cached.fetched {
-                trace!("cache outdated for card: {}", id);
+                info!("cache outdated for card: {}", id);
                 None
             } else {
-                trace!("successfully retrieved cache for card: {}", id);
+                info!("successfully retrieved cache for card: {}", id);
                 Some(cached.card.clone())
             }
         } else {

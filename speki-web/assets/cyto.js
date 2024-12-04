@@ -1,6 +1,6 @@
 import cytoscape from "https://esm.sh/cytoscape@3.23.0";
 import dagre from "https://esm.sh/cytoscape-dagre@2.4.0";
-import { onNodeClick } from '/wasm/speki-web.js';
+import { onNodeClick, onEdgeClick } from '/wasm/speki-web.js';
 cytoscape.use(dagre);
 
 const instances = new Map();
@@ -73,6 +73,22 @@ export function createCytoInstance(id) {
         const nodeId = node.id();
         console.log(`Node clicked: ${nodeId}`);
         onNodeClick(nodeId);
+    });
+
+
+
+    cy.on("tap", "edge", (event) => {
+        const edge = event.target;
+        const edgeId = edge.id();
+        const sourceNodeId = edge.source().id();
+        const targetNodeId = edge.target().id();
+    
+        console.log(`Edge clicked: ${edgeId}`);
+        console.log(`Source Node: ${sourceNodeId}`);
+        console.log(`Target Node: ${targetNodeId}`);
+        console.log("bruhhhuhu");
+    
+        onEdgeClick(sourceNodeId, targetNodeId);
     });
 
 

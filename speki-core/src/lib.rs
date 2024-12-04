@@ -108,7 +108,8 @@ impl App {
     }
 
     pub async fn load_card(&self, id: CardId) -> Option<Card<AnyType>> {
-        Arc::unwrap_or_clone(self.card_provider.load(id).await?).into()
+        let card = self.card_provider.load(id).await;
+        Some(Arc::unwrap_or_clone(card?))
     }
 
     pub async fn delete_card(&self, id: CardId) {

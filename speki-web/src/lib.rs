@@ -51,6 +51,16 @@ pub fn set_signal(signal: Signal<BrowsePage>) {
     });
 }
 
+fn trigger_refresh() {
+    if let Some(mut sig) = SIGNAL.with(|provider| provider.borrow().clone()) {
+        let b = sig.cloned();
+        FOOBAR.with(|s| {
+            *s.borrow_mut() = Some(b.clone());
+        });
+        sig.set(b);
+    }
+}
+
 #[wasm_bindgen(js_name = onNodeClick)]
 pub async fn on_node_click(node_id: &str) {
     info!("clicked node: {node_id}");
@@ -69,6 +79,29 @@ pub async fn on_node_click(node_id: &str) {
             info!("setting selected card: {selected:?}");
             sig.set(selected);
         }
+    } else {
+        tracing::warn!("Provider is not set.");
+    }
+}
+
+#[wasm_bindgen(js_name = onEdgeClick)]
+pub async fn on_edge_click(source: &str, target: &str) {
+    info!("clicked node from {source} to {target}");
+
+    let source = CardId(source.parse().unwrap());
+    info!("parsed source: {source}");
+    let target = CardId(target.parse().unwrap());
+    info!("parsed target: {target}");
+
+    info!("fetching provider");
+    let provider = PROVIDER.with(|provider| provider.borrow().clone());
+    if let Some(provider) = provider {
+        info!("loading card");
+        let mut card = provider.load_card(source).await.unwrap();
+        info!("removing dependency");
+        card.rm_dependency(target).await;
+        info!("triggering refresh");
+        trigger_refresh();
     } else {
         tracing::warn!("Provider is not set.");
     }
