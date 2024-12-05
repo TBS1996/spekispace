@@ -3,6 +3,7 @@ use std::time::Duration;
 
 use dioxus::prelude::*;
 use speki_dto::{Recall, Review as ReviewDTO};
+use tracing::info;
 
 use crate::js;
 use crate::review_state::ReviewState;
@@ -86,6 +87,7 @@ pub fn Review() -> Element {
     let log_event = move |event: Rc<KeyboardData>| {
         let _review = review.clone();
         spawn(async move {
+            info!("reviewing..");
             let mut rev = _review.clone();
             match event.key().to_string().as_str() {
                 "1" => rev.do_review(new_review(Recall::None)).await,

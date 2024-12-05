@@ -33,7 +33,7 @@ fn main() {
 #[component]
 pub fn TheApp() -> Element {
     let rev = use_context_provider(App::new);
-    use_context_provider(ReviewState::default);
+    use_context_provider(|| ReviewState::new(rev.clone()));
     use_context_provider(LoginState::default);
     use_context_provider(BrowseState::new);
 

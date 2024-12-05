@@ -1,4 +1,4 @@
-use std::{sync::Arc, time::Duration};
+use std::{fmt::Debug, sync::Arc, time::Duration};
 
 use speki_core::TimeProvider;
 
@@ -60,6 +60,12 @@ pub struct App(pub Arc<speki_core::App>);
 impl AsRef<speki_core::App> for App {
     fn as_ref(&self) -> &speki_core::App {
         &self.0
+    }
+}
+
+impl Debug for App {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_tuple("App").field(&self.0).finish()
     }
 }
 

@@ -1,14 +1,16 @@
-use crate::{App, REPO_PATH};
+use std::sync::{Arc, Mutex};
+
 use dioxus::prelude::*;
 use speki_core::{AnyType, Card};
 use speki_dto::{CardId, Review as ReviewDTO, SpekiProvider};
-use std::sync::{Arc, Mutex};
-use tracing::instrument;
-
 use speki_idb::IndexBaseProvider;
+use tracing::{info, instrument};
 
-#[derive(Default, Clone, Debug)]
+use crate::{App, REPO_PATH};
+
+#[derive(Clone, Debug)]
 pub struct ReviewState {
+    pub app: App,
     pub card: Signal<Option<Card<AnyType>>>,
     pub queue: Arc<Mutex<Vec<CardId>>>,
     pub tot_len: Signal<usize>,
@@ -19,6 +21,19 @@ pub struct ReviewState {
 }
 
 impl ReviewState {
+    pub fn new(app: App) -> Self {
+        Self {
+            app,
+            card: Default::default(),
+            queue: Default::default(),
+            tot_len: Default::default(),
+            pos: Default::default(),
+            front: Default::default(),
+            back: Default::default(),
+            show_backside: Default::default(),
+        }
+    }
+
     fn id(&self) -> Option<CardId> {
         Some(self.card.as_ref()?.id())
     }
@@ -36,7 +51,9 @@ impl ReviewState {
     }
 
     async fn make_review(&self, review: ReviewDTO, repo: &str) {
+        info!("make review");
         if let Some(id) = self.id() {
+            info!("add review");
             IndexBaseProvider::new(repo).add_review(id, review).await;
         }
     }
@@ -46,21 +63,20 @@ impl ReviewState {
     }
 
     pub async fn do_review(&mut self, review: ReviewDTO) {
+        info!("do review");
         let repo = REPO_PATH;
         self.make_review(review, repo).await;
         self.next_card(repo).await;
     }
 
     async fn next_card(&mut self, repo: &str) {
-        let app = use_context::<App>();
         let card = self.queue.lock().unwrap().pop();
-
         let card = match card {
             Some(id) => {
                 let card = Card::from_raw(
                     IndexBaseProvider::new(repo).load_card(id).await.unwrap(),
-                    app.0.card_provider.clone(),
-                    app.0.recaller.clone(),
+                    self.app.0.card_provider.clone(),
+                    self.app.0.recaller.clone(),
                 )
                 .await;
                 let front = card.print().await;
