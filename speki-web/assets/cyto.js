@@ -56,14 +56,6 @@ export function createCytoInstance(id) {
                 },
             },
         ],
-        layout: {
-            name: "dagre",
-            rankDir: "BT",
-            nodeSep: 5,
-            rankSep: 10,
-            directed: true,
-            padding: 10,
-        },
     });
 
     console.log(`adding on tap`);
@@ -136,7 +128,6 @@ export function getCytoInstance(id) {
     return instances.get(id);
 }
 
-
 export function runLayout(id, targetNodeId) {
     const cy = getCytoInstance(id);
     console.log("8 @@@@@@@@@@@@@@@@@@@@@@@@@@@@");
@@ -145,7 +136,6 @@ export function runLayout(id, targetNodeId) {
         cy.layout({
             name: "dagre",
             rankDir: "BT",          // Top-to-bottom flow
-        //    rankdir: "BT",          // Top-to-bottom flow
             fit: true,              // Fit the graph in the viewport
             padding: 50,            // Padding around the graph
             nodeSep: 50,            // Adjust spacing for better visibility

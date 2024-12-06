@@ -1,6 +1,9 @@
 use std::sync::Arc;
 
-use crate::components::{card_selector, display_card};
+use crate::{
+    components::{card_selector, display_card},
+    graph::GraphRep,
+};
 use dioxus::prelude::*;
 use speki_core::{AnyType, Card};
 use speki_web::BrowsePage;
@@ -14,19 +17,28 @@ pub struct CardEntry {
     pub card: Arc<Card<AnyType>>,
 }
 
-#[derive(Clone, Default)]
+#[derive(Clone)]
 pub struct BrowseState {
     pub selected_card: Signal<BrowsePage>,
     pub cards: Signal<Vec<CardEntry>>,
     pub front_input: Signal<String>,
     pub back_input: Signal<String>,
     pub search: Signal<String>,
+    pub graph: Signal<GraphRep>,
 }
 
 impl BrowseState {
     pub fn new() -> Self {
         info!("creating browse state!");
-        let selv = Self::default();
+        let selv = Self {
+            selected_card: Default::default(),
+            cards: Default::default(),
+            front_input: Default::default(),
+            back_input: Default::default(),
+            search: Default::default(),
+            graph: Signal::new(GraphRep::init("browcy".to_string())),
+        };
+
         speki_web::set_signal(selv.selected_card.clone());
         let _selv = selv.clone();
         spawn(async move {
@@ -46,6 +58,12 @@ impl BrowseState {
         }
 
         self.cards.clone().set(out);
+    }
+}
+
+impl Default for BrowseState {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

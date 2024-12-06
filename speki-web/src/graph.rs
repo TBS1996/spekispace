@@ -1,22 +1,128 @@
-use crate::js;
-use crate::App;
+use std::{
+    collections::{HashMap, HashSet},
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc, Mutex,
+    },
+};
+
 use petgraph::algo::is_cyclic_directed;
 use petgraph::graph::{DiGraph, NodeIndex};
 use petgraph::visit::EdgeRef;
 use speki_core::{AnyType, Card};
-use std::collections::HashSet;
-use std::{collections::HashMap, sync::Arc};
 use tracing::info;
+use web_sys::window;
 
-pub async fn cyto_graph(cyto_id: &str, app: App, card: Arc<Card<AnyType>>) {
-    let card = (*card).clone().refresh().await;
-    let mut graph = create_graph(app, card.clone()).await;
-    transitive_reduction(&mut graph);
+use crate::js;
+use crate::App;
 
-    assert!(!is_cyclic_directed(&graph));
+use dioxus::prelude::*;
 
-    create_cyto_graph(cyto_id, graph);
-    adjust_graph(cyto_id, card);
+#[derive(Default)]
+struct InnerGraph {
+    graph: DiGraph<NodeMetadata, ()>,
+    card: Option<Arc<Card<AnyType>>>,
+    _selected_edge: Option<petgraph::prelude::EdgeIndex>,
+}
+
+impl InnerGraph {
+    pub async fn new(app: App, card: Arc<Card<AnyType>>) -> Self {
+        let card = (*card).clone().refresh().await;
+        let mut graph = create_graph(app, card.clone()).await;
+        transitive_reduction(&mut graph);
+
+        assert!(!is_cyclic_directed(&graph));
+
+        Self {
+            card: Some(card),
+            graph,
+            _selected_edge: None,
+        }
+    }
+}
+
+#[derive(Clone)]
+pub struct GraphRep {
+    inner: Arc<Mutex<InnerGraph>>,
+    /// Whether a cyto js instance has been created
+    is_init: Arc<AtomicBool>,
+    cyto_id: Arc<String>,
+}
+
+impl GraphRep {
+    async fn refresh(&self, app: App, card: Arc<Card<AnyType>>) {
+        let new = InnerGraph::new(app, card).await;
+        let mut inner = self.inner.lock().unwrap();
+        *inner = new;
+    }
+
+    fn is_init(&self) -> bool {
+        self.is_init.load(Ordering::SeqCst)
+    }
+
+    fn is_dom_rendered(&self) -> bool {
+        is_element_present(&self.cyto_id)
+    }
+
+    pub fn init(id: String) -> Self {
+        Self {
+            inner: Default::default(),
+            is_init: Default::default(),
+            cyto_id: Arc::new(id),
+        }
+    }
+
+    pub async fn set_card(&self, app: App, card: Arc<Card<AnyType>>) {
+        self.refresh(app, card).await;
+        self.create_cyto_instance().await;
+    }
+
+    async fn create_cyto_instance(&self) {
+        let (graph, card) = {
+            let guard = self.inner.lock().unwrap();
+            let card = guard.card.clone();
+            let graph = guard.graph.clone();
+            (graph, card)
+        };
+
+        let Some(card) = card else {
+            return;
+        };
+
+        create_cyto_graph(&self.cyto_id, &graph);
+        adjust_graph(&self.cyto_id, card.clone());
+        self.is_init.store(true, Ordering::SeqCst);
+    }
+
+    pub fn render(&self) -> Element {
+        let cyto_id = self.cyto_id.clone();
+
+        // We can't create the cyto instance until this function has been run at least once cause
+        // cytoscape needs to connecto a valid DOM element, so it's a bit weird logic.
+        // First time this function is run, it'll render an empty div, second time, the is_element_present will be
+        // true and we create the instance, third time, is_init will be true and we won't trigger the create_instancea any longer.
+        if !self.is_init() && self.is_dom_rendered() {
+            let selv = self.clone();
+            spawn(async move {
+                selv.create_cyto_instance().await;
+            });
+        }
+
+        rsx! {
+            div {
+                id: "{cyto_id}",
+                style: "width: 800px; height: 600px; border: 1px solid black;",
+            }
+        }
+    }
+}
+
+fn is_element_present(id: &str) -> bool {
+    window()
+        .and_then(|win| win.document())
+        .unwrap()
+        .get_element_by_id(id)
+        .is_some()
 }
 
 fn transitive_reduction(graph: &mut DiGraph<NodeMetadata, ()>) {
@@ -45,7 +151,7 @@ struct NodeMetadata {
     color: String,
 }
 
-fn create_cyto_graph(cyto_id: &str, graph: DiGraph<NodeMetadata, ()>) {
+fn create_cyto_graph(cyto_id: &str, graph: &DiGraph<NodeMetadata, ()>) {
     info!("creating cyto isntance");
     js::create_cyto_instance(cyto_id);
     info!("adding nodes");

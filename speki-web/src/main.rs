@@ -1,12 +1,13 @@
 #![allow(non_snake_case)]
 
-use crate::pages::{Add, Browse, Home, Review};
-use crate::utils::App;
 use dioxus::prelude::*;
 use dioxus_logger::tracing::{info, Level};
 use login::LoginState;
 use pages::BrowseState;
 use review_state::ReviewState;
+
+use crate::pages::{Add, Browse, Home, Review};
+use crate::utils::App;
 
 mod components;
 mod graph;
@@ -32,14 +33,14 @@ fn main() {
 
 #[component]
 pub fn TheApp() -> Element {
-    let rev = use_context_provider(App::new);
-    use_context_provider(|| ReviewState::new(rev.clone()));
+    let app = use_context_provider(App::new);
+    use_context_provider(|| ReviewState::new(app.clone()));
     use_context_provider(LoginState::default);
     use_context_provider(BrowseState::new);
 
     spawn(async move {
-        rev.0.fill_cache().await;
-        speki_web::set_app(rev.0.clone());
+        app.0.fill_cache().await;
+        speki_web::set_app(app.0.clone());
     });
 
     rsx! {
