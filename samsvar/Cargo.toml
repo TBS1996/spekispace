@@ -7,9 +7,9 @@ description = "trait for matching on custom types"
 license = "GPL-2.0-only"
 
 [dependencies]
-serde_json = "1.0.128"
-nom = "7.0"
-async-trait = "0.1.83"
+serde_json.workspace = true
+nom.workspace = true
+async-trait.workspace = true
 tracing.workspace = true
 
 [dev-dependencies]

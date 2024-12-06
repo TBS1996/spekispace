@@ -3604,11 +3604,9 @@ name = "speki-dto"
 version = "0.1.0"
 dependencies = [
  "async-trait",
- "futures",
  "omtrent",
  "serde",
  "serde_json",
- "tracing",
  "uuid",
 ]
 

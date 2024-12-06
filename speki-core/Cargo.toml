@@ -20,7 +20,7 @@ speki-dto.workspace = true
 dioxus-logger.workspace = true
 tracing.workspace = true
 
-async-trait = "0.1.83"
+async-trait.workspace = true
 
 [dependencies.gkquad]
 version = "0.0.4"
@@ -29,5 +29,5 @@ default-features = false
 
 
 [dev-dependencies]
-tokio = { version = "1", features = ["full"] }
+tokio.workspace = true
 speki-fs.workspace = true

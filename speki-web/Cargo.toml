@@ -25,6 +25,7 @@ wasm-bindgen.workspace = true
 futures.workspace = true
 futures-util.workspace = true
 gloo-utils.workspace = true
+gloo-net.workspace = true
 js-sys.workspace = true
 serde.workspace = true
 serde-wasm-bindgen.workspace = true
@@ -34,23 +35,11 @@ web-sys.workspace = true
 toml.workspace = true
 async-trait.workspace = true
 time.workspace = true
-gloo-net.workspace = true
-
-
-#async-lock.workspace = true
-#gloo.workspace = true
-#gloo-timers.workspace = true
-#manganis.workspace = true
-#tracing-tree.workspace = true
-#wasm-cookies.workspace = true
-
-#uuid = { version = "1.3", features = ["v4", "serde"] }
 uuid.workspace = true
-#rand = { version = "0.8.5", features = ["std", "js"] }
+petgraph.workspace = true
+once_cell.workspace = true
 
 
 speki-dto = { path = "../speki-dto" }
 speki-core = { path = "../speki-core" }
-once_cell = "1.20.2"
 speki-idb = { path = "../speki-idb" }
-petgraph = "0.6.5"
