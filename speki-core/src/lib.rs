@@ -104,6 +104,10 @@ impl App {
     }
 
     pub async fn save_card(&self, card: Card<AnyType>) {
+        self.card_provider
+            .save_reviews(card.id, card.history.clone())
+            .await;
+
         self.card_provider.save_card(card).await;
     }
 
@@ -121,6 +125,7 @@ impl App {
     }
 
     pub async fn save_attribute(&self, attribute: Attribute) {
+        info!("saving attribute!!: {}", attribute.id);
         self.attr_provider.save(attribute).await;
     }
 

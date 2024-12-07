@@ -1,6 +1,7 @@
 use std::{fmt::Debug, sync::Arc, time::Duration};
 
 use speki_core::TimeProvider;
+use tracing::info;
 
 use crate::{js, login::LoginState, PROXY, REPO_PATH};
 
@@ -85,4 +86,36 @@ impl App {
             WasmTime,
         )))
     }
+}
+
+use speki_provider::IndexBaseProvider;
+
+pub async fn sync() {
+    let dexie_app = App(Arc::new(speki_core::App::new(
+        DexieProvider,
+        speki_core::SimpleRecall,
+        WasmTime,
+    )));
+
+    let fs_app = App(Arc::new(speki_core::App::new(
+        IndexBaseProvider::new("/foobar"),
+        speki_core::SimpleRecall,
+        WasmTime,
+    )));
+
+    info!("loading fs cards");
+    let cards = fs_app.0.load_all_cards().await;
+
+    for card in cards {
+        info!("saving card to dexie");
+        dexie_app.0.save_card(Arc::unwrap_or_clone(card)).await;
+    }
+
+    info!("loading fs attrs");
+    let attrs = fs_app.0.load_all_attributes().await;
+    for attr in attrs {
+        dexie_app.0.save_attribute(attr).await;
+    }
+
+    info!("done syncing maybe!");
 }

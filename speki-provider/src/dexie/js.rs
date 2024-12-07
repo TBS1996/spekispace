@@ -2,18 +2,19 @@ use gloo_utils::format::JsValueSerdeExt;
 use js_sys::Promise;
 use serde_json::Value;
 use std::time::Duration;
+use uuid::Uuid;
 use wasm_bindgen::prelude::*;
+
+use crate::dexie::Table;
 
 #[wasm_bindgen(module = "/dexie.js")]
 extern "C" {
-    fn saveFile(id: &JsValue, content: &JsValue);
-    fn loadFile(id: &JsValue) -> Promise;
-    fn saveReviews(id: &JsValue, content: &JsValue);
-    fn loadReviews(id: &JsValue) -> Promise;
-    fn deleteFile(id: &JsValue);
-    fn loadAllFiles() -> Promise;
-    fn lastModified(id: &JsValue) -> Promise;
-    fn loadIds() -> Promise;
+    fn saveContent(table: &JsValue, id: &JsValue, content: &JsValue);
+    fn deleteContent(table: &JsValue, id: &JsValue);
+    fn loadContent(table: &JsValue, id: &JsValue) -> Promise;
+    fn loadAllContent(table: &JsValue) -> Promise;
+    fn loadAllIds(table: &JsValue) -> Promise;
+    fn lastModified(table: &JsValue, id: &JsValue) -> Promise;
 }
 
 #[wasm_bindgen]
@@ -26,14 +27,14 @@ pub fn _current_time() -> Duration {
     Duration::from_millis(now() as u64)
 }
 
-pub async fn load_ids() -> Vec<String> {
-    let val = promise_to_val(loadIds()).await;
+pub async fn load_ids(table: Table) -> Vec<Uuid> {
+    let val = promise_to_val(loadAllIds(&table.as_js_value())).await;
     val.as_array()
         .unwrap()
         .into_iter()
         .filter_map(|obj| {
             if let serde_json::Value::String(s) = obj {
-                Some(s.clone())
+                Some(s.parse().unwrap())
             } else {
                 None
             }
@@ -41,21 +42,15 @@ pub async fn load_ids() -> Vec<String> {
         .collect()
 }
 
-pub fn delete_file(id: &str) {
-    let path = JsValue::from_str(id);
-    deleteFile(&path);
+pub fn delete_file(table: Table, id: &str) {
+    let id = JsValue::from_str(id);
+    deleteContent(&table.as_js_value(), &id);
 }
 
-pub fn save_reviews(id: &str, content: &str) {
-    let path = JsValue::from_str(id);
+pub fn save_content(table: Table, id: &str, content: &str) {
+    let id = JsValue::from_str(id);
     let content = JsValue::from_str(content);
-    saveReviews(&path, &content);
-}
-
-pub fn save_file(id: &str, content: &str) {
-    let path = JsValue::from_str(id);
-    let content = JsValue::from_str(content);
-    saveFile(&path, &content);
+    saveContent(&table.as_js_value(), &id, &content);
 }
 
 async fn promise_to_val(promise: Promise) -> Value {
@@ -64,9 +59,9 @@ async fn promise_to_val(promise: Promise) -> Value {
     jsvalue.into_serde().unwrap()
 }
 
-pub async fn last_modified(id: &str) -> Option<Duration> {
+pub async fn last_modified(table: Table, id: &str) -> Option<Duration> {
     let path = JsValue::from_str(id);
-    let val = promise_to_val(lastModified(&path)).await;
+    let val = promise_to_val(lastModified(&table.as_js_value(), &path)).await;
     let serde_json::Value::String(s) = val else {
         return None;
     };
@@ -79,8 +74,8 @@ pub async fn last_modified(id: &str) -> Option<Duration> {
     Some(Duration::from_secs(seconds as u64))
 }
 
-pub async fn load_all_files() -> Vec<String> {
-    let val = promise_to_val(loadAllFiles()).await;
+pub async fn load_all_files(table: Table) -> Vec<String> {
+    let val = promise_to_val(loadAllContent(&table.as_js_value())).await;
     let arr = val.as_array().unwrap();
     arr.into_iter()
         .map(|elm| match elm {
@@ -90,20 +85,9 @@ pub async fn load_all_files() -> Vec<String> {
         .collect()
 }
 
-pub async fn load_file(id: &str) -> Option<String> {
+pub async fn load_content(table: Table, id: &str) -> Option<String> {
     let path = JsValue::from_str(id);
-    let val = promise_to_val(loadFile(&path)).await;
-
-    match val {
-        Value::Null => None,
-        Value::String(s) => Some(s.clone()),
-        other => panic!("invalid type: {}", other),
-    }
-}
-
-pub async fn load_reviews(id: &str) -> Option<String> {
-    let path = JsValue::from_str(id);
-    let val = promise_to_val(loadReviews(&path)).await;
+    let val = promise_to_val(loadContent(&table.as_js_value(), &path)).await;
 
     match val {
         Value::Null => None,

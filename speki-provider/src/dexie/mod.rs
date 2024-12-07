@@ -6,33 +6,52 @@ use speki_dto::{AttributeDTO, AttributeId, CardId, RawCard, Recall, Review, Spek
 
 mod js;
 
+pub enum Table {
+    Attributes,
+    Cards,
+    Reviews,
+}
+
+impl Table {
+    pub fn as_js_value(&self) -> JsValue {
+        let name = match self {
+            Table::Attributes => "attrs",
+            Table::Cards => "cards",
+            Table::Reviews => "reviews",
+        };
+
+        JsValue::from_str(name)
+    }
+}
+
 pub struct DexieProvider;
 
 use async_trait::async_trait;
-use tracing::info;
+
+use wasm_bindgen::JsValue;
 
 #[async_trait(?Send)]
 impl SpekiProvider for DexieProvider {
     async fn load_card_ids(&self) -> Vec<CardId> {
-        js::load_ids()
+        js::load_ids(Table::Cards)
             .await
             .into_iter()
-            .map(|id| CardId(id.parse().unwrap()))
+            .map(|id| CardId(id))
             .collect()
     }
 
     async fn last_modified_card(&self, id: CardId) -> Duration {
-        js::last_modified(&id.into_inner().to_string())
+        js::last_modified(Table::Cards, &id.to_string())
             .await
             .unwrap()
     }
 
     async fn last_modified_reviews(&self, id: CardId) -> Option<Duration> {
-        js::last_modified(&id.to_string()).await
+        js::last_modified(Table::Reviews, &id.to_string()).await
     }
 
     async fn load_all_cards(&self) -> Vec<RawCard> {
-        let cards = js::load_all_files()
+        let cards = js::load_all_files(Table::Cards)
             .await
             .into_iter()
             .map(|s| toml::from_str(&s).unwrap())
@@ -44,16 +63,16 @@ impl SpekiProvider for DexieProvider {
     async fn save_card(&self, card: RawCard) {
         let id = card.id;
         let s: String = toml::to_string(&card).unwrap();
-        js::save_file(&id.to_string(), &s);
+        js::save_content(Table::Cards, &id.to_string(), &s);
     }
 
     async fn load_card(&self, id: CardId) -> Option<RawCard> {
-        let s = js::load_file(&id.to_string()).await?;
+        let s = js::load_content(Table::Cards, &id.to_string()).await?;
         toml::from_str(&s).unwrap()
     }
 
     async fn load_all_attributes(&self) -> Vec<AttributeDTO> {
-        js::load_all_files()
+        js::load_all_files(Table::Attributes)
             .await
             .into_iter()
             .map(|s| toml::from_str(&s).unwrap())
@@ -63,34 +82,31 @@ impl SpekiProvider for DexieProvider {
     async fn save_attribute(&self, attribute: AttributeDTO) {
         let id = attribute.id;
         let s: String = toml::to_string(&attribute).unwrap();
-        js::save_file(&id.to_string(), &s);
+        js::save_content(Table::Attributes, &id.to_string(), &s);
     }
 
     async fn load_attribute(&self, id: AttributeId) -> Option<AttributeDTO> {
-        let s = js::load_file(&id.to_string()).await?;
+        let s = js::load_content(Table::Attributes, &id.to_string()).await?;
         toml::from_str(&s).unwrap()
     }
 
     async fn delete_card(&self, id: CardId) {
-        js::delete_file(&id.to_string());
+        js::delete_file(Table::Cards, &id.to_string());
     }
 
     async fn delete_attribute(&self, id: AttributeId) {
-        js::delete_file(&id.to_string());
+        js::delete_file(Table::Attributes, &id.to_string());
     }
 
     async fn load_reviews(&self, id: CardId) -> Vec<Review> {
         let mut reviews = vec![];
 
-        let Some(s) = js::load_reviews(&id.to_string()).await else {
+        let Some(s) = js::load_content(Table::Reviews, &id.to_string()).await else {
             return vec![];
         };
 
-        info!("string: {s}");
-
         for line in s.lines() {
             let (timestamp, grade) = line.split_once(' ').unwrap();
-            info!("{timestamp}, {grade}");
             let timestamp = Duration::from_secs(timestamp.parse().unwrap());
             let grade = Recall::from_str(grade).unwrap();
             let review = Review {
@@ -118,7 +134,7 @@ impl SpekiProvider for DexieProvider {
             s.push_str(&format!("{} {}\n", stamp, grade));
         }
 
-        js::save_reviews(&id.to_string(), &s);
+        js::save_content(Table::Reviews, &id.to_string(), &s);
     }
 
     async fn load_config(&self) -> Config {

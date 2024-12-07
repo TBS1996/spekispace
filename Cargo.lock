@@ -3585,6 +3585,7 @@ dependencies = [
  "time",
  "toml",
  "tracing",
+ "uuid",
  "wasm-bindgen",
  "wasm-bindgen-futures",
 ]

@@ -289,6 +289,10 @@ impl Card<AnyType> {
         self.persist().await;
     }
 
+    pub fn override_reviews(&mut self, reviews: Vec<Review>) {
+        self.history = Reviews(reviews);
+    }
+
     pub async fn min_rec_recall_rate(&self) -> f32 {
         let mut min_rec = f32::MAX;
 

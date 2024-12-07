@@ -5,6 +5,7 @@ use dioxus_logger::tracing::{info, Level};
 use login::LoginState;
 use pages::BrowseState;
 use review_state::ReviewState;
+use utils::sync;
 
 use crate::pages::{Add, Browse, Home, Review};
 use crate::utils::App;
@@ -39,6 +40,7 @@ pub fn TheApp() -> Element {
     use_context_provider(BrowseState::new);
 
     spawn(async move {
+        //sync().await;
         app.0.fill_cache().await;
         speki_web::set_app(app.0.clone());
     });
