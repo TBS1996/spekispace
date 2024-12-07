@@ -30,4 +30,3 @@ default-features = false
 
 [dev-dependencies]
 tokio.workspace = true
-speki-fs.workspace = true

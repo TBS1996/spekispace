@@ -238,6 +238,12 @@ impl AsRef<Uuid> for AttributeId {
     }
 }
 
+impl fmt::Display for AttributeId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
 impl AttributeId {
     pub fn into_inner(self) -> Uuid {
         self.0

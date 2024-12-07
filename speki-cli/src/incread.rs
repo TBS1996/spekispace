@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use speki_core::current_time;
 use speki_core::App;
 use speki_core::CardId;
-use speki_fs::paths;
+use speki_provider::paths;
 use std::collections::HashMap;
 use std::fs::{self, read_to_string};
 use std::io::{self, Write};

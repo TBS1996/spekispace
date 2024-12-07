@@ -2,11 +2,10 @@ use std::sync::{Arc, Mutex};
 
 use dioxus::prelude::*;
 use speki_core::{AnyType, Card};
-use speki_dto::{CardId, Review as ReviewDTO, SpekiProvider};
-use speki_idb::IndexBaseProvider;
+use speki_dto::{CardId, Recall};
 use tracing::{info, instrument};
 
-use crate::{App, REPO_PATH};
+use crate::App;
 
 #[derive(Clone, Debug)]
 pub struct ReviewState {
@@ -34,10 +33,6 @@ impl ReviewState {
         }
     }
 
-    fn id(&self) -> Option<CardId> {
-        Some(self.card.as_ref()?.id())
-    }
-
     #[instrument]
     pub async fn refresh(&mut self, filter: String) {
         let app = use_context::<App>();
@@ -47,38 +42,29 @@ impl ReviewState {
             let mut lock = self.queue.lock().unwrap();
             *lock = cards;
         }
-        self.next_card(REPO_PATH).await;
+        self.next_card().await;
     }
 
-    async fn make_review(&self, review: ReviewDTO, repo: &str) {
+    async fn make_review(&self, recall: Recall) {
         info!("make review");
-        if let Some(id) = self.id() {
-            info!("add review");
-            IndexBaseProvider::new(repo).add_review(id, review).await;
-        }
+        self.card.cloned().unwrap().add_review(recall).await;
     }
 
     fn current_pos(&self) -> usize {
         self.tot_len - self.queue.lock().unwrap().len()
     }
 
-    pub async fn do_review(&mut self, review: ReviewDTO) {
+    pub async fn do_review(&mut self, review: Recall) {
         info!("do review");
-        let repo = REPO_PATH;
-        self.make_review(review, repo).await;
-        self.next_card(repo).await;
+        self.make_review(review).await;
+        self.next_card().await;
     }
 
-    async fn next_card(&mut self, repo: &str) {
+    async fn next_card(&mut self) {
         let card = self.queue.lock().unwrap().pop();
         let card = match card {
             Some(id) => {
-                let card = Card::from_raw(
-                    IndexBaseProvider::new(repo).load_card(id).await.unwrap(),
-                    self.app.0.card_provider.clone(),
-                    self.app.0.recaller.clone(),
-                )
-                .await;
+                let card = self.app.0.load_card(id).await.unwrap();
                 let front = card.print().await;
                 let back = card
                     .display_backside()

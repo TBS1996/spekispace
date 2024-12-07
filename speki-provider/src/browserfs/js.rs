@@ -4,7 +4,7 @@ use serde_json::Value;
 use std::time::Duration;
 use wasm_bindgen::prelude::*;
 
-#[wasm_bindgen(module = "/utils.js")]
+#[wasm_bindgen(module = "/browserfs.js")]
 extern "C" {
     fn loadAllFiles(path: &JsValue) -> Promise;
     fn deleteFile(path: &JsValue);

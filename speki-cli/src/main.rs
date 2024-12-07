@@ -14,7 +14,7 @@ use utils::{
     select_from_attributes,
 };
 
-use speki_fs::{
+use speki_provider::{
     paths::{config_dir, get_cards_path, get_review_path},
     FileProvider,
 };

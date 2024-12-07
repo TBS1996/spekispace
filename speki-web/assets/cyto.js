@@ -29,7 +29,6 @@ export function createCytoInstance(id) {
             {
                 selector: "node",
                 style: {
-                    "shape": "circle",
                     "background-color": "data(backgroundColor)",
                     "border-color": "#000",
                     "border-width": 1,

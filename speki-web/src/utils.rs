@@ -4,7 +4,7 @@ use speki_core::TimeProvider;
 
 use crate::{js, login::LoginState, PROXY, REPO_PATH};
 
-use speki_idb::IndexBaseProvider;
+use speki_provider::DexieProvider;
 
 pub mod cookies {
     use std::collections::HashMap;
@@ -80,7 +80,7 @@ impl TimeProvider for WasmTime {
 impl App {
     pub fn new() -> Self {
         Self(Arc::new(speki_core::App::new(
-            IndexBaseProvider::new(REPO_PATH),
+            DexieProvider,
             speki_core::SimpleRecall,
             WasmTime,
         )))

@@ -13,7 +13,7 @@ use speki_core::{
     StatementCard,
 };
 use speki_dto::Recall;
-use speki_fs::paths;
+use speki_provider::paths;
 use std::{ops::ControlFlow, str::FromStr};
 
 fn review_help() -> &'static str {

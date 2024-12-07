@@ -1,17 +1,14 @@
-
 [workspace]
 members = [
-    "fsload",
     "samsvar",
     "speki-cli",
     "speki-core",
     "speki-dto",
-    "speki-fs",
     "omtrent",
     "speki-auth",
     "speki-web",
     "speki-proxy",
-    "speki-idb",
+    "speki-provider",
 ]
 
 resolver = "2"
@@ -19,10 +16,10 @@ resolver = "2"
 
 [workspace.dependencies]
 speki-core = { path = "speki-core" }
+speki-provider = { path = "speki-provider" }
 samsvar = { path = "samsvar" }
 omtrent = { path = "omtrent" }
 speki-dto = { path = "speki-dto" }
-speki-fs = { path = "speki-fs" }
 
 clap = { version = "4.5.17", features = ["derive"] }
 skim = "0.10.4"

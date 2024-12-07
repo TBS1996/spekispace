@@ -1,7 +1,7 @@
 use dialoguer::{theme::ColorfulTheme, Input, Select};
 use speki_core::{AnyType, App, Attribute, Card, CardId};
 use speki_dto::AttributeId;
-use speki_fs::paths;
+use speki_provider::paths;
 use std::path::Path;
 use std::process::Command;
 

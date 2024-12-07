@@ -1433,20 +1433,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "486f806e73c5707928240ddc295403b1b93c96a02038563881c4a2fd84b81ac4"
 
 [[package]]
-name = "filecash"
-version = "0.1.2"
-dependencies = [
- "dirs",
- "rayon",
- "sanitize-filename",
- "serde",
- "serde_json",
- "toml",
- "uuid",
- "walkdir",
-]
-
-[[package]]
 name = "fixedbitset"
 version = "0.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3134,15 +3120,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f3cb5ba0dc43242ce17de99c180e96db90b235b8a9fdc9543c96d2209116bd9f"
 
 [[package]]
-name = "same-file"
-version = "1.0.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "93fc1dc3aaa9bfed95e02e6eadabb4baf7e3078b0bd1b4d7b6b0b68378900502"
-dependencies = [
- "winapi-util",
-]
-
-[[package]]
 name = "samsvar"
 version = "0.1.2"
 dependencies = [
@@ -3151,16 +3128,6 @@ dependencies = [
  "serde_json",
  "tokio",
  "tracing",
-]
-
-[[package]]
-name = "sanitize-filename"
-version = "0.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2ed72fbaf78e6f2d41744923916966c4fbe3d7c74e3037a8ee482f1115572603"
-dependencies = [
- "lazy_static",
- "regex",
 ]
 
 [[package]]
@@ -3566,7 +3533,7 @@ dependencies = [
  "skim",
  "speki-core",
  "speki-dto",
- "speki-fs",
+ "speki-provider",
  "tokio",
  "uuid",
  "wikipedia",
@@ -3586,7 +3553,6 @@ dependencies = [
  "serde",
  "serde_json",
  "speki-dto",
- "speki-fs",
  "tokio",
  "toml",
  "tracing",
@@ -3605,24 +3571,15 @@ dependencies = [
 ]
 
 [[package]]
-name = "speki-fs"
+name = "speki-provider"
 version = "0.1.0"
 dependencies = [
  "async-trait",
  "dirs",
- "rayon",
- "serde",
- "speki-dto",
- "toml",
-]
-
-[[package]]
-name = "speki-idb"
-version = "0.1.0"
-dependencies = [
- "async-trait",
  "gloo-utils",
  "js-sys",
+ "rayon",
+ "serde",
  "serde_json",
  "speki-dto",
  "time",
@@ -3661,7 +3618,7 @@ dependencies = [
  "serde_json",
  "speki-core",
  "speki-dto",
- "speki-idb",
+ "speki-provider",
  "time",
  "toml",
  "tracing",
@@ -4397,16 +4354,6 @@ checksum = "2e369bee1b05d510a7b4ed645f5faa90619e05437111783ea5848f28d97d3c2e"
 dependencies = [
  "proc-macro2",
  "quote",
-]
-
-[[package]]
-name = "walkdir"
-version = "2.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "29790946404f91d9c5d06f9874efddea1dc06c5efe94541a7d6863108e3a5e4b"
-dependencies = [
- "same-file",
- "winapi-util",
 ]
 
 [[package]]

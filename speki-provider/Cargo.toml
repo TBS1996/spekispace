@@ -1,0 +1,41 @@
+[package]
+name = "speki-provider"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+rayon = { workspace = true, optional = true }
+serde = { workspace = true, optional = true }
+dirs = { workspace = true, optional = true }
+wasm-bindgen = { workspace = true, optional = true }
+gloo-utils = { workspace = true, optional = true }
+wasm-bindgen-futures = { workspace = true, optional = true }
+js-sys = { workspace = true, optional = true }
+time = { workspace = true, optional = true }
+
+serde_json.workspace = true
+toml.workspace = true
+tracing.workspace = true
+async-trait.workspace = true
+speki-dto.workspace = true
+
+
+[features]
+fs = ["dep:rayon", "dep:serde", "dep:dirs"]
+dexie = [
+    "dep:wasm-bindgen",
+    "dep:gloo-utils",
+    "dep:js-sys",
+    "dep:wasm-bindgen-futures",
+    "dep:time",
+]
+browserfs = [
+    "dep:wasm-bindgen",
+    "dep:gloo-utils",
+    "dep:js-sys",
+    "dep:wasm-bindgen-futures",
+    "dep:time",
+]

@@ -1,23 +1,13 @@
 use std::rc::Rc;
-use std::time::Duration;
 
 use dioxus::prelude::*;
-use speki_dto::{Recall, Review as ReviewDTO};
+use speki_dto::Recall;
 use tracing::info;
 
-use crate::js;
 use crate::review_state::ReviewState;
 
 pub const DEFAULT_FILTER: &'static str =
     "recall < 0.8 & finished == true & suspended == false & minrecrecall > 0.8 & lastreview > 0.5 & weeklapses < 3 & monthlapses < 6";
-
-pub fn new_review(recall: Recall) -> ReviewDTO {
-    ReviewDTO {
-        timestamp: js::current_time(),
-        grade: recall,
-        time_spent: Duration::default(),
-    }
-}
 
 fn recall_button(recall: Recall) -> Element {
     let label = match recall {
@@ -33,7 +23,7 @@ fn recall_button(recall: Recall) -> Element {
             onclick: move |_| {
                 spawn(async move{
                     let mut review = use_context::<ReviewState>();
-                    review.do_review(new_review(recall)).await;
+                    review.do_review(recall).await;
                 });
             },
             "{label}"
@@ -90,10 +80,10 @@ pub fn Review() -> Element {
             info!("reviewing..");
             let mut rev = _review.clone();
             match event.key().to_string().as_str() {
-                "1" => rev.do_review(new_review(Recall::None)).await,
-                "2" => rev.do_review(new_review(Recall::Late)).await,
-                "3" => rev.do_review(new_review(Recall::Some)).await,
-                "4" => rev.do_review(new_review(Recall::Perfect)).await,
+                "1" => rev.do_review(Recall::None).await,
+                "2" => rev.do_review(Recall::Late).await,
+                "3" => rev.do_review(Recall::Some).await,
+                "4" => rev.do_review(Recall::Perfect).await,
                 " " => rev.show_backside.set(true),
                 _ => {}
             }
