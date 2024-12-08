@@ -157,7 +157,7 @@ pub fn Browse() -> Element {
             let b = BrowsePage::View(Arc::new(card.clone()));
             speki_web::set_browsepage(b);
             info!("settting dependency..");
-            card.set_dependency(sel_card.id).await;
+            card.add_dependency(sel_card.id).await;
             info!("refreshing card");
             let card = card.refresh().await;
             info!("setting to view");

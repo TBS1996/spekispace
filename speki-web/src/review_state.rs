@@ -5,7 +5,7 @@ use speki_core::{AnyType, Card};
 use speki_dto::{CardId, Recall};
 use tracing::{info, instrument};
 
-use crate::App;
+use crate::{App, DEFAULT_FILTER};
 
 #[derive(Clone, Debug)]
 pub struct ReviewState {
@@ -17,6 +17,7 @@ pub struct ReviewState {
     pub front: Signal<String>,
     pub back: Signal<String>,
     pub show_backside: Signal<bool>,
+    pub filter: Signal<String>,
 }
 
 impl ReviewState {
@@ -30,17 +31,22 @@ impl ReviewState {
             front: Default::default(),
             back: Default::default(),
             show_backside: Default::default(),
+            filter: Signal::new(DEFAULT_FILTER.to_string()),
         }
     }
 
     #[instrument]
-    pub async fn refresh(&mut self, filter: String) {
-        let app = use_context::<App>();
-        let cards = app.0.load_non_pending(Some(filter)).await;
+    pub async fn refresh(&mut self) {
+        info!("refreshing..");
+        let filter = self.filter.cloned();
+        let cards = self.app.0.load_non_pending(Some(filter)).await;
+        info!("review cards loaded");
         self.tot_len.clone().set(cards.len());
         {
+            info!("setting queue");
             let mut lock = self.queue.lock().unwrap();
             *lock = cards;
+            info!("queue was set");
         }
         self.next_card().await;
     }
@@ -78,6 +84,7 @@ impl ReviewState {
             None => None,
         };
 
+        info!("card set: {:?}", card);
         self.card.clone().set(card);
         self.pos.clone().set(self.current_pos());
         self.show_backside.set(false);

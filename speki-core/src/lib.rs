@@ -1,10 +1,8 @@
-use std::collections::HashMap;
 use std::fmt::Debug;
 use std::sync::Arc;
 use std::time::Duration;
 
 use attribute::AttrProvider;
-use card::filter_rec_recall;
 use card::RecallRate;
 use card_provider::CardProvider;
 use dioxus_logger::tracing::info;
@@ -146,36 +144,30 @@ impl App {
     #[instrument]
     pub async fn load_non_pending(&self, filter: Option<String>) -> Vec<CardId> {
         info!("loading card ids");
-        let cards: HashMap<_, _> = self
-            .load_all_cards()
-            .await
-            .into_iter()
-            .filter(|card| !card.history().is_empty())
-            .map(|card| (card.id, card))
-            .collect();
 
-        info!("starting filter recall thing");
-        let cards = filter_rec_recall(cards, 0.8).await;
+        let schema = filter.map(|filter| Schema::new(filter).unwrap());
+        let schema = Arc::new(schema);
+        info!("schema is: {:?}", schema);
 
-        let mut ids = vec![];
-
-        if let Some(ref filter) = filter {
-            let schema = Schema::new(filter.clone()).unwrap();
-
-            trace!("applying filters..");
-            for card in cards {
-                trace!("applying filter");
-                if card.eval_schema(&schema).await {
-                    ids.push(card.id());
+        let filter = {
+            let schema = schema.clone();
+            move |card: Arc<Card<AnyType>>| {
+                let schema = schema.clone();
+                async move {
+                    match &*schema {
+                        Some(sch) => card.eval_schema(sch).await,
+                        None => true,
+                    }
                 }
             }
-        } else {
-            for card in cards {
-                ids.push(card.id());
-            }
-        }
+        };
 
-        ids
+        self.card_provider
+            .filtered_load(filter)
+            .await
+            .into_iter()
+            .map(|card| card.id)
+            .collect()
     }
 
     pub async fn load_and_persist(&self) {

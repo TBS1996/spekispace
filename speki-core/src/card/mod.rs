@@ -1,9 +1,10 @@
-use crate::card_provider::CardProvider;
-use crate::recall_rate::SimpleRecall;
-use crate::reviews::Reviews;
-use crate::RecallCalc;
-use crate::Recaller;
-use crate::TimeGetter;
+use std::cmp::Ord;
+use std::cmp::PartialEq;
+use std::collections::{BTreeMap, BTreeSet};
+use std::fmt::Debug;
+use std::sync::Arc;
+use std::time::Duration;
+
 use async_trait::async_trait;
 use core::f32;
 use dioxus_logger::tracing::instrument;
@@ -18,13 +19,14 @@ use speki_dto::CardId;
 use speki_dto::RawCard;
 use speki_dto::Recall;
 use speki_dto::Review;
-use std::cmp::Ord;
-use std::cmp::PartialEq;
-use std::collections::HashMap;
-use std::collections::{BTreeMap, BTreeSet};
-use std::fmt::Debug;
-use std::sync::Arc;
-use std::time::Duration;
+use tracing::info;
+
+use crate::card_provider::CardProvider;
+use crate::recall_rate::SimpleRecall;
+use crate::reviews::Reviews;
+use crate::RecallCalc;
+use crate::Recaller;
+use crate::TimeGetter;
 
 pub type RecallRate = f32;
 
@@ -293,24 +295,6 @@ impl Card<AnyType> {
         self.history = Reviews(reviews);
     }
 
-    pub async fn min_rec_recall_rate(&self) -> f32 {
-        let mut min_rec = f32::MAX;
-
-        let dependencies = self.all_dependencies().await;
-        dbg!(dependencies);
-
-        for id in self.all_dependencies().await {
-            let card = self.card_provider.load(id).await.unwrap();
-            dbg!(&card);
-            dbg!(&card.history());
-            let rec = card.recall_rate().unwrap_or_default();
-            dbg!(rec);
-            min_rec = min_rec.min(rec);
-        }
-
-        min_rec
-    }
-
     pub async fn should_review(&self) -> bool {
         if self.recall_rate().unwrap_or_default() > 0.8 {
             return false;
@@ -431,7 +415,7 @@ impl Card<AnyType> {
         self.card_provider.load(self.id).await.unwrap()
     }
 
-    pub async fn set_dependency(&mut self, dependency: CardId) {
+    pub async fn add_dependency(&mut self, dependency: CardId) {
         info!("for card: {} inserting dependency: {}", self.id, dependency);
         if self.id() == dependency {
             return;
@@ -503,7 +487,7 @@ impl Card<AnyType> {
     }
 
     pub async fn all_dependencies(&self) -> Vec<CardId> {
-        info!("getting dependencies of: {}", self.id);
+        tracing::trace!("getting dependencies of: {}", self.id);
         let mut deps = vec![];
         let mut stack = vec![self.id()];
 
@@ -520,6 +504,11 @@ impl Card<AnyType> {
         }
 
         deps
+    }
+
+    pub async fn min_rec_recall_rate(&self) -> RecallRate {
+        tracing::trace!("min rec recall of {}", self.id);
+        self.card_provider.min_rec_recall_rate(self.id).await
     }
 
     pub async fn display_backside(&self) -> Option<String> {
@@ -675,7 +664,7 @@ impl Matcher for Card<AnyType> {
                     / 86400.
             ),
             "minrecrecall" => {
-                json!(1.0)
+                json!(self.min_rec_recall_rate().await)
             }
             "minrecstab" => {
                 let mut min_recall = usize::MAX;
@@ -695,58 +684,6 @@ impl Matcher for Card<AnyType> {
         }
         .into()
     }
-}
-
-use tracing::info;
-
-#[instrument]
-pub async fn filter_rec_recall(
-    mut cards: HashMap<CardId, Arc<Card<AnyType>>>,
-    min_recall: f32,
-) -> Vec<Arc<Card<AnyType>>> {
-    let mut output = vec![];
-
-    while !cards.is_empty() {
-        let card = cards.values().next().unwrap();
-        let map = recall_cache(card.clone()).await;
-
-        for (id, rec) in map.into_iter() {
-            if let Some(card) = cards.remove(&id) {
-                if rec > min_recall {
-                    output.push(card);
-                }
-            }
-        }
-    }
-
-    output
-}
-
-pub async fn recall_cache(card: Arc<Card<AnyType>>) -> HashMap<CardId, f32> {
-    use std::future::Future;
-    use std::pin::Pin;
-
-    fn inner(
-        card: Arc<Card<AnyType>>,
-        mut map: HashMap<CardId, f32>,
-        mut min_recall: f32,
-    ) -> Pin<Box<dyn Future<Output = (HashMap<CardId, f32>, f32)>>> {
-        Box::pin(async move {
-            for dep in card.dependency_ids().await {
-                let dep_card = card.card_provider.load(dep).await.unwrap();
-                let (inner_map, inner_recall) = inner(dep_card, map.clone(), min_recall).await;
-                min_recall = min_recall.min(inner_recall);
-                map.extend(inner_map.iter());
-            }
-            map.insert(card.id, min_recall);
-            min_recall = card.recall_rate().unwrap_or_default().min(min_recall);
-            (map, min_recall)
-        })
-    }
-
-    let (map, _) = inner(card, Default::default(), 1.0).await;
-
-    map
 }
 
 #[cfg(test)]
@@ -977,6 +914,74 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_min_recall_basic() {
+        let storage = TestStuff::new();
+        let mut card1 = storage.insert_card().await;
+        let mut card2 = storage.insert_card().await;
+
+        card1.add_review(Recall::Late).await;
+        card2.add_review(Recall::Some).await;
+
+        storage.inc_time(Duration::from_secs(86400));
+
+        card1.add_dependency(card2.id).await;
+
+        let lowest_recall = card2.recall_rate().unwrap();
+
+        assert_eq!(card1.min_rec_recall_rate().await, lowest_recall);
+        assert_eq!(card2.min_rec_recall_rate().await, 1.0);
+    }
+
+    #[tokio::test]
+    async fn test_min_recall_simple() {
+        use tracing::Level;
+        use tracing_subscriber::FmtSubscriber;
+
+        let subscriber = FmtSubscriber::builder()
+            .with_max_level(Level::INFO)
+            .finish();
+
+        // Set the global default subscriber.
+        tracing::subscriber::set_global_default(subscriber)
+            .expect("Setting default subscriber failed");
+
+        let storage = TestStuff::new();
+        let mut card1 = storage.insert_card().await;
+        let mut card2 = storage.insert_card().await;
+        let mut card3 = storage.insert_card().await;
+
+        card1.add_review(Recall::Some).await;
+        card2.add_review(Recall::Late).await;
+        card3.add_review(Recall::Perfect).await;
+
+        storage.inc_time(Duration::from_secs(86400));
+
+        card1.add_dependency(card2.id).await;
+        card2.add_dependency(card3.id).await;
+
+        dbg!(card1.recall_rate().unwrap());
+        dbg!(card2.recall_rate().unwrap());
+        dbg!(card3.recall_rate().unwrap());
+
+        tracing::info!("card1 min rec recall:");
+        dbg!(card1.min_rec_recall_rate().await);
+        tracing::info!("card2 min rec recall:");
+        dbg!(card2.min_rec_recall_rate().await);
+        tracing::info!("card3 min rec recall:");
+        dbg!(card3.min_rec_recall_rate().await);
+
+        assert_eq!(
+            card1.min_rec_recall_rate().await,
+            card2.recall_rate().unwrap()
+        );
+        assert_eq!(
+            card2.min_rec_recall_rate().await,
+            card3.recall_rate().unwrap()
+        );
+        assert_eq!(card3.min_rec_recall_rate().await, 1.0,);
+    }
+
+    #[tokio::test]
     async fn test_min_recall() {
         let storage = TestStuff::new();
         let mut card1 = storage.insert_card().await;
@@ -991,9 +996,9 @@ mod tests {
 
         storage.inc_time(Duration::from_secs(86400));
 
-        card1.set_dependency(card2.id).await;
-        card2.set_dependency(card3.id).await;
-        card3.set_dependency(card4.id).await;
+        card1.add_dependency(card2.id).await;
+        card2.add_dependency(card3.id).await;
+        card3.add_dependency(card4.id).await;
 
         let lowest_recall = card3.recall_rate().unwrap();
 
@@ -1016,17 +1021,37 @@ mod tests {
 
         storage.inc_time(Duration::from_secs(86400));
 
-        card1.set_dependency(card2.id).await;
-        card2.set_dependency(card3.id).await;
-        card3.set_dependency(card4.id).await;
+        tracing::info!("TEST ADD DEPENDENCIES");
+        card1.add_dependency(card2.id).await;
+        card2.add_dependency(card3.id).await;
+        card3.add_dependency(card4.id).await;
 
-        let mut map = super::recall_cache(Arc::new(card1.clone())).await;
+        dbg!(card1.recall_rate().unwrap());
+        dbg!(card2.recall_rate().unwrap());
+        dbg!(card3.recall_rate().unwrap());
+        dbg!(card4.recall_rate().unwrap());
 
-        assert_eq!(map.remove(&card1.id).unwrap(), card3.recall_rate().unwrap());
-        assert_eq!(map.remove(&card2.id).unwrap(), card3.recall_rate().unwrap());
-        assert_eq!(map.remove(&card3.id).unwrap(), card4.recall_rate().unwrap());
-        assert_eq!(map.remove(&card4.id).unwrap(), 1.0);
+        tracing::info!("card1 min rec recall:");
+        dbg!(card1.min_rec_recall_rate().await);
+        tracing::info!("card2 min rec recall:");
+        dbg!(card2.min_rec_recall_rate().await);
+        tracing::info!("card3 min rec recall:");
+        dbg!(card3.min_rec_recall_rate().await);
+        tracing::info!("card4 min rec recall:");
+        dbg!(card4.min_rec_recall_rate().await);
 
-        assert!(map.is_empty());
+        assert_eq!(
+            card1.min_rec_recall_rate().await,
+            card3.recall_rate().unwrap()
+        );
+        assert_eq!(
+            card2.min_rec_recall_rate().await,
+            card3.recall_rate().unwrap()
+        );
+        assert_eq!(
+            card3.min_rec_recall_rate().await,
+            card4.recall_rate().unwrap()
+        );
+        assert_eq!(card4.min_rec_recall_rate().await, 1.0);
     }
 }

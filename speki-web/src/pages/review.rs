@@ -6,9 +6,6 @@ use tracing::info;
 
 use crate::review_state::ReviewState;
 
-pub const DEFAULT_FILTER: &'static str =
-    "recall < 0.8 & finished == true & suspended == false & minrecrecall > 0.8 & lastreview > 0.5 & weeklapses < 3 & monthlapses < 6";
-
 fn recall_button(recall: Recall) -> Element {
     let label = match recall {
         Recall::None => "unfamiliar",
@@ -32,16 +29,25 @@ fn recall_button(recall: Recall) -> Element {
     }
 }
 
-fn review_start() -> Element {
+fn review_start(mut filter: Signal<String>) -> Element {
     rsx! {
         div {
             class: "flex items-center justify-center h-screen",
+
+            input {
+                class: "w-full border border-gray-300 rounded-md p-2 mb-4 text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent",
+                value: "{filter}",
+                oninput: move |evt| filter.set(evt.value().clone()),
+            },
+
             button {
                 class: "mt-6 inline-flex items-center text-white bg-gray-800 border-0 py-1 px-3 focus:outline-none hover:bg-gray-700 rounded text-base md:mt-0",
+
+
                 onclick: move |_| {
                     spawn(async move {
                         let mut review = use_context::<ReviewState>();
-                        review.refresh(DEFAULT_FILTER.to_string()).await;
+                        review.refresh().await;
                     });
                 },
                 "Start review"
@@ -69,7 +75,10 @@ pub fn Review() -> Element {
     let pos = review.pos.clone();
     let tot = review.tot_len.clone();
     let reviewing = card().is_some();
+    let _card = card.clone();
+    let reviewing = use_memo(move || _card().is_some());
     let mut show_backside = review.show_backside.clone();
+    let filter_sig = review.filter.clone();
 
     let front = review.front.clone();
     let back = review.back.clone();
@@ -97,7 +106,7 @@ pub fn Review() -> Element {
         div { id: "receiver", tabindex: 0,
             onkeydown: move |event| log_event(event.data()),
 
-            if reviewing {
+            if reviewing() {
                 div {
                     class: "w-full max-w-lg text-center",
 
@@ -129,7 +138,7 @@ pub fn Review() -> Element {
                     }
                 }
             } else {
-                { review_start() }
+                { review_start(filter_sig) }
             }
         }
     }

@@ -254,7 +254,7 @@ async fn handle_action(app: &App, card: CardId, action: CardAction) -> ControlFl
                 app.load_card(card.id)
                     .await
                     .unwrap()
-                    .set_dependency(new_card)
+                    .add_dependency(new_card)
                     .await;
             }
         }
@@ -263,7 +263,7 @@ async fn handle_action(app: &App, card: CardId, action: CardAction) -> ControlFl
                 app.load_card(card.id())
                     .await
                     .unwrap()
-                    .set_dependency(dep)
+                    .add_dependency(dep)
                     .await;
             }
         }
@@ -273,7 +273,7 @@ async fn handle_action(app: &App, card: CardId, action: CardAction) -> ControlFl
                 app.load_card(new_card)
                     .await
                     .unwrap()
-                    .set_dependency(card.id)
+                    .add_dependency(card.id)
                     .await;
             }
         }
@@ -282,7 +282,7 @@ async fn handle_action(app: &App, card: CardId, action: CardAction) -> ControlFl
                 app.load_card(dep)
                     .await
                     .unwrap()
-                    .set_dependency(card.id)
+                    .add_dependency(card.id)
                     .await;
             }
         }

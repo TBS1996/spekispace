@@ -19,6 +19,7 @@ omtrent.workspace = true
 speki-dto.workspace = true
 dioxus-logger.workspace = true
 tracing.workspace = true
+tracing-subscriber.workspace = true
 
 async-trait.workspace = true
 

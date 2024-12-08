@@ -1,5 +1,8 @@
 use crate::{
-    card::serializing::{into_any, into_raw_card},
+    card::{
+        serializing::{into_any, into_raw_card},
+        RecallRate,
+    },
     reviews::Reviews,
     AnyType, Attribute, Card, Provider, Recaller, TimeGetter,
 };
@@ -29,7 +32,137 @@ impl Debug for CardProvider {
     }
 }
 
+use std::future::Future;
+use std::pin::Pin;
+
 impl CardProvider {
+    pub fn min_rec_recall_rate(
+        &self,
+        id: CardId,
+    ) -> Pin<Box<dyn Future<Output = RecallRate> + '_>> {
+        Box::pin(async move {
+            trace!("card: {id} starting min rec recall calculation");
+            let card = self.load(id).await.unwrap();
+            let entry = self.load_cached_entry(id).await.unwrap();
+            let recall_rate = card.recall_rate().unwrap_or_default();
+
+            if let Some(recall) = entry.min_rec_recall {
+                trace!("card: {id}: cached min rec recall: {recall}");
+                return recall;
+            }
+
+            let dependencies = card.dependency_ids().await;
+
+            if dependencies.is_empty() {
+                trace!("card: {id}: no dependencies!");
+                self.update_min_rec_recall(id, 1.0);
+                recall_rate
+            } else {
+                trace!("card: {id} traversing dependencies first: {dependencies:?}");
+                let mut min_recall: RecallRate = 1.0;
+
+                for dep in dependencies {
+                    let rec = self.min_rec_recall_rate(dep).await;
+                    let dep_rec = self
+                        .load(dep)
+                        .await
+                        .unwrap()
+                        .recall_rate()
+                        .unwrap_or_default();
+                    min_recall = min_recall.min(rec);
+                    min_recall = min_recall.min(dep_rec);
+                    trace!("card: {id}: min recall updated: {min_recall}");
+                }
+
+                self.update_min_rec_recall(id, min_recall);
+                trace!("card: {id}: new min rec recall: {min_recall}");
+                min_recall
+            }
+        })
+    }
+
+    fn update_min_rec_recall(&self, id: CardId, cached_recall: RecallRate) {
+        trace!("card: {id}: caching min rec recall: {cached_recall}");
+        let mut guard = self.inner.write().unwrap();
+        guard.cards.get_mut(&id).unwrap().min_rec_recall = Some(cached_recall);
+    }
+
+    pub async fn load_all_card_ids(&self) -> Vec<CardId> {
+        self.provider.load_card_ids().await
+    }
+
+    pub async fn filtered_load<F, Fut>(&self, filter: F) -> Vec<Arc<Card<AnyType>>>
+    where
+        F: Fn(Arc<Card<AnyType>>) -> Fut + Send + Sync,
+        Fut: std::future::Future<Output = bool>,
+    {
+        info!("loading card ids");
+        let card_ids = self.load_all_card_ids().await;
+        info!("so many ids loaded: {}", card_ids.len());
+
+        let filtered_cards = futures::future::join_all(card_ids.into_iter().map(|id| {
+            let filter = &filter;
+            async move {
+                let card = self.load(id).await.unwrap();
+
+                if filter(card.clone()).await {
+                    Some(card)
+                } else {
+                    None
+                }
+            }
+        }))
+        .await;
+
+        filtered_cards.into_iter().filter_map(|card| card).collect()
+    }
+
+    pub async fn load_all(&self) -> Vec<Arc<Card<AnyType>>> {
+        let filter = |_: Arc<Card<AnyType>>| async move { true };
+        self.filtered_load(filter).await
+    }
+
+    pub async fn dependents(&self, id: CardId) -> BTreeSet<Arc<Card<AnyType>>> {
+        info!("dependents of: {}", id);
+        let mut out = BTreeSet::default();
+        let deps = self
+            .inner
+            .read()
+            .unwrap()
+            .dependents
+            .get(&id)
+            .cloned()
+            .unwrap_or_default();
+
+        for dep in deps {
+            if let Some(card) = self.load(dep).await {
+                out.insert(card);
+            }
+        }
+
+        out
+    }
+
+    pub async fn load(&self, id: CardId) -> Option<Arc<Card<AnyType>>> {
+        trace!("loading card for id: {}", id);
+        if let (Some(card), Some(_)) = (
+            self.load_cached_card(id).await,
+            self.load_cached_reviews(id).await,
+        ) {
+            trace!("cache hit for id: {}", id);
+            Some(card)
+        } else {
+            trace!("cache miss for id: {}", id);
+            self.fresh_load(id).await
+        }
+    }
+
+    pub async fn load_attribute(&self, id: AttributeId) -> Option<Attribute> {
+        self.provider
+            .load_attribute(id)
+            .await
+            .map(|dto| Attribute::from_dto(dto, self.clone()))
+    }
     pub async fn load_reviews(&self, id: CardId) -> Reviews {
         Reviews(self.provider.load_reviews(id).await)
     }
@@ -124,17 +257,21 @@ impl CardProvider {
         }
     }
 
-    async fn load_cached_card(&self, id: CardId) -> Option<Arc<Card<AnyType>>> {
+    async fn load_cached_entry(&self, id: CardId) -> Option<CardCache> {
         trace!("attempting cache load for card: {}", id);
         let guard = self.inner.read().unwrap();
         trace!("cache size: {}", guard.cards.len());
-        let cached = match guard.cards.get(&id) {
-            Some(cached) => cached,
+        match guard.cards.get(&id) {
+            Some(cached) => Some((*cached).clone()),
             None => {
                 trace!("cache miss for card: {}", id);
-                return None;
+                None
             }
-        };
+        }
+    }
+
+    async fn load_cached_card(&self, id: CardId) -> Option<Arc<Card<AnyType>>> {
+        let cached = self.load_cached_entry(id).await?;
 
         if self.check_modified {
             let last_modified = self.provider.last_modified_card(id).await;
@@ -160,80 +297,22 @@ impl CardProvider {
             fetched: now,
             review: card.history.clone(),
         };
-        let cached_card = CardCache { fetched: now, card };
+        let cached_card = CardCache {
+            fetched: now,
+            card,
+            min_rec_recall: None,
+        };
 
         guard.cards.insert(id, cached_card);
         guard.reviews.insert(id, cached_reviews);
     }
 
-    pub async fn load_all_card_ids(&self) -> Vec<CardId> {
-        self.provider.load_card_ids().await
-    }
-
-    pub async fn load_all(&self) -> Vec<Arc<Card<AnyType>>> {
-        info!("loading card ids");
-        let card_ids = self.load_all_card_ids().await;
-        info!("so many ids loaded: {}", card_ids.len());
-
-        let output = futures::future::join_all(card_ids.into_iter().map(|id| async move {
-            trace!("loading card..");
-            let card = self.load(id).await.unwrap();
-            trace!("loaded card");
-            card
-        }))
-        .await;
-
-        output
-    }
-
-    pub async fn dependents(&self, id: CardId) -> BTreeSet<Arc<Card<AnyType>>> {
-        info!("dependents of: {}", id);
-        let mut out = BTreeSet::default();
-        let deps = self
-            .inner
-            .read()
-            .unwrap()
-            .dependents
-            .get(&id)
-            .cloned()
-            .unwrap_or_default();
-
-        for dep in deps {
-            if let Some(card) = self.load(dep).await {
-                out.insert(card);
-            }
-        }
-
-        out
-    }
-
-    pub async fn fresh_load(&self, id: CardId) -> Option<Arc<Card<AnyType>>> {
+    async fn fresh_load(&self, id: CardId) -> Option<Arc<Card<AnyType>>> {
         let uncached = self.load_uncached(id).await?;
         let uncached = Arc::new(uncached);
         self.update_dependents(uncached.clone()).await;
         self.update_cache(uncached.clone());
         Some(uncached)
-    }
-
-    pub async fn load(&self, id: CardId) -> Option<Arc<Card<AnyType>>> {
-        trace!("loading card for id: {}", id);
-        if let (Some(card), Some(_)) = (
-            self.load_cached_card(id).await,
-            self.load_cached_reviews(id).await,
-        ) {
-            trace!("cache hit for id: {}", id);
-            Some(card)
-        } else {
-            trace!("cache miss for id: {}", id);
-            self.fresh_load(id).await
-        }
-    }
-
-    pub async fn load_attribute(&self, id: AttributeId) -> Option<Attribute> {
-        self.provider
-            .load_attribute(id)
-            .await
-            .map(|dto| Attribute::from_dto(dto, self.clone()))
     }
 }
 
@@ -243,9 +322,11 @@ struct Inner {
     dependents: HashMap<CardId, HashSet<CardId>>,
 }
 
+#[derive(Clone, Debug)]
 struct CardCache {
     fetched: Duration,
     card: Arc<Card<AnyType>>,
+    min_rec_recall: Option<RecallRate>,
 }
 
 struct RevCache {
