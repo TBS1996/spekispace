@@ -427,6 +427,7 @@ impl Card<AnyType> {
     }
 
     pub async fn refresh(self) -> Arc<Self> {
+        info!("refreshing card: {}", self.id);
         self.card_provider.load(self.id).await.unwrap()
     }
 
@@ -482,6 +483,7 @@ impl Card<AnyType> {
     }
 
     pub async fn all_dependents(&self) -> Vec<CardId> {
+        info!("getting dependents of: {}", self.id);
         let mut deps = vec![];
         let mut stack = vec![self.id()];
 
@@ -501,6 +503,7 @@ impl Card<AnyType> {
     }
 
     pub async fn all_dependencies(&self) -> Vec<CardId> {
+        info!("getting dependencies of: {}", self.id);
         let mut deps = vec![];
         let mut stack = vec![self.id()];
 
@@ -729,7 +732,6 @@ pub async fn recall_cache(card: Arc<Card<AnyType>>) -> HashMap<CardId, f32> {
         mut min_recall: f32,
     ) -> Pin<Box<dyn Future<Output = (HashMap<CardId, f32>, f32)>>> {
         Box::pin(async move {
-            info!("damn...");
             for dep in card.dependency_ids().await {
                 let dep_card = card.card_provider.load(dep).await.unwrap();
                 let (inner_map, inner_recall) = inner(dep_card, map.clone(), min_recall).await;

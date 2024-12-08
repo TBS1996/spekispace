@@ -1,11 +1,11 @@
 use std::{fmt::Debug, sync::Arc, time::Duration};
 
 use speki_core::TimeProvider;
+use speki_provider::DexieProvider;
+use speki_provider::IndexBaseProvider;
 use tracing::info;
 
 use crate::{js, login::LoginState, PROXY, REPO_PATH};
-
-use speki_provider::DexieProvider;
 
 pub mod cookies {
     use std::collections::HashMap;
@@ -88,9 +88,7 @@ impl App {
     }
 }
 
-use speki_provider::IndexBaseProvider;
-
-pub async fn sync() {
+pub async fn _sync() {
     let dexie_app = App(Arc::new(speki_core::App::new(
         DexieProvider,
         speki_core::SimpleRecall,

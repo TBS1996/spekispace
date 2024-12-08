@@ -3,13 +3,14 @@ use std::{rc::Rc, sync::Arc};
 use dioxus::prelude::*;
 use speki_core::{AnyType, Card};
 
-use crate::pages::BrowseState;
+use crate::pages::CardEntry;
 
 #[derive(Props, Clone)]
 pub struct CardSelectorProps {
     pub title: String,
     pub search: Signal<String>,
     pub on_card_selected: Rc<dyn Fn(Arc<Card<AnyType>>)>,
+    pub cards: Signal<Vec<CardEntry>>,
 }
 
 impl PartialEq for CardSelectorProps {
@@ -24,10 +25,9 @@ pub fn card_selector(props: CardSelectorProps) -> Element {
     let title = props.title;
     let mut search = props.search.clone();
 
-    let browse_state = use_context::<BrowseState>();
     let closure = Arc::new(props.on_card_selected);
 
-    let filtered_cards: Vec<_> = browse_state
+    let filtered_cards: Vec<_> = props
         .cards
         .iter()
         .filter(|card| card.front.contains(&search.cloned()))

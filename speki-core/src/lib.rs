@@ -1,22 +1,24 @@
-use crate::card::serializing::new_raw_card;
+use std::collections::HashMap;
+use std::fmt::Debug;
+use std::sync::Arc;
+use std::time::Duration;
+
 use attribute::AttrProvider;
 use card::filter_rec_recall;
 use card::RecallRate;
 use card_provider::CardProvider;
+use dioxus_logger::tracing::info;
 use eyre::Result;
 use reviews::Reviews;
 use samsvar::Matcher;
 use samsvar::Schema;
 use speki_dto::AttributeId;
 use speki_dto::SpekiProvider;
-use std::collections::HashMap;
-use std::fmt::Debug;
-use std::time::Duration;
 use tracing::instrument;
+use tracing::trace;
 
-//pub mod collections;
-//pub mod github;
-//mod attr_provider;
+use crate::card::serializing::new_raw_card;
+
 mod attribute;
 mod card;
 mod card_provider;
@@ -41,8 +43,6 @@ pub trait RecallCalc {
     fn recall_rate(&self, reviews: &Reviews, current_unix: Duration) -> Option<RecallRate>;
 }
 
-use std::sync::Arc;
-
 pub trait TimeProvider {
     fn current_time(&self) -> Duration;
 }
@@ -63,8 +63,6 @@ impl Debug for App {
         write!(f, "app!")
     }
 }
-
-use dioxus_logger::tracing::info;
 
 impl App {
     pub fn new<A, B, C>(provider: A, recall_calc: B, time_provider: C) -> Self
@@ -94,8 +92,10 @@ impl App {
 
     pub async fn fill_cache(&self) {
         info!("filling cache");
+        let start = self.time_provider.current_time();
         self.card_provider.load_all().await;
-        info!("cache filled!");
+        let elapsed = self.time_provider.current_time() - start;
+        info!("cache filled in {:.4} seconds!", elapsed.as_secs_f32());
     }
 
     #[instrument]
@@ -112,7 +112,9 @@ impl App {
     }
 
     pub async fn load_card(&self, id: CardId) -> Option<Card<AnyType>> {
+        trace!("loading card: {id}");
         let card = self.card_provider.load(id).await;
+        trace!("card loaded i guess: {card:?}");
         Some(Arc::unwrap_or_clone(card?))
     }
 
@@ -160,14 +162,11 @@ impl App {
         if let Some(ref filter) = filter {
             let schema = Schema::new(filter.clone()).unwrap();
 
-            info!("applying filters..");
+            trace!("applying filters..");
             for card in cards {
-                info!("applying filter");
+                trace!("applying filter");
                 if card.eval_schema(&schema).await {
-                    //    info!("filter match");
                     ids.push(card.id());
-                } else {
-                    //   info!("filter not match");
                 }
             }
         } else {
@@ -195,6 +194,11 @@ impl App {
             }
         }
         ids
+    }
+
+    pub async fn add_card_with_backside(&self, front: String, back: BackSide) -> CardId {
+        let data = NormalCard { front, back };
+        self.new_any(data).await.id()
     }
 
     pub async fn add_card(&self, front: String, back: String) -> CardId {

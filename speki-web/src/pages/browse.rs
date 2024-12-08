@@ -1,20 +1,33 @@
-use std::sync::Arc;
-
-use crate::{
-    components::{card_selector, display_card},
-    graph::GraphRep,
+use std::rc::Rc;
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    Arc,
 };
+
 use dioxus::prelude::*;
 use speki_core::{AnyType, Card};
 use speki_web::BrowsePage;
 use tracing::info;
 
 use crate::App;
+use crate::{
+    components::{card_selector, display_card},
+    graph::GraphRep,
+};
 
 #[derive(Clone)]
 pub struct CardEntry {
     pub front: String,
     pub card: Arc<Card<AnyType>>,
+}
+
+impl CardEntry {
+    pub async fn new(card: Arc<Card<AnyType>>) -> Self {
+        Self {
+            front: card.print().await,
+            card,
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -25,6 +38,7 @@ pub struct BrowseState {
     pub back_input: Signal<String>,
     pub search: Signal<String>,
     pub graph: Signal<GraphRep>,
+    pub refreshed: Arc<AtomicBool>,
 }
 
 impl BrowseState {
@@ -37,17 +51,26 @@ impl BrowseState {
             back_input: Default::default(),
             search: Default::default(),
             graph: Signal::new(GraphRep::init("browcy".to_string())),
+            refreshed: Default::default(),
         };
 
         speki_web::set_signal(selv.selected_card.clone());
-        let _selv = selv.clone();
-        spawn(async move {
-            _selv.refresh_cards().await;
-        });
         selv
     }
 
+    fn maybe_refresh(&self) {
+        info!("maybe refresh");
+        if !self.refreshed.load(Ordering::SeqCst) {
+            let selv = self.clone();
+            spawn(async move {
+                selv.refresh_cards().await;
+                selv.refreshed.store(true, Ordering::SeqCst);
+            });
+        }
+    }
+
     pub async fn refresh_cards(&self) {
+        info!("refreshing cards");
         let app = use_context::<App>();
         let mut out = vec![];
         for card in app.as_ref().load_all_cards().await {
@@ -70,6 +93,7 @@ impl Default for BrowseState {
 #[component]
 pub fn Browse() -> Element {
     let browse_state = use_context::<BrowseState>();
+    browse_state.maybe_refresh();
     let app = use_context::<App>();
     let selected_card = browse_state.selected_card.clone();
     let display_cyto = use_signal(|| false);
@@ -150,14 +174,14 @@ pub fn Browse() -> Element {
                 title: "browse cards".to_string(),
                 search: browse_state.search.clone(),
                 on_card_selected: Rc::new(view_closure),
+                cards: browse_state.cards.clone(),
             }},
             BrowsePage::SetDependency(_) => rsx !{ card_selector::card_selector {
                 title: "set dependency".to_string(),
                 search: browse_state.search.clone(),
                 on_card_selected: Rc::new(dep_closure),
+                cards: browse_state.cards.clone(),
             }},
         }
     }
 }
-
-use std::rc::Rc;

@@ -71,6 +71,7 @@ impl CardProvider {
     }
 
     async fn load_uncached(&self, id: CardId) -> Option<Card<AnyType>> {
+        trace!("load uncached");
         let raw_card = self.provider.load_card(id).await?;
         let reviews = self.provider.load_reviews(id).await;
         let history = Reviews(reviews);
@@ -116,6 +117,7 @@ impl CardProvider {
     }
 
     async fn update_dependents(&self, card: Arc<Card<AnyType>>) {
+        trace!("updating cache dependents");
         let mut guard = self.inner.write().unwrap();
         for dep in card.dependency_ids().await {
             guard.dependents.entry(dep).or_default().insert(card.id);
@@ -174,9 +176,9 @@ impl CardProvider {
         info!("so many ids loaded: {}", card_ids.len());
 
         let output = futures::future::join_all(card_ids.into_iter().map(|id| async move {
-            info!("loading card..");
+            trace!("loading card..");
             let card = self.load(id).await.unwrap();
-            info!("loaded card");
+            trace!("loaded card");
             card
         }))
         .await;
@@ -185,6 +187,7 @@ impl CardProvider {
     }
 
     pub async fn dependents(&self, id: CardId) -> BTreeSet<Arc<Card<AnyType>>> {
+        info!("dependents of: {}", id);
         let mut out = BTreeSet::default();
         let deps = self
             .inner
@@ -204,20 +207,25 @@ impl CardProvider {
         out
     }
 
+    pub async fn fresh_load(&self, id: CardId) -> Option<Arc<Card<AnyType>>> {
+        let uncached = self.load_uncached(id).await?;
+        let uncached = Arc::new(uncached);
+        self.update_dependents(uncached.clone()).await;
+        self.update_cache(uncached.clone());
+        Some(uncached)
+    }
+
     pub async fn load(&self, id: CardId) -> Option<Arc<Card<AnyType>>> {
         trace!("loading card for id: {}", id);
         if let (Some(card), Some(_)) = (
             self.load_cached_card(id).await,
             self.load_cached_reviews(id).await,
         ) {
+            trace!("cache hit for id: {}", id);
             Some(card)
         } else {
             trace!("cache miss for id: {}", id);
-            let uncached = self.load_uncached(id).await?;
-            let uncached = Arc::new(uncached);
-            self.update_dependents(uncached.clone()).await;
-            self.update_cache(uncached.clone());
-            Some(uncached)
+            self.fresh_load(id).await
         }
     }
 

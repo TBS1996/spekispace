@@ -1,11 +1,11 @@
 #![allow(non_snake_case)]
 
+use components::backside::BackPut;
 use dioxus::prelude::*;
 use dioxus_logger::tracing::{info, Level};
 use login::LoginState;
 use pages::BrowseState;
 use review_state::ReviewState;
-use utils::sync;
 
 use crate::pages::{Add, Browse, Home, Review};
 use crate::utils::App;
@@ -35,14 +35,16 @@ fn main() {
 #[component]
 pub fn TheApp() -> Element {
     let app = use_context_provider(App::new);
+    let backput = BackPut::new(app.clone());
+    use_context_provider(|| backput.clone());
     use_context_provider(|| ReviewState::new(app.clone()));
     use_context_provider(LoginState::default);
     use_context_provider(BrowseState::new);
 
     spawn(async move {
-        //sync().await;
         app.0.fill_cache().await;
         speki_web::set_app(app.0.clone());
+        backput.load_cards().await;
     });
 
     rsx! {

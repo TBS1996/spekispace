@@ -1,17 +1,19 @@
-use super::{
-    AnyType, AttributeCard, Card, ClassCard, EventCard, InstanceCard, IsSuspended, NormalCard,
-    StatementCard, UnfinishedCard,
-};
-use crate::card_provider::CardProvider;
+use std::time::Duration;
+
 use omtrent::TimeStamp;
 use serde::de::{self, Deserializer};
 use serde::{Deserialize, Serialize};
 use speki_dto::RawCard;
 use speki_dto::{AttributeId, CardId};
 use speki_dto::{CType, RawType};
-use std::time::Duration;
 use toml::Value;
 use uuid::Uuid;
+
+use super::{
+    AnyType, AttributeCard, Card, ClassCard, EventCard, InstanceCard, IsSuspended, NormalCard,
+    StatementCard, UnfinishedCard,
+};
+use crate::card_provider::CardProvider;
 
 pub fn into_any(raw: RawType, card_provider: &CardProvider) -> AnyType {
     match raw.ty {
