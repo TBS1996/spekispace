@@ -1,11 +1,17 @@
-use std::{rc::Rc, sync::Arc};
+use std::{
+    fmt::{Debug, Display},
+    rc::Rc,
+    sync::Arc,
+};
 
 use dioxus::prelude::*;
+use serde::{Deserialize, Serialize};
 use speki_core::{AnyType, Card};
 use speki_dto::{BackSide, CardId};
+use strum::{EnumIter, IntoEnumIterator};
 use tracing::info;
 
-use super::card_selector::CardSelectorProps;
+use super::{card_selector::CardSelectorProps, dropdown::DropDownMenu};
 use crate::{components::card_selector, pages::CardEntry, utils::App};
 
 const PLACEHOLDER: &'static str = "pick reference...";
@@ -15,7 +21,7 @@ pub struct BackPut {
     text: Signal<String>,
     card: Signal<Option<CardId>>,
     show: Signal<bool>,
-    chosen: Signal<DropDown>,
+    dropdown: DropDownMenu<BackOpts>,
     app: App,
     ref_display: Signal<String>,
     pub searching_cards: Signal<Option<CardSelectorProps>>,
@@ -29,7 +35,7 @@ impl BackPut {
             text: Default::default(),
             card: Default::default(),
             show: Default::default(),
-            chosen: Default::default(),
+            dropdown: DropDownMenu::new(BackOpts::iter()),
             ref_display: Signal::new(PLACEHOLDER.to_string()),
             searching_cards: Default::default(),
             cards: Default::default(),
@@ -72,7 +78,6 @@ impl BackPut {
         let front = self.app.0.load_card(card).await.unwrap().print().await;
         info!("2");
         self.ref_display.clone().set(front);
-        self.chosen.clone().set(DropDown::Card);
         self.card.clone().set(Some(card));
         self.searching_cards.clone().set(None);
     }
@@ -82,50 +87,32 @@ impl BackPut {
         self.card.clone().set(Default::default());
         self.show.clone().set(Default::default());
         self.searching_cards.clone().set(Default::default());
-        self.chosen.clone().set(Default::default());
         self.ref_display.clone().set(PLACEHOLDER.to_string());
     }
 
     pub fn view(&self) -> Element {
-        let mut dropdown = self.chosen.clone();
-
         rsx! {
             div {
                 class: "backside-editor flex items-center space-x-4",
 
-                match *dropdown.read() {
-                    DropDown::Text => self.render_text(),
-                    DropDown::Card => self.render_ref(),
+                match *self.dropdown.selected.read() {
+                    BackOpts::Text => self.render_text(),
+                    BackOpts::Card => self.render_ref(),
                 }
 
-                div {
-                    class: "dropdown",
-                    select {
-                        class: "w-full border border-gray-300 rounded-md p-2 text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent",
-                        value: "{dropdown.read().text()}",
-                        onchange: move |evt| {
-                            let new_choice = match evt.value().as_str() {
-                                "text" => DropDown::Text,
-                                "card" => DropDown::Card,
-                                _ => unreachable!(),
-                            };
-                            dropdown.set(new_choice);
-                        },
-                        option { value: "text", "🔤" }
-                        option { value: "card", "🔗" }
-                    }
-                }
+                { self.dropdown.view() }
+
             }
         }
     }
 
     pub fn to_backside(&self) -> Option<BackSide> {
-        let chosen = self.chosen.cloned();
+        let chosen = self.dropdown.selected.cloned();
         info!("chosen is: {:?}", chosen);
 
         match chosen {
-            DropDown::Card => Some(BackSide::Card(self.card.cloned()?)),
-            DropDown::Text => {
+            BackOpts::Card => Some(BackSide::Card(self.card.cloned()?)),
+            BackOpts::Text => {
                 let s = self.text.cloned();
                 info!("text is: {s}");
 
@@ -167,18 +154,20 @@ impl BackPut {
     }
 }
 
-#[derive(Default, Copy, Clone, Debug)]
-enum DropDown {
+#[derive(Default, Copy, Clone, Debug, Serialize, Deserialize, EnumIter)]
+enum BackOpts {
     #[default]
     Text,
     Card,
 }
 
-impl DropDown {
-    fn text(&self) -> &'static str {
-        match self {
-            DropDown::Text => "text",
-            DropDown::Card => "card",
-        }
+impl Display for BackOpts {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let s = match self {
+            BackOpts::Text => "🔤",
+            BackOpts::Card => "🔗",
+        };
+
+        write!(f, "{s}")
     }
 }

@@ -74,7 +74,6 @@ pub fn Review() -> Element {
     let card = review.card.clone();
     let pos = review.pos.clone();
     let tot = review.tot_len.clone();
-    let reviewing = card().is_some();
     let _card = card.clone();
     let reviewing = use_memo(move || _card().is_some());
     let mut show_backside = review.show_backside.clone();
