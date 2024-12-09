@@ -1,6 +1,6 @@
 use dioxus::prelude::*;
 use speki_web::BrowsePage;
-use tracing::info;
+use tracing::{info, trace};
 
 use crate::{pages::BrowseState, utils::App};
 
@@ -14,7 +14,6 @@ pub fn display_card() -> Element {
 
     let mut selected_card = browse_state.selected_card.clone();
 
-    info!("huh??");
     let graphing = browse_state.graph.clone();
     if let Some(browse) = speki_web::take_browsepage() {
         info!("set some!!");
@@ -26,7 +25,7 @@ pub fn display_card() -> Element {
             graphing.read().set_card(_app, _card).await;
         });
     } else {
-        info!("nope no set");
+        trace!("nope no set");
     }
 
     info!("cyto id: {cyto_id}");

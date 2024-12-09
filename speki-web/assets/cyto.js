@@ -32,6 +32,7 @@ export function createCytoInstance(id) {
                     "background-color": "data(backgroundColor)",
                     "border-color": "#000",
                     "border-width": 1,
+                    "shape": "data(shape)",
                     "label": "data(label)",
                     "color": "#000",
                     "text-wrap": "wrap",
@@ -129,9 +130,7 @@ export function getCytoInstance(id) {
 
 export function runLayout(id, targetNodeId) {
     const cy = getCytoInstance(id);
-    console.log("8 @@@@@@@@@@@@@@@@@@@@@@@@@@@@");
     if (cy) {
-        // Run the Dagre layout
         cy.layout({
             name: "dagre",
             rankDir: "BT",          // Top-to-bottom flow
@@ -193,11 +192,18 @@ export function addEdge(id, source, target) {
     }
 }
 
-export function addNode(cyto_id, id, label, backgroundColor) {
+export function addNode(cyto_id, id, label, backgroundColor, shape) {
     const cy = getCytoInstance(cyto_id);
     if (cy) {
         const wrappedLabel = wrapText(label); 
-        const node = cy.add({ data: { id, label: wrappedLabel, backgroundColor } });
+        const node = cy.add({ 
+            data: { 
+                id, 
+                label: wrappedLabel, 
+                backgroundColor, 
+                shape 
+            } 
+        });
 
         resizeNodeToFitLabel(node);
     }

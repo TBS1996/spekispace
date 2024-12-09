@@ -10,6 +10,7 @@ use petgraph::algo::is_cyclic_directed;
 use petgraph::graph::{DiGraph, NodeIndex};
 use petgraph::visit::EdgeRef;
 use speki_core::{AnyType, Card};
+use speki_dto::CType;
 use tracing::info;
 use web_sys::window;
 
@@ -144,11 +145,24 @@ fn transitive_reduction(graph: &mut DiGraph<NodeMetadata, ()>) {
     }
 }
 
+fn card_ty_to_shape(ty: CType) -> &'static str {
+    match ty {
+        CType::Instance => "roundrectangle",
+        CType::Normal => "ellipse",
+        CType::Unfinished => "ellipse",
+        CType::Attribute => "ellipse",
+        CType::Class => "rectangle",
+        CType::Statement => "ellipse",
+        CType::Event => "ellipse",
+    }
+}
+
 #[derive(Clone, Debug)]
 struct NodeMetadata {
     id: String,
     label: String,
     color: String,
+    ty: CType,
 }
 
 fn create_cyto_graph(cyto_id: &str, graph: &DiGraph<NodeMetadata, ()>) {
@@ -158,7 +172,13 @@ fn create_cyto_graph(cyto_id: &str, graph: &DiGraph<NodeMetadata, ()>) {
 
     for idx in graph.node_indices() {
         let node = &graph[idx];
-        js::add_node(cyto_id, &node.id, &node.label, &node.color);
+        js::add_node(
+            cyto_id,
+            &node.id,
+            &node.label,
+            &node.color,
+            card_ty_to_shape(node.ty),
+        );
     }
 
     info!("adding edges");
@@ -208,10 +228,13 @@ async fn create_graph(app: App, card: Arc<Card<AnyType>>) -> DiGraph<NodeMetadat
                 "#32a852".to_string()
             };
 
+            let ty = card_ref.card_type().fieldless();
+
             let metadata = NodeMetadata {
                 id: id.clone(),
                 label,
                 color,
+                ty,
             };
 
             let node_index = graph.add_node(metadata);
@@ -249,6 +272,7 @@ mod tests {
             id: id.to_string(),
             label: Default::default(),
             color: Default::default(),
+            ty: CType::Normal,
         }
     }
 

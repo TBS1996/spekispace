@@ -43,7 +43,7 @@ pub trait SpekiProvider: Sync {
 #[derive(Serialize, Deserialize, Debug, Clone, Default)]
 pub struct Config;
 
-#[derive(Serialize, Deserialize, Debug, Clone, Default)]
+#[derive(Serialize, Deserialize, Debug, Clone, Default, Copy)]
 #[serde(rename_all = "lowercase")]
 pub enum CType {
     Instance,

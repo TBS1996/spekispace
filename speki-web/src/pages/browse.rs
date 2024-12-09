@@ -9,10 +9,10 @@ use speki_core::{AnyType, Card};
 use speki_web::BrowsePage;
 use tracing::info;
 
-use crate::App;
 use crate::{
     components::{card_selector, display_card},
     graph::GraphRep,
+    App,
 };
 
 #[derive(Clone)]

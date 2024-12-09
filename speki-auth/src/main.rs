@@ -196,8 +196,6 @@ async fn github_callback(
     Extension(verifier_store): Extension<VerifierStore>,
     Query(params): Query<AuthQuery>,
 ) -> impl IntoResponse {
-    dbg!("@@@@@@@@@@@@@@@@@");
-
     use axum::body::Body;
 
     let csrf_token = params.state;

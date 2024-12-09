@@ -5,9 +5,8 @@ use speki_core::{AnyType, Card};
 use speki_dto::{BackSide, CardId};
 use tracing::info;
 
-use crate::{components::card_selector, pages::CardEntry, utils::App};
-
 use super::card_selector::CardSelectorProps;
+use crate::{components::card_selector, pages::CardEntry, utils::App};
 
 const PLACEHOLDER: &'static str = "pick reference...";
 
@@ -94,6 +93,11 @@ impl BackPut {
             div {
                 class: "backside-editor flex items-center space-x-4",
 
+                match *dropdown.read() {
+                    DropDown::Text => self.render_text(),
+                    DropDown::Card => self.render_ref(),
+                }
+
                 div {
                     class: "dropdown",
                     select {
@@ -110,11 +114,6 @@ impl BackPut {
                         option { value: "text", "🔤" }
                         option { value: "card", "🔗" }
                     }
-                }
-
-                match *dropdown.read() {
-                    DropDown::Text => self.render_text(),
-                    DropDown::Card => self.render_ref(),
                 }
             }
         }
