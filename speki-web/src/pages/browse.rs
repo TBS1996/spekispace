@@ -166,8 +166,6 @@ pub fn Browse() -> Element {
     };
 
     rsx! {
-        crate::nav::nav {}
-
         match selected_card() {
             BrowsePage::View(_) => rsx! { display_card::display_card {} },
             BrowsePage::Browse => rsx !{ card_selector::card_selector {

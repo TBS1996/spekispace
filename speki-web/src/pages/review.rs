@@ -99,9 +99,6 @@ pub fn Review() -> Element {
     };
 
     rsx! {
-
-        crate::nav::nav{}
-
         div { id: "receiver", tabindex: 0,
             onkeydown: move |event| log_event(event.data()),
 

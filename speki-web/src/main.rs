@@ -57,8 +57,17 @@ pub fn TheApp() -> Element {
     }
 }
 
+#[component]
+fn Wrapper() -> Element {
+    rsx! {
+        crate::nav::nav{}
+        Outlet::<Route> { }
+    }
+}
+
 #[derive(Clone, Routable, Debug, PartialEq)]
 pub enum Route {
+    #[layout(Wrapper)]
     #[route("/")]
     Home {},
     #[route("/review")]

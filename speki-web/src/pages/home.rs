@@ -17,7 +17,5 @@ pub fn Home() -> Element {
 
     info!("home nice");
 
-    rsx! {
-        crate::nav::nav{}
-    }
+    rsx! {}
 }

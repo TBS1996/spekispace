@@ -15,9 +15,6 @@ pub fn Add() -> Element {
     let refsearch = backside.searching_cards.clone();
 
     rsx! {
-        crate::nav::nav{}
-
-
         match refsearch() {
             Some(props) => rsx!{
                 card_selector::card_selector {
