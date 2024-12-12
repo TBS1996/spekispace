@@ -10,6 +10,11 @@ function getTable(tableName) {
     return db[tableName];
 }
 
+function unixSecs() {
+    return Math.floor(Date.now() / 1000);
+}
+
+
 export async function loadContent(tableName, id) {
     const table = getTable(tableName);
     const record = await table.get(id);
@@ -19,7 +24,14 @@ export async function loadContent(tableName, id) {
 export async function lastModified(tableName, id) {
     const table = getTable(tableName);
     const record = await table.get(id);
-    return record?.lastModified ?? null; 
+    let modified = record?.lastModified ?? null; 
+    if (modified) {
+        if (modified > 173399404600) { // 
+            return Math.floor(modified / 1000);
+        } else {
+            return modified;
+        }
+    }
 }
 
 export async function loadAllContent(tableName) {
@@ -39,7 +51,7 @@ export async function saveContent(tableName, id, content) {
     await table.put({
         id,
         content,
-        lastModified: Date.now() 
+        lastModified: unixSecs()
     });
 }
 
