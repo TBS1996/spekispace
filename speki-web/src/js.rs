@@ -47,7 +47,7 @@ pub fn current_time() -> Duration {
     Duration::from_millis(now() as u64)
 }
 
-pub fn sync_repo(path: &str, token: &str, proxy: &str) {
+pub fn _sync_repo(path: &str, token: &str, proxy: &str) {
     info!("lets sync :D");
     let path = JsValue::from_str(path);
     let token = JsValue::from_str(token);

@@ -41,6 +41,11 @@ impl SpekiProvider for IndexBaseProvider {
             .collect()
     }
 
+    async fn last_modified_attribute(&self, id: AttributeId) -> Duration {
+        let path = self.attrs_path().join(id.0.to_string());
+        js::last_modified(path.to_str().unwrap()).await.unwrap()
+    }
+
     async fn last_modified_card(&self, id: CardId) -> Duration {
         let path = self.cards_path().join(id.0.to_string());
         js::last_modified(path.to_str().unwrap()).await.unwrap()

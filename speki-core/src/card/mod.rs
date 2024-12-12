@@ -203,6 +203,7 @@ pub struct Card<T: CardTrait + ?Sized> {
     pub suspended: IsSuspended,
     pub card_provider: CardProvider,
     pub recaller: Recaller,
+    pub last_modified: Duration,
 }
 
 impl<T: CardTrait + ?Sized> PartialEq for Card<T> {
@@ -365,6 +366,7 @@ impl Card<AnyType> {
             suspended: IsSuspended::from(raw_card.suspended),
             card_provider,
             recaller,
+            last_modified: Duration::default(),
         }
     }
 
@@ -760,6 +762,11 @@ mod tests {
                 .map(Record::into_value)
                 .collect()
         }
+
+        async fn last_modified_attribute(&self, id: AttributeId) -> Duration {
+            panic!()
+        }
+
         async fn save_card(&self, card: RawCard) {
             self.inner
                 .lock()

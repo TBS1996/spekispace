@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use crate::App;
 use crate::{card_provider::CardProvider, Provider};
 use speki_dto::{AttributeDTO, AttributeId, CardId};
@@ -17,12 +19,15 @@ impl AttrProvider {
     }
 
     pub async fn load_all(&self) -> Vec<Attribute> {
-        self.provider
-            .load_all_attributes()
-            .await
-            .into_iter()
-            .map(|dto| Attribute::from_dto(dto, self.card_provider.clone()))
-            .collect()
+        let mut out = vec![];
+
+        for attr in self.provider.load_all_attributes().await {
+            let modified = self.provider.last_modified_attribute(attr.id).await;
+            let attr = Attribute::from_dto(attr, self.card_provider.clone(), modified);
+            out.push(attr);
+        }
+
+        out
     }
 
     pub async fn save(&self, attribute: Attribute) {
@@ -32,11 +37,12 @@ impl AttrProvider {
     }
 
     pub async fn load(&self, id: AttributeId) -> Option<Attribute> {
+        let last_modified = self.provider.last_modified_attribute(id).await;
         let card_provider = self.card_provider.clone();
         self.provider
             .load_attribute(id)
             .await
-            .map(|dto| Attribute::from_dto(dto, card_provider.clone()))
+            .map(|dto| Attribute::from_dto(dto, card_provider.clone(), last_modified))
     }
 
     pub async fn delete(&self, id: AttributeId) {
@@ -56,6 +62,7 @@ pub struct Attribute {
     // for example, if the attribute is 'where was {} born?' the type should be of concept place
     pub back_type: Option<CardId>,
     pub card_provider: CardProvider,
+    pub last_modified: Duration,
 }
 
 impl Attribute {
@@ -76,13 +83,18 @@ impl Attribute {
         }
     }
 
-    pub fn from_dto(dto: AttributeDTO, card_provider: CardProvider) -> Self {
+    pub fn from_dto(
+        dto: AttributeDTO,
+        card_provider: CardProvider,
+        last_modified: Duration,
+    ) -> Self {
         Self {
             pattern: dto.pattern,
             id: dto.id,
             class: dto.class,
             back_type: dto.back_type,
             card_provider,
+            last_modified,
         }
     }
 
@@ -125,6 +137,7 @@ impl Attribute {
             class: concept,
             back_type,
             card_provider: app.card_provider.clone(),
+            last_modified: Duration::default(),
         };
         let id = x.id;
         app.save_attribute(x).await;

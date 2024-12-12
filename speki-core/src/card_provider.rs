@@ -158,10 +158,11 @@ impl CardProvider {
     }
 
     pub async fn load_attribute(&self, id: AttributeId) -> Option<Attribute> {
+        let modified = self.provider.last_modified_attribute(id).await;
         self.provider
             .load_attribute(id)
             .await
-            .map(|dto| Attribute::from_dto(dto, self.clone()))
+            .map(|dto| Attribute::from_dto(dto, self.clone(), modified))
     }
     pub async fn load_reviews(&self, id: CardId) -> Reviews {
         Reviews(self.provider.load_reviews(id).await)
@@ -209,6 +210,7 @@ impl CardProvider {
         let reviews = self.provider.load_reviews(id).await;
         let history = Reviews(reviews);
         let data = into_any(raw_card.data, self);
+        let last_modified = self.provider.last_modified_card(id).await;
 
         let card = Card::<AnyType> {
             id,
@@ -219,6 +221,7 @@ impl CardProvider {
             suspended: crate::card::IsSuspended::from(raw_card.suspended),
             card_provider: self.clone(),
             recaller: self.recaller.clone(),
+            last_modified,
         };
 
         Some(card)

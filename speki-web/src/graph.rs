@@ -6,6 +6,7 @@ use std::{
     },
 };
 
+use dioxus::prelude::*;
 use petgraph::algo::is_cyclic_directed;
 use petgraph::graph::{DiGraph, NodeIndex};
 use petgraph::visit::EdgeRef;
@@ -16,8 +17,6 @@ use web_sys::window;
 
 use crate::js;
 use crate::App;
-
-use dioxus::prelude::*;
 
 #[derive(Default)]
 struct InnerGraph {

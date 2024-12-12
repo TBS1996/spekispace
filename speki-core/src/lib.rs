@@ -22,7 +22,7 @@ mod card;
 mod card_provider;
 mod common;
 mod recall_rate;
-mod reviews;
+pub mod reviews;
 
 pub use attribute::Attribute;
 pub use card::Card;
@@ -99,6 +99,10 @@ impl App {
     #[instrument]
     pub async fn load_all_cards(&self) -> Vec<Arc<Card<AnyType>>> {
         self.card_provider.load_all().await
+    }
+
+    pub async fn save_card_not_reviews(&self, card: Card<AnyType>) {
+        self.card_provider.save_card(card).await;
     }
 
     pub async fn save_card(&self, card: Card<AnyType>) {

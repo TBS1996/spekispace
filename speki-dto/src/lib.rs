@@ -24,6 +24,7 @@ pub trait SpekiProvider: Sync {
     async fn load_config(&self) -> Config;
     async fn save_config(&self, config: Config);
     async fn last_modified_card(&self, id: CardId) -> Duration;
+    async fn last_modified_attribute(&self, id: AttributeId) -> Duration;
     async fn last_modified_reviews(&self, id: CardId) -> Option<Duration>;
     async fn load_card_ids(&self) -> Vec<CardId> {
         self.load_all_cards()

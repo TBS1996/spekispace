@@ -11,6 +11,7 @@ use crate::pages::{Add, Browse, Home, Review};
 use crate::utils::App;
 
 mod components;
+mod firebase;
 mod graph;
 mod js;
 mod login;

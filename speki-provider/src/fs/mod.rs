@@ -1,4 +1,4 @@
-use paths::{get_cards_path, get_review_path};
+use paths::{get_attributes_path, get_cards_path, get_review_path};
 use rayon::prelude::*;
 use speki_dto::Config;
 use speki_dto::{AttributeDTO, AttributeId, CardId, RawCard, Recall, Review, SpekiProvider};
@@ -47,6 +47,17 @@ impl SpekiProvider for FileProvider {
             .into_par_iter()
             .map(|s| toml::from_str(&s).unwrap())
             .collect()
+    }
+
+    async fn last_modified_attribute(&self, id: AttributeId) -> Duration {
+        fs::File::open(get_attributes_path().join(id.to_string()))
+            .unwrap()
+            .metadata()
+            .unwrap()
+            .modified()
+            .unwrap()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .unwrap()
     }
 
     async fn last_modified_card(&self, id: CardId) -> Duration {

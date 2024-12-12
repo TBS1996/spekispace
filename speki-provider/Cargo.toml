@@ -40,3 +40,4 @@ browserfs = [
     "dep:wasm-bindgen-futures",
     "dep:time",
 ]
+firestore = []

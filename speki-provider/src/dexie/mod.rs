@@ -26,9 +26,9 @@ impl Table {
 
 pub struct DexieProvider;
 
-use async_trait::async_trait;
-
 use wasm_bindgen::JsValue;
+
+use async_trait::async_trait;
 
 #[async_trait(?Send)]
 impl SpekiProvider for DexieProvider {
@@ -40,10 +40,16 @@ impl SpekiProvider for DexieProvider {
             .collect()
     }
 
+    async fn last_modified_attribute(&self, id: AttributeId) -> Duration {
+        js::last_modified(Table::Attributes, &id.to_string())
+            .await
+            .unwrap_or_default()
+    }
+
     async fn last_modified_card(&self, id: CardId) -> Duration {
         js::last_modified(Table::Cards, &id.to_string())
             .await
-            .unwrap()
+            .unwrap_or_default()
     }
 
     async fn last_modified_reviews(&self, id: CardId) -> Option<Duration> {

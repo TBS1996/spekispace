@@ -18,3 +18,9 @@ mod dexie;
 
 #[cfg(feature = "dexie")]
 pub use dexie::DexieProvider;
+
+#[cfg(feature = "firestore")]
+mod firestore;
+
+#[cfg(feature = "firestore")]
+pub use firestore::FirestoreProvider;
