@@ -9,23 +9,126 @@ use std::str::FromStr;
 use std::time::Duration;
 use uuid::Uuid;
 
+pub enum Cty {
+    Attribute,
+    Review,
+    Card,
+}
+
 #[async_trait(?Send)]
 pub trait SpekiProvider: Sync {
-    async fn load_all_cards(&self) -> Vec<RawCard>;
-    async fn save_card(&self, card: RawCard);
-    async fn load_card(&self, id: CardId) -> Option<RawCard>;
-    async fn delete_card(&self, id: CardId);
-    async fn load_all_attributes(&self) -> Vec<AttributeDTO>;
-    async fn save_attribute(&self, attribute: AttributeDTO);
-    async fn load_attribute(&self, id: AttributeId) -> Option<AttributeDTO>;
-    async fn delete_attribute(&self, id: AttributeId);
-    async fn load_reviews(&self, id: CardId) -> Vec<Review>;
-    async fn save_reviews(&self, id: CardId, reviews: Vec<Review>);
+    async fn load_content(&self, id: Uuid, ty: Cty) -> Option<String>;
+    async fn last_modified(&self, id: Uuid, ty: Cty) -> Option<Duration>;
+    async fn load_all_content(&self, ty: Cty) -> Vec<String>;
+    async fn save_content(&self, ty: Cty, id: Uuid, content: String);
+    async fn delete_content(&self, id: Uuid, ty: Cty);
+
+    async fn load_all_cards(&self) -> Vec<RawCard> {
+        self.load_all_content(Cty::Card)
+            .await
+            .into_iter()
+            .map(|content| toml::from_str(&content).unwrap())
+            .collect()
+    }
+
+    async fn save_card(&self, card: RawCard) {
+        self.save_content(Cty::Card, card.id, toml::to_string(&card).unwrap())
+            .await;
+    }
+
+    async fn load_card(&self, id: CardId) -> Option<RawCard> {
+        self.load_content(id.into_inner(), Cty::Card)
+            .await
+            .map(|card| toml::from_str(&card).unwrap())
+    }
+
+    async fn delete_card(&self, id: CardId) {
+        self.delete_content(id.into_inner(), Cty::Card).await;
+    }
+
+    async fn load_all_attributes(&self) -> Vec<AttributeDTO> {
+        self.load_all_content(Cty::Attribute)
+            .await
+            .into_iter()
+            .map(|content| toml::from_str(&content).unwrap())
+            .collect()
+    }
+
+    async fn save_attribute(&self, attribute: AttributeDTO) {
+        self.save_content(
+            Cty::Attribute,
+            attribute.id.into_inner(),
+            toml::to_string(&attribute).unwrap(),
+        )
+        .await;
+    }
+
+    async fn load_attribute(&self, id: AttributeId) -> Option<AttributeDTO> {
+        self.load_content(id.into_inner(), Cty::Attribute)
+            .await
+            .map(|card| toml::from_str(&card).unwrap())
+    }
+
+    async fn delete_attribute(&self, id: AttributeId) {
+        self.delete_content(id.into_inner(), Cty::Attribute).await;
+    }
+
+    async fn load_reviews(&self, id: CardId) -> Vec<Review> {
+        let mut reviews = vec![];
+
+        let Some(s) = self.load_content(id.into_inner(), Cty::Review).await else {
+            return vec![];
+        };
+
+        for line in s.lines() {
+            let (timestamp, grade) = line.split_once(' ').unwrap();
+            let timestamp = Duration::from_secs(timestamp.parse().unwrap());
+            let grade = Recall::from_str(grade).unwrap();
+            let review = Review {
+                timestamp,
+                grade,
+                time_spent: Duration::default(),
+            };
+            reviews.push(review);
+        }
+
+        reviews.sort_by_key(|r| r.timestamp);
+        reviews
+    }
+
+    async fn save_reviews(&self, id: CardId, reviews: Vec<Review>) {
+        let mut s = String::new();
+        for r in reviews {
+            let stamp = r.timestamp.as_secs().to_string();
+            let grade = match r.grade {
+                Recall::None => "1",
+                Recall::Late => "2",
+                Recall::Some => "3",
+                Recall::Perfect => "4",
+            };
+            s.push_str(&format!("{} {}\n", stamp, grade));
+        }
+
+        self.save_content(Cty::Review, id.into_inner(), s).await;
+    }
     async fn load_config(&self) -> Config;
     async fn save_config(&self, config: Config);
-    async fn last_modified_card(&self, id: CardId) -> Duration;
-    async fn last_modified_attribute(&self, id: AttributeId) -> Duration;
-    async fn last_modified_reviews(&self, id: CardId) -> Option<Duration>;
+
+    async fn last_modified_card(&self, id: CardId) -> Duration {
+        self.last_modified(id.into_inner(), Cty::Card)
+            .await
+            .unwrap_or_default()
+    }
+
+    async fn last_modified_attribute(&self, id: AttributeId) -> Duration {
+        self.last_modified(id.into_inner(), Cty::Attribute)
+            .await
+            .unwrap_or_default()
+    }
+
+    async fn last_modified_reviews(&self, id: CardId) -> Option<Duration> {
+        self.last_modified(id.into_inner(), Cty::Review).await
+    }
     async fn load_card_ids(&self) -> Vec<CardId> {
         self.load_all_cards()
             .await

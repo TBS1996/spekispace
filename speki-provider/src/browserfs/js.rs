@@ -1,7 +1,7 @@
 use gloo_utils::format::JsValueSerdeExt;
 use js_sys::Promise;
 use serde_json::Value;
-use std::time::Duration;
+use std::{path::PathBuf, time::Duration};
 use wasm_bindgen::prelude::*;
 
 #[wasm_bindgen(module = "/browserfs.js")]
@@ -40,12 +40,14 @@ pub async fn load_filenames(path: &str) -> Vec<String> {
         .collect()
 }
 
-pub fn delete_file(path: &str) {
+pub fn delete_file(path: PathBuf) {
+    let path = path.to_str().unwrap();
     let path = JsValue::from_str(path);
     deleteFile(&path);
 }
 
-pub fn save_file(path: &str, content: &str) {
+pub fn save_file(path: PathBuf, content: &str) {
+    let path = path.to_str().unwrap();
     let path = JsValue::from_str(path);
     let content = JsValue::from_str(content);
     saveFile(&path, &content);
@@ -57,7 +59,8 @@ async fn promise_to_val(promise: Promise) -> Value {
     jsvalue.into_serde().unwrap()
 }
 
-pub async fn last_modified(path: &str) -> Option<Duration> {
+pub async fn last_modified(path: PathBuf) -> Option<Duration> {
+    let path = path.to_str().unwrap();
     let path = JsValue::from_str(path);
     let val = promise_to_val(lastModified(&path)).await;
     let serde_json::Value::String(s) = val else {
@@ -72,7 +75,8 @@ pub async fn last_modified(path: &str) -> Option<Duration> {
     Some(Duration::from_secs(seconds as u64))
 }
 
-pub async fn load_all_files(path: &str) -> Vec<String> {
+pub async fn load_all_files(path: PathBuf) -> Vec<String> {
+    let path = path.to_str().unwrap();
     let path = JsValue::from_str(path);
     let val = promise_to_val(loadAllFiles(&path)).await;
     let arr = val.as_array().unwrap();
@@ -84,7 +88,8 @@ pub async fn load_all_files(path: &str) -> Vec<String> {
         .collect()
 }
 
-pub async fn load_file(path: &str) -> Option<String> {
+pub async fn load_file(path: PathBuf) -> Option<String> {
+    let path = path.to_str().unwrap();
     let path = JsValue::from_str(path);
     let val = promise_to_val(loadFile(&path)).await;
 

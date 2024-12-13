@@ -696,10 +696,7 @@ mod tests {
         card_provider::CardProvider, Provider, Recaller, SimpleRecall, TimeGetter, TimeProvider,
     };
     use async_trait::async_trait;
-    use speki_dto::{
-        AttributeDTO, AttributeId, BackSide, CType, CardId, Config, RawCard, RawType, Recall,
-        Review, SpekiProvider,
-    };
+    use speki_dto::{BackSide, CType, Config, Cty, RawCard, RawType, Recall, SpekiProvider};
     use std::{
         collections::HashMap,
         sync::{Arc, Mutex},
@@ -723,114 +720,100 @@ mod tests {
                 })),
             }
         }
+
+        fn remove(&self, ty: Cty, id: Uuid) {
+            let mut lock = self.inner.lock().unwrap();
+            match ty {
+                Cty::Attribute => &mut lock._attrs,
+                Cty::Review => &mut lock.cards,
+                Cty::Card => &mut lock.reviews,
+            }
+            .remove(&id);
+        }
+
+        fn save(&self, ty: Cty, id: Uuid, s: String) {
+            let mut lock = self.inner.lock().unwrap();
+            let map = match ty {
+                Cty::Attribute => &mut lock._attrs,
+                Cty::Review => &mut lock.cards,
+                Cty::Card => &mut lock.reviews,
+            };
+
+            map.insert(id, Record::new(s, self.time.clone()));
+        }
+
+        fn get_all(&self, ty: Cty) -> Vec<String> {
+            let lock = self.inner.lock().unwrap();
+
+            match ty {
+                Cty::Attribute => &lock._attrs,
+                Cty::Review => &lock.cards,
+                Cty::Card => &lock.reviews,
+            }
+            .clone()
+            .into_values()
+            .map(|v| v.data)
+            .collect()
+        }
+
+        fn get(&self, ty: Cty, id: Uuid) -> Option<Record> {
+            let lock = self.inner.lock().unwrap();
+            match ty {
+                Cty::Attribute => lock._attrs.get(&id).cloned(),
+                Cty::Card => lock.cards.get(&id).cloned(),
+                Cty::Review => lock.reviews.get(&id).cloned(),
+            }
+        }
     }
 
     #[derive(Clone)]
-    struct Record<T> {
-        data: T,
+    struct Record {
+        data: String,
         modified: Duration,
     }
 
-    impl<T> Record<T> {
-        fn new(data: T, time: ControlledTime) -> Self {
+    impl Record {
+        fn new(data: String, time: ControlledTime) -> Self {
             Self {
                 data,
                 modified: time.current_time(),
             }
         }
-
-        fn into_value(self) -> T {
-            self.data
-        }
     }
 
     struct Inner {
-        cards: HashMap<CardId, Record<RawCard>>,
-        reviews: HashMap<CardId, Vec<Review>>,
-        _attrs: HashMap<AttributeId, AttributeDTO>,
+        cards: HashMap<Uuid, Record>,
+        reviews: HashMap<Uuid, Record>,
+        _attrs: HashMap<Uuid, Record>,
     }
 
     #[async_trait(?Send)]
     impl SpekiProvider for Storage {
-        async fn load_all_cards(&self) -> Vec<RawCard> {
-            self.inner
-                .lock()
-                .unwrap()
-                .cards
-                .clone()
-                .into_values()
-                .map(Record::into_value)
-                .collect()
+        async fn load_content(&self, id: Uuid, ty: Cty) -> Option<String> {
+            self.get(ty, id).map(|r| r.data)
         }
 
-        async fn last_modified_attribute(&self, id: AttributeId) -> Duration {
-            panic!()
+        async fn last_modified(&self, id: Uuid, ty: Cty) -> Option<Duration> {
+            self.get(ty, id).map(|r| r.modified)
         }
 
-        async fn save_card(&self, card: RawCard) {
-            self.inner
-                .lock()
-                .unwrap()
-                .cards
-                .insert(CardId(card.id), Record::new(card, self.time.clone()));
+        async fn load_all_content(&self, ty: Cty) -> Vec<String> {
+            self.get_all(ty)
         }
 
-        async fn load_card(&self, id: CardId) -> Option<RawCard> {
-            self.inner
-                .lock()
-                .unwrap()
-                .cards
-                .get(&id)
-                .map(|card| card.to_owned().into_value())
-        }
-        async fn delete_card(&self, id: CardId) {
-            self.inner.lock().unwrap().cards.remove(&id);
+        async fn save_content(&self, ty: Cty, id: Uuid, content: String) {
+            self.save(ty, id, content);
         }
 
-        async fn load_all_attributes(&self) -> Vec<AttributeDTO> {
-            todo!()
+        async fn delete_content(&self, id: Uuid, ty: Cty) {
+            self.remove(ty, id);
         }
-        async fn save_attribute(&self, _attribute: AttributeDTO) {
-            todo!()
-        }
-        async fn load_attribute(&self, _id: AttributeId) -> Option<AttributeDTO> {
-            todo!()
-        }
-        async fn delete_attribute(&self, _id: AttributeId) {
-            todo!()
-        }
-        async fn load_reviews(&self, id: CardId) -> Vec<Review> {
-            self.inner
-                .lock()
-                .unwrap()
-                .reviews
-                .get(&id)
-                .map(|revs| revs.to_owned())
-                .unwrap_or_default()
-        }
-        async fn save_reviews(&self, id: CardId, reviews: Vec<Review>) {
-            self.inner.lock().unwrap().reviews.insert(id, reviews);
-        }
+
         async fn load_config(&self) -> Config {
             todo!()
         }
         async fn save_config(&self, _config: Config) {
             todo!()
-        }
-        async fn last_modified_card(&self, id: CardId) -> Duration {
-            self.inner.lock().unwrap().cards.get(&id).unwrap().modified
-        }
-        async fn last_modified_reviews(&self, _id: CardId) -> Option<Duration> {
-            Duration::default().into()
-        }
-        async fn load_card_ids(&self) -> Vec<CardId> {
-            self.inner
-                .lock()
-                .unwrap()
-                .cards
-                .clone()
-                .into_keys()
-                .collect()
         }
     }
 

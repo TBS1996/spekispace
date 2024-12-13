@@ -5,7 +5,7 @@ use std::time::Duration;
 use uuid::Uuid;
 use wasm_bindgen::prelude::*;
 
-use crate::dexie::Table;
+use crate::dexie::Cty;
 
 #[wasm_bindgen(module = "/dexie.js")]
 extern "C" {
@@ -15,6 +15,16 @@ extern "C" {
     fn loadAllContent(table: &JsValue) -> Promise;
     fn loadAllIds(table: &JsValue) -> Promise;
     fn lastModified(table: &JsValue, id: &JsValue) -> Promise;
+}
+
+fn cty_as_jsvalue(ty: Cty) -> JsValue {
+    let name = match ty {
+        Cty::Attribute => "attrs",
+        Cty::Card => "cards",
+        Cty::Review => "reviews",
+    };
+
+    JsValue::from_str(name)
 }
 
 #[wasm_bindgen]
@@ -27,8 +37,8 @@ pub fn _current_time() -> Duration {
     Duration::from_millis(now() as u64)
 }
 
-pub async fn load_ids(table: Table) -> Vec<Uuid> {
-    let val = promise_to_val(loadAllIds(&table.as_js_value())).await;
+pub async fn load_ids(table: Cty) -> Vec<Uuid> {
+    let val = promise_to_val(loadAllIds(&cty_as_jsvalue(table))).await;
     val.as_array()
         .unwrap()
         .into_iter()
@@ -42,15 +52,15 @@ pub async fn load_ids(table: Table) -> Vec<Uuid> {
         .collect()
 }
 
-pub fn delete_file(table: Table, id: &str) {
+pub fn delete_file(table: Cty, id: &str) {
     let id = JsValue::from_str(id);
-    deleteContent(&table.as_js_value(), &id);
+    deleteContent(&cty_as_jsvalue(table), &id);
 }
 
-pub fn save_content(table: Table, id: &str, content: &str) {
+pub fn save_content(table: Cty, id: &str, content: &str) {
     let id = JsValue::from_str(id);
     let content = JsValue::from_str(content);
-    saveContent(&table.as_js_value(), &id, &content);
+    saveContent(&cty_as_jsvalue(table), &id, &content);
 }
 
 async fn promise_to_val(promise: Promise) -> Value {
@@ -59,9 +69,9 @@ async fn promise_to_val(promise: Promise) -> Value {
     jsvalue.into_serde().unwrap()
 }
 
-pub async fn last_modified(table: Table, id: &str) -> Option<Duration> {
+pub async fn last_modified(table: Cty, id: &str) -> Option<Duration> {
     let path = JsValue::from_str(id);
-    let val = promise_to_val(lastModified(&table.as_js_value(), &path)).await;
+    let val = promise_to_val(lastModified(&cty_as_jsvalue(table), &path)).await;
     let serde_json::Value::String(s) = val else {
         return None;
     };
@@ -74,8 +84,8 @@ pub async fn last_modified(table: Table, id: &str) -> Option<Duration> {
     Some(Duration::from_secs(seconds as u64))
 }
 
-pub async fn load_all_files(table: Table) -> Vec<String> {
-    let val = promise_to_val(loadAllContent(&table.as_js_value())).await;
+pub async fn load_all_files(table: Cty) -> Vec<String> {
+    let val = promise_to_val(loadAllContent(&cty_as_jsvalue(table))).await;
     let arr = val.as_array().unwrap();
     arr.into_iter()
         .map(|elm| match elm {
@@ -85,9 +95,9 @@ pub async fn load_all_files(table: Table) -> Vec<String> {
         .collect()
 }
 
-pub async fn load_content(table: Table, id: &str) -> Option<String> {
+pub async fn load_content(table: Cty, id: &str) -> Option<String> {
     let path = JsValue::from_str(id);
-    let val = promise_to_val(loadContent(&table.as_js_value(), &path)).await;
+    let val = promise_to_val(loadContent(&cty_as_jsvalue(table), &path)).await;
 
     match val {
         Value::Null => None,

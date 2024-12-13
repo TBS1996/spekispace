@@ -1,15 +1,15 @@
-use paths::{get_attributes_path, get_cards_path, get_review_path};
 use rayon::prelude::*;
-use speki_dto::Config;
-use speki_dto::{AttributeDTO, AttributeId, CardId, RawCard, Recall, Review, SpekiProvider};
+use speki_dto::SpekiProvider;
+use speki_dto::{Config, Cty};
+use std::path::PathBuf;
 use std::time::SystemTime;
 use std::{
-    fs::{self, read_to_string},
+    fs::{self},
     io::{Read, Write},
     path::Path,
-    str::FromStr,
     time::Duration,
 };
+use uuid::Uuid;
 
 pub mod paths;
 
@@ -39,41 +39,33 @@ pub struct FileProvider;
 
 use async_trait::async_trait;
 
+fn path_from_ty(ty: Cty) -> PathBuf {
+    match ty {
+        Cty::Attribute => paths::get_attributes_path(),
+        Cty::Review => paths::get_review_path(),
+        Cty::Card => paths::get_cards_path(),
+    }
+}
+
+fn file_path(ty: Cty, id: Uuid) -> PathBuf {
+    path_from_ty(ty).join(id.to_string())
+}
+
 #[async_trait(?Send)]
 impl SpekiProvider for FileProvider {
-    async fn load_all_cards(&self) -> Vec<RawCard> {
-        load_files(paths::get_cards_path())
-            .unwrap()
-            .into_par_iter()
-            .map(|s| toml::from_str(&s).unwrap())
-            .collect()
+    async fn load_content(&self, id: Uuid, ty: Cty) -> Option<String> {
+        let path = file_path(ty, id);
+
+        if !path.exists() {
+            None
+        } else {
+            Some(fs::read_to_string(&path).unwrap())
+        }
     }
 
-    async fn last_modified_attribute(&self, id: AttributeId) -> Duration {
-        fs::File::open(get_attributes_path().join(id.to_string()))
-            .unwrap()
-            .metadata()
-            .unwrap()
-            .modified()
-            .unwrap()
-            .duration_since(SystemTime::UNIX_EPOCH)
-            .unwrap()
-    }
-
-    async fn last_modified_card(&self, id: CardId) -> Duration {
-        fs::File::open(get_cards_path().join(id.to_string()))
-            .unwrap()
-            .metadata()
-            .unwrap()
-            .modified()
-            .unwrap()
-            .duration_since(SystemTime::UNIX_EPOCH)
-            .unwrap()
-    }
-
-    async fn last_modified_reviews(&self, id: CardId) -> Option<Duration> {
+    async fn last_modified(&self, id: Uuid, ty: Cty) -> Option<Duration> {
         Some(
-            fs::File::open(get_review_path().join(id.to_string()))
+            fs::File::open(file_path(ty, id))
                 .ok()?
                 .metadata()
                 .unwrap()
@@ -83,101 +75,18 @@ impl SpekiProvider for FileProvider {
                 .unwrap(),
         )
     }
-
-    async fn save_card(&self, card: RawCard) {
-        let s: String = toml::to_string(&card).unwrap();
-        let path = paths::get_cards_path().join(card.id.to_string());
+    async fn load_all_content(&self, ty: Cty) -> Vec<String> {
+        load_files(path_from_ty(ty)).unwrap()
+    }
+    async fn save_content(&self, ty: Cty, id: Uuid, content: String) {
+        let path = file_path(ty, id);
         let mut file = fs::File::create(path).unwrap();
-        file.write_all(&mut s.as_bytes()).unwrap();
+        file.write_all(&mut content.as_bytes()).unwrap();
     }
 
-    async fn load_card(&self, id: CardId) -> Option<RawCard> {
-        let path = paths::get_cards_path().join(id.to_string());
-        if !path.exists() {
-            None
-        } else {
-            let s = fs::read_to_string(&path).unwrap();
-            toml::from_str(&s).unwrap()
-        }
-    }
-
-    async fn load_all_attributes(&self) -> Vec<AttributeDTO> {
-        load_files(paths::get_attributes_path())
-            .unwrap()
-            .into_par_iter()
-            .map(|s| toml::from_str(&s).unwrap())
-            .collect()
-    }
-
-    async fn save_attribute(&self, attribute: AttributeDTO) {
-        let s: String = toml::to_string(&attribute).unwrap();
-        let path = paths::get_attributes_path().join(attribute.id.into_inner().to_string());
-        let mut file = fs::File::create(path).unwrap();
-        file.write_all(&mut s.as_bytes()).unwrap();
-    }
-
-    async fn load_attribute(&self, id: AttributeId) -> Option<AttributeDTO> {
-        let path = paths::get_attributes_path().join(id.into_inner().to_string());
-
-        if !path.exists() {
-            None
-        } else {
-            let s = fs::read_to_string(&path).unwrap();
-            toml::from_str(&s).unwrap()
-        }
-    }
-
-    async fn delete_card(&self, id: CardId) {
-        let path = paths::get_cards_path().join(id.to_string());
+    async fn delete_content(&self, id: Uuid, ty: Cty) {
+        let path = file_path(ty, id);
         fs::remove_file(&path).unwrap();
-    }
-
-    async fn delete_attribute(&self, id: AttributeId) {
-        let path = paths::get_attributes_path().join(id.into_inner().to_string());
-        fs::remove_file(&path).unwrap();
-    }
-
-    async fn load_reviews(&self, id: CardId) -> Vec<Review> {
-        let mut reviews = vec![];
-        let path = paths::get_review_path().join(id.to_string());
-
-        if !path.exists() {
-            return Default::default();
-        }
-
-        let s = read_to_string(&path).unwrap();
-        for line in s.lines() {
-            let (timestamp, grade) = line.split_once(' ').unwrap();
-            let timestamp = Duration::from_secs(timestamp.parse().unwrap());
-            let grade = Recall::from_str(grade).unwrap();
-            let review = Review {
-                timestamp,
-                grade,
-                time_spent: Duration::default(),
-            };
-            reviews.push(review);
-        }
-
-        reviews.sort_by_key(|r| r.timestamp);
-        reviews
-    }
-
-    async fn save_reviews(&self, id: CardId, reviews: Vec<Review>) {
-        let path = paths::get_review_path().join(id.to_string());
-        let mut s = String::new();
-        for r in reviews {
-            let stamp = r.timestamp.as_secs().to_string();
-            let grade = match r.grade {
-                Recall::None => "1",
-                Recall::Late => "2",
-                Recall::Some => "3",
-                Recall::Perfect => "4",
-            };
-            s.push_str(&format!("{} {}\n", stamp, grade));
-        }
-
-        let mut f = fs::File::create(&path).unwrap();
-        f.write_all(&mut s.as_bytes()).unwrap();
     }
 
     async fn load_config(&self) -> Config {

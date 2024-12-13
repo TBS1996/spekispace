@@ -9,3 +9,4 @@ serde_json.workspace = true
 uuid.workspace = true
 omtrent.workspace = true
 async-trait.workspace = true
+toml.workspace = true
