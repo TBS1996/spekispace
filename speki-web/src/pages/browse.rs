@@ -58,6 +58,46 @@ impl BrowseState {
         selv
     }
 
+    fn dep_closure(&self) -> impl Fn(Arc<Card<AnyType>>) {
+        let _dep_closure = self.selected_card.clone();
+        let _selected = self.selected_card.clone();
+
+        move |sel_card: Arc<Card<AnyType>>| {
+            let mut sel = _selected.clone();
+            info!("dep closure selected: {sel:?}");
+
+            let current_card = match sel.cloned() {
+                BrowsePage::Browse => return,
+                BrowsePage::View(card) => card,
+                BrowsePage::SetDependency(card) => card,
+            };
+
+            spawn(async move {
+                let mut card = (*current_card).clone();
+                let b = BrowsePage::View(Arc::new(card.clone()));
+                speki_web::set_browsepage(b);
+                info!("settting dependency..");
+                card.add_dependency(sel_card.id).await;
+                info!("refreshing card");
+                let card = card.refresh().await;
+                info!("setting to view");
+                sel.set(BrowsePage::View(card));
+            });
+        }
+    }
+
+    fn view_closure(&self) -> impl Fn(Arc<Card<AnyType>>) {
+        let _selected = self.selected_card.clone();
+
+        move |card: Arc<Card<AnyType>>| {
+            info!("view closure :D");
+            let b = BrowsePage::View(card.clone());
+            speki_web::set_browsepage(b);
+            let mut sel = _selected.clone();
+            sel.set(BrowsePage::View(card));
+        }
+    }
+
     fn maybe_refresh(&self) {
         info!("maybe refresh");
         if !self.refreshed.load(Ordering::SeqCst) {
@@ -82,6 +122,29 @@ impl BrowseState {
 
         self.cards.clone().set(out);
     }
+
+    fn set_selected(&self) {
+        let sel = self.selected_card.clone();
+        let browse_state = self.clone();
+        use_effect(move || {
+            let _ = sel.cloned();
+            spawn(async move {
+                let card = match sel.cloned() {
+                    BrowsePage::Browse => return,
+                    BrowsePage::View(card) => card,
+                    BrowsePage::SetDependency(card) => card,
+                };
+
+                info!("selected card: {card:?}");
+
+                let raw = card.to_raw();
+                let front = raw.data.front.unwrap_or_default();
+                let back = raw.data.back.unwrap_or_default().to_string();
+                browse_state.front_input.clone().set(front);
+                browse_state.back_input.clone().set(back);
+            });
+        });
+    }
 }
 
 impl Default for BrowseState {
@@ -94,76 +157,8 @@ impl Default for BrowseState {
 pub fn Browse() -> Element {
     let browse_state = use_context::<BrowseState>();
     browse_state.maybe_refresh();
-    let app = use_context::<App>();
     let selected_card = browse_state.selected_card.clone();
-    let display_cyto = use_signal(|| false);
-
-    let sel = selected_card.clone();
-    let _display = display_cyto.clone();
-    use_effect(move || {
-        let mut display = _display.clone();
-        let should_display = match sel.cloned() {
-            BrowsePage::Browse => false,
-            BrowsePage::View(_) => true,
-            BrowsePage::SetDependency(_) => false,
-        };
-
-        display.set(should_display);
-    });
-
-    let sel = selected_card.clone();
-    let _app = app.clone();
-    use_effect(move || {
-        let _ = sel.cloned();
-        spawn(async move {
-            let card = match sel.cloned() {
-                BrowsePage::Browse => return,
-                BrowsePage::View(card) => card,
-                BrowsePage::SetDependency(card) => card,
-            };
-
-            info!("selected card: {card:?}");
-
-            let raw = card.to_raw();
-            let front = raw.data.front.unwrap_or_default();
-            let back = raw.data.back.unwrap_or_default().to_string();
-            browse_state.front_input.clone().set(front);
-            browse_state.back_input.clone().set(back);
-        });
-    });
-
-    let _selected = browse_state.selected_card.clone();
-    let view_closure = move |card: Arc<Card<AnyType>>| {
-        info!("view closure :D");
-        let b = BrowsePage::View(card.clone());
-        speki_web::set_browsepage(b);
-        let mut sel = _selected.clone();
-        sel.set(BrowsePage::View(card));
-    };
-
-    let _dep_closure = browse_state.selected_card.clone();
-    let dep_closure = move |sel_card: Arc<Card<AnyType>>| {
-        let mut sel = _selected.clone();
-        info!("dep closure selected: {sel:?}");
-
-        let current_card = match sel.cloned() {
-            BrowsePage::Browse => return,
-            BrowsePage::View(card) => card,
-            BrowsePage::SetDependency(card) => card,
-        };
-
-        spawn(async move {
-            let mut card = (*current_card).clone();
-            let b = BrowsePage::View(Arc::new(card.clone()));
-            speki_web::set_browsepage(b);
-            info!("settting dependency..");
-            card.add_dependency(sel_card.id).await;
-            info!("refreshing card");
-            let card = card.refresh().await;
-            info!("setting to view");
-            sel.set(BrowsePage::View(card));
-        });
-    };
+    browse_state.set_selected();
 
     rsx! {
         match selected_card() {
@@ -171,13 +166,13 @@ pub fn Browse() -> Element {
             BrowsePage::Browse => rsx !{ card_selector::card_selector {
                 title: "browse cards".to_string(),
                 search: browse_state.search.clone(),
-                on_card_selected: Rc::new(view_closure),
+                on_card_selected: Rc::new(browse_state.view_closure()),
                 cards: browse_state.cards.clone(),
             }},
             BrowsePage::SetDependency(_) => rsx !{ card_selector::card_selector {
                 title: "set dependency".to_string(),
                 search: browse_state.search.clone(),
-                on_card_selected: Rc::new(dep_closure),
+                on_card_selected: Rc::new(browse_state.dep_closure()),
                 cards: browse_state.cards.clone(),
             }},
         }
