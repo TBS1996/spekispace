@@ -192,16 +192,40 @@ impl App {
         ids
     }
 
-    pub async fn add_card_with_backside(&self, front: String, back: BackSide) -> CardId {
-        let data = NormalCard { front, back };
+    pub async fn add_class(
+        &self,
+        front: String,
+        back: impl Into<BackSide>,
+        parent_class: Option<CardId>,
+    ) -> CardId {
+        let back = back.into();
+        let data = ClassCard {
+            name: front,
+            back,
+            parent_class,
+        };
+
         self.new_any(data).await.id()
     }
 
-    pub async fn add_card(&self, front: String, back: String) -> CardId {
-        let data = NormalCard {
-            front,
-            back: back.into(),
+    pub async fn add_instance(
+        &self,
+        front: String,
+        back: Option<impl Into<BackSide>>,
+        class: CardId,
+    ) -> CardId {
+        let back = back.map(|back| back.into());
+        let data = InstanceCard {
+            name: front,
+            back,
+            class,
         };
+        self.new_any(data).await.id()
+    }
+
+    pub async fn add_card(&self, front: String, back: impl Into<BackSide>) -> CardId {
+        let back = back.into();
+        let data = NormalCard { front, back };
         self.new_any(data).await.id()
     }
 

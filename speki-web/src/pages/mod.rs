@@ -1,4 +1,4 @@
-mod add_card;
+pub mod add_card;
 mod browse;
 mod home;
 mod review;

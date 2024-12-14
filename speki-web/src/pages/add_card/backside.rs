@@ -11,8 +11,12 @@ use speki_dto::{BackSide, CardId};
 use strum::{EnumIter, IntoEnumIterator};
 use tracing::info;
 
-use super::{card_selector::CardSelectorProps, dropdown::DropDownMenu};
-use crate::{components::card_selector, pages::CardEntry, utils::App};
+use super::card_selector::CardSelectorProps;
+use crate::{
+    components::{card_selector, dropdown::DropDownMenu},
+    pages::CardEntry,
+    utils::App,
+};
 
 const PLACEHOLDER: &'static str = "pick reference...";
 
@@ -24,12 +28,12 @@ pub struct BackPut {
     dropdown: DropDownMenu<BackOpts>,
     app: App,
     ref_display: Signal<String>,
+    pub cards: Signal<Vec<CardEntry>>,
     pub searching_cards: Signal<Option<CardSelectorProps>>,
-    cards: Signal<Vec<CardEntry>>,
 }
 
 impl BackPut {
-    pub fn new(app: App) -> Self {
+    pub fn new(app: App, searching_cards: Signal<Option<CardSelectorProps>>) -> Self {
         Self {
             app,
             text: Default::default(),
@@ -37,7 +41,7 @@ impl BackPut {
             show: Default::default(),
             dropdown: DropDownMenu::new(BackOpts::iter()),
             ref_display: Signal::new(PLACEHOLDER.to_string()),
-            searching_cards: Default::default(),
+            searching_cards,
             cards: Default::default(),
         }
     }
@@ -86,12 +90,16 @@ impl BackPut {
         self.text.clone().set(Default::default());
         self.card.clone().set(Default::default());
         self.show.clone().set(Default::default());
-        self.searching_cards.clone().set(Default::default());
         self.ref_display.clone().set(PLACEHOLDER.to_string());
     }
 
     pub fn view(&self) -> Element {
         rsx! {
+
+            div {
+                class: "block text-gray-700 text-sm font-medium mb-2",
+                "Back:"
+
             div {
                 class: "backside-editor flex items-center space-x-4",
 
@@ -103,6 +111,7 @@ impl BackPut {
                 { self.dropdown.view() }
 
             }
+        }
         }
     }
 

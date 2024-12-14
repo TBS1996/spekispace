@@ -1,9 +1,10 @@
 #![allow(non_snake_case)]
 
-use components::backside::BackPut;
 use dioxus::prelude::*;
 use dioxus_logger::tracing::{info, Level};
 use login::LoginState;
+use pages::add_card::backside::BackPut;
+use pages::add_card::AddCardState;
 use pages::BrowseState;
 use review_state::ReviewState;
 
@@ -36,8 +37,8 @@ fn main() {
 #[component]
 pub fn TheApp() -> Element {
     let app = use_context_provider(App::new);
-    let backput = BackPut::new(app.clone());
-    use_context_provider(|| backput.clone());
+    let addcard = AddCardState::new(app.clone());
+    use_context_provider(|| addcard.clone());
     use_context_provider(|| ReviewState::new(app.clone()));
     use_context_provider(LoginState::default);
     use_context_provider(BrowseState::new);
@@ -45,7 +46,7 @@ pub fn TheApp() -> Element {
     spawn(async move {
         app.0.fill_cache().await;
         speki_web::set_app(app.0.clone());
-        backput.load_cards().await;
+        addcard.load_cards().await;
     });
 
     rsx! {
