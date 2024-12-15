@@ -80,7 +80,7 @@ impl AddCardState {
         let popup: Popup = Box::new(props);
 
         let pop = use_context::<PopupManager>();
-        pop.set(Route::Add {}, popup);
+        pop.set(popup);
     }
 
     pub async fn set_card(&self, card: CardId) {
@@ -206,7 +206,7 @@ impl AddCardState {
 #[component]
 pub fn Add() -> Element {
     let pop = use_context::<PopupManager>();
-    if let Some(elm) = pop.render(Route::Add {}) {
+    if let Some(elm) = pop.render() {
         elm
     } else {
         use_context::<AddCardState>().render()

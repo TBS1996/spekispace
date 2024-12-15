@@ -62,7 +62,7 @@ impl BackPut {
         };
 
         let popup: Popup = Box::new(props);
-        use_context::<PopupManager>().set(Route::Add {}, popup);
+        use_context::<PopupManager>().set(popup);
     }
 
     pub async fn set_card(&self, card: CardId) {

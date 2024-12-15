@@ -48,12 +48,12 @@ impl PopupManager {
         Self::default()
     }
 
-    pub fn set(&self, route: Route, popup: Popup) {
-        self.get(route).clone().set(Some(popup));
+    pub fn set(&self, popup: Popup) {
+        self.get().clone().set(Some(popup));
     }
 
-    pub fn render(&self, route: Route) -> Option<Element> {
-        let pop = self.get(route.clone());
+    pub fn render(&self) -> Option<Element> {
+        let pop = self.get();
         let Some(pop) = pop.as_ref() else {
             return None;
         };
@@ -66,7 +66,8 @@ impl PopupManager {
         }
     }
 
-    pub fn get(&self, route: Route) -> PopupEntry {
+    pub fn get(&self) -> PopupEntry {
+        let route = use_route::<Route>();
         info!("getting route popup..");
         match route {
             Route::Home {} => self.home.clone(),
@@ -76,8 +77,8 @@ impl PopupManager {
         }
     }
 
-    pub fn clear(&self, route: Route) {
-        self.get(route).clone().set(Default::default());
+    pub fn clear(&self) {
+        self.get().clone().set(Default::default());
     }
 }
 
