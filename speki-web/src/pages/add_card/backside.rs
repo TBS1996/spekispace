@@ -46,16 +46,6 @@ impl BackPut {
         }
     }
 
-    pub async fn load_cards(&self) {
-        let mut cards = vec![];
-
-        for card in self.app.0.load_all_cards().await {
-            cards.push(CardEntry::new(card).await);
-        }
-
-        self.cards.clone().set(cards);
-    }
-
     pub fn start_ref_search(&self) {
         let _selv = self.clone();
 

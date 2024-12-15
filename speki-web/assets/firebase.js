@@ -82,6 +82,28 @@ export async function deleteContent(userId, tableName, contentId) {
   await deleteDoc(docRef);
 }
 
+export async function loadAll(userId, tableName) {
+  console.log(`Loading all content with metadata from table ${tableName}`);
+  const colRef = getTable(userId, tableName);
+
+  console.log(`Fetching table...`);
+  const querySnapshot = await getDocs(colRef);
+
+  console.log(`Processing documents...`);
+  const resultMap = {};
+  querySnapshot.forEach(doc => {
+    const data = doc.data();
+    resultMap[doc.id] = {
+      content: data.content,
+      lastModified: data.lastModified ? data.lastModified.toMillis() : null
+    };
+  });
+
+  console.log(`Done loading all content with metadata`);
+  return resultMap;
+}
+
+
 export async function signInWithGoogle() {
   try {
       const result = await signInWithPopup(auth, provider);

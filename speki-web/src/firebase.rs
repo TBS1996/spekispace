@@ -1,7 +1,8 @@
-use std::time::Duration;
+use std::{collections::HashMap, time::Duration};
 
 use gloo_utils::format::JsValueSerdeExt;
 use js_sys::Promise;
+use serde::Deserialize;
 use serde_json::Value;
 use speki_dto::{Config, Cty, SpekiProvider};
 use uuid::Uuid;
@@ -62,14 +63,19 @@ impl SpekiProvider for FirestoreProvider {
         Some(Duration::from_secs(seconds as u64))
     }
     async fn load_all_content(&self, ty: Cty) -> Vec<String> {
+        // let wtf = load_all_records(self.user_id.parse().unwrap(), ty.clone()).await;
+        //tracing::info!("wtF: {:?}", wtf);
         let promise = loadAllContent(&self.user_id(), &as_js_value(ty));
         let val = promise_to_val(promise).await;
         val.as_array()
             .unwrap()
             .into_iter()
             .map(|val| match val {
-                Value::String(s) => toml::from_str(s).unwrap(),
-                _ => panic!(),
+                Value::String(s) => s.clone(),
+                x => {
+                    tracing::info!("err lol: {:?}", x);
+                    panic!();
+                }
             })
             .collect()
     }
@@ -95,13 +101,13 @@ impl SpekiProvider for FirestoreProvider {
 
 #[wasm_bindgen(module = "/assets/firebase.js")]
 extern "C" {
-
     fn saveContent(user_id: &JsValue, table: &JsValue, content_id: &JsValue, content: &JsValue);
     fn deleteContent(user_id: &JsValue, table: &JsValue, id: &JsValue);
     fn loadContent(user_id: &JsValue, table: &JsValue, id: &JsValue) -> Promise;
     fn loadAllContent(user_id: &JsValue, table: &JsValue) -> Promise;
     fn loadAllIds(user_id: &JsValue, table: &JsValue) -> Promise;
     fn lastModified(user_id: &JsValue, table: &JsValue, id: &JsValue) -> Promise;
+    fn loadAll(user_id: &JsValue, table: &JsValue) -> Promise;
 
     fn signInWithGoogle() -> Promise;
     fn signOutUser() -> Promise;
@@ -134,4 +140,20 @@ impl TryFrom<Value> for AuthUser {
 #[derive(Default, Clone, Debug)]
 pub struct AuthUser {
     pub uid: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct Record {
+    content: String,
+    last_modified: Duration,
+}
+
+async fn load_all_records(user_id: Uuid, ty: Cty) -> HashMap<Uuid, Record> {
+    let user_id = JsValue::from_str(&user_id.to_string());
+    let promise = loadAll(&user_id, &as_js_value(ty));
+    let future = wasm_bindgen_futures::JsFuture::from(promise);
+    let jsvalue = future.await.unwrap();
+    let records: HashMap<Uuid, Record> =
+        serde_wasm_bindgen::from_value(jsvalue).expect("Failed to deserialize Firestore response");
+    records
 }

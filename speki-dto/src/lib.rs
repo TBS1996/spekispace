@@ -3,12 +3,14 @@ use core::fmt;
 use omtrent::TimeStamp;
 use serde::{ser::SerializeSeq, Deserialize, Deserializer, Serialize};
 use serde_json::Value;
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::fmt::Debug;
 use std::str::FromStr;
 use std::time::Duration;
+use tracing::info;
 use uuid::Uuid;
 
+#[derive(Clone, Copy)]
 pub enum Cty {
     Attribute,
     Review,
@@ -111,6 +113,7 @@ pub trait SpekiProvider: Sync {
 
         self.save_content(Cty::Review, id.into_inner(), s).await;
     }
+
     async fn load_config(&self) -> Config;
     async fn save_config(&self, config: Config);
 
@@ -141,6 +144,124 @@ pub trait SpekiProvider: Sync {
         let mut reviews = self.load_reviews(id).await;
         reviews.push(review);
         self.save_reviews(id, reviews).await;
+    }
+
+    async fn sync(&self, other: Box<dyn SpekiProvider>) {
+        info!("loading cards 1");
+        let mut map1: HashMap<CardId, RawCard> = self
+            .load_all_cards()
+            .await
+            .into_iter()
+            .map(|card| (CardId(card.id), card))
+            .collect();
+
+        info!("loading cards 2");
+        let mut map2: HashMap<CardId, RawCard> = other
+            .load_all_cards()
+            .await
+            .into_iter()
+            .map(|card| (CardId(card.id), card))
+            .collect();
+
+        let mut ids: HashSet<CardId> = map1.keys().map(|key| *key).collect();
+        ids.extend(map2.keys());
+
+        for id in &ids {
+            info!("syncing card");
+            let id = *id;
+            match (map1.remove(&id), map2.remove(&id)) {
+                (None, None) => panic!(),
+                (None, Some(card)) => self.save_card(card).await,
+                (Some(card), None) => other.save_card(card).await,
+                (Some(card1), Some(card2)) => {
+                    let lm1 = self.last_modified_card(CardId(card1.id)).await;
+                    let lm2 = self.last_modified_card(CardId(card2.id)).await;
+
+                    if lm1 > lm2 {
+                        self.save_card(card2).await;
+                    } else if lm1 < lm2 {
+                        other.save_card(card1).await;
+                    }
+                }
+            }
+        }
+
+        for id in &ids {
+            info!("syncing review");
+            let id = *id;
+            let rev1 = self.load_reviews(id).await;
+            let rev2 = other.load_reviews(id).await;
+            let rev1_qty = rev1.len();
+            let rev2_qty = rev2.len();
+
+            if rev1_qty != rev2_qty {
+                let combined = {
+                    let mut combined = vec![];
+                    combined.extend(rev1);
+                    combined.extend(rev2);
+                    combined.dedup();
+                    combined.sort_by_key(|key| key.timestamp);
+                    combined
+                };
+
+                let comb_qty = combined.len();
+
+                if comb_qty < rev1_qty.max(rev2_qty) {
+                    let dbg = format!(
+                        "id: {id}, rev1len {rev1_qty}, rev2len: {rev2_qty}, combined: {comb_qty}"
+                    );
+                    panic!("{dbg}");
+                }
+
+                if rev1_qty != comb_qty {
+                    info!("save review to other");
+                    other.save_reviews(id, combined.clone()).await;
+                }
+
+                if rev2_qty != comb_qty {
+                    info!("save review to self");
+                    self.save_reviews(id, combined).await;
+                }
+            }
+        }
+
+        info!("fetching attributes 1");
+        let mut map1: HashMap<AttributeId, AttributeDTO> = self
+            .load_all_attributes()
+            .await
+            .into_iter()
+            .map(|card| (card.id, card))
+            .collect();
+
+        info!("fetching attributes 2");
+        let mut map2: HashMap<AttributeId, AttributeDTO> = other
+            .load_all_attributes()
+            .await
+            .into_iter()
+            .map(|card| (card.id, card))
+            .collect();
+
+        let mut ids: HashSet<AttributeId> = map1.keys().map(|key| *key).collect();
+        ids.extend(map2.keys());
+
+        for id in ids {
+            info!("syncing attribute");
+            match (map1.remove(&id), map2.remove(&id)) {
+                (None, None) => panic!(),
+                (None, Some(card)) => self.save_attribute(card).await,
+                (Some(card), None) => other.save_attribute(card).await,
+                (Some(card1), Some(card2)) => {
+                    let lm1 = self.last_modified_attribute(card1.id).await;
+                    let lm2 = self.last_modified_attribute(card2.id).await;
+
+                    if lm1 > lm2 {
+                        self.save_attribute(card2).await;
+                    } else if lm1 < lm2 {
+                        other.save_attribute(card1).await;
+                    }
+                }
+            }
+        }
     }
 }
 
