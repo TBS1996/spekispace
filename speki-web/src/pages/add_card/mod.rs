@@ -1,17 +1,12 @@
-use std::rc::Rc;
-use std::sync::Arc;
-
 use dioxus::prelude::*;
 use frontside::{CardTy, FrontPut};
-use speki_core::{AnyType, Card};
-use speki_dto::CardId;
 use tracing::info;
 
 use super::add_card::backside::BackPut;
 use super::CardEntry;
 
-use crate::overlays::card_selector::{self};
-use crate::{App, OverlayManager, Popup};
+use crate::components::cardref::CardRef;
+use crate::{App, OverlayManager};
 
 pub mod backside;
 mod frontside;
@@ -21,9 +16,8 @@ pub struct AddCardState {
     app: App,
     front: FrontPut,
     back: BackPut,
-    concept: Signal<Option<CardId>>,
+    concept: CardRef,
     selected: Signal<CardTy>,
-    concept_input: Signal<String>,
     concept_cards: Signal<Vec<CardEntry>>,
 }
 
@@ -32,15 +26,21 @@ impl AddCardState {
         let back = BackPut::new();
         let front = FrontPut::new();
         let selected = front.dropdown.selected.clone();
+        let concept_cards: Signal<Vec<CardEntry>> = Default::default();
         Self {
             app,
             front,
+            concept: CardRef::new(concept_cards.clone()),
             back,
-            concept: Default::default(),
             selected,
-            concept_input: Default::default(),
-            concept_cards: Default::default(),
+            concept_cards,
         }
+    }
+
+    pub fn reset(&self) {
+        self.front.reset();
+        self.back.reset();
+        self.concept.reset();
     }
 
     pub async fn load_cards(&self) {
@@ -58,41 +58,8 @@ impl AddCardState {
         self.concept_cards.clone().set(concept_cards);
     }
 
-    pub fn start_concept_ref_search(&self) {
-        let _selv = self.clone();
-
-        let fun = move |card: Arc<Card<AnyType>>| {
-            let selv = _selv.clone();
-            spawn(async move {
-                info!("setting card.. ");
-                selv.set_card(card.id).await;
-            });
-        };
-
-        let props = card_selector::CardSelectorProps {
-            title: "choose concept card".to_string(),
-            search: Signal::new_in_scope(Default::default(), ScopeId(3)),
-            on_card_selected: Rc::new(fun),
-            cards: self.concept_cards.clone(),
-            done: Signal::new_in_scope(false, ScopeId(3)),
-        };
-
-        let popup: Popup = Box::new(props);
-
-        let pop = use_context::<OverlayManager>();
-        pop.set(popup);
-    }
-
-    pub async fn set_card(&self, card: CardId) {
-        info!("hey there");
-        let front = self.app.0.load_card(card).await.unwrap().print().await;
-        info!("2");
-        self.concept_input.clone().set(front);
-    }
-
-    fn render_norm(&self) -> Element {
+    fn render(&self) -> Element {
         let selv = self.clone();
-        let selv2 = self.clone();
 
         rsx! {
             div {
@@ -115,14 +82,7 @@ impl AddCardState {
                                 div {
                                     class: "block text-gray-700 text-sm font-medium mb-2",
                                     "Parent class"
-                                input {
-                                    class: "w-full border border-gray-300 rounded-md p-2 mb-4 text-gray-500 bg-gray-600 cursor-pointer focus:outline-none",
-                                    value: "{self.concept_input}",
-                                    readonly: "true",
-                                    onclick: move |_| {
-                                        selv2.start_concept_ref_search();
-                                    },
-                                }
+                                    {selv.concept.render()},
                             }
                         }
                         },
@@ -131,14 +91,7 @@ impl AddCardState {
                                 div {
                                     class: "block text-gray-700 text-sm font-medium mb-2",
                                     "Class of instance"
-                                    input {
-                                        class: "w-full border border-gray-300 rounded-md p-2 mb-4 text-gray-500 bg-gray-600 cursor-pointer focus:outline-none",
-                                        value: "{self.concept_input}",
-                                        readonly: "true",
-                                        onclick: move |_| {
-                                            selv2.start_concept_ref_search();
-                                        },
-                                    }
+                                    {selv.concept.render()},
                                 }
                             }
                         },
@@ -164,7 +117,7 @@ impl AddCardState {
 
                                     },
                                     CardTy::Class => {
-                                        let parent_class = selv.concept.cloned();
+                                        let parent_class = selv.concept.selected_card().cloned();
                                         let Some(back) = backside.to_backside() else {
                                             return;
                                         };
@@ -174,7 +127,7 @@ impl AddCardState {
 
                                     },
                                     CardTy::Instance => {
-                                        let Some(class) = selv.concept.cloned() else {
+                                        let Some(class) = selv.concept.selected_card().cloned() else {
                                             return;
                                         };
 
@@ -183,9 +136,7 @@ impl AddCardState {
                                     },
                                 }
 
-                                frontside.reset();
-                                backside.reset();
-                                selv.concept.clone().set(None);
+                                selv.reset();
 
                                 info!("adding new card!");
                                 selv.load_cards().await;
@@ -196,10 +147,6 @@ impl AddCardState {
                 }
             }
         }
-    }
-
-    fn render(&self) -> Element {
-        self.render_norm()
     }
 }
 
