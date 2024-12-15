@@ -11,7 +11,6 @@ use speki_dto::{BackSide, CardId};
 use strum::{EnumIter, IntoEnumIterator};
 use tracing::info;
 
-use super::card_selector::CardSelectorProps;
 use crate::{
     components::{card_selector, dropdown::DropDownMenu},
     pages::CardEntry,
@@ -25,24 +24,20 @@ const PLACEHOLDER: &'static str = "pick reference...";
 pub struct BackPut {
     text: Signal<String>,
     card: Signal<Option<CardId>>,
-    show: Signal<bool>,
     dropdown: DropDownMenu<BackOpts>,
     app: App,
     ref_display: Signal<String>,
     pub cards: Signal<Vec<CardEntry>>,
-    pub searching_cards: Signal<Option<CardSelectorProps>>,
 }
 
 impl BackPut {
-    pub fn new(app: App, searching_cards: Signal<Option<CardSelectorProps>>) -> Self {
+    pub fn new(app: App) -> Self {
         Self {
             app,
             text: Default::default(),
             card: Default::default(),
-            show: Default::default(),
             dropdown: DropDownMenu::new(BackOpts::iter()),
             ref_display: Signal::new(PLACEHOLDER.to_string()),
-            searching_cards,
             cards: Default::default(),
         }
     }
@@ -78,13 +73,11 @@ impl BackPut {
         info!("2");
         self.ref_display.clone().set(front);
         self.card.clone().set(Some(card));
-        self.searching_cards.clone().set(None);
     }
 
     pub fn reset(&self) {
         self.text.clone().set(Default::default());
         self.card.clone().set(Default::default());
-        self.show.clone().set(Default::default());
         self.ref_display.clone().set(PLACEHOLDER.to_string());
     }
 

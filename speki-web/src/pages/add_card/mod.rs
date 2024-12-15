@@ -10,7 +10,7 @@ use tracing::info;
 use super::add_card::backside::BackPut;
 use super::CardEntry;
 
-use crate::components::card_selector::{self, CardSelectorProps};
+use crate::components::card_selector::{self};
 use crate::{App, Popup, PopupManager, Route};
 
 pub mod backside;
@@ -20,18 +20,16 @@ mod frontside;
 pub struct AddCardState {
     app: App,
     front: FrontPut,
-    pub back: BackPut,
+    back: BackPut,
     concept: Signal<Option<CardId>>,
     selected: Signal<CardTy>,
-    pub searching_cards: Signal<Option<CardSelectorProps>>,
     concept_input: Signal<String>,
     concept_cards: Signal<Vec<CardEntry>>,
 }
 
 impl AddCardState {
     pub fn new(app: App) -> Self {
-        let searching_cards: Signal<Option<CardSelectorProps>> = Default::default();
-        let back = BackPut::new(app.clone(), searching_cards.clone());
+        let back = BackPut::new(app.clone());
         let front = FrontPut::new();
         let selected = front.dropdown.selected.clone();
         Self {
@@ -40,7 +38,6 @@ impl AddCardState {
             back,
             concept: Default::default(),
             selected,
-            searching_cards,
             concept_input: Default::default(),
             concept_cards: Default::default(),
         }
@@ -91,7 +88,6 @@ impl AddCardState {
         let front = self.app.0.load_card(card).await.unwrap().print().await;
         info!("2");
         self.concept_input.clone().set(front);
-        self.searching_cards.clone().set(None);
     }
 
     fn render_norm(&self) -> Element {

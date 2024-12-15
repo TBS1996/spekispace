@@ -1,7 +1,4 @@
-use std::{
-    rc::Rc,
-    sync::{atomic::AtomicBool, Arc},
-};
+use std::{rc::Rc, sync::Arc};
 
 use dioxus::prelude::*;
 use speki_core::{AnyType, Card};
