@@ -93,7 +93,7 @@ pub async fn sync() {
     use speki_dto::SpekiProvider;
 
     let agent = sign_in().await;
-    info!("lets sync!!!!!!!!!!!!!!!!!!!!!");
+    info!("starting sync!");
 
     let fsp: Box<dyn SpekiProvider> = Box::new(FirestoreProvider::new(agent));
 

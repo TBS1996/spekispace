@@ -1,18 +1,17 @@
-use rayon::prelude::*;
-use speki_dto::{Config, Cty};
-use speki_dto::{Record, SpekiProvider};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::time::SystemTime;
 use std::{
     fs::{self},
-    io::{Read, Write},
+    io::Write,
     path::Path,
     time::Duration,
 };
-use uuid::Uuid;
 
-pub mod paths;
+use rayon::prelude::*;
+use speki_dto::{Config, Cty};
+use speki_dto::{Record, SpekiProvider};
+use uuid::Uuid;
 
 fn load_dir_paths<P: AsRef<Path>>(folder_path: P) -> std::io::Result<Vec<PathBuf>> {
     let entries = fs::read_dir(folder_path)?.collect::<Result<Vec<_>, std::io::Error>>()?;
@@ -30,25 +29,6 @@ fn load_dir_paths<P: AsRef<Path>>(folder_path: P) -> std::io::Result<Vec<PathBuf
         .collect();
 
     Ok(paths)
-}
-
-fn _load_files<P: AsRef<Path>>(folder_path: P) -> std::io::Result<Vec<String>> {
-    let contents: Vec<String> = load_dir_paths(folder_path)?
-        .par_iter()
-        .filter_map(|path| {
-            if path.is_file() {
-                let mut file_content = String::new();
-                if let Ok(mut file) = fs::File::open(&path) {
-                    if file.read_to_string(&mut file_content).is_ok() {
-                        return Some(file_content);
-                    }
-                }
-            }
-            None
-        })
-        .collect();
-
-    Ok(contents)
 }
 
 pub struct FileProvider;
@@ -129,5 +109,68 @@ impl SpekiProvider for FileProvider {
 
     async fn save_config(&self, _config: Config) {
         todo!()
+    }
+}
+
+pub mod paths {
+
+    #![allow(dead_code)]
+
+    use std::{
+        fs::{self, create_dir_all},
+        path::PathBuf,
+    };
+
+    pub fn get_cache_path() -> PathBuf {
+        let path = dirs::home_dir().unwrap().join(".cache").join("speki");
+        create_dir_all(&path).unwrap();
+        path
+    }
+
+    pub fn config_dir() -> PathBuf {
+        let path = dirs::home_dir().unwrap().join(".config").join("speki");
+        fs::create_dir_all(&path).unwrap();
+        path
+    }
+
+    pub fn get_review_path() -> PathBuf {
+        let path = get_share_path().join("reviews");
+        create_dir_all(&path).unwrap();
+        path
+    }
+
+    pub fn get_collections_path() -> PathBuf {
+        let path = get_share_path().join("collections");
+        create_dir_all(&path).unwrap();
+        path
+    }
+
+    pub fn get_concepts_path() -> PathBuf {
+        let path = get_share_path().join("concepts");
+        create_dir_all(&path).unwrap();
+        path
+    }
+
+    pub fn get_attributes_path() -> PathBuf {
+        let path = get_share_path().join("attributes");
+        create_dir_all(&path).unwrap();
+        path
+    }
+
+    pub fn get_cards_path() -> PathBuf {
+        let path = get_share_path().join("cards");
+        create_dir_all(&path).unwrap();
+        path
+    }
+
+    #[cfg(not(test))]
+    pub fn get_share_path() -> PathBuf {
+        let home = dirs::home_dir().unwrap();
+        home.join(".local/share/speki/")
+    }
+
+    #[cfg(test)]
+    pub fn get_share_path() -> PathBuf {
+        PathBuf::from("./test_dir/")
     }
 }
