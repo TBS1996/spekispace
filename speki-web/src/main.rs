@@ -36,14 +36,14 @@ pub type PopupEntry = Signal<Option<Popup>>;
 pub type Popup = Box<dyn PopTray>;
 
 #[derive(Clone, Default)]
-pub struct PopupManager {
+pub struct OverlayManager {
     home: PopupEntry,
     review: PopupEntry,
     add: PopupEntry,
     browse: PopupEntry,
 }
 
-impl PopupManager {
+impl OverlayManager {
     pub fn new() -> Self {
         Self::default()
     }
@@ -59,7 +59,6 @@ impl PopupManager {
         };
 
         if *pop.is_done().read() {
-            //            self.clear(route);
             None
         } else {
             Some(pop.render())
@@ -102,7 +101,7 @@ pub fn TheApp() -> Element {
     use_context_provider(|| ReviewState::new(app.clone()));
     use_context_provider(LoginState::default);
     use_context_provider(BrowseState::new);
-    use_context_provider(PopupManager::new);
+    use_context_provider(OverlayManager::new);
 
     spawn(async move {
         app.0.fill_cache().await;

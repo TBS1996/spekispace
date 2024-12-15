@@ -27,6 +27,11 @@ where
         Self { options, selected }
     }
 
+    pub fn reset(&self) {
+        let first = self.options.first().unwrap().clone();
+        self.selected.clone().set(first);
+    }
+
     pub fn view(&self) -> Element {
         let mut dropdown = self.selected.clone();
         let val: String = serde_json::to_string(&dropdown.cloned()).unwrap();

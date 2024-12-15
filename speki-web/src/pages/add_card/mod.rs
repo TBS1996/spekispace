@@ -11,7 +11,7 @@ use super::add_card::backside::BackPut;
 use super::CardEntry;
 
 use crate::overlays::card_selector::{self};
-use crate::{App, Popup, PopupManager, Route};
+use crate::{App, OverlayManager, Popup};
 
 pub mod backside;
 mod frontside;
@@ -29,7 +29,7 @@ pub struct AddCardState {
 
 impl AddCardState {
     pub fn new(app: App) -> Self {
-        let back = BackPut::new(app.clone());
+        let back = BackPut::new();
         let front = FrontPut::new();
         let selected = front.dropdown.selected.clone();
         Self {
@@ -54,7 +54,7 @@ impl AddCardState {
             cards.push(CardEntry::new(card).await);
         }
 
-        self.back.cards.clone().set(cards);
+        self.back.ref_card.cards().set(cards);
         self.concept_cards.clone().set(concept_cards);
     }
 
@@ -79,7 +79,7 @@ impl AddCardState {
 
         let popup: Popup = Box::new(props);
 
-        let pop = use_context::<PopupManager>();
+        let pop = use_context::<OverlayManager>();
         pop.set(popup);
     }
 
@@ -104,7 +104,7 @@ impl AddCardState {
                     }
 
                     { self.front.view() }
-                    { self.back.view() }
+                    { self.back.render() }
 
                     match (self.selected)() {
                         CardTy::Normal => {
@@ -205,7 +205,7 @@ impl AddCardState {
 
 #[component]
 pub fn Add() -> Element {
-    let pop = use_context::<PopupManager>();
+    let pop = use_context::<OverlayManager>();
     if let Some(elm) = pop.render() {
         elm
     } else {
