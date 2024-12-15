@@ -125,10 +125,15 @@ fn Wrapper() -> Element {
     info!("wrapper!!!!!!!");
     let id = current_scope_id();
     info!("wrapper scope id: {id:?}");
+    let overlay = use_context::<OverlayManager>();
 
     rsx! {
          crate::nav::nav {}
-         Outlet::<Route> {}
+         if let Some(overlay) = overlay.render() {
+            { overlay }
+         } else {
+            Outlet::<Route> {}
+         }
 
     }
 }
