@@ -11,16 +11,10 @@ pub use fs::paths;
 mod browserfs;
 
 #[cfg(feature = "browserfs")]
-pub use browserfs::IndexBaseProvider;
+pub use browserfs::BrowserFsProvider;
 
 #[cfg(feature = "dexie")]
 mod dexie;
 
 #[cfg(feature = "dexie")]
 pub use dexie::DexieProvider;
-
-#[cfg(feature = "firestore")]
-mod firestore;
-
-#[cfg(feature = "firestore")]
-pub use firestore::FirestoreProvider;

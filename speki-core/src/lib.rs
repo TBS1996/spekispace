@@ -91,7 +91,7 @@ impl App {
     pub async fn fill_cache(&self) {
         info!("filling cache");
         let start = self.time_provider.current_time();
-        self.card_provider.load_all().await;
+        self.card_provider.fill_cache().await;
         let elapsed = self.time_provider.current_time() - start;
         info!("cache filled in {:.4} seconds!", elapsed.as_secs_f32());
     }

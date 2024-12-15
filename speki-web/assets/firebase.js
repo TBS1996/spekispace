@@ -24,7 +24,6 @@ const db = getFirestore(app);
 const auth = getAuth();
 const provider = new GoogleAuthProvider();
 
-// Helper functions
 function getTable(userId, tableName) {
   return collection(db, `users/${userId}/${tableName}`);
 }
@@ -33,31 +32,48 @@ function getContentRef(userId, tableName, contentId) {
   return doc(getTable(userId, tableName), contentId);
 }
 
-// Core CRUD functions
 async function getContent(userId, tableName, contentId) {
   const docRef = getContentRef(userId, tableName, contentId);
   const docSnap = await getDoc(docRef);
   return docSnap;
 }
 
-export async function loadContent(userId, tableName, contentId) {
+export async function loadRecord(userId, tableName, contentId) {
   const docSnap = await getContent(userId, tableName, contentId);
-  return docSnap.exists() ? docSnap.data().content : null;
+
+  if (!docSnap.exists()) {
+    return null; 
+  }
+
+  const data = docSnap.data();
+  return {
+    content: data.content,
+    last_modified: data.lastModified ? Math.floor(data.lastModified.toMillis() / 1000) : null 
+  };
 }
 
-export async function lastModified(userId, tableName, contentId) {
-  const docSnap = await getContent(userId, tableName, contentId);
-  return docSnap.exists() ? docSnap.data().lastModified.toMillis() : null;
-}
 
-export async function loadAllContent(userId, tableName) {
-  console.log(`loading all content from table ${tableName}`)
+export async function loadAllRecords(userId, tableName) {
+  console.log(`Loading all content with metadata from table ${tableName}`);
   const colRef = getTable(userId, tableName);
-  console.log(`fetched table..`)
+
+  console.log(`Fetching table...`);
   const querySnapshot = await getDocs(colRef);
-  console.log(`done loading`)
-  return querySnapshot.docs.map(doc => doc.data().content);
+
+  console.log(`Processing documents...`);
+  const resultMap = {};
+  querySnapshot.forEach(doc => {
+    const data = doc.data();
+    resultMap[doc.id] = {
+      content: data.content,
+      last_modified: data.lastModified ? Math.floor(data.lastModified.toMillis() / 1000) : null 
+    };
+  });
+
+  console.log(`Done loading all content with metadata`);
+  return resultMap;
 }
+
 
 export async function loadAllIds(userId, tableName) {
   console.log(`loading all id from table ${tableName}`)
@@ -80,27 +96,6 @@ export async function saveContent(userId, tableName, contentId, content) {
 export async function deleteContent(userId, tableName, contentId) {
   const docRef = getContentRef(userId, tableName, contentId);
   await deleteDoc(docRef);
-}
-
-export async function loadAll(userId, tableName) {
-  console.log(`Loading all content with metadata from table ${tableName}`);
-  const colRef = getTable(userId, tableName);
-
-  console.log(`Fetching table...`);
-  const querySnapshot = await getDocs(colRef);
-
-  console.log(`Processing documents...`);
-  const resultMap = {};
-  querySnapshot.forEach(doc => {
-    const data = doc.data();
-    resultMap[doc.id] = {
-      content: data.content,
-      lastModified: data.lastModified ? data.lastModified.toMillis() : null
-    };
-  });
-
-  console.log(`Done loading all content with metadata`);
-  return resultMap;
 }
 
 

@@ -22,6 +22,7 @@ tracing.workspace = true
 async-trait.workspace = true
 speki-dto.workspace = true
 uuid.workspace = true
+serde-wasm-bindgen.workspace = true
 
 
 [features]

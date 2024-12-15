@@ -14,30 +14,45 @@ function unixSecs() {
     return Math.floor(Date.now() / 1000);
 }
 
+const TooBig = 173426346900;
 
-export async function loadContent(tableName, id) {
-    const table = getTable(tableName);
-    const record = await table.get(id);
-    return record?.content ?? null; 
-}
-
-export async function lastModified(tableName, id) {
-    const table = getTable(tableName);
-    const record = await table.get(id);
-    let modified = record?.lastModified ?? null; 
-    if (modified) {
-        if (modified > 173399404600) { // 
-            return Math.floor(modified / 1000);
-        } else {
-            return modified;
-        }
+function ensureUnixSeconds(timestamp) {
+    if (timestamp == null) {
+        return null;
+    }
+    if (timestamp > TooBig) {
+        return Math.floor(timestamp / 1000);
+    } else {
+        return Math.floor(timestamp);
     }
 }
 
-export async function loadAllContent(tableName) {
+export async function loadRecord(tableName, id) {
+    const table = getTable(tableName);
+    const record = await table.get(id);
+
+    if (!record) {
+        return null; 
+    }
+
+    return {
+        content: record.content,
+        last_modified: ensureUnixSeconds(record.lastModified) ?? null 
+    };
+}
+
+export async function loadAllRecords(tableName) {
     const table = getTable(tableName);
     const records = await table.toArray();
-    return records.map(record => record.content); 
+
+    return records.reduce((map, record) => {
+        map[record.id] = {
+            content: record.content,
+            last_modified: ensureUnixSeconds(record.lastModified)
+        };
+        return map;
+    }, {});
+
 }
 
 export async function loadAllIds(tableName) {

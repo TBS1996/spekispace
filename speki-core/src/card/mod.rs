@@ -350,10 +350,11 @@ impl Card<AnyType> {
         self.history.lapses_since(day, current_time)
     }
 
-    pub async fn from_raw(
+    pub fn from_raw_with_reviews(
         raw_card: RawCard,
         card_provider: CardProvider,
         recaller: Recaller,
+        reviews: Vec<Review>,
     ) -> Card<AnyType> {
         let id = CardId(raw_card.id);
 
@@ -362,12 +363,23 @@ impl Card<AnyType> {
             data: into_any(raw_card.data, &card_provider),
             dependencies: raw_card.dependencies.into_iter().map(CardId).collect(),
             tags: raw_card.tags,
-            history: card_provider.load_reviews(id).await,
+            history: Reviews(reviews),
             suspended: IsSuspended::from(raw_card.suspended),
             card_provider,
             recaller,
             last_modified: Duration::default(),
         }
+    }
+
+    pub async fn from_raw(
+        raw_card: RawCard,
+        card_provider: CardProvider,
+        recaller: Recaller,
+    ) -> Card<AnyType> {
+        let id = CardId(raw_card.id);
+        let reviews = card_provider.load_reviews(id).await;
+
+        Self::from_raw_with_reviews(raw_card, card_provider, recaller, reviews.0)
     }
 
     pub fn card_type(&self) -> &AnyType {
@@ -696,7 +708,9 @@ mod tests {
         card_provider::CardProvider, Provider, Recaller, SimpleRecall, TimeGetter, TimeProvider,
     };
     use async_trait::async_trait;
-    use speki_dto::{BackSide, CType, Config, Cty, RawCard, RawType, Recall, SpekiProvider};
+    use speki_dto::{
+        BackSide, CType, Config, Cty, RawCard, RawType, Recall, Record, SpekiProvider,
+    };
     use std::{
         collections::HashMap,
         sync::{Arc, Mutex},
@@ -739,10 +753,15 @@ mod tests {
                 Cty::Card => &mut lock.reviews,
             };
 
-            map.insert(id, Record::new(s, self.time.clone()));
+            let record = Record {
+                content: s,
+                last_modified: self.time.current_time().as_secs(),
+            };
+
+            map.insert(id, record);
         }
 
-        fn get_all(&self, ty: Cty) -> Vec<String> {
+        fn get_all(&self, ty: Cty) -> HashMap<Uuid, Record> {
             let lock = self.inner.lock().unwrap();
 
             match ty {
@@ -751,9 +770,6 @@ mod tests {
                 Cty::Card => &lock.reviews,
             }
             .clone()
-            .into_values()
-            .map(|v| v.data)
-            .collect()
         }
 
         fn get(&self, ty: Cty, id: Uuid) -> Option<Record> {
@@ -766,21 +782,6 @@ mod tests {
         }
     }
 
-    #[derive(Clone)]
-    struct Record {
-        data: String,
-        modified: Duration,
-    }
-
-    impl Record {
-        fn new(data: String, time: ControlledTime) -> Self {
-            Self {
-                data,
-                modified: time.current_time(),
-            }
-        }
-    }
-
     struct Inner {
         cards: HashMap<Uuid, Record>,
         reviews: HashMap<Uuid, Record>,
@@ -789,15 +790,11 @@ mod tests {
 
     #[async_trait(?Send)]
     impl SpekiProvider for Storage {
-        async fn load_content(&self, id: Uuid, ty: Cty) -> Option<String> {
-            self.get(ty, id).map(|r| r.data)
+        async fn load_record(&self, id: Uuid, ty: Cty) -> Option<Record> {
+            self.get(ty, id)
         }
 
-        async fn last_modified(&self, id: Uuid, ty: Cty) -> Option<Duration> {
-            self.get(ty, id).map(|r| r.modified)
-        }
-
-        async fn load_all_content(&self, ty: Cty) -> Vec<String> {
+        async fn load_all_records(&self, ty: Cty) -> HashMap<Uuid, Record> {
             self.get_all(ty)
         }
 

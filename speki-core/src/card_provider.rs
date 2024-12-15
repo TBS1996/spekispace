@@ -91,6 +91,40 @@ impl CardProvider {
         self.provider.load_card_ids().await
     }
 
+    pub async fn fill_cache(&self) {
+        let mut cards: HashMap<CardId, CardCache> = Default::default();
+        let mut rev_caches: HashMap<CardId, RevCache> = Default::default();
+        let raw_cards = self.provider.load_all_cards().await;
+        let mut reviews = self.provider.load_all_reviews().await;
+        let fetched = self.time_provider.current_time();
+
+        for card in raw_cards {
+            let rev = reviews.remove(&card.id).unwrap_or_default();
+            let card =
+                Card::from_raw_with_reviews(card, self.clone(), self.recaller.clone(), rev.clone());
+            let card = Arc::new(card);
+            self.update_dependents(card.clone()).await;
+
+            let reventry = RevCache {
+                fetched,
+                review: Reviews(rev),
+            };
+
+            let entry = CardCache {
+                fetched,
+                card,
+                min_rec_recall: None,
+            };
+
+            rev_caches.insert(entry.card.id, reventry);
+            cards.insert(entry.card.id, entry);
+        }
+
+        let mut guard = self.inner.write().unwrap();
+        guard.cards = cards;
+        guard.reviews = rev_caches;
+    }
+
     pub async fn filtered_load<F, Fut>(&self, filter: F) -> Vec<Arc<Card<AnyType>>>
     where
         F: Fn(Arc<Card<AnyType>>) -> Fut + Send + Sync,

@@ -17,13 +17,46 @@ pub enum Cty {
     Card,
 }
 
+#[derive(Debug, Deserialize, Clone)]
+pub struct Record {
+    pub content: String,
+    pub last_modified: u64,
+}
+
 #[async_trait(?Send)]
 pub trait SpekiProvider: Sync {
-    async fn load_content(&self, id: Uuid, ty: Cty) -> Option<String>;
-    async fn last_modified(&self, id: Uuid, ty: Cty) -> Option<Duration>;
-    async fn load_all_content(&self, ty: Cty) -> Vec<String>;
+    async fn load_record(&self, id: Uuid, ty: Cty) -> Option<Record>;
+    async fn load_all_records(&self, ty: Cty) -> HashMap<Uuid, Record>;
+
+    async fn load_content(&self, id: Uuid, ty: Cty) -> Option<String> {
+        self.load_record(id, ty).await.map(|rec| rec.content)
+    }
+
+    async fn last_modified(&self, id: Uuid, ty: Cty) -> Option<Duration> {
+        self.load_record(id, ty)
+            .await
+            .map(|rec| Duration::from_secs(rec.last_modified))
+    }
+
+    async fn load_all_content(&self, ty: Cty) -> Vec<String> {
+        self.load_all_records(ty)
+            .await
+            .into_values()
+            .map(|rec| rec.content)
+            .collect()
+    }
+
     async fn save_content(&self, ty: Cty, id: Uuid, content: String);
+
     async fn delete_content(&self, id: Uuid, ty: Cty);
+
+    async fn load_all_reviews(&self) -> HashMap<Uuid, Vec<Review>> {
+        self.load_all_records(Cty::Review)
+            .await
+            .into_iter()
+            .map(|rev| (rev.0, parse_review(rev.1.content)))
+            .collect()
+    }
 
     async fn load_all_cards(&self) -> Vec<RawCard> {
         self.load_all_content(Cty::Card)
@@ -76,26 +109,11 @@ pub trait SpekiProvider: Sync {
     }
 
     async fn load_reviews(&self, id: CardId) -> Vec<Review> {
-        let mut reviews = vec![];
-
         let Some(s) = self.load_content(id.into_inner(), Cty::Review).await else {
             return vec![];
         };
 
-        for line in s.lines() {
-            let (timestamp, grade) = line.split_once(' ').unwrap();
-            let timestamp = Duration::from_secs(timestamp.parse().unwrap());
-            let grade = Recall::from_str(grade).unwrap();
-            let review = Review {
-                timestamp,
-                grade,
-                time_spent: Duration::default(),
-            };
-            reviews.push(review);
-        }
-
-        reviews.sort_by_key(|r| r.timestamp);
-        reviews
+        parse_review(s)
     }
 
     async fn save_reviews(&self, id: CardId, reviews: Vec<Review>) {
@@ -186,41 +204,48 @@ pub trait SpekiProvider: Sync {
             }
         }
 
+        info!("REVIEW SYNCING");
+
+        info!("loading self reviews");
+        let mut map1: HashMap<Uuid, Vec<Review>> = self.load_all_reviews().await;
+        info!("loading other reviews");
+        let mut map2: HashMap<Uuid, Vec<Review>> = other.load_all_reviews().await;
+
         for id in &ids {
             info!("syncing review");
             let id = *id;
-            let rev1 = self.load_reviews(id).await;
-            let rev2 = other.load_reviews(id).await;
-            let rev1_qty = rev1.len();
-            let rev2_qty = rev2.len();
 
-            if rev1_qty != rev2_qty {
-                let combined = {
-                    let mut combined = vec![];
-                    combined.extend(rev1);
-                    combined.extend(rev2);
-                    combined.dedup();
-                    combined.sort_by_key(|key| key.timestamp);
-                    combined
-                };
+            match (map1.remove(&id.into_inner()), map2.remove(&id.into_inner())) {
+                (None, None) => continue,
+                (None, Some(rev2)) => self.save_reviews(id, rev2).await,
+                (Some(rev1), None) => other.save_reviews(id, rev1).await,
+                (Some(rev1), Some(rev2)) => {
+                    let rev1_qty = rev1.len();
+                    let rev2_qty = rev2.len();
 
-                let comb_qty = combined.len();
+                    if rev1_qty == rev2_qty {
+                        continue;
+                    }
 
-                if comb_qty < rev1_qty.max(rev2_qty) {
-                    let dbg = format!(
-                        "id: {id}, rev1len {rev1_qty}, rev2len: {rev2_qty}, combined: {comb_qty}"
-                    );
-                    panic!("{dbg}");
-                }
+                    let combined = {
+                        let mut cmb = rev1.clone();
+                        cmb.extend(rev2);
+                        cmb.dedup();
+                        cmb.sort_by_key(|rev| rev.timestamp);
+                        cmb
+                    };
 
-                if rev1_qty != comb_qty {
-                    info!("save review to other");
-                    other.save_reviews(id, combined.clone()).await;
-                }
+                    let comb_qty = combined.len();
 
-                if rev2_qty != comb_qty {
-                    info!("save review to self");
-                    self.save_reviews(id, combined).await;
+                    if comb_qty > rev1_qty {
+                        info!("save reviews to self");
+                        self.save_reviews(id, combined.clone()).await;
+                    }
+
+                    if comb_qty > rev1_qty {
+                        info!("save reviews to other");
+                        other.save_reviews(id, combined.clone()).await;
+                    }
                 }
             }
         }
@@ -263,6 +288,24 @@ pub trait SpekiProvider: Sync {
             }
         }
     }
+}
+
+fn parse_review(s: String) -> Vec<Review> {
+    let mut reviews = vec![];
+    for line in s.lines() {
+        let (timestamp, grade) = line.split_once(' ').unwrap();
+        let timestamp = Duration::from_secs(timestamp.parse().unwrap());
+        let grade = Recall::from_str(grade).unwrap();
+        let review = Review {
+            timestamp,
+            grade,
+            time_spent: Duration::default(),
+        };
+        reviews.push(review);
+    }
+
+    reviews.sort_by_key(|r| r.timestamp);
+    reviews
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, Default)]

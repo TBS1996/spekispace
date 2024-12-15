@@ -1,17 +1,17 @@
-use std::path::PathBuf;
 use std::time::Duration;
+use std::{collections::HashMap, path::PathBuf};
 
 use async_trait::async_trait;
-use speki_dto::{CardId, Config, Cty, SpekiProvider};
+use speki_dto::{CardId, Config, Cty, Record, SpekiProvider};
 use uuid::Uuid;
 
 mod js;
 
-pub struct IndexBaseProvider {
+pub struct BrowserFsProvider {
     repo: PathBuf,
 }
 
-impl IndexBaseProvider {
+impl BrowserFsProvider {
     pub fn new(path: &str) -> Self {
         Self {
             repo: PathBuf::from(path),
@@ -44,7 +44,15 @@ impl IndexBaseProvider {
 }
 
 #[async_trait(?Send)]
-impl SpekiProvider for IndexBaseProvider {
+impl SpekiProvider for BrowserFsProvider {
+    async fn load_record(&self, id: Uuid, ty: Cty) -> Option<Record> {
+        todo!()
+    }
+
+    async fn load_all_records(&self, ty: Cty) -> HashMap<Uuid, Record> {
+        todo!()
+    }
+
     async fn delete_content(&self, id: Uuid, ty: Cty) {
         js::delete_file(self.content_path(ty, id));
     }
