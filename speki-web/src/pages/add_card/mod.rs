@@ -11,7 +11,7 @@ use super::add_card::backside::BackPut;
 use super::CardEntry;
 
 use crate::components::card_selector::{self, CardSelectorProps};
-use crate::App;
+use crate::{App, Popup, PopupManager, Route};
 
 pub mod backside;
 mod frontside;
@@ -74,12 +74,16 @@ impl AddCardState {
 
         let props = card_selector::CardSelectorProps {
             title: "choose concept card".to_string(),
-            search: Default::default(),
+            search: Signal::new_in_scope(Default::default(), ScopeId(3)),
             on_card_selected: Rc::new(fun),
             cards: self.concept_cards.clone(),
+            done: Signal::new_in_scope(false, ScopeId(3)),
         };
 
-        self.searching_cards.clone().set(Some(props));
+        let popup: Popup = Box::new(props);
+
+        let pop = use_context::<PopupManager>();
+        pop.set(Route::Add {}, popup);
     }
 
     pub async fn set_card(&self, card: CardId) {
@@ -199,25 +203,16 @@ impl AddCardState {
     }
 
     fn render(&self) -> Element {
-        let refsearch = self.searching_cards.clone();
-
-        rsx! {
-          match refsearch() {
-              Some(props) => rsx!{
-                  card_selector::card_selector {
-                      title: props.title.clone(),
-                      search: props.search.clone(),
-                      on_card_selected: props.on_card_selected.clone(),
-                      cards: props.cards.clone(),
-                  }
-              },
-              None => self.render_norm(),
-            }
-        }
+        self.render_norm()
     }
 }
 
 #[component]
 pub fn Add() -> Element {
-    use_context::<AddCardState>().render()
+    let pop = use_context::<PopupManager>();
+    if let Some(elm) = pop.render(Route::Add {}) {
+        elm
+    } else {
+        use_context::<AddCardState>().render()
+    }
 }

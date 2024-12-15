@@ -168,12 +168,14 @@ pub fn Browse() -> Element {
                 search: browse_state.search.clone(),
                 on_card_selected: Rc::new(browse_state.view_closure()),
                 cards: browse_state.cards.clone(),
+                done: Default::default(),
             }},
             BrowsePage::SetDependency(_) => rsx !{ card_selector::card_selector {
                 title: "set dependency".to_string(),
                 search: browse_state.search.clone(),
                 on_card_selected: Rc::new(browse_state.dep_closure()),
                 cards: browse_state.cards.clone(),
+                done: Default::default(),
             }},
         }
     }

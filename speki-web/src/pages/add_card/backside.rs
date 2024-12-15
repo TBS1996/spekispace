@@ -16,6 +16,7 @@ use crate::{
     components::{card_selector, dropdown::DropDownMenu},
     pages::CardEntry,
     utils::App,
+    Popup, PopupManager, Route,
 };
 
 const PLACEHOLDER: &'static str = "pick reference...";
@@ -47,6 +48,8 @@ impl BackPut {
     }
 
     pub fn start_ref_search(&self) {
+        let cards = self.cards.clone();
+
         let _selv = self.clone();
 
         let fun = move |card: Arc<Card<AnyType>>| {
@@ -59,12 +62,14 @@ impl BackPut {
 
         let props = card_selector::CardSelectorProps {
             title: "choose reference".to_string(),
-            search: Default::default(),
             on_card_selected: Rc::new(fun),
-            cards: self.cards.clone(),
+            search: Signal::new_in_scope(Default::default(), ScopeId(3)),
+            cards,
+            done: Signal::new_in_scope(false, ScopeId(3)),
         };
 
-        self.searching_cards.clone().set(Some(props));
+        let popup: Popup = Box::new(props);
+        use_context::<PopupManager>().set(Route::Add {}, popup);
     }
 
     pub async fn set_card(&self, card: CardId) {

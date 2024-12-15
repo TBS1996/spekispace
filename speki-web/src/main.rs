@@ -7,7 +7,7 @@ use pages::add_card::AddCardState;
 use pages::BrowseState;
 use review_state::ReviewState;
 
-use crate::pages::{Add, Browse, Home, Review};
+use crate::pages::{Browse, Home, Review};
 use crate::utils::App;
 
 mod components;
@@ -26,21 +26,81 @@ pub const PROXY: &'static str = "http://127.0.0.1:8081";
 pub const DEFAULT_FILTER: &'static str =
     "recall < 0.8 & finished == true & suspended == false & minrecrecall > 0.8 & lastreview > 0.5 & weeklapses < 3 & monthlapses < 6";
 
+pub trait PopTray {
+    fn is_done(&self) -> Signal<bool>;
+    fn render(&self) -> Element;
+}
+
+pub type PopupEntry = Signal<Option<Popup>>;
+pub type Popup = Box<dyn PopTray>;
+
+#[derive(Clone, Default)]
+pub struct PopupManager {
+    home: PopupEntry,
+    review: PopupEntry,
+    add: PopupEntry,
+    browse: PopupEntry,
+}
+
+impl PopupManager {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn set(&self, route: Route, popup: Popup) {
+        self.get(route).clone().set(Some(popup));
+    }
+
+    pub fn render(&self, route: Route) -> Option<Element> {
+        let pop = self.get(route.clone());
+        let Some(pop) = pop.as_ref() else {
+            return None;
+        };
+
+        if *pop.is_done().read() {
+            //            self.clear(route);
+            None
+        } else {
+            Some(pop.render())
+        }
+    }
+
+    pub fn get(&self, route: Route) -> PopupEntry {
+        info!("getting route popup..");
+        match route {
+            Route::Home {} => self.home.clone(),
+            Route::Review {} => self.review.clone(),
+            Route::Add {} => self.add.clone(),
+            Route::Browse {} => self.browse.clone(),
+        }
+    }
+
+    pub fn clear(&self, route: Route) {
+        self.get(route).clone().set(Default::default());
+    }
+}
+
 fn main() {
     dioxus_logger::init(Level::INFO).expect("failed to init logger");
     info!("starting app");
+    let id = current_scope_id();
+    info!("lol scope id: {id:?}");
 
     dioxus::launch(TheApp);
 }
 
 #[component]
 pub fn TheApp() -> Element {
+    let id = current_scope_id();
+    info!("top scope id: {id:?}");
+
     let app = use_context_provider(App::new);
     let addcard = AddCardState::new(app.clone());
     use_context_provider(|| addcard.clone());
     use_context_provider(|| ReviewState::new(app.clone()));
     use_context_provider(LoginState::default);
     use_context_provider(BrowseState::new);
+    use_context_provider(PopupManager::new);
 
     spawn(async move {
         app.0.fill_cache().await;
@@ -53,6 +113,7 @@ pub fn TheApp() -> Element {
             rel: "stylesheet",
             href: asset!("/public/tailwind.css")
         }
+        { info!("hey lol") }
 
         Router::<Route> {}
     }
@@ -60,11 +121,18 @@ pub fn TheApp() -> Element {
 
 #[component]
 fn Wrapper() -> Element {
+    info!("wrapper!!!!!!!");
+    let id = current_scope_id();
+    info!("wrapper scope id: {id:?}");
+
     rsx! {
-        crate::nav::nav{}
-        Outlet::<Route> { }
+         crate::nav::nav {}
+         Outlet::<Route> {}
+
     }
 }
+
+use crate::pages::add_card::Add;
 
 #[derive(Clone, Routable, Debug, PartialEq)]
 pub enum Route {
