@@ -9,11 +9,7 @@ use speki_core::{AnyType, Card};
 use speki_web::BrowsePage;
 use tracing::info;
 
-use crate::{
-    components::{card_selector, display_card},
-    graph::GraphRep,
-    App,
-};
+use crate::{components::display_card, graph::GraphRep, overlays::card_selector, App};
 
 #[derive(Clone)]
 pub struct CardEntry {
@@ -163,20 +159,22 @@ pub fn Browse() -> Element {
     rsx! {
         match selected_card() {
             BrowsePage::View(_) => rsx! { display_card::display_card {} },
-            BrowsePage::Browse => rsx !{ card_selector::card_selector {
+            BrowsePage::Browse => card_selector::CardSelectorProps {
                 title: "browse cards".to_string(),
                 search: browse_state.search.clone(),
                 on_card_selected: Rc::new(browse_state.view_closure()),
                 cards: browse_state.cards.clone(),
                 done: Default::default(),
-            }},
-            BrowsePage::SetDependency(_) => rsx !{ card_selector::card_selector {
+            }.render(),
+            BrowsePage::SetDependency(_) => card_selector::CardSelectorProps {
                 title: "set dependency".to_string(),
                 search: browse_state.search.clone(),
                 on_card_selected: Rc::new(browse_state.dep_closure()),
                 cards: browse_state.cards.clone(),
                 done: Default::default(),
-            }},
+            }.render(),
         }
     }
 }
+
+use crate::PopTray;

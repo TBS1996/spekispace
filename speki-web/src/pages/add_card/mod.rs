@@ -10,7 +10,7 @@ use tracing::info;
 use super::add_card::backside::BackPut;
 use super::CardEntry;
 
-use crate::components::card_selector::{self};
+use crate::overlays::card_selector::{self};
 use crate::{App, Popup, PopupManager, Route};
 
 pub mod backside;

@@ -16,6 +16,7 @@ mod graph;
 mod js;
 mod login;
 mod nav;
+mod overlays;
 mod pages;
 mod review_state;
 mod utils;
