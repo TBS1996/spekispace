@@ -100,8 +100,9 @@ pub fn TheApp() -> Element {
     use_context_provider(|| addcard.clone());
     use_context_provider(|| ReviewState::new(app.clone()));
     use_context_provider(LoginState::default);
-    use_context_provider(BrowseState::new);
     use_context_provider(OverlayManager::new);
+    let browse_state = BrowseState::new();
+    use_context_provider(|| browse_state);
 
     spawn(async move {
         app.0.fill_cache().await;
