@@ -144,16 +144,36 @@ fn transitive_reduction(graph: &mut DiGraph<NodeMetadata, ()>) {
     }
 }
 
-fn card_ty_to_shape(ty: CType) -> &'static str {
-    match ty {
-        CType::Instance => "roundrectangle",
-        CType::Normal => "ellipse",
-        CType::Unfinished => "ellipse",
-        CType::Attribute => "ellipse",
-        CType::Class => "rectangle",
-        CType::Statement => "ellipse",
-        CType::Event => "ellipse",
+enum Shape {
+    RoundedRectangle,
+    Ellipse,
+    Rectangle,
+}
+
+impl Shape {
+    fn as_str(&self) -> &'static str {
+        match self {
+            Shape::RoundedRectangle => "roundrectangle",
+            Shape::Ellipse => "ellipse",
+            Shape::Rectangle => "rectangle",
+        }
     }
+
+    fn from_ctype(ty: CType) -> Self {
+        match ty {
+            CType::Instance => Self::RoundedRectangle,
+            CType::Class => Self::Rectangle,
+            CType::Unfinished => Self::Ellipse,
+            CType::Attribute => Self::Ellipse,
+            CType::Statement => Self::Ellipse,
+            CType::Normal => Self::Ellipse,
+            CType::Event => Self::Ellipse,
+        }
+    }
+}
+
+fn card_ty_to_shape(ty: CType) -> &'static str {
+    Shape::from_ctype(ty).as_str()
 }
 
 #[derive(Clone, Debug)]
