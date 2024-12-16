@@ -65,7 +65,6 @@ impl BrowseState {
             let current_card = match sel.cloned() {
                 BrowsePage::Browse => return,
                 BrowsePage::View(card) => card,
-                BrowsePage::SetDependency(card) => card,
             };
 
             spawn(async move {
@@ -128,7 +127,6 @@ impl BrowseState {
                 let card = match sel.cloned() {
                     BrowsePage::Browse => return,
                     BrowsePage::View(card) => card,
-                    BrowsePage::SetDependency(card) => card,
                 };
 
                 info!("selected card: {card:?}");
@@ -166,6 +164,7 @@ pub fn Browse() -> Element {
                 cards: browse_state.cards.clone(),
                 done: Default::default(),
             }.render(),
+            /*
             BrowsePage::SetDependency(_) => card_selector::CardSelectorProps {
                 title: "set dependency".to_string(),
                 search: browse_state.search.clone(),
@@ -173,6 +172,7 @@ pub fn Browse() -> Element {
                 cards: browse_state.cards.clone(),
                 done: Default::default(),
             }.render(),
+            */
         }
     }
 }

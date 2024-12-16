@@ -11,7 +11,6 @@ pub enum BrowsePage {
     #[default]
     Browse,
     View(Arc<Card<AnyType>>),
-    SetDependency(Arc<Card<AnyType>>),
 }
 
 impl BrowsePage {
@@ -19,7 +18,6 @@ impl BrowsePage {
         match self {
             BrowsePage::Browse => return None,
             BrowsePage::View(arc) => Some(arc.clone()),
-            BrowsePage::SetDependency(arc) => Some(arc.clone()),
         }
     }
 }

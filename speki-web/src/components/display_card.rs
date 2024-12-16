@@ -1,8 +1,14 @@
+use std::{rc::Rc, sync::Arc};
+
 use dioxus::prelude::*;
+use speki_core::{AnyType, Card};
 use speki_web::BrowsePage;
 use tracing::{info, trace};
 
-use crate::{pages::BrowseState, utils::App};
+use crate::{
+    overlays::card_selector::CardSelectorProps, pages::BrowseState, utils::App, OverlayManager,
+    Popup,
+};
 
 #[component]
 pub fn display_card() -> Element {
@@ -37,25 +43,6 @@ pub fn display_card() -> Element {
 
     let _card = card.clone();
     let _app = app.clone();
-    let _cyto_id = cyto_id.clone();
-    let _selected = browse_state.selected_card.clone();
-    let graphing = browse_state.graph.clone();
-    use_effect(move || {
-        let card = _card.clone();
-        let _selected = _selected.clone();
-        let app = _app.clone();
-        spawn(async move {
-            let raw = card.to_raw();
-            let front = raw.data.front.unwrap_or_default();
-            let back = raw.data.back.unwrap_or_default().to_string();
-            front_input.set(front);
-            back_input.set(back);
-            graphing.read().set_card(app, card).await;
-        });
-    });
-
-    let _card = card.clone();
-    let _app = app.clone();
     let graph = browse_state.graph.clone();
     rsx! {
             input {
@@ -73,9 +60,25 @@ pub fn display_card() -> Element {
                 button {
                     class: "mt-6 inline-flex items-center text-white bg-gray-800 border-0 py-1 px-3 focus:outline-none hover:bg-gray-700 rounded text-base md:mt-0",
                     onclick: move |_| {
-                        let card = _card.clone();
                         let browse_state = use_context::<BrowseState>();
-                        browse_state.selected_card.clone().set(BrowsePage::SetDependency(card));
+                        let selected_card = browse_state.selected_card.clone();
+                        let fun = move |card: Arc<Card<AnyType>>| {
+                            selected_card.clone().set(BrowsePage::View(card));
+
+                        };
+
+                        let props = CardSelectorProps {
+                            title: "set dependency".to_string(),
+                            search: browse_state.search.clone(),
+                            on_card_selected: Rc::new(fun),
+                            cards: browse_state.cards.clone(),
+                            done: Default::default(),
+                        };
+                        let pop: Popup = Box::new(props);
+                        use_context::<OverlayManager>().set(pop);
+
+
+
                     },
                     "set dependency"
                 }
@@ -84,6 +87,7 @@ pub fn display_card() -> Element {
                     onclick: move |_| {
                         let browse_state = use_context::<BrowseState>();
                         browse_state.selected_card.clone().set(BrowsePage::Browse);
+
                     },
                     "go back"
                 }
