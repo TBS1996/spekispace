@@ -43,6 +43,7 @@ impl InnerGraph {
 
 #[derive(Clone)]
 pub struct GraphRep {
+    app: App,
     inner: Arc<Mutex<InnerGraph>>,
     /// Whether a cyto js instance has been created
     is_init: Arc<AtomicBool>,
@@ -50,8 +51,8 @@ pub struct GraphRep {
 }
 
 impl GraphRep {
-    async fn refresh(&self, app: App, card: Arc<Card<AnyType>>) {
-        let new = InnerGraph::new(app, card).await;
+    async fn refresh(&self, card: Arc<Card<AnyType>>) {
+        let new = InnerGraph::new(self.app.clone(), card).await;
         let mut inner = self.inner.lock().unwrap();
         *inner = new;
     }
@@ -65,15 +66,17 @@ impl GraphRep {
     }
 
     pub fn init(id: String) -> Self {
+        let app = use_context::<App>();
         Self {
+            app,
             inner: Default::default(),
             is_init: Default::default(),
             cyto_id: Arc::new(id),
         }
     }
 
-    pub async fn set_card(&self, app: App, card: Arc<Card<AnyType>>) {
-        self.refresh(app, card).await;
+    pub async fn set_card(&self, card: Arc<Card<AnyType>>) {
+        self.refresh(card).await;
         self.create_cyto_instance().await;
     }
 
