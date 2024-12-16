@@ -1,5 +1,6 @@
 use dioxus::prelude::*;
 use frontside::{CardTy, FrontPut};
+use speki_dto::CardId;
 use tracing::info;
 
 use super::add_card::backside::BackPut;
@@ -57,6 +58,60 @@ impl AddCardState {
         self.back.ref_card.cards().set(cards);
         self.concept_cards.clone().set(concept_cards);
     }
+
+    async fn add_card(&self) -> Option<CardId> {
+        let backside = self.back.clone();
+        let frontside = self.front.clone();
+
+        let front = format!("{}", frontside.text.cloned());
+        let id = match self.selected.cloned() {
+            CardTy::Normal => {
+                let back = backside.to_backside()?;
+
+                self.app.0.add_card(front, back).await
+            }
+            CardTy::Class => {
+                let parent_class = self.concept.selected_card().cloned();
+                let back = backside.to_backside()?;
+
+                self.app.0.add_class(front, back, parent_class).await
+            }
+            CardTy::Instance => {
+                let class = self.concept.selected_card().cloned()?;
+
+                let back = backside.to_backside();
+                self.app.0.add_instance(front, back, class).await
+            }
+        };
+
+        Some(id)
+    }
+
+    fn maybe_render_concept(&self) -> Element {
+        match (self.selected)() {
+            CardTy::Normal => {
+                rsx! {}
+            }
+            CardTy::Class => {
+                rsx! {
+                        div {
+                            class: "block text-gray-700 text-sm font-medium mb-2",
+                            "Parent class"
+                            {self.concept.render()},
+                    }
+                }
+            }
+            CardTy::Instance => {
+                rsx! {
+                    div {
+                        class: "block text-gray-700 text-sm font-medium mb-2",
+                        "Class of instance"
+                        {self.concept.render()},
+                    }
+                }
+            }
+        }
+    }
 }
 
 #[component]
@@ -72,78 +127,23 @@ pub fn Add() -> Element {
                     "Add Flashcard"
                 }
 
-                { selv.front.view() }
+                { selv.front.render() }
                 { selv.back.render() }
+                { selv.maybe_render_concept() }
 
-                match (selv.selected)() {
-                    CardTy::Normal => {
-                        rsx ! {}
-                    },
-                    CardTy::Class => {
-                        rsx! {
-                            div {
-                                class: "block text-gray-700 text-sm font-medium mb-2",
-                                "Parent class"
-                                {selv.concept.render()},
-                        }
-                    }
-                    },
-                    CardTy::Instance => {
-                        rsx! {
-                            div {
-                                class: "block text-gray-700 text-sm font-medium mb-2",
-                                "Class of instance"
-                                {selv.concept.render()},
-                            }
-                        }
-                    },
-                }
 
                 button {
                     class: "bg-blue-500 text-white py-2 px-4 rounded-md hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 mt-4",
                     onclick: move |_| {
                         let selv = selv.clone();
                         spawn(async move {
-                            let backside = selv.back.clone();
-                            let frontside = selv.front.clone();
-
-                            let front = format!("{}", frontside.text.cloned());
-                            match selv.selected.cloned() {
-                                CardTy::Normal => {
-                                    let Some(back) = backside.to_backside() else {
-                                        info!("oops, empty backside");
-                                        return;
-                                    };
-
-                                    selv.app.0.add_card(front, back).await;
-
-                                },
-                                CardTy::Class => {
-                                    let parent_class = selv.concept.selected_card().cloned();
-                                    let Some(back) = backside.to_backside() else {
-                                        return;
-                                    };
-
-                                    selv.app.0.add_class(front, back, parent_class).await;
-
-
-                                },
-                                CardTy::Instance => {
-                                    let Some(class) = selv.concept.selected_card().cloned() else {
-                                        return;
-                                    };
-
-                                    let back = backside.to_backside();
-                                    selv.app.0.add_instance(front, back, class).await;
-                                },
-                            }
-
-                            selv.reset();
-
-                            info!("adding new card!");
-                            selv.load_cards().await;
+                            if selv.add_card().await.is_some(){
+                                selv.reset();
+                                info!("adding new card!");
+                                selv.load_cards().await;
+                            };
                         });
-                    },
+                        },
                     "Save"
                 }
             }

@@ -43,7 +43,7 @@ impl FrontPut {
         self.text.clone().set(Default::default());
     }
 
-    pub fn view(&self) -> Element {
+    pub fn render(&self) -> Element {
         let mut text = self.text.clone();
         rsx! {
             div {
