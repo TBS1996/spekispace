@@ -1,5 +1,7 @@
 #![allow(non_snake_case)]
 
+use std::sync::atomic::{AtomicBool, Ordering};
+
 use dioxus::prelude::*;
 use dioxus_logger::tracing::{info, Level};
 use login::LoginState;
@@ -35,6 +37,8 @@ pub trait PopTray {
 pub type PopupEntry = Signal<Option<Popup>>;
 pub type Popup = Box<dyn PopTray>;
 
+pub static ROUTE_CHANGE: AtomicBool = AtomicBool::new(false);
+
 #[derive(Clone, Default)]
 pub struct OverlayManager {
     home: PopupEntry,
@@ -68,6 +72,8 @@ impl OverlayManager {
     }
 
     pub fn get(&self) -> PopupEntry {
+        ROUTE_CHANGE.store(true, Ordering::SeqCst);
+
         let route = use_route::<Route>();
         info!("getting route popup..");
         match route {

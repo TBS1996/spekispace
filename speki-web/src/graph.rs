@@ -15,8 +15,8 @@ use speki_dto::CType;
 use tracing::info;
 use web_sys::window;
 
-use crate::js;
 use crate::App;
+use crate::{js, ROUTE_CHANGE};
 
 #[derive(Default)]
 struct InnerGraph {
@@ -110,6 +110,13 @@ impl GraphRep {
         // First time this function is run, it'll render an empty div, second time, the is_element_present will be
         // true and we create the instance, third time, is_init will be true and we won't trigger the create_instancea any longer.
         if !self.is_init() && self.is_dom_rendered() {
+            let selv = self.clone();
+            spawn(async move {
+                selv.create_cyto_instance().await;
+            });
+        }
+
+        if ROUTE_CHANGE.swap(false, Ordering::SeqCst) {
             let selv = self.clone();
             spawn(async move {
                 selv.create_cyto_instance().await;
