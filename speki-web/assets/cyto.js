@@ -64,7 +64,7 @@ export function createCytoInstance(id) {
         const node = event.target;
         const nodeId = node.id();
         console.log(`Node clicked: ${nodeId}`);
-        onNodeClick(nodeId);
+        onNodeClick(id, nodeId);
     });
 
 
@@ -80,7 +80,7 @@ export function createCytoInstance(id) {
         console.log(`Target Node: ${targetNodeId}`);
         console.log("bruhhhuhu");
     
-        onEdgeClick(sourceNodeId, targetNodeId);
+        onEdgeClick(id, sourceNodeId, targetNodeId);
     });
 
 

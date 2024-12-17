@@ -1,7 +1,7 @@
 use std::{
     collections::{HashMap, HashSet},
     sync::{
-        atomic::{AtomicBool, Ordering},
+        atomic::{AtomicBool, AtomicUsize, Ordering},
         Arc, Mutex,
     },
 };
@@ -41,63 +41,68 @@ impl InnerGraph {
     }
 }
 
+static COUNTER: AtomicUsize = AtomicUsize::new(0);
+
 #[derive(Clone)]
 pub struct GraphRep {
     app: App,
     inner: Arc<Mutex<InnerGraph>>,
-    /// Whether a cyto js instance has been created
     is_init: Arc<AtomicBool>,
     cyto_id: Arc<String>,
+    new_card_hook: Option<Arc<Box<dyn Fn(Arc<Card<AnyType>>)>>>,
 }
 
 impl GraphRep {
-    async fn refresh(&self, card: Arc<Card<AnyType>>) {
-        let new = InnerGraph::new(self.app.clone(), card).await;
-        let mut inner = self.inner.lock().unwrap();
-        *inner = new;
-    }
-
-    fn is_init(&self) -> bool {
-        self.is_init.load(Ordering::SeqCst)
-    }
-
-    fn is_dom_rendered(&self) -> bool {
-        is_element_present(&self.cyto_id)
-    }
-
-    pub fn init(id: String) -> Self {
+    pub fn init(new_card_hook: Option<Arc<Box<dyn Fn(Arc<Card<AnyType>>)>>>) -> Self {
+        let id = format!("cyto_id-{}", COUNTER.fetch_add(1, Ordering::SeqCst));
         let app = use_context::<App>();
         Self {
             app,
             inner: Default::default(),
             is_init: Default::default(),
             cyto_id: Arc::new(id),
+            new_card_hook,
         }
     }
 
-    pub async fn set_card(&self, card: Arc<Card<AnyType>>) {
-        self.refresh(card).await;
-        self.create_cyto_instance().await;
-    }
-
-    async fn create_cyto_instance(&self) {
-        let (graph, card) = {
-            let guard = self.inner.lock().unwrap();
-            let card = guard.card.clone();
-            let graph = guard.graph.clone();
-            (graph, card)
-        };
-
-        let Some(card) = card else {
-            return;
-        };
-
-        create_cyto_graph(&self.cyto_id, &graph);
-        adjust_graph(&self.cyto_id, card.clone());
-        self.is_init.store(true, Ordering::SeqCst);
-    }
-
     pub fn render(&self) -> Element {
+        let scope = current_scope_id().unwrap();
+        info!("init scope: {scope:?}");
+        speki_web::set_refresh_scope(self.cyto_id.to_string(), scope);
+
+        let selv = self.clone();
+        if let Some(whatever) = speki_web::take_graphaction(&self.cyto_id) {
+            info!("nice clicked whatever!!! {whatever:?}");
+
+            let app = self.app.clone();
+            match whatever {
+                speki_web::GraphAction::NodeClick(card) => {
+                    spawn(async move {
+                        let card = app.0.load_card(card).await.unwrap();
+                        let card = Arc::new(card);
+                        if let Some(hook) = selv.new_card_hook.as_ref() {
+                            (hook)(card.clone());
+                        }
+                        selv.set_card(card).await;
+                    });
+                }
+                speki_web::GraphAction::FromRust(card) => {
+                    spawn(async move {
+                        selv.set_card(card).await;
+                    });
+                }
+                speki_web::GraphAction::EdgeClick((from, to)) => {
+                    spawn(async move {
+                        let mut first = app.0.load_card(from).await.unwrap();
+                        first.rm_dependency(to).await;
+                        selv.set_card(Arc::new(first)).await;
+                    });
+                }
+            };
+        } else {
+            tracing::trace!("nope no set");
+        }
+
         let cyto_id = self.cyto_id.clone();
 
         // We can't create the cyto instance until this function has been run at least once cause
@@ -117,6 +122,49 @@ impl GraphRep {
                 style: "width: 800px; height: 600px; border: 1px solid black;",
             }
         }
+    }
+
+    pub fn new_set_card(&self, card: Arc<Card<AnyType>>) {
+        speki_web::set_graphaction(
+            self.cyto_id.to_string(),
+            speki_web::GraphAction::FromRust(card),
+        );
+    }
+
+    async fn set_card(&self, card: Arc<Card<AnyType>>) {
+        self.refresh(card).await;
+        self.create_cyto_instance().await;
+    }
+
+    async fn refresh(&self, card: Arc<Card<AnyType>>) {
+        let new = InnerGraph::new(self.app.clone(), card).await;
+        let mut inner = self.inner.lock().unwrap();
+        *inner = new;
+    }
+
+    fn is_init(&self) -> bool {
+        self.is_init.load(Ordering::SeqCst)
+    }
+
+    fn is_dom_rendered(&self) -> bool {
+        is_element_present(&self.cyto_id)
+    }
+
+    async fn create_cyto_instance(&self) {
+        let (graph, card) = {
+            let guard = self.inner.lock().unwrap();
+            let card = guard.card.clone();
+            let graph = guard.graph.clone();
+            (graph, card)
+        };
+
+        let Some(card) = card else {
+            return;
+        };
+
+        create_cyto_graph(&self.cyto_id, &graph);
+        adjust_graph(&self.cyto_id, card.clone());
+        self.is_init.store(true, Ordering::SeqCst);
     }
 }
 

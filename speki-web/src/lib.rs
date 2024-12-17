@@ -1,4 +1,4 @@
-use std::{cell::RefCell, sync::Arc};
+use std::{cell::RefCell, collections::HashMap, sync::Arc};
 
 use dioxus::prelude::*;
 use speki_core::{AnyType, Card};
@@ -13,6 +13,13 @@ pub enum BrowsePage {
     View(Arc<Card<AnyType>>),
 }
 
+#[derive(Clone, Debug)]
+pub enum GraphAction {
+    NodeClick(CardId),
+    FromRust(Arc<Card<AnyType>>),
+    EdgeClick((CardId, CardId)),
+}
+
 impl BrowsePage {
     pub fn get_card(&self) -> Option<Arc<Card<AnyType>>> {
         match self {
@@ -23,85 +30,53 @@ impl BrowsePage {
 }
 
 thread_local! {
-    static SIGNAL: RefCell<Option<Signal<BrowsePage>>> = RefCell::new(None);
-    static PROVIDER: RefCell<Option<Arc<speki_core::App>>> = RefCell::new(None);
-    static FOOBAR: RefCell<Option<BrowsePage>> = RefCell::new(None);
+    static FOOBAR: RefCell<HashMap<String, Option<GraphAction>>> = RefCell::new(Default::default());
+    static REFRESH_SCOPE: RefCell<HashMap<String, ScopeId>> = RefCell::new(Default::default());
 }
 
-pub fn set_browsepage(b: BrowsePage) {
+pub fn set_graphaction(id: String, b: GraphAction) {
     FOOBAR.with(|s| {
-        *s.borrow_mut() = Some(b);
+        s.borrow_mut().insert(id, Some(b));
     });
 }
 
-pub fn take_browsepage() -> Option<BrowsePage> {
-    FOOBAR.with(|s| s.borrow_mut().take())
+pub fn take_graphaction(id: &str) -> Option<GraphAction> {
+    FOOBAR.with(|s| s.borrow_mut().get_mut(id)?.take())
 }
 
-pub fn set_app(app: Arc<speki_core::App>) {
-    PROVIDER.with(|s| {
-        *s.borrow_mut() = Some(app);
+pub fn set_refresh_scope(id: String, signal: ScopeId) {
+    REFRESH_SCOPE.with(|s| {
+        s.borrow_mut().insert(id, signal);
     });
 }
 
-pub fn set_signal(signal: Signal<BrowsePage>) {
-    SIGNAL.with(|s| {
-        *s.borrow_mut() = Some(signal);
-    });
-}
-
-fn trigger_refresh() {
-    if let Some(mut sig) = SIGNAL.with(|provider| provider.borrow().clone()) {
-        let b = sig.cloned();
-        FOOBAR.with(|s| {
-            *s.borrow_mut() = Some(b.clone());
-        });
-        sig.set(b);
-    }
+fn trigger_refresh(id: &str) {
+    let scope = REFRESH_SCOPE.with(|provider| provider.borrow().get(id).unwrap().to_owned());
+    info!("updating this scope: {scope:?}");
+    scope.needs_update();
 }
 
 #[wasm_bindgen(js_name = onNodeClick)]
-pub async fn on_node_click(node_id: &str) {
-    info!("clicked node: {node_id}");
+pub async fn on_node_click(cyto_id: &str, node_id: &str) {
+    info!("cyto id: {cyto_id}");
+    info!("!! clicked node: {node_id}");
     let id = CardId(node_id.parse().unwrap());
-    let provider = PROVIDER.with(|provider| provider.borrow().clone());
-    if let Some(provider) = provider {
-        let card = provider.load_card(id).await.unwrap();
 
-        FOOBAR.with(|s| {
-            let selected = BrowsePage::View(Arc::new(card.clone()));
-            *s.borrow_mut() = Some(selected);
-        });
-
-        if let Some(mut sig) = SIGNAL.with(|signal| signal.borrow().clone()) {
-            let selected = BrowsePage::View(Arc::new(card));
-            info!("setting selected card: {selected:?}");
-            sig.set(selected);
-        }
-    } else {
-        tracing::warn!("Provider is not set.");
-    }
+    set_graphaction(cyto_id.to_string(), GraphAction::NodeClick(id));
+    trigger_refresh(cyto_id);
 }
 
 #[wasm_bindgen(js_name = onEdgeClick)]
-pub async fn on_edge_click(source: &str, target: &str) {
+pub async fn on_edge_click(cyto_id: &str, source: &str, target: &str) {
+    info!("okcyto id: {cyto_id}");
     info!("clicked node from {source} to {target}");
 
     let source = CardId(source.parse().unwrap());
-    info!("parsed source: {source}");
     let target = CardId(target.parse().unwrap());
-    info!("parsed target: {target}");
 
-    info!("fetching provider");
-    let provider = PROVIDER.with(|provider| provider.borrow().clone());
-    if let Some(provider) = provider {
-        info!("loading card");
-        let mut card = provider.load_card(source).await.unwrap();
-        info!("removing dependency");
-        card.rm_dependency(target).await;
-        info!("triggering refresh");
-        trigger_refresh();
-    } else {
-        tracing::warn!("Provider is not set.");
-    }
+    set_graphaction(
+        cyto_id.to_string(),
+        GraphAction::EdgeClick((source, target)),
+    );
+    trigger_refresh(cyto_id);
 }

@@ -33,7 +33,7 @@ pub struct BrowseState {
     pub browse_menu: Signal<BrowsePage>,
     pub front_input: Signal<String>,
     pub back_input: Signal<String>,
-    pub graph: Signal<GraphRep>,
+    pub graph: GraphRep,
     pub refreshed: Arc<AtomicBool>,
     pub browse_page: CardSelectorProps,
 }
@@ -41,36 +41,44 @@ pub struct BrowseState {
 impl BrowseState {
     pub fn new() -> Self {
         info!("creating browse state!");
-        let selected_card: Signal<BrowsePage> = Default::default();
-        speki_web::set_signal(selected_card.clone());
+        let browse_menu: Signal<BrowsePage> = Default::default();
+
+        let f = move |card: Arc<Card<AnyType>>| {
+            let scope = current_scope_id().unwrap();
+            info!("x___>>>>>>>>>>>>>..._______current scope: {scope:?}____________________");
+            browse_menu.clone().set(BrowsePage::View(card));
+        };
+
+        let graph = GraphRep::init(Some(Arc::new(Box::new(f))));
 
         let props = card_selector::CardSelectorProps {
             title: "browse cards".to_string(),
             search: Default::default(),
-            on_card_selected: Rc::new(Self::view_closure(selected_card.clone())),
+            on_card_selected: Rc::new(Self::view_closure(graph.clone(), browse_menu.clone())),
             cards: Default::default(),
             done: Default::default(),
         };
 
-        let selv = Self {
-            browse_menu: selected_card,
+        Self {
+            browse_menu,
             front_input: Default::default(),
             back_input: Default::default(),
-            graph: Signal::new(GraphRep::init("browcy".to_string())),
+            graph,
             refreshed: Default::default(),
             browse_page: props,
-        };
-
-        selv
+        }
     }
 
-    fn view_closure(selected: Signal<BrowsePage>) -> impl Fn(Arc<Card<AnyType>>) {
+    fn view_closure(
+        graph: GraphRep,
+        selected_card: Signal<BrowsePage>,
+    ) -> impl Fn(Arc<Card<AnyType>>) {
         move |card: Arc<Card<AnyType>>| {
+            let graph = graph.clone();
             info!("view closure :D");
-            let b = BrowsePage::View(card.clone());
-            speki_web::set_browsepage(b);
-            let mut sel = selected.clone();
-            sel.set(BrowsePage::View(card));
+
+            *selected_card.clone().write() = BrowsePage::View(card.clone());
+            graph.new_set_card(card);
         }
     }
 
@@ -100,22 +108,8 @@ impl BrowseState {
     }
 
     fn view_card(&self, card: Arc<Card<AnyType>>) -> Element {
-        info!("rendering display_card");
+        info!("XX rendering display_card");
         let app = use_context::<App>();
-        let mut selected_card = self.browse_menu.clone();
-
-        let graphing = self.graph.clone();
-        if let Some(browse) = speki_web::take_browsepage() {
-            info!("set some!!");
-            selected_card.set(browse);
-            let _app = app.clone();
-            let _card = card.clone();
-            spawn(async move {
-                graphing.read().set_card(_card).await;
-            });
-        } else {
-            tracing::trace!("nope no set");
-        }
 
         let mut front_input = self.front_input.clone();
         let mut back_input = self.back_input.clone();
@@ -125,6 +119,7 @@ impl BrowseState {
         let selv = self.clone();
         let selv2 = self.clone();
         let selv3 = self.clone();
+        let selv4 = self.clone();
         rsx! {
                 input {
                     class: "w-full border border-gray-300 rounded-md p-2 mb-4 text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent",
@@ -141,10 +136,17 @@ impl BrowseState {
                     button {
                         class: "mt-6 inline-flex items-center text-white bg-gray-800 border-0 py-1 px-3 focus:outline-none hover:bg-gray-700 rounded text-base md:mt-0",
                         onclick: move |_| {
-                            let selected_card = selv.browse_menu.clone();
-                            let fun = move |card: Arc<Card<AnyType>>| {
-                                selected_card.clone().set(BrowsePage::View(card));
+                            let selected_card = selv.browse_menu.cloned().get_card().unwrap();
 
+                            let graph = selv4.graph.clone();
+                            let fun = move |card: Arc<Card<AnyType>>| {
+                                let graph = graph.clone();
+                                graph.new_set_card(card.clone());
+                                let _card = selected_card.clone();
+                                spawn(async move {
+                                    let mut sel = Arc::unwrap_or_clone(_card);
+                                    sel.add_dependency(card.id).await;
+                                });
                             };
 
                             let props = CardSelectorProps {
@@ -152,13 +154,10 @@ impl BrowseState {
                                 search: selv.browse_page.search.clone(),
                                 on_card_selected: Rc::new(fun),
                                 cards: selv.browse_page.cards.clone(),
-                                done: Default::default(),
+                                done: Signal::new_in_scope(false, ScopeId(3)),
                             };
                             let pop: Popup = Box::new(props);
                             use_context::<OverlayManager>().set(pop);
-
-
-
                         },
                         "set dependency"
                     }
@@ -194,7 +193,7 @@ impl BrowseState {
                         "save"
                     }
                 }
-            { self.graph.read().render() }
+            { self.graph.render() }
         }
     }
 
@@ -229,6 +228,7 @@ impl Default for BrowseState {
 
 #[component]
 pub fn Browse() -> Element {
+    info!("browse!");
     let browse_state = use_context::<BrowseState>();
     browse_state.maybe_refresh();
     let selected_card = browse_state.browse_menu.clone();

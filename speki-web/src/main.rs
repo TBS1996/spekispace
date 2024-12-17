@@ -41,11 +41,13 @@ pub struct OverlayManager {
     review: PopupEntry,
     add: PopupEntry,
     browse: PopupEntry,
+    dumb: Signal<usize>,
 }
 
 impl OverlayManager {
     pub fn new() -> Self {
-        Self::default()
+        let s = Self::default();
+        s
     }
 
     pub fn set(&self, popup: Popup) {
@@ -106,7 +108,6 @@ pub fn TheApp() -> Element {
 
     spawn(async move {
         app.0.fill_cache().await;
-        speki_web::set_app(app.0.clone());
         addcard.load_cards().await;
     });
 
@@ -127,8 +128,10 @@ fn Wrapper() -> Element {
     let id = current_scope_id();
     info!("wrapper scope id: {id:?}");
     let overlay = use_context::<OverlayManager>();
+    let x = overlay.dumb.clone();
 
     rsx! {
+         p {"{x}"}
          crate::nav::nav {}
          if let Some(overlay) = overlay.render() {
             { overlay }
