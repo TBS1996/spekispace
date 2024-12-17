@@ -4,6 +4,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 use dioxus::prelude::*;
 use dioxus_logger::tracing::{info, Level};
+use graph::GraphRep;
 use login::LoginState;
 use pages::add_card::AddCardState;
 use pages::BrowseState;
@@ -45,7 +46,6 @@ pub struct OverlayManager {
     review: PopupEntry,
     add: PopupEntry,
     browse: PopupEntry,
-    dumb: Signal<usize>,
 }
 
 impl OverlayManager {
@@ -72,8 +72,6 @@ impl OverlayManager {
     }
 
     pub fn get(&self) -> PopupEntry {
-        ROUTE_CHANGE.store(true, Ordering::SeqCst);
-
         let route = use_route::<Route>();
         info!("getting route popup..");
         match route {
@@ -104,9 +102,10 @@ pub fn TheApp() -> Element {
     info!("top scope id: {id:?}");
 
     let app = use_context_provider(App::new);
+    let graph = GraphRep::init(None);
     let addcard = AddCardState::new(app.clone());
     use_context_provider(|| addcard.clone());
-    use_context_provider(|| ReviewState::new(app.clone()));
+    use_context_provider(|| ReviewState::new(app.clone(), graph));
     use_context_provider(LoginState::default);
     use_context_provider(OverlayManager::new);
     let browse_state = BrowseState::new();
@@ -130,14 +129,13 @@ pub fn TheApp() -> Element {
 
 #[component]
 fn Wrapper() -> Element {
-    info!("wrapper!!!!!!!");
+    info!("wrapper??!!!!!");
+    ROUTE_CHANGE.store(true, Ordering::SeqCst);
     let id = current_scope_id();
     info!("wrapper scope id: {id:?}");
     let overlay = use_context::<OverlayManager>();
-    let x = overlay.dumb.clone();
 
     rsx! {
-         p {"{x}"}
          crate::nav::nav {}
          if let Some(overlay) = overlay.render() {
             { overlay }

@@ -1,5 +1,6 @@
 use std::{
     collections::{HashMap, HashSet},
+    fmt::Debug,
     sync::{
         atomic::{AtomicBool, AtomicUsize, Ordering},
         Arc, Mutex,
@@ -42,6 +43,16 @@ impl InnerGraph {
 }
 
 static COUNTER: AtomicUsize = AtomicUsize::new(0);
+
+impl Debug for GraphRep {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("GraphRep")
+            .field("app", &self.app)
+            .field("is_init", &self.is_init)
+            .field("cyto_id", &self.cyto_id)
+            .finish()
+    }
+}
 
 #[derive(Clone)]
 pub struct GraphRep {
@@ -105,11 +116,14 @@ impl GraphRep {
 
         let cyto_id = self.cyto_id.clone();
 
+        let rendered = self.is_dom_rendered();
+        info!("rendered status: {rendered}");
+
         // We can't create the cyto instance until this function has been run at least once cause
         // cytoscape needs to connecto a valid DOM element, so it's a bit weird logic.
         // First time this function is run, it'll render an empty div, second time, the is_element_present will be
         // true and we create the instance, third time, is_init will be true and we won't trigger the create_instancea any longer.
-        if !self.is_init() && self.is_dom_rendered() {
+        if !self.is_init() && rendered {
             let selv = self.clone();
             spawn(async move {
                 selv.create_cyto_instance().await;
@@ -117,6 +131,7 @@ impl GraphRep {
         }
 
         if ROUTE_CHANGE.swap(false, Ordering::SeqCst) {
+            info!("route change cause new cyto");
             let selv = self.clone();
             spawn(async move {
                 selv.create_cyto_instance().await;

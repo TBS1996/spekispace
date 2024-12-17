@@ -5,7 +5,7 @@ use speki_core::{AnyType, Card};
 use speki_dto::{CardId, Recall};
 use tracing::{info, instrument};
 
-use crate::{App, DEFAULT_FILTER};
+use crate::{graph::GraphRep, App, DEFAULT_FILTER};
 
 #[derive(Clone, Debug)]
 pub struct ReviewState {
@@ -18,10 +18,11 @@ pub struct ReviewState {
     pub back: Signal<String>,
     pub show_backside: Signal<bool>,
     pub filter: Signal<String>,
+    pub graph: GraphRep,
 }
 
 impl ReviewState {
-    pub fn new(app: App) -> Self {
+    pub fn new(app: App, graph: GraphRep) -> Self {
         Self {
             app,
             card: Default::default(),
@@ -32,10 +33,10 @@ impl ReviewState {
             back: Default::default(),
             show_backside: Default::default(),
             filter: Signal::new(DEFAULT_FILTER.to_string()),
+            graph,
         }
     }
 
-    #[instrument]
     pub async fn refresh(&mut self) {
         info!("refreshing..");
         let filter = self.filter.cloned();
@@ -83,6 +84,11 @@ impl ReviewState {
             }
             None => None,
         };
+
+        if let Some(card) = card.as_ref() {
+            let card = Arc::new(card.clone());
+            self.graph.new_set_card(card);
+        }
 
         info!("card set: {:?}", card);
         self.card.clone().set(card);

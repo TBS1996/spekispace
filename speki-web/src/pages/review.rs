@@ -45,8 +45,10 @@ fn review_start(mut filter: Signal<String>) -> Element {
 
 
                 onclick: move |_| {
+                    info!("review..?");
+                    let mut review = use_context::<ReviewState>();
                     spawn(async move {
-                        let mut review = use_context::<ReviewState>();
+                        info!("nice..?");
                         review.refresh().await;
                     });
                 },
@@ -71,6 +73,7 @@ fn review_buttons() -> Element {
 #[component]
 pub fn Review() -> Element {
     let review = use_context::<ReviewState>();
+    let rev2 = review.clone();
     let card = review.card.clone();
     let pos = review.pos.clone();
     let tot = review.tot_len.clone();
@@ -87,11 +90,12 @@ pub fn Review() -> Element {
         spawn(async move {
             info!("reviewing..");
             let mut rev = _review.clone();
+            let bck = rev.show_backside.cloned();
             match event.key().to_string().as_str() {
-                "1" => rev.do_review(Recall::None).await,
-                "2" => rev.do_review(Recall::Late).await,
-                "3" => rev.do_review(Recall::Some).await,
-                "4" => rev.do_review(Recall::Perfect).await,
+                "1" if bck => rev.do_review(Recall::None).await,
+                "2" if bck => rev.do_review(Recall::Late).await,
+                "3" if bck => rev.do_review(Recall::Some).await,
+                "4" if bck => rev.do_review(Recall::Perfect).await,
                 " " => rev.show_backside.set(true),
                 _ => {}
             }
@@ -99,37 +103,57 @@ pub fn Review() -> Element {
     };
 
     rsx! {
-        div { id: "receiver", tabindex: 0,
+        div {
+            id: "receiver",
+            class: "flex justify-center items-center w-full h-screen p-4",
+            tabindex: 0,
             onkeydown: move |event| log_event(event.data()),
 
             if reviewing() {
                 div {
-                    class: "w-full max-w-lg text-center",
+                    class: "w-full max-w-4xl flex flex-row gap-8 items-start",
+                    div {
+                        class: "flex-1 text-center flex flex-col gap-6",
 
-                    h2 {
-                        class: "text-2xl text-gray-700 mb-6",
-                        style: "width: 50%; margin: 0 auto; text-align: left;",
-                        "{pos}/{tot}"
+                        div {
+                            class: "flex justify-between items-center",
+                            h2 {
+                                class: "text-2xl text-gray-700",
+                                "{pos}/{tot}"
+                            }
+                        }
+
+                        p {
+                            class: "text-lg text-gray-800",
+                            "{front}"
+                        }
+
+                        if show_backside() {
+                            div {
+                                class: "w-full border-t-2 border-gray-300 my-6"
+                            }
+                            p {
+                                class: "text-lg text-gray-700",
+                                "{back}"
+                            }
+
+                            div {
+                                class: "flex justify-center gap-4 mt-4",
+                                { review_buttons() }
+                            }
+                        } else {
+                            button {
+                                class: "mt-6 inline-flex items-center text-white bg-gray-800 border-0 py-1 px-3 focus:outline-none hover:bg-gray-700 rounded text-base",
+                                onclick: move |_| show_backside.set(true),
+                                "show backside"
+                            }
+                        }
                     }
-                    p {
-                        class: "text-lg text-gray-800 mb-8",
-                        "{front}"
-                    }
+
                     if show_backside() {
                         div {
-                            style: "width: 50%; border-top: 2px solid #d1d5db; margin: 24px auto;",
-                        }
-                        p {
-                            class: "text-lg text-gray-700 mb-6",
-                            style: "margin-bottom: 24px;",
-                            "{back}"
-                        }
-                        { review_buttons() }
-                    } else {
-                        button {
-                            class: "mt-6 inline-flex items-center text-white bg-gray-800 border-0 py-1 px-3 focus:outline-none hover:bg-gray-700 rounded text-base md:mt-0",
-                            onclick: move |_| show_backside.set(true),
-                            "show backside"
+                            class: "flex-shrink-0 w-1/3",
+                            { rev2.graph.render() }
                         }
                     }
                 }
