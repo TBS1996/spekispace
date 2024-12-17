@@ -44,12 +44,20 @@ impl PopTray for CardSelectorProps {
                 oninput: move |evt| search.set(evt.value().clone()),
             }
 
-            div {
-                style: "display: flex; flex-direction: column; gap: 8px; text-align: left;",
-
-                for (card, _closure, is_done) in filtered_cards {
-                        button {
-                            style: "text-align: left;",
+            table {
+                class: "min-w-full table-fixed border-collapse border border-gray-200",
+                thead {
+                    class: "bg-gray-500",
+                    tr {
+                        th { class: "border border-gray-300 px-4 py-2 w-2/3", "Front" }
+                        th { class: "border border-gray-300 px-4 py-2 w-1/12", "Recall" }
+                        th { class: "border border-gray-300 px-4 py-2 w-1/12", "Stability" }
+                    }
+                }
+                tbody {
+                    for (card, _closure, is_done) in filtered_cards {
+                        tr {
+                            class: "hover:bg-gray-50",
                             onclick: move |_| {
                                 let card = card.clone();
                                 let closure = _closure.clone();
@@ -61,8 +69,12 @@ impl PopTray for CardSelectorProps {
                                 done.clone().set(true);
 
                             },
-                            "{card.front}"
+
+                            td { class: "border border-gray-300 px-4 py-2 w-2/3", "{card.front}" }
+                            td { class: "border border-gray-300 px-4 py-2 w-1/12", "{card.card.recall_rate().unwrap_or_default():.2}" }
+                            td { class: "border border-gray-300 px-4 py-2 w-1/12", "{card.card.maybeturity().unwrap_or_default():.1}" }
                         }
+                    }
                 }
             }
         }
