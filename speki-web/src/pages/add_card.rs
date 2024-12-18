@@ -2,12 +2,11 @@ use dioxus::prelude::*;
 use speki_dto::CardId;
 use tracing::info;
 
-use super::CardEntry;
-
 use crate::components::BackPut;
 use crate::components::CardRef;
 use crate::components::CardTy;
 use crate::components::FrontPut;
+use crate::utils::CardEntries;
 use crate::App;
 use crate::Komponent;
 
@@ -18,22 +17,19 @@ pub struct AddCardState {
     back: BackPut,
     concept: CardRef,
     selected: Signal<CardTy>,
-    concept_cards: Signal<Vec<CardEntry>>,
 }
 
 impl AddCardState {
-    pub fn new(app: App) -> Self {
+    pub fn new(app: App, entries: CardEntries) -> Self {
         let back = BackPut::new();
         let front = FrontPut::new();
         let selected = front.dropdown.selected.clone();
-        let concept_cards: Signal<Vec<CardEntry>> = Default::default();
         Self {
             app,
             front,
-            concept: CardRef::new(concept_cards.clone()),
+            concept: CardRef::new(entries.classes.clone()),
             back,
             selected,
-            concept_cards,
         }
     }
 
@@ -41,21 +37,6 @@ impl AddCardState {
         self.front.reset();
         self.back.reset();
         self.concept.reset();
-    }
-
-    pub async fn load_cards(&self) {
-        let mut concept_cards = vec![];
-        let mut cards = vec![];
-
-        for card in self.app.0.load_all_cards().await {
-            if card.is_class() {
-                concept_cards.push(CardEntry::new(card.clone()).await);
-            }
-            cards.push(CardEntry::new(card).await);
-        }
-
-        self.back.ref_card.cards().set(cards);
-        self.concept_cards.clone().set(concept_cards);
     }
 
     async fn add_card(&self) -> Option<CardId> {
@@ -144,7 +125,6 @@ pub fn Add() -> Element {
                             if selv.add_card().await.is_some(){
                                 selv.reset();
                                 info!("adding new card!");
-                                selv.load_cards().await;
                             };
                         });
                         },

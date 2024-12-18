@@ -7,6 +7,7 @@ use tracing::info;
 use crate::firebase::sign_in;
 use crate::firebase::FirestoreProvider;
 use crate::js;
+use crate::pages::CardEntry;
 
 #[derive(Clone)]
 pub struct App(pub Arc<speki_core::App>);
@@ -53,3 +54,28 @@ pub async fn sync() {
 
     info!("done syncing maybe!");
 }
+
+#[derive(Clone, Default)]
+pub struct CardEntries {
+    pub cards: Signal<Vec<CardEntry>>,
+    pub classes: Signal<Vec<CardEntry>>,
+}
+
+impl CardEntries {
+    pub async fn fill(&self, app: App) {
+        let mut concept_cards = vec![];
+        let mut cards = vec![];
+
+        for card in app.0.load_all_cards().await {
+            if card.is_class() {
+                concept_cards.push(CardEntry::new(card.clone()).await);
+            }
+            cards.push(CardEntry::new(card).await);
+        }
+
+        self.cards.clone().set(cards);
+        self.classes.clone().set(concept_cards);
+    }
+}
+
+use dioxus::prelude::*;

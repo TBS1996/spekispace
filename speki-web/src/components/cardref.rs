@@ -29,10 +29,6 @@ impl CardRef {
         self.display.clone().set(PLACEHOLDER.to_string());
     }
 
-    pub fn cards(&self) -> Signal<Vec<CardEntry>> {
-        self.cards.clone()
-    }
-
     pub fn selected_card(&self) -> Signal<Option<CardId>> {
         self.card.clone()
     }

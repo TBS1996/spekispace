@@ -11,6 +11,7 @@ use tracing::info;
 
 use crate::components::GraphRep;
 use crate::overlays::card_selector::CardSelector;
+use crate::utils::CardEntries;
 use crate::Komponent;
 use crate::{overlays::card_selector, App};
 use crate::{OverlayManager, Popup};
@@ -41,7 +42,7 @@ pub struct BrowseState {
 }
 
 impl BrowseState {
-    pub fn new() -> Self {
+    pub fn new(entries: CardEntries) -> Self {
         info!("creating browse state!");
         let browse_menu: Signal<BrowsePage> = Default::default();
 
@@ -57,7 +58,7 @@ impl BrowseState {
             title: "browse cards".to_string(),
             search: Default::default(),
             on_card_selected: Rc::new(Self::view_closure(graph.clone(), browse_menu.clone())),
-            cards: Default::default(),
+            cards: entries.cards.clone(),
             done: Default::default(),
         };
 
@@ -219,12 +220,6 @@ impl BrowseState {
                 browse_state.back_input.clone().set(back);
             });
         });
-    }
-}
-
-impl Default for BrowseState {
-    fn default() -> Self {
-        Self::new()
     }
 }
 

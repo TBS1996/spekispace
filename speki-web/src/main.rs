@@ -4,6 +4,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 use dioxus::prelude::*;
 use dioxus_logger::tracing::{info, Level};
+use utils::CardEntries;
 
 use crate::pages::{Browse, Home, Review};
 use crate::utils::App;
@@ -105,16 +106,17 @@ pub fn TheApp() -> Element {
 
     let app = use_context_provider(App::new);
     let graph = GraphRep::init(None);
-    let addcard = AddCardState::new(app.clone());
-    use_context_provider(|| addcard.clone());
     use_context_provider(|| ReviewState::new(app.clone(), graph));
     use_context_provider(OverlayManager::new);
-    let browse_state = BrowseState::new();
+    let entries = use_context_provider(CardEntries::default);
+    let addcard = AddCardState::new(app.clone(), entries.clone());
+    use_context_provider(|| addcard.clone());
+    let browse_state = BrowseState::new(entries.clone());
     use_context_provider(|| browse_state);
 
     spawn(async move {
         app.0.fill_cache().await;
-        addcard.load_cards().await;
+        entries.fill(app).await;
     });
 
     rsx! {
