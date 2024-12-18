@@ -234,7 +234,7 @@ pub fn Browse() -> Element {
     rsx! {
         match selected_card() {
             BrowsePage::View(card) => { browse_state.view_card(card) },
-            BrowsePage::Browse => { Komponent::render(&browse_state.browse_page) }
+            BrowsePage::Browse => { browse_state.browse_page.render() }
         }
     }
 }

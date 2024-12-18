@@ -1,6 +1,7 @@
 #![allow(non_snake_case)]
 
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 
 use dioxus::prelude::*;
 use dioxus_logger::tracing::{info, Level};
@@ -24,7 +25,7 @@ mod utils;
 pub const DEFAULT_FILTER: &'static str =
     "recall < 0.8 & finished == true & suspended == false & minrecrecall > 0.8 & lastreview > 0.5 & weeklapses < 3 & monthlapses < 6";
 
-pub type PopupEntry = Signal<Option<Popup>>;
+pub type PopupEntry = Signal<Vec<Arc<Popup>>>;
 pub type Popup = Box<dyn PopTray>;
 
 /// We need to re-render cyto instance every time the route changes, so this boolean
@@ -41,19 +42,21 @@ pub struct OverlayManager {
 
 impl OverlayManager {
     pub fn new() -> Self {
-        let s = Self::default();
-        s
+        Self::default()
     }
 
     pub fn set(&self, popup: Popup) {
-        self.get().clone().set(Some(popup));
+        self.get().clone().write().push(Arc::new(popup));
+    }
+
+    pub fn replace(&self, popup: Popup) {
+        self.pop();
+        self.get().clone().write().push(Arc::new(popup));
     }
 
     pub fn render(&self) -> Option<Element> {
-        let pop = self.get();
-        let Some(pop) = pop.as_ref() else {
-            return None;
-        };
+        info!("render popup!");
+        let pop = self.get_last_not_done()?;
 
         let mut done_signal = pop.is_done().clone();
 
@@ -74,7 +77,22 @@ impl OverlayManager {
         }
     }
 
-    pub fn get(&self) -> PopupEntry {
+    fn get_last(&self) -> Option<Arc<Popup>> {
+        self.get().read().last().cloned()
+    }
+
+    fn get_last_not_done(&self) -> Option<Arc<Popup>> {
+        loop {
+            let last = self.get_last()?;
+            if last.is_done().cloned() {
+                self.pop().unwrap();
+            } else {
+                return Some(last);
+            }
+        }
+    }
+
+    fn get(&self) -> PopupEntry {
         let route = use_route::<Route>();
         info!("getting route popup..");
         match route {
@@ -85,8 +103,8 @@ impl OverlayManager {
         }
     }
 
-    pub fn clear(&self) {
-        self.get().clone().set(Default::default());
+    fn pop(&self) -> Option<Arc<Popup>> {
+        self.get().write().pop()
     }
 }
 
