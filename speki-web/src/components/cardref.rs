@@ -4,7 +4,7 @@ use dioxus::prelude::*;
 use speki_core::{AnyType, Card};
 use speki_dto::CardId;
 
-use crate::{overlays::card_selector, pages::CardEntry, Popup, OverlayManager};
+use crate::{overlays::card_selector, pages::CardEntry, OverlayManager, Popup};
 
 const PLACEHOLDER: &'static str = "pick card...";
 
@@ -70,7 +70,7 @@ impl CardRef {
 
         rsx! {
             input {
-                class: "w-full border border-gray-300 rounded-md p-2 mb-4 text-gray-500 bg-gray-600 cursor-pointer focus:outline-none",
+                class: "w-full border border-gray-300 rounded-md p-2 mb-4 text-gray-950 bg-gray-50 cursor-pointer focus:outline-none",
                 value: "{card_display}",
                 readonly: "true",
                 onclick: move |_| {

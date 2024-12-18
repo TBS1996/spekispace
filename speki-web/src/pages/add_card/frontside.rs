@@ -11,6 +11,7 @@ pub enum CardTy {
     Normal,
     Instance,
     Class,
+    Unfinished,
 }
 
 impl Display for CardTy {
@@ -19,6 +20,7 @@ impl Display for CardTy {
             CardTy::Normal => "normal",
             CardTy::Instance => "instance",
             CardTy::Class => "class",
+            CardTy::Unfinished => "unfinished",
         };
 
         write!(f, "{s}")

@@ -82,35 +82,10 @@ impl AddCardState {
                 let back = backside.to_backside();
                 self.app.0.add_instance(front, back, class).await
             }
+            CardTy::Unfinished => self.app.0.add_unfinished(front).await,
         };
 
         Some(id)
-    }
-
-    fn maybe_render_concept(&self) -> Element {
-        match (self.selected)() {
-            CardTy::Normal => {
-                rsx! {}
-            }
-            CardTy::Class => {
-                rsx! {
-                        div {
-                            class: "block text-gray-700 text-sm font-medium mb-2",
-                            "Parent class"
-                            {self.concept.render()},
-                    }
-                }
-            }
-            CardTy::Instance => {
-                rsx! {
-                    div {
-                        class: "block text-gray-700 text-sm font-medium mb-2",
-                        "Class of instance"
-                        {self.concept.render()},
-                    }
-                }
-            }
-        }
     }
 }
 
@@ -128,9 +103,39 @@ pub fn Add() -> Element {
                 }
 
                 { selv.front.render() }
-                { selv.back.render() }
-                { selv.maybe_render_concept() }
 
+
+                match (selv.selected)() {
+                    CardTy::Unfinished => {
+                        rsx! {}
+                    }
+                    CardTy::Normal => {
+                        rsx! {
+                            { selv.back.render() }
+                        }
+                    }
+                    CardTy::Class => {
+                        rsx! {
+                            { selv.back.render() }
+                                div {
+                                    class: "block text-gray-700 text-sm font-medium mb-2",
+                                    "Parent class"
+                                    {selv.concept.render()},
+                            }
+                        }
+                    }
+                    CardTy::Instance => {
+                        rsx! {
+                            { selv.back.render() }
+
+                            div {
+                                class: "block text-gray-700 text-sm font-medium mb-2",
+                                "Class of instance"
+                                {selv.concept.render()},
+                            }
+                        }
+                    }
+                }
 
                 button {
                     class: "bg-blue-500 text-white py-2 px-4 rounded-md hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 mt-4",
