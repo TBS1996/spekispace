@@ -3,9 +3,9 @@ use std::sync::{Arc, Mutex};
 use dioxus::prelude::*;
 use speki_core::{AnyType, Card};
 use speki_dto::{CardId, Recall};
-use tracing::{info, instrument};
+use tracing::info;
 
-use crate::{graph::GraphRep, App, DEFAULT_FILTER};
+use crate::{components::GraphRep, App, DEFAULT_FILTER};
 
 #[derive(Clone, Debug)]
 pub struct ReviewState {

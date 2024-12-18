@@ -1,9 +1,12 @@
-use crate::utils;
+use dioxus::prelude::*;
 use tracing::{debug, info};
+use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::JsFuture;
 
-use dioxus::prelude::*;
-use wasm_bindgen::prelude::*;
+use crate::js;
+
+pub const REPO_PATH: &'static str = "/foobar";
+pub const PROXY: &'static str = "http://127.0.0.1:8081";
 
 #[allow(dead_code)]
 #[derive(Debug, Clone)]
@@ -46,11 +49,11 @@ impl LoginState {
 }
 
 pub async fn load_cached_info() -> Option<UserInfo> {
-    let auth_token = utils::get_auth_token()?;
+    let auth_token = get_auth_token()?;
     let res = fetch_github_username(auth_token.clone()).await;
     debug!("{:?}", &res);
     let username = res.ok()?;
-    let install_token = utils::get_install_token().unwrap();
+    let install_token = get_install_token().unwrap();
     Some(UserInfo {
         auth_token,
         username: Signal::new(username),
@@ -66,11 +69,11 @@ async fn load_user_info() -> Option<UserInfo> {
         .location()
         .set_href(auth_url)
         .unwrap();
-    let auth_token = utils::get_auth_token()?;
+    let auth_token = get_auth_token()?;
     let res = fetch_github_username(auth_token.clone()).await;
     info!("{:?}", &res);
     let username = res.ok()?;
-    let install_token = utils::get_install_token().unwrap();
+    let install_token = get_install_token().unwrap();
     Some(UserInfo {
         auth_token,
         username: Signal::new(username),
@@ -115,5 +118,53 @@ pub async fn fetch_github_username(access_token: String) -> Result<String, JsVal
         Ok(user.login)
     } else {
         Err(JsValue::from_str("Failed to fetch GitHub user data"))
+    }
+}
+
+pub mod cookies {
+    use std::collections::HashMap;
+    use wasm_bindgen::prelude::*;
+
+    #[wasm_bindgen(inline_js = "
+export function getCookies() {
+    const cookies = document.cookie;
+    console.log('Cookies:', cookies);
+    return cookies;
+}
+")]
+    extern "C" {
+        fn getCookies() -> String;
+    }
+
+    pub fn get(key: &str) -> Option<String> {
+        parse_cookies(&getCookies()).get(key).cloned()
+    }
+
+    fn parse_cookies(cookie_header: &str) -> HashMap<String, String> {
+        cookie_header
+            .split("; ")
+            .filter_map(|cookie| {
+                let parts: Vec<&str> = cookie.split('=').collect();
+                if parts.len() == 2 {
+                    Some((parts[0].to_string(), parts[1].to_string()))
+                } else {
+                    None
+                }
+            })
+            .collect()
+    }
+}
+
+pub fn get_install_token() -> Option<String> {
+    cookies::get("install-token")
+}
+
+pub fn get_auth_token() -> Option<String> {
+    cookies::get("auth-token")
+}
+
+pub fn sync_repo(info: LoginState) {
+    if let Some(token) = info.auth_token() {
+        js::_sync_repo(REPO_PATH, &token, PROXY);
     }
 }

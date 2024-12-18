@@ -6,7 +6,7 @@ use tracing::info;
 use super::add_card::backside::BackPut;
 use super::CardEntry;
 
-use crate::components::cardref::CardRef;
+use crate::components::CardRef;
 use crate::App;
 
 pub mod backside;

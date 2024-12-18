@@ -4,28 +4,21 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 use dioxus::prelude::*;
 use dioxus_logger::tracing::{info, Level};
-use graph::GraphRep;
-use login::LoginState;
-use pages::add_card::AddCardState;
-use pages::BrowseState;
-use review_state::ReviewState;
 
 use crate::pages::{Browse, Home, Review};
 use crate::utils::App;
+use components::GraphRep;
+use pages::add_card::AddCardState;
+use pages::{BrowseState, ReviewState};
 
+//mod github;
 mod components;
 mod firebase;
-mod graph;
 mod js;
-mod login;
 mod nav;
 mod overlays;
 mod pages;
-mod review_state;
 mod utils;
-
-pub const REPO_PATH: &'static str = "/foobar";
-pub const PROXY: &'static str = "http://127.0.0.1:8081";
 
 pub const DEFAULT_FILTER: &'static str =
     "recall < 0.8 & finished == true & suspended == false & minrecrecall > 0.8 & lastreview > 0.5 & weeklapses < 3 & monthlapses < 6";
@@ -38,6 +31,8 @@ pub trait PopTray {
 pub type PopupEntry = Signal<Option<Popup>>;
 pub type Popup = Box<dyn PopTray>;
 
+/// We need to re-render cyto instance every time the route changes, so this boolean
+/// is true every time we change route, and is set back to false after the cyto instance is re-rendered
 pub static ROUTE_CHANGE: AtomicBool = AtomicBool::new(false);
 
 #[derive(Clone, Default)]
@@ -106,7 +101,6 @@ pub fn TheApp() -> Element {
     let addcard = AddCardState::new(app.clone());
     use_context_provider(|| addcard.clone());
     use_context_provider(|| ReviewState::new(app.clone(), graph));
-    use_context_provider(LoginState::default);
     use_context_provider(OverlayManager::new);
     let browse_state = BrowseState::new();
     use_context_provider(|| browse_state);

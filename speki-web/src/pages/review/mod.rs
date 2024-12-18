@@ -1,10 +1,11 @@
 use std::rc::Rc;
 
 use dioxus::prelude::*;
+use review_state::ReviewState;
 use speki_dto::Recall;
 use tracing::info;
 
-use crate::review_state::ReviewState;
+pub mod review_state;
 
 fn recall_button(recall: Recall) -> Element {
     let label = match recall {

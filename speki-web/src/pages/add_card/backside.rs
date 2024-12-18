@@ -6,7 +6,7 @@ use speki_dto::BackSide;
 use strum::{EnumIter, IntoEnumIterator};
 use tracing::info;
 
-use crate::components::{cardref::CardRef, dropdown::DropDownMenu};
+use crate::components::{CardRef, DropDownMenu};
 
 #[derive(Clone)]
 pub struct BackPut {

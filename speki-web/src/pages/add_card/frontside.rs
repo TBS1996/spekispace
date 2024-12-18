@@ -4,7 +4,7 @@ use dioxus::prelude::*;
 use serde::{Deserialize, Serialize};
 use strum::{EnumIter, IntoEnumIterator};
 
-use crate::components::dropdown::DropDownMenu;
+use crate::components::DropDownMenu;
 
 #[derive(EnumIter, Clone, Serialize, Deserialize)]
 pub enum CardTy {

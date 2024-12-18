@@ -9,8 +9,9 @@ use speki_core::{AnyType, Card};
 use speki_web::BrowsePage;
 use tracing::info;
 
+use crate::components::GraphRep;
 use crate::overlays::card_selector::CardSelectorProps;
-use crate::{graph::GraphRep, overlays::card_selector, App};
+use crate::{overlays::card_selector, App};
 use crate::{OverlayManager, PopTray, Popup};
 
 #[derive(Clone)]

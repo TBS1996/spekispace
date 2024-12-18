@@ -5,4 +5,4 @@ mod review;
 
 pub use browse::{Browse, BrowseState, CardEntry};
 pub use home::Home;
-pub use review::Review;
+pub use review::{review_state::ReviewState, Review};
