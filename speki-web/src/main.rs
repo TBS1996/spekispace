@@ -26,6 +26,9 @@ pub const DEFAULT_FILTER: &'static str =
 pub trait PopTray {
     fn is_done(&self) -> Signal<bool>;
     fn render(&self) -> Element;
+    fn set_done(&self) {
+        self.is_done().clone().set(true);
+    }
 }
 
 pub type PopupEntry = Signal<Option<Popup>>;
@@ -59,10 +62,22 @@ impl OverlayManager {
             return None;
         };
 
-        if *pop.is_done().read() {
+        let mut done_signal = pop.is_done().clone();
+
+        if done_signal() {
             None
         } else {
-            Some(pop.render())
+            Some(rsx! {
+            button {
+                class: "float-right mr-4 mb-10",
+                onclick: move |_| {
+                    done_signal.set(true);
+                },
+                "❌"
+            },
+
+            { pop.render() }
+            })
         }
     }
 
