@@ -16,8 +16,8 @@ use speki_dto::CType;
 use tracing::info;
 use web_sys::window;
 
-use crate::App;
 use crate::{js, ROUTE_CHANGE};
+use crate::{App, Komponent};
 
 #[derive(Default)]
 struct InnerGraph {
@@ -63,20 +63,8 @@ pub struct GraphRep {
     new_card_hook: Option<Arc<Box<dyn Fn(Arc<Card<AnyType>>)>>>,
 }
 
-impl GraphRep {
-    pub fn init(new_card_hook: Option<Arc<Box<dyn Fn(Arc<Card<AnyType>>)>>>) -> Self {
-        let id = format!("cyto_id-{}", COUNTER.fetch_add(1, Ordering::SeqCst));
-        let app = use_context::<App>();
-        Self {
-            app,
-            inner: Default::default(),
-            is_init: Default::default(),
-            cyto_id: Arc::new(id),
-            new_card_hook,
-        }
-    }
-
-    pub fn render(&self) -> Element {
+impl Komponent for GraphRep {
+    fn render(&self) -> Element {
         let scope = current_scope_id().unwrap();
         info!("init scope: {scope:?}");
         speki_web::set_refresh_scope(self.cyto_id.to_string(), scope);
@@ -143,6 +131,20 @@ impl GraphRep {
                 id: "{cyto_id}",
                 style: "width: 800px; height: 600px; border: 1px solid black;",
             }
+        }
+    }
+}
+
+impl GraphRep {
+    pub fn init(new_card_hook: Option<Arc<Box<dyn Fn(Arc<Card<AnyType>>)>>>) -> Self {
+        let id = format!("cyto_id-{}", COUNTER.fetch_add(1, Ordering::SeqCst));
+        let app = use_context::<App>();
+        Self {
+            app,
+            inner: Default::default(),
+            is_init: Default::default(),
+            cyto_id: Arc::new(id),
+            new_card_hook,
         }
     }
 

@@ -1,16 +1,15 @@
 use dioxus::prelude::*;
-use frontside::{CardTy, FrontPut};
 use speki_dto::CardId;
 use tracing::info;
 
-use super::add_card::backside::BackPut;
 use super::CardEntry;
 
+use crate::components::BackPut;
 use crate::components::CardRef;
+use crate::components::CardTy;
+use crate::components::FrontPut;
 use crate::App;
-
-pub mod backside;
-mod frontside;
+use crate::Komponent;
 
 #[derive(Clone)]
 pub struct AddCardState {

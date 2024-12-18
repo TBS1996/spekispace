@@ -3,6 +3,8 @@ use std::fmt::Display;
 use dioxus::prelude::*;
 use serde::{Deserialize, Serialize};
 
+use crate::Komponent;
+
 #[derive(Clone)]
 pub struct DropDownMenu<T>
 where
@@ -31,8 +33,13 @@ where
         let first = self.options.first().unwrap().clone();
         self.selected.clone().set(first);
     }
+}
 
-    pub fn view(&self) -> Element {
+impl<T> Komponent for DropDownMenu<T>
+where
+    T: Serialize + for<'de> Deserialize<'de> + 'static + Clone + Display,
+{
+    fn render(&self) -> Element {
         let mut dropdown = self.selected.clone();
         let val: String = serde_json::to_string(&dropdown.cloned()).unwrap();
 

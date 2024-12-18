@@ -180,3 +180,7 @@ impl Route {
         }
     }
 }
+
+pub trait Komponent {
+    fn render(&self) -> Element;
+}

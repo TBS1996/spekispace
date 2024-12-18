@@ -6,13 +6,40 @@ use speki_dto::BackSide;
 use strum::{EnumIter, IntoEnumIterator};
 use tracing::info;
 
-use crate::components::{CardRef, DropDownMenu};
+use crate::{
+    components::{CardRef, DropDownMenu},
+    Komponent,
+};
 
 #[derive(Clone)]
 pub struct BackPut {
     text: Signal<String>,
     dropdown: DropDownMenu<BackOpts>,
     pub ref_card: CardRef,
+}
+
+impl Komponent for BackPut {
+    fn render(&self) -> Element {
+        rsx! {
+
+            div {
+                class: "block text-gray-700 text-sm font-medium mb-2",
+                "Back:"
+
+            div {
+                class: "backside-editor flex items-center space-x-4",
+
+                match *self.dropdown.selected.read() {
+                    BackOpts::Text => self.render_text(),
+                    BackOpts::Card => self.ref_card.render(),
+                }
+
+                { self.dropdown.render() }
+
+            }
+        }
+        }
+    }
 }
 
 impl BackPut {
@@ -28,28 +55,6 @@ impl BackPut {
         self.text.clone().set(Default::default());
         self.dropdown.reset();
         self.ref_card.reset();
-    }
-
-    pub fn render(&self) -> Element {
-        rsx! {
-
-            div {
-                class: "block text-gray-700 text-sm font-medium mb-2",
-                "Back:"
-
-            div {
-                class: "backside-editor flex items-center space-x-4",
-
-                match *self.dropdown.selected.read() {
-                    BackOpts::Text => self.render_text(),
-                    BackOpts::Card => self.ref_card.render(),
-                }
-
-                { self.dropdown.view() }
-
-            }
-        }
-        }
     }
 
     pub fn to_backside(&self) -> Option<BackSide> {

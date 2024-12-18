@@ -3,10 +3,10 @@ use std::{rc::Rc, sync::Arc};
 use dioxus::prelude::*;
 use speki_core::{AnyType, Card};
 
-use crate::{pages::CardEntry, PopTray};
+use crate::{pages::CardEntry, Komponent, PopTray};
 
 #[derive(Props, Clone)]
-pub struct CardSelectorProps {
+pub struct CardSelector {
     pub title: String,
     pub search: Signal<String>,
     pub on_card_selected: Rc<dyn Fn(Arc<Card<AnyType>>)>,
@@ -14,11 +14,7 @@ pub struct CardSelectorProps {
     pub done: Signal<bool>,
 }
 
-impl PopTray for CardSelectorProps {
-    fn is_done(&self) -> Signal<bool> {
-        self.done.clone()
-    }
-
+impl Komponent for CardSelector {
     /// Selects a card from the collection and calls a closure on it.
     fn render(&self) -> Element {
         let title = &self.title;
@@ -81,7 +77,17 @@ impl PopTray for CardSelectorProps {
     }
 }
 
-impl PartialEq for CardSelectorProps {
+impl PopTray for CardSelector {
+    fn is_done(&self) -> Signal<bool> {
+        self.done.clone()
+    }
+
+    fn render(&self) -> Element {
+        Komponent::render(self)
+    }
+}
+
+impl PartialEq for CardSelector {
     fn eq(&self, other: &Self) -> bool {
         self.title == other.title && self.search == other.search
     }

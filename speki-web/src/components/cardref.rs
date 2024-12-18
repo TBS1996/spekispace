@@ -4,7 +4,7 @@ use dioxus::prelude::*;
 use speki_core::{AnyType, Card};
 use speki_dto::CardId;
 
-use crate::{overlays::card_selector, pages::CardEntry, OverlayManager, Popup};
+use crate::{overlays::card_selector, pages::CardEntry, Komponent, OverlayManager, Popup};
 
 const PLACEHOLDER: &'static str = "pick card...";
 
@@ -52,7 +52,7 @@ impl CardRef {
             });
         };
 
-        let props = card_selector::CardSelectorProps {
+        let props = card_selector::CardSelector {
             title: "choose reference".to_string(),
             on_card_selected: Rc::new(fun),
             search: Signal::new_in_scope(Default::default(), ScopeId(3)),
@@ -63,8 +63,10 @@ impl CardRef {
         let popup: Popup = Box::new(props);
         use_context::<OverlayManager>().set(popup);
     }
+}
 
-    pub fn render(&self) -> Element {
+impl Komponent for CardRef {
+    fn render(&self) -> Element {
         let card_display = self.display.clone();
         let selv = self.clone();
 

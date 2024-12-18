@@ -4,7 +4,7 @@ use dioxus::prelude::*;
 use serde::{Deserialize, Serialize};
 use strum::{EnumIter, IntoEnumIterator};
 
-use crate::components::DropDownMenu;
+use crate::{components::DropDownMenu, Komponent};
 
 #[derive(EnumIter, Clone, Serialize, Deserialize)]
 pub enum CardTy {
@@ -33,19 +33,8 @@ pub struct FrontPut {
     pub text: Signal<String>,
 }
 
-impl FrontPut {
-    pub fn new() -> Self {
-        Self {
-            dropdown: DropDownMenu::new(CardTy::iter()),
-            text: Default::default(),
-        }
-    }
-
-    pub fn reset(&self) {
-        self.text.clone().set(Default::default());
-    }
-
-    pub fn render(&self) -> Element {
+impl Komponent for FrontPut {
+    fn render(&self) -> Element {
         let mut text = self.text.clone();
         rsx! {
             div {
@@ -60,10 +49,23 @@ impl FrontPut {
                         oninput: move |evt| text.set(evt.value()),
                     }
 
-                    { self.dropdown.view() }
+                    { self.dropdown.render() }
                 }
 
             }
         }
+    }
+}
+
+impl FrontPut {
+    pub fn new() -> Self {
+        Self {
+            dropdown: DropDownMenu::new(CardTy::iter()),
+            text: Default::default(),
+        }
+    }
+
+    pub fn reset(&self) {
+        self.text.clone().set(Default::default());
     }
 }

@@ -10,9 +10,10 @@ use speki_web::BrowsePage;
 use tracing::info;
 
 use crate::components::GraphRep;
-use crate::overlays::card_selector::CardSelectorProps;
+use crate::overlays::card_selector::CardSelector;
+use crate::Komponent;
 use crate::{overlays::card_selector, App};
-use crate::{OverlayManager, PopTray, Popup};
+use crate::{OverlayManager, Popup};
 
 #[derive(Clone)]
 pub struct CardEntry {
@@ -36,7 +37,7 @@ pub struct BrowseState {
     pub back_input: Signal<String>,
     pub graph: GraphRep,
     pub refreshed: Arc<AtomicBool>,
-    pub browse_page: CardSelectorProps,
+    pub browse_page: CardSelector,
 }
 
 impl BrowseState {
@@ -52,7 +53,7 @@ impl BrowseState {
 
         let graph = GraphRep::init(Some(Arc::new(Box::new(f))));
 
-        let props = card_selector::CardSelectorProps {
+        let props = card_selector::CardSelector {
             title: "browse cards".to_string(),
             search: Default::default(),
             on_card_selected: Rc::new(Self::view_closure(graph.clone(), browse_menu.clone())),
@@ -150,7 +151,7 @@ impl BrowseState {
                                 });
                             };
 
-                            let props = CardSelectorProps {
+                            let props = CardSelector {
                                 title: "set dependency".to_string(),
                                 search: selv.browse_page.search.clone(),
                                 on_card_selected: Rc::new(fun),
@@ -238,7 +239,7 @@ pub fn Browse() -> Element {
     rsx! {
         match selected_card() {
             BrowsePage::View(card) => { browse_state.view_card(card) },
-            BrowsePage::Browse => { browse_state.browse_page.render() }
+            BrowsePage::Browse => { Komponent::render(&browse_state.browse_page) }
         }
     }
 }

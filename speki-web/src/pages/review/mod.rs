@@ -5,6 +5,8 @@ use review_state::ReviewState;
 use speki_dto::Recall;
 use tracing::info;
 
+use crate::Komponent;
+
 pub mod review_state;
 
 fn recall_button(recall: Recall) -> Element {
