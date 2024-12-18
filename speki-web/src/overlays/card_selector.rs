@@ -81,10 +81,6 @@ impl PopTray for CardSelector {
     fn is_done(&self) -> Signal<bool> {
         self.done.clone()
     }
-
-    fn render(&self) -> Element {
-        Komponent::render(self)
-    }
 }
 
 impl PartialEq for CardSelector {

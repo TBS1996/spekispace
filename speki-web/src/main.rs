@@ -23,14 +23,6 @@ mod utils;
 pub const DEFAULT_FILTER: &'static str =
     "recall < 0.8 & finished == true & suspended == false & minrecrecall > 0.8 & lastreview > 0.5 & weeklapses < 3 & monthlapses < 6";
 
-pub trait PopTray {
-    fn is_done(&self) -> Signal<bool>;
-    fn render(&self) -> Element;
-    fn set_done(&self) {
-        self.is_done().clone().set(true);
-    }
-}
-
 pub type PopupEntry = Signal<Option<Popup>>;
 pub type Popup = Box<dyn PopTray>;
 
@@ -183,4 +175,11 @@ impl Route {
 
 pub trait Komponent {
     fn render(&self) -> Element;
+}
+
+pub trait PopTray: Komponent {
+    fn is_done(&self) -> Signal<bool>;
+    fn set_done(&self) {
+        self.is_done().clone().set(true);
+    }
 }
