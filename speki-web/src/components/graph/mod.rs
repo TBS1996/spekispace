@@ -208,7 +208,10 @@ impl Komponent for GraphRep {
         rsx! {
             div {
                 id: "{cyto_id}",
-                style: "width: 800px; height: 600px; border: 1px solid black;",
+                class: "w-full h-full", // Tailwind classes
+           //     style: "width: 800px; height: 600px; border: 1px solid black;",
+               // style: "width: 100%; height: 100%; border: 1px solid black;",
+
             }
         }
     }

@@ -26,16 +26,6 @@ pub fn Add() -> Element {
     let selv = ADD_CARDS.cloned();
 
     rsx! {
-        div {
-            style: "max-width: 500px; margin: 0 auto;",
-            div {
-                h1 {
-                    class: "text-2xl font-bold text-gray-800 mb-6 text-center",
-                    "Add Flashcard"
-                }
-
-                { selv.viewer.render() }
-            }
-        }
+        { selv.viewer.render() }
     }
 }

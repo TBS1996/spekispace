@@ -136,12 +136,8 @@ impl CardViewer {
             ty: speki_dto::CType::Normal,
         }
     }
-}
 
-impl Komponent for CardViewer {
-    fn render(&self) -> Element {
-        info!(" XX rendering display_card");
-
+    fn render_inputs(&self) -> Element {
         let selv = self.clone();
         let selv2 = self.clone();
         rsx! {
@@ -232,7 +228,27 @@ impl Komponent for CardViewer {
                     "save"
                 }
             }
-            { self.graph.render() }
+        }
+    }
+}
+
+impl Komponent for CardViewer {
+    fn render(&self) -> Element {
+        info!("XX rendering display_card");
+
+        let selv = self.clone();
+        rsx! {
+            div {
+                class: "flex w-full h-[800px] mt-8",
+                div {
+                    class: "flex-[2] max-w-[600px] p-4 ml-20",
+                    { selv.render_inputs() }
+                }
+                div {
+                    class: "flex-[1] max-w-[700px] max-h-[700px]",
+                    { self.graph.render() }
+                }
+            }
         }
     }
 }
