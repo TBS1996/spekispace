@@ -4,11 +4,12 @@ use speki_core::TimeProvider;
 use speki_provider::DexieProvider;
 use tracing::info;
 
-use crate::firebase::sign_in;
-use crate::firebase::FirestoreProvider;
-use crate::js;
-use crate::pages::CardEntry;
-use crate::APP;
+use crate::{
+    firebase::{sign_in, FirestoreProvider},
+    js,
+    pages::CardEntry,
+    APP,
+};
 
 #[derive(Clone)]
 pub struct App(pub Arc<speki_core::App>);

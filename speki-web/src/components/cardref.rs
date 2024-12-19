@@ -5,7 +5,7 @@ use speki_core::{AnyType, Card};
 use speki_dto::CardId;
 
 use super::Komponent;
-use crate::{overlays::card_selector, overlays::Popup, pages::CardEntry, OVERLAY};
+use crate::{overlays::card_selector, pages::CardEntry, OVERLAY};
 
 const PLACEHOLDER: &'static str = "pick card...";
 
@@ -20,7 +20,7 @@ impl CardRef {
     pub fn new(cards: Signal<Vec<CardEntry>>) -> Self {
         Self {
             card: Signal::new_in_scope(Default::default(), ScopeId(3)),
-            display: Signal::new(PLACEHOLDER.to_string()),
+            display: Signal::new_in_scope(PLACEHOLDER.to_string(), ScopeId(3)),
             cards,
         }
     }
@@ -57,9 +57,7 @@ impl CardRef {
             done: Signal::new_in_scope(false, ScopeId(3)),
         };
 
-        let popup: Popup = Box::new(props);
-        OVERLAY.cloned().set(popup);
-        ScopeId(7).needs_update();
+        OVERLAY.cloned().set(Box::new(props));
     }
 }
 

@@ -1,11 +1,10 @@
 use dioxus::prelude::*;
 
-use crate::components::GraphRep;
-use crate::components::Komponent;
-use crate::overlays::cardviewer::CardViewer;
-use crate::ADD_CARDS;
-use crate::APP;
-use crate::CARDS;
+use crate::{
+    components::{GraphRep, Komponent},
+    overlays::cardviewer::CardViewer,
+    ADD_CARDS, APP, CARDS,
+};
 
 #[derive(Clone)]
 pub struct AddCardState {

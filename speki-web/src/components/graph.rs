@@ -8,9 +8,11 @@ use std::{
 };
 
 use dioxus::prelude::*;
-use petgraph::algo::is_cyclic_directed;
-use petgraph::graph::{DiGraph, NodeIndex};
-use petgraph::visit::EdgeRef;
+use petgraph::{
+    algo::is_cyclic_directed,
+    graph::{DiGraph, NodeIndex},
+    visit::EdgeRef,
+};
 use speki_core::{AnyType, Card};
 use speki_dto::{CType, CardId};
 use speki_web::{NodeMetadata, Origin};
@@ -18,8 +20,7 @@ use tracing::info;
 use web_sys::window;
 
 use super::Komponent;
-use crate::App;
-use crate::{js, APP, ROUTE_CHANGE};
+use crate::{js, App, APP, ROUTE_CHANGE};
 
 #[derive(Default)]
 struct InnerGraph {
@@ -252,8 +253,7 @@ fn is_element_present(id: &str) -> bool {
 }
 
 fn transitive_reduction(graph: &mut DiGraph<NodeMetadata, ()>) {
-    use petgraph::algo::has_path_connecting;
-    use petgraph::visit::EdgeRef;
+    use petgraph::{algo::has_path_connecting, visit::EdgeRef};
 
     let all_edges: Vec<_> = graph
         .edge_references()

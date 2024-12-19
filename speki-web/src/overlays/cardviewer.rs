@@ -8,15 +8,11 @@ use tracing::info;
 use uuid::Uuid;
 
 use crate::{
-    components::{BackPut, CardRef, CardTy, FrontPut, GraphRep},
-    overlays::card_selector::CardSelector,
+    components::{BackPut, CardRef, CardTy, FrontPut, GraphRep, Komponent},
+    overlays::{card_selector::CardSelector, Overlay},
     utils::{App, CardEntries},
-    OVERLAY,
+    APP, CARDS, OVERLAY,
 };
-
-use crate::components::Komponent;
-
-use super::Overlay;
 
 pub struct CardRep {
     ty: AnyType,
@@ -37,12 +33,10 @@ pub struct CardViewer {
 }
 
 impl CardViewer {
-    pub async fn _new_from_card(
-        card: Arc<Card<AnyType>>,
-        graph: GraphRep,
-        app: App,
-        entries: CardEntries,
-    ) -> Self {
+    pub async fn new_from_card(card: Arc<Card<AnyType>>, graph: GraphRep) -> Self {
+        graph.new_set_card(card.clone());
+        let app = APP.cloned();
+        let entries = CARDS.cloned();
         let dependencies = card.dependency_ids().await;
         let raw = card.to_raw();
         let front = raw.data.front.unwrap_or_default();

@@ -24,7 +24,7 @@ where
     {
         let options: Vec<T> = options.into_iter().collect();
         assert!(!options.is_empty(), "must provide at least one option");
-        let selected = Signal::new(options.first().unwrap().clone());
+        let selected = Signal::new_in_scope(options.first().unwrap().clone(), ScopeId(3));
 
         Self { options, selected }
     }

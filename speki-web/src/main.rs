@@ -2,17 +2,17 @@
 
 use std::sync::atomic::{AtomicBool, Ordering};
 
+use components::GraphRep;
 use dioxus::prelude::*;
 use dioxus_logger::tracing::{info, Level};
 use overlays::OverlayManager;
+use pages::{add_card::AddCardState, BrowseState, ReviewState};
 use utils::CardEntries;
 
-use crate::pages::add_card::Add;
-use crate::pages::{Browse, Home, Review};
-use crate::utils::App;
-use components::GraphRep;
-use pages::add_card::AddCardState;
-use pages::{BrowseState, ReviewState};
+use crate::{
+    pages::{add_card::Add, Browse, Home, Review},
+    utils::App,
+};
 
 //mod github;
 mod components;
@@ -34,7 +34,7 @@ fn main() {
     dioxus_logger::init(Level::INFO).expect("failed to init logger");
     info!("starting app");
     let id = current_scope_id();
-    info!("cool scope id: {id:?}");
+    info!("bruh scope id: {id:?}");
 
     dioxus::launch(TheApp);
 }

@@ -15,8 +15,6 @@ pub trait Overlay: Komponent {
     fn is_done(&self) -> Signal<bool>;
 }
 
-pub type Popup = Box<dyn Overlay>;
-
 #[derive(Clone, Default)]
 pub struct OverlayManager {
     overlays: Arc<RwLock<HashMap<Route, Vec<Arc<Box<dyn Overlay>>>>>>,
@@ -38,7 +36,7 @@ impl OverlayManager {
             .needs_update();
     }
 
-    pub fn set(&self, popup: Popup) {
+    pub fn set(&self, popup: Box<dyn Overlay>) {
         info!("set popup");
         let popup = Arc::new(popup);
         let route = use_route::<Route>();
@@ -74,7 +72,7 @@ impl OverlayManager {
         })
     }
 
-    fn get_last_not_done(&self) -> Option<Arc<Popup>> {
+    fn get_last_not_done(&self) -> Option<Arc<Box<dyn Overlay>>> {
         let route = use_route::<Route>();
         loop {
             let last = self.overlays.read().unwrap().get(&route)?.last().cloned()?;
