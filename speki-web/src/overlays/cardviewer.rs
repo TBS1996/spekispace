@@ -11,7 +11,7 @@ use crate::{
     components::{BackPut, CardRef, CardTy, FrontPut, GraphRep},
     overlays::card_selector::CardSelector,
     utils::{App, CardEntries},
-    Komponent, OverlayManager, PopTray, Popup,
+    Komponent, PopTray, Popup, OVERLAY,
 };
 
 pub struct CardRep {
@@ -196,7 +196,7 @@ impl Komponent for CardViewer {
                             let props = CardSelector::dependency_picker(Box::new(fun));
 
                             let pop: Popup = Box::new(props);
-                            use_context::<OverlayManager>().set(pop);
+                            OVERLAY.cloned().set(pop);
                     },
                     "add dependency"
                 }

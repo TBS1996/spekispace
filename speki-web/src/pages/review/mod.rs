@@ -1,11 +1,10 @@
 use std::rc::Rc;
 
 use dioxus::prelude::*;
-use review_state::ReviewState;
 use speki_dto::Recall;
 use tracing::info;
 
-use crate::Komponent;
+use crate::{Komponent, REVIEW_STATE};
 
 pub mod review_state;
 
@@ -22,8 +21,7 @@ fn recall_button(recall: Recall) -> Element {
             class: "mt-6 inline-flex items-center text-white bg-gray-800 border-0 py-1 px-3 focus:outline-none hover:bg-gray-700 rounded text-base md:mt-0",
             onclick: move |_| {
                 spawn(async move{
-                    let mut review = use_context::<ReviewState>();
-                    review.do_review(recall).await;
+                    REVIEW_STATE.cloned().do_review(recall).await;
                 });
             },
             "{label}"
@@ -49,10 +47,9 @@ fn review_start(mut filter: Signal<String>) -> Element {
 
                 onclick: move |_| {
                     info!("review..?");
-                    let mut review = use_context::<ReviewState>();
                     spawn(async move {
                         info!("nice..?");
-                        review.refresh().await;
+                        REVIEW_STATE.cloned().refresh().await;
                     });
                 },
                 "Start review"
@@ -75,7 +72,7 @@ fn review_buttons() -> Element {
 
 #[component]
 pub fn Review() -> Element {
-    let review = use_context::<ReviewState>();
+    let review = REVIEW_STATE.cloned();
     let rev2 = review.clone();
     let card = review.card.clone();
     let pos = review.pos.clone();

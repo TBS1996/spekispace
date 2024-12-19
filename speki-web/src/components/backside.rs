@@ -8,8 +8,7 @@ use tracing::info;
 
 use crate::{
     components::{CardRef, DropDownMenu},
-    utils::CardEntries,
-    Komponent,
+    Komponent, CARDS,
 };
 
 #[derive(Clone)]
@@ -45,7 +44,7 @@ impl Komponent for BackPut {
 
 impl BackPut {
     pub fn new() -> Self {
-        let entries = use_context::<CardEntries>();
+        let entries = CARDS.cloned();
         Self {
             text: Signal::new_in_scope(Default::default(), ScopeId(3)),
             dropdown: DropDownMenu::new(BackOpts::iter()),

@@ -5,7 +5,7 @@ use speki_core::{AnyType, Card};
 use speki_dto::{CardId, Recall};
 use tracing::info;
 
-use crate::{components::GraphRep, App, DEFAULT_FILTER};
+use crate::{components::GraphRep, App, APP, DEFAULT_FILTER};
 
 #[derive(Clone, Debug)]
 pub struct ReviewState {
@@ -22,7 +22,8 @@ pub struct ReviewState {
 }
 
 impl ReviewState {
-    pub fn new(app: App, graph: GraphRep) -> Self {
+    pub fn new(graph: GraphRep) -> Self {
+        let app = APP.cloned();
         Self {
             app,
             card: Default::default(),

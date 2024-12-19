@@ -46,7 +46,9 @@ impl OverlayManager {
     }
 
     pub fn set(&self, popup: Popup) {
-        self.get().clone().write().push(Arc::new(popup));
+        let mut vec = self.get().cloned();
+        vec.push(Arc::new(popup));
+        self.get().set(vec);
     }
 
     pub fn replace(&self, popup: Popup) {
@@ -104,7 +106,10 @@ impl OverlayManager {
     }
 
     fn pop(&self) -> Option<Arc<Popup>> {
-        self.get().write().pop()
+        let mut vec = self.get().cloned();
+        let ret = vec.pop();
+        self.get().set(vec);
+        ret
     }
 }
 
@@ -117,25 +122,23 @@ fn main() {
     dioxus::launch(TheApp);
 }
 
+static CARDS: GlobalSignal<CardEntries> = Signal::global(CardEntries::default);
+static BROWSE_STATE: GlobalSignal<BrowseState> = Signal::global(BrowseState::new);
+static APP: GlobalSignal<App> = Signal::global(App::new);
+static OVERLAY: GlobalSignal<OverlayManager> = Signal::global(OverlayManager::new);
+static REVIEW_STATE: GlobalSignal<ReviewState> =
+    Signal::global(|| ReviewState::new(GraphRep::init(None)));
+static ADD_CARDS: GlobalSignal<AddCardState> =
+    Signal::global(|| AddCardState::new(GraphRep::init(None)));
+
 #[component]
 pub fn TheApp() -> Element {
     let id = current_scope_id();
     info!("top scope id: {id:?}");
 
-    let app = use_context_provider(App::new);
-    let graph = GraphRep::init(None);
-    use_context_provider(|| ReviewState::new(app.clone(), graph));
-    use_context_provider(OverlayManager::new);
-    let graph2 = GraphRep::init(None);
-    let entries = use_context_provider(CardEntries::default);
-    let addcard = AddCardState::new(graph2, app.clone(), entries.clone());
-    use_context_provider(|| addcard.clone());
-    let browse_state = BrowseState::new(entries.clone());
-    use_context_provider(|| browse_state);
-
     spawn(async move {
-        app.0.fill_cache().await;
-        entries.fill(app).await;
+        APP.read().0.fill_cache().await;
+        CARDS.cloned().fill().await;
     });
 
     rsx! {
@@ -155,7 +158,7 @@ fn Wrapper() -> Element {
     ROUTE_CHANGE.store(true, Ordering::SeqCst);
     let id = current_scope_id();
     info!("wrapper scope id: {id:?}");
-    let overlay = use_context::<OverlayManager>();
+    let overlay = OVERLAY.cloned();
 
     rsx! {
          crate::nav::nav {}

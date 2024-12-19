@@ -4,7 +4,7 @@ use dioxus::prelude::*;
 use speki_core::{AnyType, Card};
 use speki_dto::CardId;
 
-use crate::{overlays::card_selector, pages::CardEntry, Komponent, OverlayManager, Popup};
+use crate::{overlays::card_selector, pages::CardEntry, Komponent, Popup, OVERLAY};
 
 const PLACEHOLDER: &'static str = "pick card...";
 
@@ -57,7 +57,7 @@ impl CardRef {
         };
 
         let popup: Popup = Box::new(props);
-        use_context::<OverlayManager>().set(popup);
+        OVERLAY.cloned().set(popup);
     }
 }
 

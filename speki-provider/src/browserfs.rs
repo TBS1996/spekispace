@@ -148,11 +148,11 @@ impl BrowserFsProvider {
 
 #[async_trait(?Send)]
 impl SpekiProvider for BrowserFsProvider {
-    async fn load_record(&self, id: Uuid, ty: Cty) -> Option<Record> {
+    async fn load_record(&self, _id: Uuid, _ty: Cty) -> Option<Record> {
         todo!()
     }
 
-    async fn load_all_records(&self, ty: Cty) -> HashMap<Uuid, Record> {
+    async fn load_all_records(&self, _ty: Cty) -> HashMap<Uuid, Record> {
         todo!()
     }
 

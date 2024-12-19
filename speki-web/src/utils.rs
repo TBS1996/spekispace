@@ -8,6 +8,7 @@ use crate::firebase::sign_in;
 use crate::firebase::FirestoreProvider;
 use crate::js;
 use crate::pages::CardEntry;
+use crate::APP;
 
 #[derive(Clone)]
 pub struct App(pub Arc<speki_core::App>);
@@ -62,7 +63,8 @@ pub struct CardEntries {
 }
 
 impl CardEntries {
-    pub async fn fill(&self, app: App) {
+    pub async fn fill(&self) {
+        let app = APP.cloned();
         let mut concept_cards = vec![];
         let mut cards = vec![];
 

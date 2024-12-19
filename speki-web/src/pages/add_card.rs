@@ -2,9 +2,10 @@ use dioxus::prelude::*;
 
 use crate::components::GraphRep;
 use crate::overlays::cardviewer::CardViewer;
-use crate::utils::CardEntries;
-use crate::App;
 use crate::Komponent;
+use crate::ADD_CARDS;
+use crate::APP;
+use crate::CARDS;
 
 #[derive(Clone)]
 pub struct AddCardState {
@@ -12,7 +13,9 @@ pub struct AddCardState {
 }
 
 impl AddCardState {
-    pub fn new(graph: GraphRep, app: App, entries: CardEntries) -> Self {
+    pub fn new(graph: GraphRep) -> Self {
+        let entries = CARDS.cloned();
+        let app = APP.read().clone();
         Self {
             viewer: CardViewer::new(graph, app, entries),
         }
@@ -21,7 +24,7 @@ impl AddCardState {
 
 #[component]
 pub fn Add() -> Element {
-    let selv = use_context::<AddCardState>();
+    let selv = ADD_CARDS.cloned();
 
     rsx! {
         div {

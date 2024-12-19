@@ -10,11 +10,10 @@ use speki_web::BrowsePage;
 use tracing::info;
 
 use crate::components::GraphRep;
+use crate::overlays::card_selector;
 use crate::overlays::card_selector::CardSelector;
-use crate::utils::CardEntries;
-use crate::Komponent;
-use crate::{overlays::card_selector, App};
-use crate::{OverlayManager, Popup};
+use crate::{Komponent, APP, BROWSE_STATE, OVERLAY};
+use crate::{Popup, CARDS};
 
 #[derive(Clone)]
 pub struct CardEntry {
@@ -42,7 +41,8 @@ pub struct BrowseState {
 }
 
 impl BrowseState {
-    pub fn new(entries: CardEntries) -> Self {
+    pub fn new() -> Self {
+        let entries = CARDS.cloned();
         info!("creating browse state!");
         let browse_menu: Signal<BrowsePage> = Default::default();
 
@@ -98,7 +98,7 @@ impl BrowseState {
 
     pub async fn refresh_cards(&self) {
         info!("refreshing cards");
-        let app = use_context::<App>();
+        let app = APP.cloned();
         let mut out = vec![];
         for card in app.as_ref().load_all_cards().await {
             out.push(CardEntry {
@@ -112,7 +112,7 @@ impl BrowseState {
 
     fn view_card(&self, card: Arc<Card<AnyType>>) -> Element {
         info!("YY rendering display_card");
-        let app = use_context::<App>();
+        let app = APP.cloned();
 
         let mut front_input = self.front_input.clone();
         let mut back_input = self.back_input.clone();
@@ -160,7 +160,7 @@ impl BrowseState {
                                 done: Signal::new_in_scope(false, ScopeId(3)),
                             };
                             let pop: Popup = Box::new(props);
-                            use_context::<OverlayManager>().set(pop);
+                            OVERLAY.cloned().set(pop);
                         },
                         "set dependency"
                     }
@@ -226,7 +226,7 @@ impl BrowseState {
 #[component]
 pub fn Browse() -> Element {
     info!("browse!");
-    let browse_state = use_context::<BrowseState>();
+    let browse_state = BROWSE_STATE.cloned();
     browse_state.maybe_refresh();
     let selected_card = browse_state.browse_menu.clone();
     browse_state.set_selected();

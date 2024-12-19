@@ -24,7 +24,6 @@ speki-dto.workspace = true
 uuid.workspace = true
 serde-wasm-bindgen.workspace = true
 
-
 [features]
 fs = ["dep:rayon", "dep:serde", "dep:dirs"]
 dexie = [

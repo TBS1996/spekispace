@@ -17,7 +17,7 @@ use speki_web::{NodeMetadata, Origin};
 use tracing::info;
 use web_sys::window;
 
-use crate::{js, ROUTE_CHANGE};
+use crate::{js, APP, ROUTE_CHANGE};
 use crate::{App, Komponent};
 
 #[derive(Default)]
@@ -66,7 +66,7 @@ pub struct GraphRep {
 impl GraphRep {
     pub fn init(new_card_hook: Option<Arc<Box<dyn Fn(Arc<Card<AnyType>>)>>>) -> Self {
         let id = format!("cyto_id-{}", COUNTER.fetch_add(1, Ordering::SeqCst));
-        let app = use_context::<App>();
+        let app = APP.cloned();
         Self {
             app,
             inner: Default::default(),

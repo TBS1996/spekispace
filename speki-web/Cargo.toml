@@ -25,7 +25,6 @@ wasm-bindgen.workspace = true
 futures.workspace = true
 futures-util.workspace = true
 gloo-utils.workspace = true
-gloo-net.workspace = true
 js-sys.workspace = true
 serde.workspace = true
 serde-wasm-bindgen.workspace = true
