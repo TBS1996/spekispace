@@ -168,3 +168,16 @@ pub fn sync_repo(info: LoginState) {
         js::_sync_repo(REPO_PATH, &token, PROXY);
     }
 }
+
+#[wasm_bindgen(module = "/assets/git.js")]
+extern "C" {
+    fn syncRepo(path: &JsValue, token: &JsValue, proxy: &JsValue);
+}
+
+pub fn _sync_repo(path: &str, token: &str, proxy: &str) {
+    info!("lets sync :D");
+    let path = JsValue::from_str(path);
+    let token = JsValue::from_str(token);
+    let proxy = JsValue::from_str(proxy);
+    syncRepo(&path, &token, &proxy);
+}

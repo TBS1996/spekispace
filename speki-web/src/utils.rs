@@ -6,7 +6,6 @@ use tracing::info;
 
 use crate::{
     firebase::{sign_in, FirestoreProvider},
-    js,
     pages::CardEntry,
     APP,
 };
@@ -26,11 +25,19 @@ impl Debug for App {
     }
 }
 
+use wasm_bindgen::prelude::*;
+
+#[wasm_bindgen]
+extern "C" {
+    #[wasm_bindgen(js_namespace = Date)]
+    fn now() -> f64;
+}
+
 struct WasmTime;
 
 impl TimeProvider for WasmTime {
     fn current_time(&self) -> Duration {
-        js::current_time()
+        Duration::from_millis(now() as u64)
     }
 }
 

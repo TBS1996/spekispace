@@ -17,7 +17,6 @@ use crate::{
 //mod github;
 mod components;
 mod firebase;
-mod js;
 mod nav;
 mod overlays;
 mod pages;
