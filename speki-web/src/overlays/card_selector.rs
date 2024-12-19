@@ -25,7 +25,11 @@ impl Komponent for CardSelector {
         let filtered_cards: Vec<_> = self
             .cards
             .iter()
-            .filter(|card| card.front.contains(&search.cloned()))
+            .filter(|card| {
+                card.front
+                    .to_lowercase()
+                    .contains(&search.cloned().to_lowercase())
+            })
             .take(50)
             .zip(std::iter::repeat_with(|| Arc::clone(&closure)))
             .map(|(card, closure)| (card.clone(), closure, self.done.clone()))
