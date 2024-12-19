@@ -52,7 +52,7 @@ impl RustGraph {
         (origin, inner)
     }
 
-    pub async fn refresh(&self, origin: Origin) {
+    pub async fn set_origin(&self, origin: Origin) {
         let (origin, graph) = Self::origin_and_graph(origin).await;
         *self.inner.lock().unwrap() = graph;
         *self.origin.lock().unwrap() = Some(origin);

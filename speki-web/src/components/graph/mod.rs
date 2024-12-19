@@ -70,7 +70,7 @@ impl GraphRep {
     }
 
     async fn set_card(&self, origin: Origin) {
-        self.refresh(origin).await;
+        self.set_origin(origin).await;
         self.create_cyto_instance().await;
     }
 
@@ -84,8 +84,15 @@ impl GraphRep {
         }
     }
 
-    async fn refresh(&self, origin: Origin) {
-        self.inner.refresh(origin).await;
+    pub async fn set_origin(&self, origin: Origin) {
+        self.inner.set_origin(origin).await;
+    }
+
+    pub async fn _refresh(&self) {
+        match self.inner.origin() {
+            Some(origin) => self.set_origin(origin).await,
+            None => self.clear().await,
+        }
     }
 
     fn is_init(&self) -> bool {
@@ -130,7 +137,6 @@ impl Komponent for GraphRep {
                         let card = Arc::new(card);
                         if let Some(hook) = selv.new_card_hook.as_ref() {
                             (hook)(card.clone());
-                            //selv.set_card(Origin::Card(id)).await;
                         }
                     });
                 }

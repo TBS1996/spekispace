@@ -189,6 +189,12 @@ impl Komponent for CardViewer {
                             let fun = move |card: Arc<Card<AnyType>>| {
                                 selv.dependencies.clone().write().push(card.id);
                                 selv.set_graph();
+                                let old_card = selv.old_card.cloned();
+                                spawn(async move {
+                                    if let Some(old_card) = old_card {
+                                        Arc::unwrap_or_clone(old_card).add_dependency(card.id).await;
+                                    }
+                                });
                             };
 
                             let props = CardSelector::dependency_picker(Box::new(fun));
