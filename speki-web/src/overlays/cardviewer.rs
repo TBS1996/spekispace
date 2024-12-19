@@ -10,12 +10,13 @@ use uuid::Uuid;
 use crate::{
     components::{BackPut, CardRef, CardTy, FrontPut, GraphRep},
     overlays::card_selector::CardSelector,
-    overlays::{PopTray, Popup},
     utils::{App, CardEntries},
     OVERLAY,
 };
 
 use crate::components::Komponent;
+
+use super::Overlay;
 
 pub struct CardRep {
     ty: AnyType,
@@ -198,8 +199,7 @@ impl Komponent for CardViewer {
 
                             let props = CardSelector::dependency_picker(Box::new(fun));
 
-                            let pop: Popup = Box::new(props);
-                            OVERLAY.cloned().set(pop);
+                            OVERLAY.cloned().set(Box::new(props));
                     },
                     "add dependency"
                 }
@@ -237,7 +237,7 @@ impl Komponent for CardViewer {
     }
 }
 
-impl PopTray for CardViewer {
+impl Overlay for CardViewer {
     fn is_done(&self) -> Signal<bool> {
         self.is_done.clone()
     }

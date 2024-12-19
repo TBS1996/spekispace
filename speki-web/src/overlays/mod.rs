@@ -1,6 +1,6 @@
-use std::sync::{
-    atomic::{AtomicUsize, Ordering},
-    Arc, RwLock,
+use std::{
+    collections::HashMap,
+    sync::{Arc, RwLock},
 };
 
 use dioxus::prelude::*;
@@ -11,24 +11,16 @@ use crate::{components::Komponent, Route};
 pub mod card_selector;
 pub mod cardviewer;
 
-pub trait PopTray: Komponent {
+pub trait Overlay: Komponent {
     fn is_done(&self) -> Signal<bool>;
 }
 
-#[derive(Clone, Default)]
-pub struct PopupEntry {
-    cards: Arc<RwLock<Vec<Arc<Popup>>>>,
-    scope: Arc<AtomicUsize>,
-}
-
-pub type Popup = Box<dyn PopTray>;
+pub type Popup = Box<dyn Overlay>;
 
 #[derive(Clone, Default)]
 pub struct OverlayManager {
-    home: PopupEntry,
-    review: PopupEntry,
-    add: PopupEntry,
-    browse: PopupEntry,
+    overlays: Arc<RwLock<HashMap<Route, Vec<Arc<Box<dyn Overlay>>>>>>,
+    scopes: Arc<RwLock<HashMap<Route, ScopeId>>>,
 }
 
 impl OverlayManager {
@@ -36,22 +28,31 @@ impl OverlayManager {
         Self::default()
     }
 
-    pub fn set(&self, popup: Popup) {
-        info!("set popup");
-        self.get().cards.write().unwrap().push(Arc::new(popup));
-        self.get_scope().needs_update();
+    fn update_scope(&self) {
+        let route = use_route::<Route>();
+        self.scopes
+            .read()
+            .unwrap()
+            .get(&route)
+            .unwrap()
+            .needs_update();
     }
 
-    pub fn _replace(&self, popup: Popup) {
-        info!("replace popup");
-        let entry = self.get();
-        let mut guard = entry.cards.write().unwrap();
-        guard.pop();
-        guard.push(Arc::new(popup));
+    pub fn set(&self, popup: Popup) {
+        info!("set popup");
+        let popup = Arc::new(popup);
+        let route = use_route::<Route>();
+        self.overlays
+            .try_write()
+            .unwrap()
+            .entry(route)
+            .or_default()
+            .push(popup);
+        self.update_scope();
     }
 
     pub fn render(&self) -> Option<Element> {
-        info!("render popup!");
+        info!("render popup!?");
 
         if let Ok(scope) = current_scope_id() {
             info!("overlay scope id: {scope:?}");
@@ -74,34 +75,25 @@ impl OverlayManager {
     }
 
     fn get_last_not_done(&self) -> Option<Arc<Popup>> {
+        let route = use_route::<Route>();
         loop {
-            let last = self.get().cards.read().unwrap().last().cloned()?;
+            let last = self.overlays.read().unwrap().get(&route)?.last().cloned()?;
+
             if last.is_done().cloned() {
-                self.get().cards.write().unwrap().pop();
+                self.overlays
+                    .write()
+                    .unwrap()
+                    .get_mut(&route)
+                    .unwrap()
+                    .pop();
             } else {
                 return Some(last);
             }
         }
     }
 
-    fn get(&self) -> PopupEntry {
-        let route = use_route::<Route>();
-        match route {
-            Route::Home {} => self.home.clone(),
-            Route::Review {} => self.review.clone(),
-            Route::Add {} => self.add.clone(),
-            Route::Browse {} => self.browse.clone(),
-        }
-    }
-
     fn set_scope(&self, scope: ScopeId) {
-        let entry = self.get();
-        entry.scope.store(scope.0, Ordering::SeqCst);
-    }
-
-    fn get_scope(&self) -> ScopeId {
-        let scope = ScopeId(self.get().scope.load(Ordering::SeqCst));
-        info!("got scope: {scope:?}");
-        scope
+        let route = use_route::<Route>();
+        self.scopes.write().unwrap().insert(route, scope);
     }
 }

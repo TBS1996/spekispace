@@ -4,7 +4,7 @@ use dioxus::prelude::*;
 use speki_core::{AnyType, Card};
 
 use crate::components::Komponent;
-use crate::{overlays::PopTray, pages::CardEntry, CARDS};
+use crate::{overlays::Overlay, pages::CardEntry, CARDS};
 
 #[derive(Props, Clone)]
 pub struct CardSelector {
@@ -96,7 +96,7 @@ impl Komponent for CardSelector {
     }
 }
 
-impl PopTray for CardSelector {
+impl Overlay for CardSelector {
     fn is_done(&self) -> Signal<bool> {
         self.done.clone()
     }

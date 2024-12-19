@@ -53,6 +53,12 @@ impl ReviewState {
         self.next_card().await;
     }
 
+    pub async fn do_review(&mut self, review: Recall) {
+        info!("do review");
+        self.make_review(review).await;
+        self.next_card().await;
+    }
+
     async fn make_review(&self, recall: Recall) {
         info!("make review");
         self.card.cloned().unwrap().add_review(recall).await;
@@ -60,12 +66,6 @@ impl ReviewState {
 
     fn current_pos(&self) -> usize {
         self.tot_len - self.queue.lock().unwrap().len()
-    }
-
-    pub async fn do_review(&mut self, review: Recall) {
-        info!("do review");
-        self.make_review(review).await;
-        self.next_card().await;
     }
 
     async fn next_card(&mut self) {
