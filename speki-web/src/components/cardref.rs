@@ -18,7 +18,7 @@ pub struct CardRef {
 impl CardRef {
     pub fn new(cards: Signal<Vec<CardEntry>>) -> Self {
         Self {
-            card: Default::default(),
+            card: Signal::new_in_scope(Default::default(), ScopeId(3)),
             display: Signal::new(PLACEHOLDER.to_string()),
             cards,
         }

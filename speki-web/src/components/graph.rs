@@ -1,5 +1,5 @@
 use std::{
-    collections::{HashMap, HashSet},
+    collections::{BTreeSet, HashMap, HashSet},
     fmt::Debug,
     sync::{
         atomic::{AtomicBool, AtomicUsize, Ordering},
@@ -12,7 +12,8 @@ use petgraph::algo::is_cyclic_directed;
 use petgraph::graph::{DiGraph, NodeIndex};
 use petgraph::visit::EdgeRef;
 use speki_core::{AnyType, Card};
-use speki_dto::CType;
+use speki_dto::{CType, CardId};
+use speki_web::{NodeMetadata, Origin};
 use tracing::info;
 use web_sys::window;
 
@@ -22,20 +23,19 @@ use crate::{App, Komponent};
 #[derive(Default)]
 struct InnerGraph {
     graph: DiGraph<NodeMetadata, ()>,
-    card: Option<Arc<Card<AnyType>>>,
+    origin: Option<Origin>,
     _selected_edge: Option<petgraph::prelude::EdgeIndex>,
 }
 
 impl InnerGraph {
-    pub async fn new(app: App, card: Arc<Card<AnyType>>) -> Self {
-        let card = (*card).clone().refresh().await;
-        let mut graph = create_graph(app, card.clone()).await;
+    pub async fn new(app: App, origin: Origin) -> Self {
+        let mut graph = create_graph(app, origin.clone()).await;
         transitive_reduction(&mut graph);
 
         assert!(!is_cyclic_directed(&graph));
 
         Self {
-            card: Some(card),
+            origin: Some(origin),
             graph,
             _selected_edge: None,
         }
@@ -63,6 +63,84 @@ pub struct GraphRep {
     new_card_hook: Option<Arc<Box<dyn Fn(Arc<Card<AnyType>>)>>>,
 }
 
+impl GraphRep {
+    pub fn init(new_card_hook: Option<Arc<Box<dyn Fn(Arc<Card<AnyType>>)>>>) -> Self {
+        let id = format!("cyto_id-{}", COUNTER.fetch_add(1, Ordering::SeqCst));
+        let app = use_context::<App>();
+        Self {
+            app,
+            inner: Default::default(),
+            is_init: Default::default(),
+            cyto_id: Arc::new(id),
+            new_card_hook,
+        }
+    }
+
+    pub fn new_set_card_rep(&self, node: NodeMetadata, dependencies: Vec<CardId>) {
+        let origin = Origin::Nope {
+            node,
+            dependencies,
+            dependents: vec![],
+        };
+        speki_web::set_graphaction(
+            self.cyto_id.to_string(),
+            speki_web::GraphAction::FromRust(origin),
+        );
+    }
+
+    pub fn new_set_card(&self, card: Arc<Card<AnyType>>) {
+        speki_web::set_graphaction(
+            self.cyto_id.to_string(),
+            speki_web::GraphAction::FromRust(Origin::Card(card.id)),
+        );
+    }
+
+    async fn set_card(&self, origin: Origin) {
+        self.refresh(origin).await;
+        self.create_cyto_instance().await;
+    }
+
+    pub async fn clear(&self) {
+        {
+            let new = InnerGraph::default();
+            let mut inner = self.inner.lock().unwrap();
+            *inner = new;
+        }
+        create_cyto_graph(&self.cyto_id, &Default::default());
+    }
+
+    async fn refresh(&self, origin: Origin) {
+        let new = InnerGraph::new(self.app.clone(), origin).await;
+        let mut inner = self.inner.lock().unwrap();
+        *inner = new;
+    }
+
+    fn is_init(&self) -> bool {
+        self.is_init.load(Ordering::SeqCst)
+    }
+
+    fn is_dom_rendered(&self) -> bool {
+        is_element_present(&self.cyto_id)
+    }
+
+    async fn create_cyto_instance(&self) {
+        let (graph, card) = {
+            let guard = self.inner.lock().unwrap();
+            let card = guard.origin.clone();
+            let graph = guard.graph.clone();
+            (graph, card)
+        };
+
+        let Some(card) = card else {
+            return;
+        };
+
+        create_cyto_graph(&self.cyto_id, &graph);
+        adjust_graph(&self.cyto_id, card.id().to_string());
+        self.is_init.store(true, Ordering::SeqCst);
+    }
+}
+
 impl Komponent for GraphRep {
     fn render(&self) -> Element {
         let scope = current_scope_id().unwrap();
@@ -75,14 +153,19 @@ impl Komponent for GraphRep {
 
             let app = self.app.clone();
             match whatever {
-                speki_web::GraphAction::NodeClick(card) => {
+                speki_web::GraphAction::NodeClick(id) => {
+                    info!("node clicked!");
+
                     spawn(async move {
-                        let card = app.0.load_card(card).await.unwrap();
+                        let Some(card) = app.0.load_card(id).await else {
+                            return;
+                        };
+
                         let card = Arc::new(card);
                         if let Some(hook) = selv.new_card_hook.as_ref() {
                             (hook)(card.clone());
+                            selv.set_card(Origin::Card(id)).await;
                         }
-                        selv.set_card(card).await;
                     });
                 }
                 speki_web::GraphAction::FromRust(card) => {
@@ -92,9 +175,33 @@ impl Komponent for GraphRep {
                 }
                 speki_web::GraphAction::EdgeClick((from, to)) => {
                     spawn(async move {
-                        let mut first = app.0.load_card(from).await.unwrap();
-                        first.rm_dependency(to).await;
-                        selv.set_card(Arc::new(first)).await;
+                        let origin = selv.inner.lock().unwrap().origin.clone().unwrap();
+                        match origin {
+                            Origin::Card(_) => {
+                                let mut first = app.0.load_card(from).await.unwrap();
+                                first.rm_dependency(to).await;
+                                selv.set_card(Origin::Card(from)).await;
+                            }
+                            Origin::Nope {
+                                node,
+                                mut dependencies,
+                                mut dependents,
+                            } => {
+                                let totlen = dependencies.len() + dependents.len();
+
+                                dependencies.retain(|dep| dep != &to);
+                                dependents.retain(|dep| dep != &to);
+
+                                assert!(totlen != dependencies.len() + dependents.len());
+
+                                selv.set_card(Origin::Nope {
+                                    node,
+                                    dependencies,
+                                    dependents,
+                                })
+                                .await;
+                            }
+                        }
                     });
                 }
             };
@@ -132,63 +239,6 @@ impl Komponent for GraphRep {
                 style: "width: 800px; height: 600px; border: 1px solid black;",
             }
         }
-    }
-}
-
-impl GraphRep {
-    pub fn init(new_card_hook: Option<Arc<Box<dyn Fn(Arc<Card<AnyType>>)>>>) -> Self {
-        let id = format!("cyto_id-{}", COUNTER.fetch_add(1, Ordering::SeqCst));
-        let app = use_context::<App>();
-        Self {
-            app,
-            inner: Default::default(),
-            is_init: Default::default(),
-            cyto_id: Arc::new(id),
-            new_card_hook,
-        }
-    }
-
-    pub fn new_set_card(&self, card: Arc<Card<AnyType>>) {
-        speki_web::set_graphaction(
-            self.cyto_id.to_string(),
-            speki_web::GraphAction::FromRust(card),
-        );
-    }
-
-    async fn set_card(&self, card: Arc<Card<AnyType>>) {
-        self.refresh(card).await;
-        self.create_cyto_instance().await;
-    }
-
-    async fn refresh(&self, card: Arc<Card<AnyType>>) {
-        let new = InnerGraph::new(self.app.clone(), card).await;
-        let mut inner = self.inner.lock().unwrap();
-        *inner = new;
-    }
-
-    fn is_init(&self) -> bool {
-        self.is_init.load(Ordering::SeqCst)
-    }
-
-    fn is_dom_rendered(&self) -> bool {
-        is_element_present(&self.cyto_id)
-    }
-
-    async fn create_cyto_instance(&self) {
-        let (graph, card) = {
-            let guard = self.inner.lock().unwrap();
-            let card = guard.card.clone();
-            let graph = guard.graph.clone();
-            (graph, card)
-        };
-
-        let Some(card) = card else {
-            return;
-        };
-
-        create_cyto_graph(&self.cyto_id, &graph);
-        adjust_graph(&self.cyto_id, card.clone());
-        self.is_init.store(true, Ordering::SeqCst);
     }
 }
 
@@ -251,12 +301,105 @@ fn card_ty_to_shape(ty: CType) -> &'static str {
     Shape::from_ctype(ty).as_str()
 }
 
-#[derive(Clone, Debug)]
-struct NodeMetadata {
-    id: String,
-    label: String,
-    color: String,
-    ty: CType,
+async fn inner_create_graph(
+    app: App,
+    origin: NodeMetadata,
+    dependencies: Vec<CardId>,
+    dependents: Vec<CardId>,
+) -> DiGraph<NodeMetadata, ()> {
+    let mut graph = DiGraph::new();
+    let origin_index = graph.add_node(origin.clone());
+    let mut node_map: HashMap<String, NodeIndex> = HashMap::new();
+    node_map.insert(origin.id.clone(), origin_index);
+
+    let mut all_cards = BTreeSet::new();
+
+    for dep in dependencies.clone() {
+        let dep = Arc::new(app.0.load_card(dep).await.unwrap());
+        all_cards.insert(dep.clone());
+        for dep in dep.all_dependencies().await {
+            let dep = app.0.load_card(dep).await.unwrap();
+            all_cards.insert(Arc::new(dep));
+        }
+    }
+
+    for dep in dependents.clone() {
+        let dep = Arc::new(app.0.load_card(dep).await.unwrap());
+        all_cards.insert(dep.clone());
+        for dep in dep.all_dependents().await {
+            let dep = app.0.load_card(dep).await.unwrap();
+            all_cards.insert(Arc::new(dep));
+        }
+    }
+
+    for card_ref in &all_cards {
+        let id = card_ref.id.into_inner().to_string();
+        if !node_map.contains_key(&id) {
+            let node = NodeMetadata::from_card(card_ref, false).await;
+            let node_index = graph.add_node(node);
+            node_map.insert(id, node_index);
+        }
+    }
+
+    let mut edges = HashSet::<(NodeIndex, NodeIndex)>::default();
+
+    for card_ref in &all_cards {
+        let from_id = card_ref.id.to_string();
+        if let Some(&from_idx) = node_map.get(&from_id) {
+            for dependency in card_ref.dependency_ids().await {
+                let to_id = dependency.into_inner().to_string();
+                if let Some(&to_idx) = node_map.get(&to_id) {
+                    edges.insert((from_idx, to_idx));
+                }
+            }
+        }
+    }
+
+    for (from_idx, to_idx) in edges {
+        graph.add_edge(from_idx, to_idx, ());
+    }
+
+    for dep in dependencies {
+        let from_idx = origin_index;
+        let to_idx = *node_map.get(&dep.to_string()).unwrap();
+        graph.add_edge(from_idx, to_idx, ());
+    }
+
+    for dep in dependents {
+        let from_idx = *node_map.get(&dep.to_string()).unwrap();
+        let to_idx = origin_index;
+        graph.add_edge(from_idx, to_idx, ());
+    }
+
+    graph
+}
+
+async fn create_graph(app: App, origin: Origin) -> DiGraph<NodeMetadata, ()> {
+    let (origin, dependencies, dependents) = match origin {
+        Origin::Card(id) => {
+            let card = app.0.load_card(id).await.unwrap();
+            let mut dependents = vec![];
+            let mut dependencies = vec![];
+
+            for dep in card.dependency_ids().await {
+                dependencies.push(dep);
+            }
+
+            for dep in card.dependents().await {
+                dependents.push(dep.id);
+            }
+
+            let origin = NodeMetadata::from_card(&card, true).await;
+            (origin, dependencies, dependents)
+        }
+        Origin::Nope {
+            node,
+            dependencies,
+            dependents,
+        } => (node, dependencies, dependents),
+    };
+
+    inner_create_graph(app, origin, dependencies, dependents).await
 }
 
 fn create_cyto_graph(cyto_id: &str, graph: &DiGraph<NodeMetadata, ()>) {
@@ -284,77 +427,10 @@ fn create_cyto_graph(cyto_id: &str, graph: &DiGraph<NodeMetadata, ()>) {
     }
 }
 
-fn adjust_graph(cyto_id: &str, card: Arc<Card<AnyType>>) {
+fn adjust_graph(cyto_id: &str, origin: String) {
     info!("adjust graph");
-    let id = card.id.into_inner().to_string();
-    js::run_layout(cyto_id, &id);
-    js::zoom_to_node(cyto_id, &id);
-}
-
-async fn create_graph(app: App, card: Arc<Card<AnyType>>) -> DiGraph<NodeMetadata, ()> {
-    info!("creating graph from card: {}", card.print().await);
-    let mut graph = DiGraph::new();
-    let mut node_map: HashMap<String, NodeIndex> = HashMap::new();
-
-    let mut all_cards = Vec::new();
-
-    for dependency in card.all_dependencies().await {
-        if let Some(dep_card) = app.as_ref().load_card(dependency).await {
-            all_cards.push(Arc::new(dep_card));
-        }
-    }
-
-    for dependent in card.all_dependents().await {
-        if let Some(dep_card) = app.as_ref().load_card(dependent).await {
-            all_cards.push(Arc::new(dep_card));
-        }
-    }
-
-    all_cards.push(card.clone());
-
-    for card_ref in &all_cards {
-        let id = card_ref.id.into_inner().to_string();
-        if !node_map.contains_key(&id) {
-            let label = card_ref.print().await;
-            let color = if Arc::ptr_eq(&card, card_ref) {
-                "#34ebdb".to_string()
-            } else {
-                "#32a852".to_string()
-            };
-
-            let ty = card_ref.card_type().fieldless();
-
-            let metadata = NodeMetadata {
-                id: id.clone(),
-                label,
-                color,
-                ty,
-            };
-
-            let node_index = graph.add_node(metadata);
-            node_map.insert(id, node_index);
-        }
-    }
-
-    let mut edges = HashSet::<(NodeIndex, NodeIndex)>::default();
-
-    for card_ref in &all_cards {
-        let from_id = card_ref.id.into_inner().to_string();
-        if let Some(&from_idx) = node_map.get(&from_id) {
-            for dependency in card_ref.dependency_ids().await {
-                let to_id = dependency.into_inner().to_string();
-                if let Some(&to_idx) = node_map.get(&to_id) {
-                    edges.insert((from_idx, to_idx));
-                }
-            }
-        }
-    }
-
-    for (from_idx, to_idx) in edges {
-        graph.add_edge(from_idx, to_idx, ());
-    }
-
-    graph
+    js::run_layout(cyto_id, &origin);
+    js::zoom_to_node(cyto_id, &origin);
 }
 
 #[cfg(test)]

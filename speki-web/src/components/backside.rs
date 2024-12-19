@@ -8,13 +8,14 @@ use tracing::info;
 
 use crate::{
     components::{CardRef, DropDownMenu},
+    utils::CardEntries,
     Komponent,
 };
 
 #[derive(Clone)]
 pub struct BackPut {
-    text: Signal<String>,
-    dropdown: DropDownMenu<BackOpts>,
+    pub text: Signal<String>,
+    pub dropdown: DropDownMenu<BackOpts>,
     pub ref_card: CardRef,
 }
 
@@ -44,10 +45,11 @@ impl Komponent for BackPut {
 
 impl BackPut {
     pub fn new() -> Self {
+        let entries = use_context::<CardEntries>();
         Self {
-            text: Default::default(),
+            text: Signal::new_in_scope(Default::default(), ScopeId(3)),
             dropdown: DropDownMenu::new(BackOpts::iter()),
-            ref_card: CardRef::new(Default::default()),
+            ref_card: CardRef::new(entries.cards.clone()),
         }
     }
 
@@ -89,7 +91,7 @@ impl BackPut {
 }
 
 #[derive(Default, Copy, Clone, Debug, Serialize, Deserialize, EnumIter)]
-enum BackOpts {
+pub enum BackOpts {
     #[default]
     Text,
     Card,

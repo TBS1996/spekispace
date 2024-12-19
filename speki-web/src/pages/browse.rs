@@ -111,7 +111,7 @@ impl BrowseState {
     }
 
     fn view_card(&self, card: Arc<Card<AnyType>>) -> Element {
-        info!("XX rendering display_card");
+        info!("YY rendering display_card");
         let app = use_context::<App>();
 
         let mut front_input = self.front_input.clone();

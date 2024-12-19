@@ -61,7 +61,7 @@ impl FrontPut {
     pub fn new() -> Self {
         Self {
             dropdown: DropDownMenu::new(CardTy::iter()),
-            text: Default::default(),
+            text: Signal::new_in_scope(Default::default(), ScopeId(3)),
         }
     }
 

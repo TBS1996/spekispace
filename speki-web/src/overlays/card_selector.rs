@@ -3,7 +3,7 @@ use std::{rc::Rc, sync::Arc};
 use dioxus::prelude::*;
 use speki_core::{AnyType, Card};
 
-use crate::{pages::CardEntry, Komponent, PopTray};
+use crate::{pages::CardEntry, utils::CardEntries, Komponent, PopTray};
 
 #[derive(Props, Clone)]
 pub struct CardSelector {
@@ -12,6 +12,20 @@ pub struct CardSelector {
     pub on_card_selected: Rc<dyn Fn(Arc<Card<AnyType>>)>,
     pub cards: Signal<Vec<CardEntry>>,
     pub done: Signal<bool>,
+}
+
+impl CardSelector {
+    pub fn dependency_picker(f: Box<dyn Fn(Arc<Card<AnyType>>)>) -> Self {
+        let cards = use_context::<CardEntries>().cards.clone();
+
+        Self {
+            title: "set dependency".to_string(),
+            search: Signal::new_in_scope(String::default(), ScopeId(3)),
+            on_card_selected: Rc::new(f),
+            cards,
+            done: Signal::new_in_scope(false, ScopeId(3)),
+        }
+    }
 }
 
 impl Komponent for CardSelector {

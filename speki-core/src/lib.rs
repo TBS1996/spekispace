@@ -11,6 +11,7 @@ use reviews::Reviews;
 use samsvar::Matcher;
 use samsvar::Schema;
 use speki_dto::AttributeId;
+use speki_dto::RawCard;
 use speki_dto::SpekiProvider;
 use tracing::instrument;
 use tracing::trace;
@@ -18,7 +19,7 @@ use tracing::trace;
 use crate::card::serializing::new_raw_card;
 
 mod attribute;
-mod card;
+pub mod card;
 mod card_provider;
 mod common;
 mod recall_rate;
@@ -276,6 +277,12 @@ impl App {
         }
 
         ids
+    }
+
+    pub async fn new_from_raw(&self, raw: RawCard) -> Card<AnyType> {
+        let mut card = Card::from_raw(raw, self.card_provider.clone(), self.recaller.clone()).await;
+        card.persist().await;
+        card
     }
 
     pub async fn new_any(&self, any: impl Into<AnyType>) -> Card<AnyType> {

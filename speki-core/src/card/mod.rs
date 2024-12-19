@@ -34,6 +34,7 @@ mod card_types;
 pub(crate) mod serializing;
 
 pub use card_types::*;
+pub use serializing::new_raw_card;
 
 #[async_trait::async_trait(?Send)]
 pub trait CardTrait: Debug + Clone {

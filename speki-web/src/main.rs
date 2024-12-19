@@ -126,8 +126,9 @@ pub fn TheApp() -> Element {
     let graph = GraphRep::init(None);
     use_context_provider(|| ReviewState::new(app.clone(), graph));
     use_context_provider(OverlayManager::new);
+    let graph2 = GraphRep::init(None);
     let entries = use_context_provider(CardEntries::default);
-    let addcard = AddCardState::new(app.clone(), entries.clone());
+    let addcard = AddCardState::new(graph2, app.clone(), entries.clone());
     use_context_provider(|| addcard.clone());
     let browse_state = BrowseState::new(entries.clone());
     use_context_provider(|| browse_state);
