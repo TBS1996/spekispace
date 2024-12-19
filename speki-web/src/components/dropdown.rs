@@ -3,7 +3,7 @@ use std::fmt::Display;
 use dioxus::prelude::*;
 use serde::{Deserialize, Serialize};
 
-use crate::Komponent;
+use super::Komponent;
 
 #[derive(Clone)]
 pub struct DropDownMenu<T>

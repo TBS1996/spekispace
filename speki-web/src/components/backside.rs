@@ -6,9 +6,10 @@ use speki_dto::BackSide;
 use strum::{EnumIter, IntoEnumIterator};
 use tracing::info;
 
+use super::Komponent;
 use crate::{
     components::{CardRef, DropDownMenu},
-    Komponent, CARDS,
+    CARDS,
 };
 
 #[derive(Clone)]

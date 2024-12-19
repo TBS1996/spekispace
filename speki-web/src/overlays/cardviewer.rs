@@ -10,9 +10,12 @@ use uuid::Uuid;
 use crate::{
     components::{BackPut, CardRef, CardTy, FrontPut, GraphRep},
     overlays::card_selector::CardSelector,
+    overlays::{PopTray, Popup},
     utils::{App, CardEntries},
-    Komponent, PopTray, Popup, OVERLAY,
+    OVERLAY,
 };
+
+use crate::components::Komponent;
 
 pub struct CardRep {
     ty: AnyType,

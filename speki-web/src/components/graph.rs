@@ -17,8 +17,9 @@ use speki_web::{NodeMetadata, Origin};
 use tracing::info;
 use web_sys::window;
 
+use super::Komponent;
+use crate::App;
 use crate::{js, APP, ROUTE_CHANGE};
-use crate::{App, Komponent};
 
 #[derive(Default)]
 struct InnerGraph {

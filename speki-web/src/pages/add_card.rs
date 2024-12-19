@@ -1,8 +1,8 @@
 use dioxus::prelude::*;
 
 use crate::components::GraphRep;
+use crate::components::Komponent;
 use crate::overlays::cardviewer::CardViewer;
-use crate::Komponent;
 use crate::ADD_CARDS;
 use crate::APP;
 use crate::CARDS;

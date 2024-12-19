@@ -3,7 +3,8 @@ use std::{rc::Rc, sync::Arc};
 use dioxus::prelude::*;
 use speki_core::{AnyType, Card};
 
-use crate::{pages::CardEntry, Komponent, PopTray, CARDS};
+use crate::components::Komponent;
+use crate::{overlays::PopTray, pages::CardEntry, CARDS};
 
 #[derive(Props, Clone)]
 pub struct CardSelector {

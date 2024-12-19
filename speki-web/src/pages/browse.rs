@@ -10,10 +10,11 @@ use speki_web::BrowsePage;
 use tracing::info;
 
 use crate::components::GraphRep;
+use crate::components::Komponent;
 use crate::overlays::card_selector;
 use crate::overlays::card_selector::CardSelector;
-use crate::{Komponent, APP, BROWSE_STATE, OVERLAY};
-use crate::{Popup, CARDS};
+use crate::{overlays::Popup, CARDS};
+use crate::{APP, BROWSE_STATE, OVERLAY};
 
 #[derive(Clone)]
 pub struct CardEntry {
@@ -111,7 +112,7 @@ impl BrowseState {
     }
 
     fn view_card(&self, card: Arc<Card<AnyType>>) -> Element {
-        info!("YY rendering display_card");
+        info!("rendering display_card");
         let app = APP.cloned();
 
         let mut front_input = self.front_input.clone();

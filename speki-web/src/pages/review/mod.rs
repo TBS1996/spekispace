@@ -4,7 +4,7 @@ use dioxus::prelude::*;
 use speki_dto::Recall;
 use tracing::info;
 
-use crate::{Komponent, REVIEW_STATE};
+use crate::{components::Komponent, REVIEW_STATE};
 
 pub mod review_state;
 
