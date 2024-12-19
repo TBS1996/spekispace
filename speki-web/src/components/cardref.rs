@@ -1,4 +1,4 @@
-use std::{rc::Rc, sync::Arc};
+use std::sync::Arc;
 
 use dioxus::prelude::*;
 use speki_core::{AnyType, Card};
@@ -51,7 +51,7 @@ impl CardRef {
 
         let props = card_selector::CardSelector {
             title: "choose reference".to_string(),
-            on_card_selected: Rc::new(fun),
+            on_card_selected: Arc::new(Box::new(fun)),
             search: Signal::new_in_scope(Default::default(), ScopeId(3)),
             cards,
             done: Signal::new_in_scope(false, ScopeId(3)),

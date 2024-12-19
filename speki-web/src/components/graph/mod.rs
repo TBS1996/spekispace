@@ -130,7 +130,7 @@ impl Komponent for GraphRep {
                         let card = Arc::new(card);
                         if let Some(hook) = selv.new_card_hook.as_ref() {
                             (hook)(card.clone());
-                            selv.set_card(Origin::Card(id)).await;
+                            //selv.set_card(Origin::Card(id)).await;
                         }
                     });
                 }

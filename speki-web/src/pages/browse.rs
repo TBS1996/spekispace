@@ -1,4 +1,4 @@
-use std::{rc::Rc, sync::Arc};
+use std::sync::Arc;
 
 use dioxus::prelude::*;
 use speki_core::{AnyType, Card};
@@ -30,22 +30,25 @@ pub struct BrowseState {
     pub browse_page: CardSelector,
 }
 
+fn overlay_card_viewer() -> Arc<Box<dyn Fn(Arc<Card<AnyType>>)>> {
+    Arc::new(Box::new(move |card: Arc<Card<AnyType>>| {
+        spawn(async move {
+            let viewer =
+                CardViewer::new_from_card(card, GraphRep::init(Some(overlay_card_viewer()))).await;
+            OVERLAY.cloned().replace(Box::new(viewer));
+        });
+    }))
+}
+
 impl BrowseState {
     pub fn new() -> Self {
         let entries = CARDS.cloned();
         info!("creating browse state!");
 
-        let f = move |card: Arc<Card<AnyType>>| {
-            spawn(async move {
-                let x = CardViewer::new_from_card(card, GraphRep::init(None)).await;
-                OVERLAY.cloned().set(Box::new(x));
-            });
-        };
-
         let browse_page = CardSelector {
             title: "browse cards".to_string(),
             search: Default::default(),
-            on_card_selected: Rc::new(f),
+            on_card_selected: overlay_card_viewer(),
             cards: entries.cards.clone(),
             done: Default::default(),
         };

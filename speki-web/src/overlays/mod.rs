@@ -36,6 +36,17 @@ impl OverlayManager {
             .needs_update();
     }
 
+    pub fn replace(&self, popup: Box<dyn Overlay>) {
+        info!("replace popup");
+        let popup = Arc::new(popup);
+        let route = use_route::<Route>();
+        let mut guard = self.overlays.try_write().unwrap();
+        let entry = guard.entry(route).or_default();
+        entry.pop();
+        entry.push(popup);
+        self.update_scope();
+    }
+
     pub fn set(&self, popup: Box<dyn Overlay>) {
         info!("set popup");
         let popup = Arc::new(popup);
