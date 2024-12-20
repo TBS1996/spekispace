@@ -103,7 +103,7 @@ fn Wrapper() -> Element {
     }
 }
 
-#[derive(Clone, Routable, Debug, PartialEq, Hash, Eq)]
+#[derive(Copy, Clone, Routable, Debug, PartialEq, Hash, Eq)]
 pub enum Route {
     #[layout(Wrapper)]
     #[route("/")]

@@ -25,14 +25,22 @@ pub fn tooltip_image(src: &str, msg: &str, img_size: usize, text_size: f32) -> E
 }
 
 fn route_elm(route: Route) -> Element {
-    let label = route.label();
+    let is_current = use_route::<Route>() == route;
+
+    let classes = if is_current {
+        "font-bold text-gray-950 hover:text-gray-650"
+    } else {
+        "text-gray-600 hover:text-gray-500"
+    };
+
     rsx! {
         li {
             class: "mr-12",
-
             Link {
-                class: "hover:text-gray-600",
-                to: route, "{label}"
+                class: "{classes}",
+                to: route,
+                aria_current: if is_current { "page" } else { "" },
+                "{route.label()}"
             }
         }
     }
