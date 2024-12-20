@@ -11,6 +11,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Install Dioxus CLI
+        run: cargo install dioxus-cli
       - run: cd speki-web && dx build --release
       - uses: FirebaseExtended/action-hosting-deploy@v0
         with:
@@ -18,3 +20,4 @@ jobs:
           firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_SPEKI_72569 }}
           channelId: live
           projectId: speki-72569
+
