@@ -7,8 +7,20 @@ use tracing::info;
 use crate::{
     components::{GraphRep, Komponent},
     overlays::{card_selector::CardSelector, cardviewer::CardViewer},
-    BROWSE_STATE, CARDS, OVERLAY,
+    CARDS, OVERLAY,
 };
+
+static BROWSE_STATE: GlobalSignal<BrowseState> = Signal::global(BrowseState::new);
+
+#[component]
+pub fn Browse() -> Element {
+    info!("browse!");
+    let browse_state = BROWSE_STATE.cloned();
+
+    rsx! {
+        { browse_state.browse_page.render() }
+    }
+}
 
 #[derive(Clone)]
 pub struct CardEntry {
@@ -54,15 +66,5 @@ impl BrowseState {
         };
 
         Self { browse_page }
-    }
-}
-
-#[component]
-pub fn Browse() -> Element {
-    info!("browse!");
-    let browse_state = BROWSE_STATE.cloned();
-
-    rsx! {
-        { browse_state.browse_page.render() }
     }
 }

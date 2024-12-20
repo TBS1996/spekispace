@@ -5,11 +5,9 @@ use std::{
     sync::atomic::{AtomicBool, Ordering},
 };
 
-use components::GraphRep;
 use dioxus::prelude::*;
 use dioxus_logger::tracing::{info, Level};
 use overlays::OverlayManager;
-use pages::{add_card::AddCardState, BrowseState, ReviewState};
 use utils::CardEntries;
 
 use crate::{
@@ -35,19 +33,14 @@ fn main() {
     dioxus_logger::init(Level::INFO).expect("failed to init logger");
     info!("starting app");
     let id = current_scope_id();
-    info!("wow very scope id: {id:?}");
+    info!("omg very scope id: {id:?}");
 
     dioxus::launch(TheApp);
 }
 
 static CARDS: GlobalSignal<CardEntries> = Signal::global(CardEntries::default);
-static BROWSE_STATE: GlobalSignal<BrowseState> = Signal::global(BrowseState::new);
 static APP: GlobalSignal<App> = Signal::global(App::new);
 static OVERLAY: GlobalSignal<OverlayManager> = Signal::global(OverlayManager::new);
-static REVIEW_STATE: GlobalSignal<ReviewState> =
-    Signal::global(|| ReviewState::new(GraphRep::default()));
-static ADD_CARDS: GlobalSignal<AddCardState> =
-    Signal::global(|| AddCardState::new(GraphRep::default()));
 
 #[component]
 pub fn TheApp() -> Element {
@@ -72,17 +65,14 @@ pub fn TheApp() -> Element {
 
 #[component]
 fn Wrapper() -> Element {
-    info!("xd wrapper??!!!!!");
-    ROUTE_CHANGE.store(true, Ordering::SeqCst);
     info!("wrapper scope id: {:?}", current_scope_id().unwrap());
+    ROUTE_CHANGE.store(true, Ordering::SeqCst);
     let overlay = OVERLAY.cloned();
 
     let log_event = move |event: Rc<KeyboardData>| {
         if let Key::Escape = event.key() {
             OVERLAY.read().pop();
-            info!("escape!!");
         }
-        info!("event is: {event:?}");
     };
 
     rsx! {

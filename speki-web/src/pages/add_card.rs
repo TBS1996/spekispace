@@ -1,10 +1,8 @@
 use dioxus::prelude::*;
 
-use crate::{
-    components::{GraphRep, Komponent},
-    overlays::cardviewer::CardViewer,
-    ADD_CARDS, APP, CARDS,
-};
+use crate::{components::Komponent, overlays::cardviewer::CardViewer};
+
+static ADD_CARDS: GlobalSignal<AddCardState> = Signal::global(AddCardState::new);
 
 #[derive(Clone)]
 pub struct AddCardState {
@@ -12,11 +10,9 @@ pub struct AddCardState {
 }
 
 impl AddCardState {
-    pub fn new(graph: GraphRep) -> Self {
-        let entries = CARDS.cloned();
-        let app = APP.read().clone();
+    pub fn new() -> Self {
         Self {
-            viewer: CardViewer::new(graph, app, entries),
+            viewer: CardViewer::new(),
         }
     }
 }

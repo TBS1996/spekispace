@@ -22,8 +22,9 @@ pub struct ReviewState {
 }
 
 impl ReviewState {
-    pub fn new(graph: GraphRep) -> Self {
+    pub fn new() -> Self {
         let app = APP.cloned();
+        let graph = GraphRep::init(None);
         Self {
             app,
             card: Default::default(),

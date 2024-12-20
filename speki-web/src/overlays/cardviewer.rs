@@ -10,7 +10,7 @@ use uuid::Uuid;
 use crate::{
     components::{BackPut, CardRef, CardTy, FrontPut, GraphRep, Komponent},
     overlays::{card_selector::CardSelector, Overlay},
-    utils::{App, CardEntries},
+    utils::App,
     APP, CARDS, OVERLAY,
 };
 
@@ -64,15 +64,15 @@ impl CardViewer {
         }
     }
 
-    pub fn new(graph: GraphRep, app: App, entries: CardEntries) -> Self {
+    pub fn new() -> Self {
         Self {
-            app,
+            app: APP.cloned(),
             front: FrontPut::new(),
             back: BackPut::new(),
             dependencies: Signal::new_in_scope(Default::default(), ScopeId(3)),
-            graph,
+            graph: GraphRep::default(),
             is_done: Signal::new_in_scope(false, ScopeId(3)),
-            concept: CardRef::new(entries.classes.clone()),
+            concept: CardRef::new(CARDS.cloned().classes.clone()),
             old_card: Signal::new_in_scope(None, ScopeId(3)),
             save_hook: None,
         }
@@ -199,7 +199,7 @@ impl CardViewer {
                                 });
                             };
 
-                            let viewer = Self::new(GraphRep::default(), APP.cloned(), CARDS.cloned()).with_hook(Arc::new(Box::new(fun)));
+                            let viewer = Self::new().with_hook(Arc::new(Box::new(fun)));
                             OVERLAY.cloned().set(Box::new(viewer));
                     },
                     "add new dependency"

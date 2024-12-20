@@ -4,71 +4,13 @@ use dioxus::prelude::*;
 use speki_dto::Recall;
 use tracing::info;
 
-use crate::{components::Komponent, REVIEW_STATE};
+use crate::components::Komponent;
+
+use super::ReviewState;
 
 pub mod review_state;
 
-fn recall_button(recall: Recall) -> Element {
-    let label = match recall {
-        Recall::None => "unfamiliar",
-        Recall::Late => "recognized",
-        Recall::Some => "recalled",
-        Recall::Perfect => "mastered",
-    };
-
-    rsx! {
-        button {
-            class: "mt-6 inline-flex items-center text-white bg-gray-800 border-0 py-1 px-3 focus:outline-none hover:bg-gray-700 rounded text-base md:mt-0",
-            onclick: move |_| {
-                spawn(async move{
-                    REVIEW_STATE.cloned().do_review(recall).await;
-                });
-            },
-            "{label}"
-
-        }
-    }
-}
-
-fn review_start(mut filter: Signal<String>) -> Element {
-    rsx! {
-        div {
-            class: "flex items-center justify-center h-screen",
-
-            input {
-                class: "w-full border border-gray-300 rounded-md p-2 mb-4 text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent",
-                value: "{filter}",
-                oninput: move |evt| filter.set(evt.value().clone()),
-            },
-
-            button {
-                class: "mt-6 inline-flex items-center text-white bg-gray-800 border-0 py-1 px-3 focus:outline-none hover:bg-gray-700 rounded text-base md:mt-0",
-
-
-                onclick: move |_| {
-                    info!("review..?");
-                    spawn(async move {
-                        info!("nice..?");
-                        REVIEW_STATE.cloned().refresh().await;
-                    });
-                },
-                "Start review"
-            }
-        }
-    }
-}
-
-fn review_buttons() -> Element {
-    rsx! {
-        div {
-            style: "display: flex; gap: 16px; justify-content: center; align-items: center;",
-            { recall_button(Recall::None) }
-            { recall_button(Recall::Late) }
-            { recall_button(Recall::Some) }
-            { recall_button(Recall::Perfect) }
-        }
-    }
-}
+static REVIEW_STATE: GlobalSignal<ReviewState> = Signal::global(ReviewState::new);
 
 #[component]
 pub fn Review() -> Element {
@@ -160,6 +102,68 @@ pub fn Review() -> Element {
             } else {
                 { review_start(filter_sig) }
             }
+        }
+    }
+}
+
+fn recall_button(recall: Recall) -> Element {
+    let label = match recall {
+        Recall::None => "unfamiliar",
+        Recall::Late => "recognized",
+        Recall::Some => "recalled",
+        Recall::Perfect => "mastered",
+    };
+
+    rsx! {
+        button {
+            class: "mt-6 inline-flex items-center text-white bg-gray-800 border-0 py-1 px-3 focus:outline-none hover:bg-gray-700 rounded text-base md:mt-0",
+            onclick: move |_| {
+                spawn(async move{
+                    REVIEW_STATE.cloned().do_review(recall).await;
+                });
+            },
+            "{label}"
+
+        }
+    }
+}
+
+fn review_start(mut filter: Signal<String>) -> Element {
+    rsx! {
+        div {
+            class: "flex items-center justify-center h-screen",
+
+            input {
+                class: "w-full border border-gray-300 rounded-md p-2 mb-4 text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent",
+                value: "{filter}",
+                oninput: move |evt| filter.set(evt.value().clone()),
+            },
+
+            button {
+                class: "mt-6 inline-flex items-center text-white bg-gray-800 border-0 py-1 px-3 focus:outline-none hover:bg-gray-700 rounded text-base md:mt-0",
+
+
+                onclick: move |_| {
+                    info!("review..?");
+                    spawn(async move {
+                        info!("nice..?");
+                        REVIEW_STATE.cloned().refresh().await;
+                    });
+                },
+                "Start review"
+            }
+        }
+    }
+}
+
+fn review_buttons() -> Element {
+    rsx! {
+        div {
+            style: "display: flex; gap: 16px; justify-content: center; align-items: center;",
+            { recall_button(Recall::None) }
+            { recall_button(Recall::Late) }
+            { recall_button(Recall::Some) }
+            { recall_button(Recall::Perfect) }
         }
     }
 }
