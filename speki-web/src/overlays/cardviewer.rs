@@ -51,6 +51,8 @@ impl CardViewer {
         let bck = BackPut::new();
         bck.text.clone().set(back);
 
+        let graph = graph.with_label(frnt.text.clone());
+
         Self {
             app,
             front: frnt,
@@ -65,17 +67,22 @@ impl CardViewer {
     }
 
     pub fn new() -> Self {
-        Self {
+        let front = FrontPut::new();
+        let label = front.text.clone();
+        let selv = Self {
             app: APP.cloned(),
-            front: FrontPut::new(),
+            front,
             back: BackPut::new(),
             dependencies: Signal::new_in_scope(Default::default(), ScopeId(3)),
-            graph: GraphRep::default(),
+            graph: GraphRep::default().with_label(label),
             is_done: Signal::new_in_scope(false, ScopeId(3)),
             concept: CardRef::new(CARDS.cloned().classes.clone()),
             old_card: Signal::new_in_scope(None, ScopeId(3)),
             save_hook: None,
-        }
+        };
+
+        selv.set_graph();
+        selv
     }
 
     async fn reset(&self) {

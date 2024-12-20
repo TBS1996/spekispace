@@ -37,6 +37,7 @@ pub struct GraphRep {
     is_init: Arc<AtomicBool>,
     cyto_id: Arc<String>,
     new_card_hook: Option<Arc<Box<dyn Fn(Arc<Card<AnyType>>)>>>,
+    label: Option<Signal<String>>,
 }
 
 impl Default for GraphRep {
@@ -53,7 +54,13 @@ impl GraphRep {
             is_init: Default::default(),
             cyto_id: Arc::new(id),
             new_card_hook,
+            label: Default::default(),
         }
+    }
+
+    pub fn with_label(mut self, label: Signal<String>) -> Self {
+        self.label = Some(label);
+        self
     }
 
     pub fn new_set_card_rep(&self, node: NodeMetadata, dependencies: Vec<CardId>) {
@@ -111,6 +118,10 @@ impl GraphRep {
 
     async fn create_cyto_instance(&self) {
         if self.is_dom_rendered() {
+            if let Some(label) = self.label {
+                let label = label.cloned();
+                self.inner.set_origin_label(&label);
+            }
             self.inner.create_cyto_graph(&self.cyto_id);
             if let Some(origin) = self.inner.origin() {
                 adjust_graph(&self.cyto_id, origin.id().to_string());
@@ -125,6 +136,17 @@ impl Komponent for GraphRep {
         let scope = current_scope_id().unwrap();
         info!("init scope: {scope:?}");
         speki_web::set_refresh_scope(self.cyto_id.to_string(), scope);
+
+        if let Some(label) = self.label.as_ref() {
+            let label = label.cloned();
+            if let Some(origin) = self.inner.origin() {
+                js::update_label(&self.cyto_id, origin, &label);
+            } else {
+                info!("no origin");
+            }
+        } else {
+            info!("no label");
+        }
 
         let selv = self.clone();
         if let Some(whatever) = speki_web::take_graphaction(&self.cyto_id) {

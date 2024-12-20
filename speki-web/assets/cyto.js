@@ -90,9 +90,17 @@ export function createCytoInstance(id) {
     return cy;
 }
 
+export function updateLabel(cy_id, node_id, label) {
+    const cy = getCytoInstance(cy_id); 
+    const node = cy.getElementById(node_id);
+    let thelabel = wrapText(label);
+    node.data("label", thelabel); 
+    runLayout(cy_id, node_id);
+}
+
 export function setContainer(cy_id) {
-    const cy = getCytoInstance(cy_id); // Retrieve the Cytoscape instance
-    const container = document.getElementById(cy_id); // Get the container by ID
+    const cy = getCytoInstance(cy_id); 
+    const container = document.getElementById(cy_id); 
 
     if (container) {
         console.log(`Setting container for Cytoscape instance with ID "${cy_id}"`);

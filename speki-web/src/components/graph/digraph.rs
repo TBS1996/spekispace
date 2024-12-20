@@ -19,10 +19,18 @@ use crate::{App, APP};
 pub struct RustGraph {
     inner: Arc<Mutex<DiGraph<NodeMetadata, ()>>>,
     origin: Arc<Mutex<Option<Origin>>>,
+    org_idx: Arc<Mutex<Option<NodeIndex>>>,
 }
 
 impl RustGraph {
-    async fn origin_and_graph(origin: Origin) -> (Origin, DiGraph<NodeMetadata, ()>) {
+    pub fn set_origin_label(&self, label: &str) {
+        let orgidx = self.org_idx.lock().unwrap().clone().unwrap();
+        let mut guard = self.inner.lock().unwrap();
+        let node = guard.node_weight_mut(orgidx).unwrap();
+        node.label = label.to_string();
+    }
+
+    async fn origin_and_graph(origin: Origin) -> (Origin, DiGraph<NodeMetadata, ()>, NodeIndex) {
         let app = APP.cloned();
         let (org_node, dependencies, dependents) = match origin.clone() {
             Origin::Card(id) => {
@@ -48,14 +56,16 @@ impl RustGraph {
             } => (node, dependencies, dependents),
         };
 
-        let inner = inner_create_graph(app, org_node.clone(), dependencies, dependents).await;
-        (origin, inner)
+        let (inner, idx) =
+            inner_create_graph(app, org_node.clone(), dependencies, dependents).await;
+        (origin, inner, idx)
     }
 
     pub async fn set_origin(&self, origin: Origin) {
-        let (origin, graph) = Self::origin_and_graph(origin).await;
+        let (origin, graph, idx) = Self::origin_and_graph(origin).await;
         *self.inner.lock().unwrap() = graph;
         *self.origin.lock().unwrap() = Some(origin);
+        *self.org_idx.lock().unwrap() = Some(idx);
         self.transitive_reduction();
         assert!(!self.has_cycle());
     }
@@ -125,7 +135,7 @@ async fn inner_create_graph(
     origin: NodeMetadata,
     dependencies: Vec<CardId>,
     dependents: Vec<CardId>,
-) -> DiGraph<NodeMetadata, ()> {
+) -> (DiGraph<NodeMetadata, ()>, NodeIndex) {
     let mut graph = DiGraph::new();
     let origin_index = graph.add_node(origin.clone());
     let mut node_map: HashMap<String, NodeIndex> = HashMap::new();
@@ -190,7 +200,7 @@ async fn inner_create_graph(
         graph.add_edge(from_idx, to_idx, ());
     }
 
-    graph
+    (graph, origin_index)
 }
 
 enum Shape {
