@@ -33,6 +33,11 @@ pub struct CardViewer {
 }
 
 impl CardViewer {
+    pub fn with_hook(mut self, hook: Arc<Box<dyn Fn(Arc<Card<AnyType>>)>>) -> Self {
+        self.save_hook = Some(hook);
+        self
+    }
+
     pub async fn new_from_card(card: Arc<Card<AnyType>>, graph: GraphRep) -> Self {
         graph.new_set_card(card.clone());
         let app = APP.cloned();
@@ -64,7 +69,7 @@ impl CardViewer {
             app,
             front: FrontPut::new(),
             back: BackPut::new(),
-            dependencies: Default::default(),
+            dependencies: Signal::new_in_scope(Default::default(), ScopeId(3)),
             graph,
             is_done: Signal::new_in_scope(false, ScopeId(3)),
             concept: CardRef::new(entries.classes.clone()),
@@ -140,6 +145,7 @@ impl CardViewer {
     fn render_inputs(&self) -> Element {
         let selv = self.clone();
         let selv2 = self.clone();
+        let selv3 = self.clone();
         rsx! {
 
             { self.front.render() }
@@ -180,6 +186,27 @@ impl CardViewer {
                 button {
                     class: "mt-6 inline-flex items-center text-white bg-gray-800 border-0 py-1 px-3 focus:outline-none hover:bg-gray-700 rounded text-base md:mt-0",
                     onclick: move |_| {
+
+                            let selv = selv3.clone();
+                            let fun = move |card: Arc<Card<AnyType>>| {
+                                selv.dependencies.clone().write().push(card.id);
+                                selv.set_graph();
+                                let old_card = selv.old_card.cloned();
+                                spawn(async move {
+                                    if let Some(old_card) = old_card {
+                                        Arc::unwrap_or_clone(old_card).add_dependency(card.id).await;
+                                    }
+                                });
+                            };
+
+                            let viewer = Self::new(GraphRep::default(), APP.cloned(), CARDS.cloned()).with_hook(Arc::new(Box::new(fun)));
+                            OVERLAY.cloned().set(Box::new(viewer));
+                    },
+                    "add new dependency"
+                }
+                button {
+                    class: "mt-6 inline-flex items-center text-white bg-gray-800 border-0 py-1 px-3 focus:outline-none hover:bg-gray-700 rounded text-base md:mt-0",
+                    onclick: move |_| {
                             let selv = selv2.clone();
 
                             let fun = move |card: Arc<Card<AnyType>>| {
@@ -197,7 +224,7 @@ impl CardViewer {
 
                             OVERLAY.cloned().set(Box::new(props));
                     },
-                    "add dependency"
+                    "add existing dependency"
                 }
                 button {
                     class: "mt-6 inline-flex items-center text-white bg-gray-800 border-0 py-1 px-3 focus:outline-none hover:bg-gray-700 rounded text-base md:mt-0",

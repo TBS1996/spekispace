@@ -17,7 +17,6 @@ use crate::{
     utils::App,
 };
 
-//mod github;
 mod components;
 mod firebase;
 mod nav;
@@ -36,7 +35,7 @@ fn main() {
     dioxus_logger::init(Level::INFO).expect("failed to init logger");
     info!("starting app");
     let id = current_scope_id();
-    info!("super very scope id: {id:?}");
+    info!("wow very scope id: {id:?}");
 
     dioxus::launch(TheApp);
 }
