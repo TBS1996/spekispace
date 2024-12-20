@@ -1,6 +1,6 @@
 {
   "hosting": {
-    "public": "dist",
+    "public": "target/dx/speki-web/release/web/public",
     "ignore": [
       "firebase.json",
       "**/.*",
