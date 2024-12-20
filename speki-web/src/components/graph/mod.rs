@@ -39,6 +39,12 @@ pub struct GraphRep {
     new_card_hook: Option<Arc<Box<dyn Fn(Arc<Card<AnyType>>)>>>,
 }
 
+impl Default for GraphRep {
+    fn default() -> Self {
+        Self::init(None)
+    }
+}
+
 impl GraphRep {
     pub fn init(new_card_hook: Option<Arc<Box<dyn Fn(Arc<Card<AnyType>>)>>>) -> Self {
         let id = format!("cyto_id-{}", COUNTER.fetch_add(1, Ordering::SeqCst));
@@ -208,9 +214,7 @@ impl Komponent for GraphRep {
         rsx! {
             div {
                 id: "{cyto_id}",
-                class: "w-full h-full", // Tailwind classes
-           //     style: "width: 800px; height: 600px; border: 1px solid black;",
-               // style: "width: 100%; height: 100%; border: 1px solid black;",
+                class: "w-full h-full",
 
             }
         }

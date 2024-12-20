@@ -38,13 +38,8 @@ impl OverlayManager {
 
     pub fn replace(&self, popup: Box<dyn Overlay>) {
         info!("replace popup");
-        let popup = Arc::new(popup);
-        let route = use_route::<Route>();
-        let mut guard = self.overlays.try_write().unwrap();
-        let entry = guard.entry(route).or_default();
-        entry.pop();
-        entry.push(popup);
-        self.update_scope();
+        self.pop();
+        self.set(popup);
     }
 
     pub fn set(&self, popup: Box<dyn Overlay>) {
@@ -83,18 +78,24 @@ impl OverlayManager {
         })
     }
 
-    fn get_last_not_done(&self) -> Option<Arc<Box<dyn Overlay>>> {
+    pub fn pop(&self) -> Option<Arc<Box<dyn Overlay>>> {
         let route = use_route::<Route>();
-        loop {
-            let last = self.overlays.read().unwrap().get(&route)?.last().cloned()?;
+        let pop = self.overlays.write().unwrap().get_mut(&route)?.pop();
+        self.update_scope();
+        pop
+    }
 
-            if last.is_done().cloned() {
-                self.overlays
-                    .write()
-                    .unwrap()
-                    .get_mut(&route)
-                    .unwrap()
-                    .pop();
+    fn last(&self) -> Option<Arc<Box<dyn Overlay>>> {
+        let route = use_route::<Route>();
+        self.overlays.read().unwrap().get(&route)?.last().cloned()
+    }
+
+    fn get_last_not_done(&self) -> Option<Arc<Box<dyn Overlay>>> {
+        loop {
+            let last = self.last()?;
+
+            if *last.is_done().read() {
+                self.pop();
             } else {
                 return Some(last);
             }
