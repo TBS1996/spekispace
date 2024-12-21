@@ -24,10 +24,11 @@ pub struct RustGraph {
 
 impl RustGraph {
     pub fn set_origin_label(&self, label: &str) {
-        let orgidx = self.org_idx.lock().unwrap().clone().unwrap();
-        let mut guard = self.inner.lock().unwrap();
-        let node = guard.node_weight_mut(orgidx).unwrap();
-        node.label = label.to_string();
+        if let Some(orgidx) = self.org_idx.lock().unwrap().clone() {
+            let mut guard = self.inner.lock().unwrap();
+            let node = guard.node_weight_mut(orgidx).unwrap();
+            node.label = label.to_string();
+        }
     }
 
     async fn origin_and_graph(origin: Origin) -> (Origin, DiGraph<NodeMetadata, ()>, NodeIndex) {
