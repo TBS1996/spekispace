@@ -82,7 +82,7 @@ impl BackPut {
         let mut sig = self.text.clone();
         rsx! {
             input {
-                class: "w-full border border-gray-300 rounded-md p-2 mb-4 text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent",
+                class: "bg-white w-full border border-gray-300 rounded-md p-2 mb-4 text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent",
                 value: "{sig}",
                 oninput: move |evt| sig.set(evt.value()),
             }

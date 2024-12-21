@@ -68,7 +68,7 @@ impl Komponent for CardRef {
 
         rsx! {
             input {
-                class: "w-full border border-gray-300 rounded-md p-2 mb-4 text-gray-950 bg-gray-50 cursor-pointer focus:outline-none",
+                class: "bg-white w-full border border-gray-300 rounded-md p-2 mb-4 text-gray-950 bg-gray-50 cursor-pointer focus:outline-none",
                 value: "{card_display}",
                 readonly: "true",
                 onclick: move |_| {
