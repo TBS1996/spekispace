@@ -42,20 +42,25 @@ pub struct GraphRep {
 
 impl Default for GraphRep {
     fn default() -> Self {
-        Self::init(None)
+        Self::new()
     }
 }
 
 impl GraphRep {
-    pub fn init(new_card_hook: Option<Arc<Box<dyn Fn(Arc<Card<AnyType>>)>>>) -> Self {
+    pub fn new() -> Self {
         let id = format!("cyto_id-{}", COUNTER.fetch_add(1, Ordering::SeqCst));
         Self {
             inner: Default::default(),
             is_init: Default::default(),
             cyto_id: Arc::new(id),
-            new_card_hook,
+            new_card_hook: Default::default(),
             label: Default::default(),
         }
+    }
+
+    pub fn with_hook(mut self, hook: Arc<Box<dyn Fn(Arc<Card<AnyType>>)>>) -> Self {
+        self.new_card_hook = Some(hook);
+        self
     }
 
     pub fn with_label(mut self, label: Signal<String>) -> Self {

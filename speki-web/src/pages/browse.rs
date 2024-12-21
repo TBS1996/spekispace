@@ -45,8 +45,8 @@ pub struct BrowseState {
 fn overlay_card_viewer() -> Arc<Box<dyn Fn(Arc<Card<AnyType>>)>> {
     Arc::new(Box::new(move |card: Arc<Card<AnyType>>| {
         spawn(async move {
-            let viewer =
-                CardViewer::new_from_card(card, GraphRep::init(Some(overlay_card_viewer()))).await;
+            let graph = GraphRep::new().with_hook(overlay_card_viewer());
+            let viewer = CardViewer::new_from_card(card, graph).await;
             OVERLAY.cloned().replace(Box::new(viewer));
         });
     }))

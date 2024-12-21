@@ -2,9 +2,8 @@ use dioxus::prelude::*;
 
 use crate::Route;
 
-pub fn tooltip_image(src: &str, msg: &str, img_size: usize, text_size: f32) -> Element {
+pub fn image(src: &str, img_size: usize) -> Element {
     let size = format!("{}px", img_size.to_string());
-    let text_size = format!("{}em", text_size);
 
     rsx! {
         div {
@@ -54,7 +53,7 @@ pub fn nav() -> Element {
                                     crate::utils::sync().await;
                                 });
                             },
-                            { tooltip_image("sync.svg", "nice", 34, 1.0) }
+                            { image("sync.svg",  34) }
                         }
                         { route_elm(Route::Review {}) }
                         { route_elm(Route::Add {}) }

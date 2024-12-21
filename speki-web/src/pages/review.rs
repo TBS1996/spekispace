@@ -7,7 +7,6 @@ use speki_dto::CardId;
 use speki_dto::Recall;
 use tracing::info;
 
-use crate::components::Komponent;
 use crate::{components::GraphRep, App, APP, DEFAULT_FILTER};
 
 static REVIEW_STATE: GlobalSignal<ReviewState> = Signal::global(ReviewState::new);
@@ -205,10 +204,8 @@ impl ReviewState {
     }
 
     pub fn new() -> Self {
-        let app = APP.cloned();
-        let graph = GraphRep::init(None);
         Self {
-            app,
+            app: APP.cloned(),
             card: Default::default(),
             queue: Default::default(),
             tot_len: Default::default(),
@@ -217,7 +214,7 @@ impl ReviewState {
             back: Default::default(),
             show_backside: Default::default(),
             filter: Signal::new(DEFAULT_FILTER.to_string()),
-            graph,
+            graph: Default::default(),
         }
     }
 
