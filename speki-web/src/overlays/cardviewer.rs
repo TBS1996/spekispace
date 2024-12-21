@@ -10,7 +10,6 @@ use uuid::Uuid;
 use crate::{
     components::{BackPut, CardRef, CardTy, FrontPut, GraphRep, Komponent},
     overlays::{card_selector::CardSelector, Overlay},
-    utils::App,
     APP, CARDS, OVERLAY,
 };
 
@@ -22,7 +21,6 @@ pub struct CardRep {
 #[derive(Clone)]
 pub struct CardViewer {
     title: Option<String>,
-    app: App,
     front: FrontPut,
     back: BackPut,
     concept: CardRef,
@@ -46,7 +44,6 @@ impl CardViewer {
 
     pub async fn new_from_card(card: Arc<Card<AnyType>>, graph: GraphRep) -> Self {
         graph.new_set_card(card.clone());
-        let app = APP.cloned();
         let entries = CARDS.cloned();
         let dependencies = card.dependency_ids().await;
         let raw = card.to_raw();
@@ -60,7 +57,6 @@ impl CardViewer {
         let graph = graph.with_label(frnt.text.clone());
 
         Self {
-            app,
             front: frnt,
             back: bck,
             dependencies: Signal::new_in_scope(dependencies.into_iter().collect(), ScopeId(3)),
@@ -77,7 +73,6 @@ impl CardViewer {
         let front = FrontPut::new();
         let label = front.text.clone();
         let selv = Self {
-            app: APP.cloned(),
             front,
             back: BackPut::new(),
             dependencies: Signal::new_in_scope(Default::default(), ScopeId(3)),
@@ -259,7 +254,7 @@ impl CardViewer {
                                     new_raw.dependencies.insert(dep.into_inner());
                                 }
 
-                                let card = Arc::new(selveste.app.0.new_from_raw(new_raw).await);
+                                let card = Arc::new(APP.read().0.new_from_raw(new_raw).await);
                                 if let Some(hook) = selveste.save_hook.clone() {
                                     (hook)(card);
                                 }
@@ -281,15 +276,15 @@ impl Komponent for CardViewer {
         let selv = self.clone();
         rsx! {
             div {
-                class: "flex flex-col w-full h-[800px] mt-8", // Outer container: vertical layout
+                class: "flex flex-col w-full h-[800px] mt-8",
                 if let Some(title) = self.title.as_ref() {
                     h1 {
-                        class: "text-3xl font-bold mb-4 text-center", // Styled title
+                        class: "text-3xl font-bold mb-4 text-center",
                         "{title}"
                     }
                 }
                 div {
-                    class: "flex flex-row w-full h-full", // Inner container: horizontal layout
+                    class: "flex flex-row w-full h-full",
                     div {
                         class: "flex-[2] max-w-[600px] p-4 ml-20",
                         { selv.render_inputs() }
