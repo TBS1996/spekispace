@@ -21,6 +21,7 @@ pub struct CardRep {
 
 #[derive(Clone)]
 pub struct CardViewer {
+    title: Option<String>,
     app: App,
     front: FrontPut,
     back: BackPut,
@@ -35,6 +36,11 @@ pub struct CardViewer {
 impl CardViewer {
     pub fn with_hook(mut self, hook: Arc<Box<dyn Fn(Arc<Card<AnyType>>)>>) -> Self {
         self.save_hook = Some(hook);
+        self
+    }
+
+    pub fn with_title(mut self, title: String) -> Self {
+        self.title = Some(title);
         self
     }
 
@@ -63,6 +69,7 @@ impl CardViewer {
             concept: CardRef::new(entries.classes.clone()),
             old_card: Signal::new_in_scope(Some(card), ScopeId(3)),
             save_hook: None,
+            title: None,
         }
     }
 
@@ -79,6 +86,7 @@ impl CardViewer {
             concept: CardRef::new(CARDS.cloned().classes.clone()),
             old_card: Signal::new_in_scope(None, ScopeId(3)),
             save_hook: None,
+            title: None,
         };
 
         selv.set_graph();
@@ -206,7 +214,7 @@ impl CardViewer {
                                 });
                             };
 
-                            let viewer = Self::new().with_hook(Arc::new(Box::new(fun)));
+                            let viewer = Self::new().with_hook(Arc::new(Box::new(fun))).with_title("adding dependency".to_string());
                             OVERLAY.cloned().set(Box::new(viewer));
                     },
                     "add new dependency"
@@ -268,19 +276,28 @@ impl CardViewer {
 
 impl Komponent for CardViewer {
     fn render(&self) -> Element {
-        info!("XX rendering display_card");
+        info!("_XX rendering display_card");
 
         let selv = self.clone();
         rsx! {
             div {
-                class: "flex w-full h-[800px] mt-8",
-                div {
-                    class: "flex-[2] max-w-[600px] p-4 ml-20",
-                    { selv.render_inputs() }
+                class: "flex flex-col w-full h-[800px] mt-8", // Outer container: vertical layout
+                if let Some(title) = self.title.as_ref() {
+                    h1 {
+                        class: "text-3xl font-bold mb-4 text-center", // Styled title
+                        "{title}"
+                    }
                 }
                 div {
-                    class: "flex-[1] max-w-[700px] max-h-[700px]",
-                    { self.graph.render() }
+                    class: "flex flex-row w-full h-full", // Inner container: horizontal layout
+                    div {
+                        class: "flex-[2] max-w-[600px] p-4 ml-20",
+                        { selv.render_inputs() }
+                    }
+                    div {
+                        class: "flex-[1] max-w-[700px] max-h-[700px]",
+                        { self.graph.render() }
+                    }
                 }
             }
         }
