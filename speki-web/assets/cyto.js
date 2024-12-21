@@ -4,7 +4,6 @@ import { onNodeClick, onEdgeClick } from '/wasm/speki-web.js';
 cytoscape.use(dagre);
 
 const instances = new Map();
-const charWidth = 5;
 const lineLen = 20;
 
 

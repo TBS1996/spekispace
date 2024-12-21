@@ -81,6 +81,20 @@ pub async fn on_edge_click(cyto_id: &str, source: &str, target: &str) {
     trigger_refresh(cyto_id);
 }
 
+fn rate_to_color(rate: f64) -> String {
+    let red = ((1.0 - rate / 100.0) * 255.0) as u8;
+    let green = (rate / 100.0 * 255.0) as u8;
+    format!("#{:02X}{:02X}00", red, green) // RGB color in hex
+}
+
+fn cyan_color() -> String {
+    String::from("#00FFFF")
+}
+
+fn yellow_color() -> String {
+    String::from("#FFFF00")
+}
+
 #[derive(Clone, Debug)]
 pub struct NodeMetadata {
     pub id: String,
@@ -93,9 +107,12 @@ impl NodeMetadata {
     pub async fn from_card(card_ref: &Card<AnyType>, is_origin: bool) -> Self {
         let label = card_ref.print().await;
         let color = if is_origin {
-            "#34ebdb".to_string()
+            cyan_color()
         } else {
-            "#32a852".to_string()
+            match card_ref.recall_rate() {
+                Some(rate) => rate_to_color(rate as f64 * 100.),
+                None => yellow_color(),
+            }
         };
 
         let ty = card_ref.card_type().fieldless();

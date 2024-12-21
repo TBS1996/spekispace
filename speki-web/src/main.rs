@@ -80,17 +80,17 @@ fn Wrapper() -> Element {
 
     rsx! {
         div {
-        id: "receiver",
-        tabindex: 0,
-        onkeydown: move |event| log_event(event.data()),
+            id: "receiver",
+            tabindex: 0,
+            onkeydown: move |event| log_event(event.data()),
 
-         crate::nav::nav {}
-        {info!("rsx scope id: {:?}", current_scope_id().unwrap());}
-         if let Some(overlay) = overlay.render() {
-            { overlay }
-         } else {
-            Outlet::<Route> {}
-         }
+            crate::nav::nav {}
+
+            if let Some(overlay) = overlay.render() {
+                { overlay }
+            } else {
+                Outlet::<Route> {}
+            }
         }
     }
 }
