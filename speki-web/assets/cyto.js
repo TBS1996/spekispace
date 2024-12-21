@@ -4,7 +4,7 @@ import { onNodeClick, onEdgeClick } from '/wasm/speki-web.js';
 cytoscape.use(dagre);
 
 const instances = new Map();
-const charWidth = 20;
+const charWidth = 5;
 const lineLen = 20;
 
 
@@ -38,9 +38,11 @@ export function createCytoInstance(id) {
                     "text-wrap": "wrap",
                     "text-valign": "center",
                     "text-halign": "center",
-                    "width": (ele) => calculateNodeWidth(ele.data("label"), lineLen),
-                    "height": (ele) => calculateNodeHeight(ele.data("label"), lineLen),
-                    "font-size": "6px",
+                    "width": (ele) => maxCircumference(ele),
+                    "height": (ele) => maxCircumference(ele),
+                    'font-family': 'Arial',
+                    'font-size': '8px',
+                    'font-weight': 'normal',
                 },
             },
             {
@@ -95,7 +97,7 @@ export function updateLabel(cy_id, node_id, label) {
     const node = cy.getElementById(node_id);
     let thelabel = wrapText(label);
     node.data("label", thelabel); 
-    runLayout(cy_id, node_id);
+    resizeNodeToFitLabel(node);
 }
 
 export function setContainer(cy_id) {
@@ -104,7 +106,7 @@ export function setContainer(cy_id) {
 
     if (container) {
         console.log(`Setting container for Cytoscape instance with ID "${cy_id}"`);
-        cy.mount(container); // Mount Cytoscape to the new container
+        cy.mount(container); 
     } else {
         console.error(`Container with ID "${cy_id}" not found.`);
     }
@@ -121,17 +123,6 @@ export function zoomToNode(cy_id, node_id) {
     });
 }
 
-
-function calculateNodeWidth(label, maxCharsPerLine) {
-    return Math.min(maxCharsPerLine * charWidth, label.length * charWidth);
-}
-
-function calculateNodeHeight(label, maxCharsPerLine) {
-    const lines = Math.ceil(label.length / maxCharsPerLine);
-    const lineHeight = 20; 
-    return lines * lineHeight + 10; 
-}
-
 export function getCytoInstance(id) {
     return instances.get(id);
 }
@@ -141,18 +132,17 @@ export function runLayout(id, targetNodeId) {
     if (cy) {
         cy.layout({
             name: "dagre",
-            rankDir: "BT",          // Top-to-bottom flow
-            fit: true,              // Fit the graph in the viewport
-            padding: 50,            // Padding around the graph
-            nodeSep: 50,            // Adjust spacing for better visibility
-            rankSep: 25,            // Adjust rank separation
+            rankDir: "BT",          
+            fit: true,              
+            padding: 50,            
+            nodeSep: 50,            
+            rankSep: 25,            
             edgeWeight: (edge) => {
                 const connectedToTarget = edge.source().id() === targetNodeId || edge.target().id() === targetNodeId;
-                return connectedToTarget ? 3 : 1; // Moderate weight for target-connected edges
+                return connectedToTarget ? 3 : 1; 
             },
         }).run();
 
-        // Adjust node proximity with directionality
         adjustProximityToTargetWithDirection(cy, targetNodeId);
         cy.reset();
         cy.fit();
@@ -165,25 +155,29 @@ export function runLayout(id, targetNodeId) {
 function adjustProximityToTargetWithDirection(cy, targetNodeId) {
     const targetNode = cy.getElementById(targetNodeId);
     const targetPos = targetNode.position();
-    const incomingNeighbors = targetNode.incomers("node"); // Now dependents
-    const outgoingNeighbors = targetNode.outgoers("node"); // Now dependencies
+    const incomingNeighbors = targetNode.incomers("node"); 
+    const outgoingNeighbors = targetNode.outgoers("node"); 
 
-    const horizontalSpacing = 50; // Adjust spacing as needed
-    const verticalDistance = 60;  // Adjust vertical distance as needed
+    const node = cy.getElementById(targetNodeId);
+    let origin_size = maxCircumference(node) / 2;
 
     // Outgoing nodes (dependencies) are placed above
     outgoingNeighbors.forEach((node, index) => {
+        let node_size = maxCircumference(node);
+        let node_pad = node_size + origin_size;
         node.position({
-            x: targetPos.x + index * horizontalSpacing - (outgoingNeighbors.length * horizontalSpacing) / 2,
-            y: targetPos.y - verticalDistance, 
+            x: targetPos.x + index * node_pad - (outgoingNeighbors.length * node_pad) / 2,
+            y: targetPos.y - node_pad, 
         });
     });
 
     // Incoming nodes (dependents) are placed below
     incomingNeighbors.forEach((node, index) => {
+        let node_size = maxCircumference(node);
+        let node_pad = node_size + origin_size;
         node.position({
-            x: targetPos.x + index * horizontalSpacing - (incomingNeighbors.length * horizontalSpacing) / 2,
-            y: targetPos.y + verticalDistance, 
+            x: targetPos.x + index * node_pad - (incomingNeighbors.length * node_pad) / 2,
+            y: targetPos.y + node_pad,
         });
     });
 
@@ -239,12 +233,61 @@ function wrapText(text) {
 }
 
 function resizeNodeToFitLabel(node) {
-    const label = node.data("label");
-    const lines = label.split("\n").length;
+    let circum = maxCircumference(node);
+    console.log(`AA circum max: ${circum}`);
 
-    // Adjust node size based on the number of lines
     node.style({
-        "height": 20 + lines * 10, // Base height + height per line
-        "width": 20 + lines * 10,  // Base width to keep circle aspect ratio
+        "width": (ele) => circum,
+        "height": (ele) => circum,
     });
+}
+
+function maxCircumference(node) {
+    let label = node.data("label");
+    let lines = label.split('\n'); 
+    let textHeight = calculateTextHeight(node);
+    let totalLines = lines.length; 
+    let tot_height = textHeight * totalLines;
+    let maxCircum = 0;
+
+    lines.forEach((line, currentLine) => {
+        let hypo = Hypo(line, textHeight, totalLines, currentLine, node);
+        maxCircum = Math.max(maxCircum, hypo);
+    });
+
+    return Math.max(maxCircum, tot_height);
+}
+
+function Hypo(line, textHeight, totalLines, currentLine, node) {
+    let width = calculateTextWidth(line, node);
+    let height = topLineHeight(textHeight, totalLines, currentLine);
+    let hypo = Math.sqrt(width ** 2 + height ** 2);
+    return hypo;
+}
+
+function topLineHeight(textHeight, totalLines, currentLine) {
+    let center = (totalLines - 1) / 2;
+    let distance = Math.abs(currentLine - center);
+    let dist = (distance * textHeight) + (textHeight / 2);
+    return dist;
+}
+
+
+
+
+function calculateTextHeight(node) {
+    const font = `${node.style('font-weight')} ${node.style('font-size')} ${node.style('font-family')}`;
+    const canvas = document.createElement('canvas');
+    const context = canvas.getContext('2d');
+    context.font = font;
+    const metrics = context.measureText("M");
+    return metrics.actualBoundingBoxAscent + metrics.actualBoundingBoxDescent + 7;
+}
+
+function calculateTextWidth(text, node) {
+    const font = `${node.style('font-weight')} ${node.style('font-size')} ${node.style('font-family')}`;
+    const canvas = document.createElement('canvas');
+    const context = canvas.getContext('2d');
+    context.font = font;
+    return context.measureText(text).width;
 }

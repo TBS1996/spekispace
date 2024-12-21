@@ -59,9 +59,9 @@ impl BrowseState {
 
         let browse_page = CardSelector {
             title: "browse cards".to_string(),
-            search: Default::default(),
-            on_card_selected: overlay_card_viewer(),
             cards: entries.cards.clone(),
+            on_card_selected: overlay_card_viewer(),
+            search: Default::default(),
             done: Default::default(),
         };
 
