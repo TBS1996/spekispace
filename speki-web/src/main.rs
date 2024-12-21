@@ -45,7 +45,7 @@ static OVERLAY: GlobalSignal<OverlayManager> = Signal::global(OverlayManager::ne
 #[component]
 pub fn TheApp() -> Element {
     let id = current_scope_id();
-    info!("top scope id: {id:?}");
+    info!("omg?? scope id: {id:?}");
 
     spawn(async move {
         APP.read().0.fill_cache().await;
@@ -57,9 +57,12 @@ pub fn TheApp() -> Element {
             rel: "stylesheet",
             href: asset!("/public/tailwind.css")
         }
-        { info!("hey lol") }
 
-        Router::<Route> {}
+        div {
+            class: "bg-white min-h-screen",
+            Router::<Route> {}
+        }
+
     }
 }
 

@@ -15,11 +15,6 @@ pub fn tooltip_image(src: &str, msg: &str, img_size: usize, text_size: f32) -> E
                 height: "{size}",
                 src: "assets/{src}",
             }
-            div {
-                font_size: text_size,
-                color: "white",
-                "{msg}"
-            }
         }
     }
 }
