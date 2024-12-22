@@ -111,7 +111,7 @@ impl RustGraph {
             let node = &guard[idx];
             super::js::add_node(
                 cyto_id,
-                &node.id,
+                &node.id.to_string(),
                 &node.label,
                 &node.color,
                 card_ty_to_shape(node.ty),
@@ -123,7 +123,7 @@ impl RustGraph {
             let source = &guard[edge.source()];
             let target = &guard[edge.target()];
 
-            super::js::add_edge(cyto_id, &source.id, &target.id);
+            super::js::add_edge(cyto_id, &source.id.to_string(), &target.id.to_string());
         }
     }
 
@@ -139,13 +139,19 @@ async fn inner_create_graph(
     dependencies: Vec<Origin>,
     dependents: Vec<Origin>,
 ) -> (DiGraph<NodeMetadata, ()>, NodeIndex) {
-    let dependencies: Vec<CardId> = dependencies.into_iter().map(|o| o.id()).collect();
-    let dependents: Vec<CardId> = dependents.into_iter().map(|o| o.id()).collect();
+    let dependencies: Vec<CardId> = dependencies
+        .into_iter()
+        .map(|o| o.id().card_id().unwrap())
+        .collect();
+    let dependents: Vec<CardId> = dependents
+        .into_iter()
+        .map(|o| o.id().card_id().unwrap())
+        .collect();
 
     let mut graph = DiGraph::new();
     let origin_index = graph.add_node(origin.clone());
     let mut node_map: HashMap<String, NodeIndex> = HashMap::new();
-    node_map.insert(origin.id.clone(), origin_index);
+    node_map.insert(origin.id.clone().to_string(), origin_index);
 
     let mut all_cards = BTreeSet::new();
 

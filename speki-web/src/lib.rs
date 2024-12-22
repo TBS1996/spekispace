@@ -4,13 +4,52 @@ use dioxus::prelude::*;
 use speki_core::{AnyType, Card};
 use speki_dto::{CType, CardId};
 use tracing::info;
+use uuid::Uuid;
 use wasm_bindgen::prelude::*;
 
 #[derive(Clone, Debug)]
 pub enum GraphAction {
-    NodeClick(CardId),
+    NodeClick(NodeId),
     FromRust(Origin),
-    EdgeClick((CardId, CardId)),
+    EdgeClick((NodeId, NodeId)),
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Hash)]
+pub enum NodeId {
+    Temp(Uuid),
+    Card(Uuid),
+}
+
+impl NodeId {
+    pub fn card_id(&self) -> Option<CardId> {
+        match self {
+            NodeId::Temp(_) => None,
+            NodeId::Card(uuid) => Some(CardId(*uuid)),
+        }
+    }
+
+    pub fn new_from_card(id: CardId) -> Self {
+        Self::Card(id.into_inner())
+    }
+
+    pub fn new_temp() -> Self {
+        Self::Temp(Uuid::new_v4())
+    }
+
+    pub fn to_string(&self) -> String {
+        match self {
+            NodeId::Temp(uuid) => format!("TEMP-{}", uuid.to_string()),
+            NodeId::Card(uuid) => uuid.to_string(),
+        }
+    }
+
+    pub fn from_string(s: &str) -> Self {
+        if let Some(end) = s.strip_prefix("TEMP-") {
+            Self::Temp(end.parse().unwrap())
+        } else {
+            Self::Card(s.parse().unwrap())
+        }
+    }
 }
 
 thread_local! {
@@ -44,7 +83,7 @@ fn trigger_refresh(id: &str) {
 pub async fn on_node_click(cyto_id: &str, node_id: &str) {
     info!("cyto id: {cyto_id}");
     info!("!! clicked node: {node_id}");
-    let id = CardId(node_id.parse().unwrap());
+    let id = NodeId::from_string(node_id);
 
     set_graphaction(cyto_id.to_string(), GraphAction::NodeClick(id));
     trigger_refresh(cyto_id);
@@ -55,8 +94,8 @@ pub async fn on_edge_click(cyto_id: &str, source: &str, target: &str) {
     info!("okcyto id: {cyto_id}");
     info!("clicked node from {source} to {target}");
 
-    let source = CardId(source.parse().unwrap());
-    let target = CardId(target.parse().unwrap());
+    let source = NodeId::from_string(source);
+    let target = NodeId::from_string(target);
 
     set_graphaction(
         cyto_id.to_string(),
@@ -81,28 +120,28 @@ fn yellow_color() -> String {
 
 #[derive(Clone, Debug)]
 pub struct NodeMetadata {
-    pub id: String,
+    pub id: NodeId,
     pub label: String,
     pub color: String,
     pub ty: CType,
 }
 
 impl NodeMetadata {
-    pub async fn from_card(card_ref: &Card<AnyType>, is_origin: bool) -> Self {
-        let label = card_ref.print().await;
+    pub async fn from_card(card: &Card<AnyType>, is_origin: bool) -> Self {
+        let label = card.print().await;
         let color = if is_origin {
             cyan_color()
         } else {
-            match card_ref.recall_rate() {
+            match card.recall_rate() {
                 Some(rate) => rate_to_color(rate as f64 * 100.),
                 None => yellow_color(),
             }
         };
 
-        let ty = card_ref.card_type().fieldless();
+        let ty = card.card_type().fieldless();
 
         Self {
-            id: card_ref.id.clone().to_string(),
+            id: NodeId::new_from_card(card.id),
             label,
             color,
             ty,
@@ -124,13 +163,13 @@ impl Origin {
     pub fn is_card(&self) -> bool {
         matches!(self, Self::Card(_))
     }
-    pub fn id(&self) -> CardId {
+    pub fn id(&self) -> NodeId {
         match self {
-            Origin::Card(card_id) => *card_id,
+            Origin::Card(id) => NodeId::new_from_card(*id),
             Origin::Nope { node, .. } => {
                 info!("node: {node:?}");
 
-                node.id.parse().unwrap()
+                node.id.clone()
             }
         }
     }

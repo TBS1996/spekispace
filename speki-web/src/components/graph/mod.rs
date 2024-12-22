@@ -163,6 +163,10 @@ impl Komponent for GraphRep {
                     info!("node clicked!");
 
                     spawn(async move {
+                        let Some(id) = id.card_id() else {
+                            return;
+                        };
+
                         let card = app.load_card(id).await;
 
                         if let Some(hook) = selv.new_card_hook.as_ref() {
@@ -178,8 +182,15 @@ impl Komponent for GraphRep {
                 speki_web::GraphAction::EdgeClick((from, to)) => {
                     spawn(async move {
                         let origin = selv.inner.origin().unwrap();
+                        if origin.id() != from {
+                            return;
+                        };
+
                         match origin {
                             Origin::Card(_) => {
+                                let (Some(from), Some(to)) = (from.card_id(), to.card_id()) else {
+                                    return;
+                                };
                                 let mut first = Arc::unwrap_or_clone(app.load_card(from).await);
                                 first.rm_dependency(to).await;
                                 selv.set_card(Origin::Card(from)).await;

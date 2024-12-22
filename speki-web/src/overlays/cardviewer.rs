@@ -3,9 +3,8 @@ use std::sync::Arc;
 use dioxus::prelude::*;
 use speki_core::{AnyType, Card, ClassCard, InstanceCard, NormalCard, UnfinishedCard};
 use speki_dto::CardId;
-use speki_web::NodeMetadata;
+use speki_web::{NodeId, NodeMetadata};
 use tracing::info;
-use uuid::Uuid;
 
 use crate::{
     components::{BackPut, CardRef, CardTy, FrontPut, GraphRep, Komponent},
@@ -145,7 +144,7 @@ impl CardViewer {
 
     fn to_node(&self) -> NodeMetadata {
         NodeMetadata {
-            id: Uuid::default().to_string(),
+            id: NodeId::new_temp(),
             label: self.front.text.cloned(),
             color: "#42cbf5".to_string(),
             ty: speki_dto::CType::Normal,
