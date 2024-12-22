@@ -9,7 +9,7 @@ use tracing::info;
 use crate::{
     components::{BackPut, CardRef, CardTy, FrontPut, GraphRep, Komponent},
     overlays::{card_selector::CardSelector, Overlay},
-    APP, CARDS, OVERLAY,
+    APP, CARDS, OVERLAY, ROUTE_CHANGE,
 };
 
 pub struct CardRep {
@@ -207,15 +207,21 @@ impl CardViewer {
 
                             let selv = selv3.clone();
                             let selfnode = selv.to_node();
-                            info!("selfnode: {selfnode:?}");
+                            let scope = current_scope_id().unwrap();
+                            info!("@@@ selfnode: {selfnode:?}");
                             let fun = move |card: Arc<Card<AnyType>>| {
+                                let selv2 = selv.clone();
                                 selv.dependencies.clone().write().push(card.id);
-                                selv.set_graph();
                                 let old_card = selv.old_card.cloned();
+                                let selv = selv2.clone();
                                 spawn(async move {
+                                  //  let selv2 = selv.clone();
                                     if let Some(old_card) = old_card {
                                         Arc::unwrap_or_clone(old_card).add_dependency(card.id).await;
                                     }
+                                    selv.set_graph();
+                                    ROUTE_CHANGE.store(true, std::sync::atomic::Ordering::SeqCst);
+                                    scope.needs_update();
                                 });
                             };
 

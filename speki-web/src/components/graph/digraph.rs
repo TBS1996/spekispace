@@ -119,7 +119,6 @@ impl RustGraph {
         nodes.dedup_by_key(|node| node.id.to_string());
 
         for node in nodes.clone() {
-            info!("adding node: {node:?}");
             super::js::add_node(
                 cyto_id,
                 &node.id.to_string(),
