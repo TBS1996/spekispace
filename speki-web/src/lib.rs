@@ -1,4 +1,4 @@
-use std::{cell::RefCell, collections::HashMap, sync::Arc};
+use std::{cell::RefCell, collections::HashMap};
 
 use dioxus::prelude::*;
 use speki_core::{AnyType, Card};
@@ -6,27 +6,11 @@ use speki_dto::{CType, CardId};
 use tracing::info;
 use wasm_bindgen::prelude::*;
 
-#[derive(Default, Clone, Debug)]
-pub enum BrowsePage {
-    #[default]
-    Browse,
-    View(Arc<Card<AnyType>>),
-}
-
 #[derive(Clone, Debug)]
 pub enum GraphAction {
     NodeClick(CardId),
     FromRust(Origin),
     EdgeClick((CardId, CardId)),
-}
-
-impl BrowsePage {
-    pub fn get_card(&self) -> Option<Arc<Card<AnyType>>> {
-        match self {
-            BrowsePage::Browse => return None,
-            BrowsePage::View(arc) => Some(arc.clone()),
-        }
-    }
 }
 
 thread_local! {
