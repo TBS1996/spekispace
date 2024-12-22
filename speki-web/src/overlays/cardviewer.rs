@@ -156,7 +156,7 @@ impl CardViewer {
             id: NodeId::new_temp(),
             label: self.front.text.cloned(),
             color: "#858585".to_string(),
-            ty: speki_dto::CType::Normal,
+            ty: self.front.dropdown.selected.cloned().to_ctype(),
         }
     }
 
@@ -294,6 +294,14 @@ impl CardViewer {
 impl Komponent for CardViewer {
     fn render(&self) -> Element {
         info!("_XX rendering display_card");
+
+        let dropdown = self.front.dropdown.selected.clone();
+
+        let selv = self.clone();
+        use_effect(move || {
+            let _x = dropdown.cloned();
+            selv.set_graph();
+        });
 
         let selv = self.clone();
         rsx! {

@@ -2,6 +2,7 @@ use std::fmt::Display;
 
 use dioxus::prelude::*;
 use serde::{Deserialize, Serialize};
+use speki_dto::CType;
 use strum::{EnumIter, IntoEnumIterator};
 
 use super::Komponent;
@@ -13,6 +14,17 @@ pub enum CardTy {
     Instance,
     Class,
     Unfinished,
+}
+
+impl CardTy {
+    pub fn to_ctype(&self) -> CType {
+        match self {
+            CardTy::Normal => CType::Normal,
+            CardTy::Instance => CType::Instance,
+            CardTy::Class => CType::Class,
+            CardTy::Unfinished => CType::Unfinished,
+        }
+    }
 }
 
 impl Display for CardTy {

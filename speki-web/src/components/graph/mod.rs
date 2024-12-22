@@ -10,7 +10,7 @@ use digraph::RustGraph;
 use dioxus::prelude::*;
 use speki_core::{AnyType, Card};
 use speki_dto::CardId;
-use speki_web::{NodeMetadata, Node};
+use speki_web::{Node, NodeMetadata};
 use tracing::info;
 use web_sys::window;
 

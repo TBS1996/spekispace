@@ -13,7 +13,7 @@ use speki_dto::CType;
 use speki_web::{Node, NodeId, NodeMetadata};
 use tracing::info;
 
-use crate::{utils::get_meta, App, APP};
+use crate::{components::CardTy, utils::get_meta, App, APP};
 
 #[derive(Clone, Default)]
 pub struct RustGraph {
@@ -263,14 +263,25 @@ async fn new_inner_create_graph(app: App, origin: Node) -> (DiGraph<NodeMetadata
     (graph, origin_index)
 }
 
-enum Shape {
+pub enum Shape {
     RoundedRectangle,
     Ellipse,
     Rectangle,
 }
 
 impl Shape {
-    fn as_str(&self) -> &'static str {
+    pub fn from_card_ty(ty: CardTy) -> Self {
+        let ty = match ty {
+            CardTy::Normal => CType::Normal,
+            CardTy::Instance => CType::Instance,
+            CardTy::Class => CType::Class,
+            CardTy::Unfinished => CType::Unfinished,
+        };
+
+        Self::from_ctype(ty)
+    }
+
+    pub fn as_str(&self) -> &'static str {
         match self {
             Shape::RoundedRectangle => "roundrectangle",
             Shape::Ellipse => "ellipse",
@@ -278,7 +289,7 @@ impl Shape {
         }
     }
 
-    fn from_ctype(ty: CType) -> Self {
+    pub fn from_ctype(ty: CType) -> Self {
         match ty {
             CType::Instance => Self::RoundedRectangle,
             CType::Class => Self::Rectangle,

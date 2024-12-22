@@ -11,6 +11,13 @@ extern "C" {
     fn zoomToNode(cyto_id: &str, node_id: &str);
     fn setContainer(cyto_id: &str);
     fn updateLabel(cyto_id: &str, node_id: &str, label: &str);
+    fn updateShape(cyto_id: &str, node_id: &str, shape: &str);
+}
+
+pub fn update_shape(cyto_id: &str, node: Node, shape: &str) {
+    info!("new shape!: {shape}");
+    let node_id = node.id().to_string();
+    updateShape(cyto_id, &node_id, shape);
 }
 
 pub fn update_label(cyto_id: &str, node: Node, label: &str) {

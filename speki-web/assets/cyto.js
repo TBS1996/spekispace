@@ -91,6 +91,13 @@ export function createCytoInstance(id) {
     return cy;
 }
 
+
+export function updateShape(cy_id, node_id, shape) {
+    const cy = getCytoInstance(cy_id); 
+    const node = cy.getElementById(node_id);
+    node.data("shape", shape); 
+}
+
 export function updateLabel(cy_id, node_id, label) {
     const cy = getCytoInstance(cy_id); 
     const node = cy.getElementById(node_id);
