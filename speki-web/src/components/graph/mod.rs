@@ -10,7 +10,7 @@ use digraph::RustGraph;
 use dioxus::prelude::*;
 use speki_core::{AnyType, Card};
 use speki_dto::CardId;
-use speki_web::{NodeMetadata, Origin};
+use speki_web::{NodeMetadata, Node};
 use tracing::info;
 use web_sys::window;
 
@@ -68,11 +68,16 @@ impl GraphRep {
         self
     }
 
-    pub fn new_set_card_rep(&self, node: NodeMetadata, dependencies: Vec<CardId>) {
-        let origin = Origin::Nope {
+    pub fn new_set_card_rep(
+        &self,
+        node: NodeMetadata,
+        dependencies: Vec<CardId>,
+        dependents: Vec<Node>,
+    ) {
+        let origin = Node::Nope {
             node,
-            dependencies: dependencies.into_iter().map(Origin::Card).collect(),
-            dependents: vec![],
+            dependencies: dependencies.into_iter().map(Node::Card).collect(),
+            dependents,
         };
         speki_web::set_graphaction(
             self.cyto_id.to_string(),
@@ -83,11 +88,11 @@ impl GraphRep {
     pub fn new_set_card(&self, card: Arc<Card<AnyType>>) {
         speki_web::set_graphaction(
             self.cyto_id.to_string(),
-            speki_web::GraphAction::FromRust(Origin::Card(card.id)),
+            speki_web::GraphAction::FromRust(Node::Card(card.id)),
         );
     }
 
-    async fn set_card(&self, origin: Origin) {
+    async fn set_card(&self, origin: Node) {
         self.set_origin(origin).await;
         self.create_cyto_instance().await;
     }
@@ -102,7 +107,7 @@ impl GraphRep {
         }
     }
 
-    pub async fn set_origin(&self, origin: Origin) {
+    pub async fn set_origin(&self, origin: Node) {
         self.inner.set_origin(origin).await;
     }
 
@@ -174,9 +179,9 @@ impl Komponent for GraphRep {
                         }
                     });
                 }
-                speki_web::GraphAction::FromRust(card) => {
+                speki_web::GraphAction::FromRust(origin) => {
                     spawn(async move {
-                        selv.set_card(card).await;
+                        selv.set_card(origin).await;
                     });
                 }
                 speki_web::GraphAction::EdgeClick((from, to)) => {
@@ -187,15 +192,15 @@ impl Komponent for GraphRep {
                         };
 
                         match origin {
-                            Origin::Card(_) => {
+                            Node::Card(_) => {
                                 let (Some(from), Some(to)) = (from.card_id(), to.card_id()) else {
                                     return;
                                 };
                                 let mut first = Arc::unwrap_or_clone(app.load_card(from).await);
                                 first.rm_dependency(to).await;
-                                selv.set_card(Origin::Card(from)).await;
+                                selv.set_card(Node::Card(from)).await;
                             }
-                            Origin::Nope {
+                            Node::Nope {
                                 node,
                                 mut dependencies,
                                 mut dependents,
@@ -207,7 +212,7 @@ impl Komponent for GraphRep {
 
                                 assert!(totlen != dependencies.len() + dependents.len());
 
-                                selv.set_card(Origin::Nope {
+                                selv.set_card(Node::Nope {
                                     node,
                                     dependencies,
                                     dependents,

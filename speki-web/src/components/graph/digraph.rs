@@ -1,5 +1,5 @@
 use std::{
-    collections::{BTreeSet, HashMap, HashSet},
+    collections::HashMap,
     sync::{Arc, Mutex},
 };
 
@@ -9,16 +9,16 @@ use petgraph::{
     graph::{DiGraph, NodeIndex},
     visit::EdgeRef,
 };
-use speki_dto::{CType, CardId};
-use speki_web::{NodeMetadata, Origin};
+use speki_dto::CType;
+use speki_web::{Node, NodeId, NodeMetadata};
 use tracing::info;
 
-use crate::{App, APP};
+use crate::{utils::get_meta, App, APP};
 
 #[derive(Clone, Default)]
 pub struct RustGraph {
     inner: Arc<Mutex<DiGraph<NodeMetadata, ()>>>,
-    origin: Arc<Mutex<Option<Origin>>>,
+    origin: Arc<Mutex<Option<Node>>>,
     org_idx: Arc<Mutex<Option<NodeIndex>>>,
 }
 
@@ -33,38 +33,39 @@ impl RustGraph {
         }
     }
 
-    async fn origin_and_graph(origin: Origin) -> (Origin, DiGraph<NodeMetadata, ()>, NodeIndex) {
+    async fn origin_and_graph(origin: Node) -> (Node, DiGraph<NodeMetadata, ()>, NodeIndex) {
+        info!("XXX");
         let app = APP.cloned();
-        let (org_node, dependencies, dependents) = match origin.clone() {
-            Origin::Card(id) => {
+        let new_origin = match origin.clone() {
+            Node::Card(id) => {
                 let card = app.load_card(id).await;
                 let mut dependents = vec![];
                 let mut dependencies = vec![];
 
                 for dep in card.dependency_ids().await {
-                    dependencies.push(Origin::Card(dep));
+                    dependencies.push(Node::Card(dep));
                 }
 
                 for dep in card.dependents().await {
-                    dependents.push(Origin::Card(dep.id));
+                    info!("adding dependent to origin: {dep:?}");
+                    dependents.push(Node::Card(dep.id));
                 }
 
-                let origin = NodeMetadata::from_card(&card, true).await;
-                (origin, dependencies, dependents)
+                let node = NodeMetadata::from_card(card, true).await;
+                Node::Nope {
+                    node,
+                    dependencies,
+                    dependents,
+                }
             }
-            Origin::Nope {
-                node,
-                dependencies,
-                dependents,
-            } => (node, dependencies, dependents),
+            x @ Node::Nope { .. } => x,
         };
 
-        let (inner, idx) =
-            inner_create_graph(app, org_node.clone(), dependencies, dependents).await;
+        let (inner, idx) = new_inner_create_graph(app, new_origin).await;
         (origin, inner, idx)
     }
 
-    pub async fn set_origin(&self, origin: Origin) {
+    pub async fn set_origin(&self, origin: Node) {
         let (origin, graph, idx) = Self::origin_and_graph(origin).await;
         *self.inner.lock().unwrap() = graph;
         *self.origin.lock().unwrap() = Some(origin);
@@ -97,7 +98,7 @@ impl RustGraph {
         is_cyclic_directed(&*self.inner.lock().unwrap())
     }
 
-    pub fn origin(&self) -> Option<Origin> {
+    pub fn origin(&self) -> Option<Node> {
         self.origin.lock().unwrap().clone()
     }
 
@@ -107,8 +108,18 @@ impl RustGraph {
         info!("adding nodes");
         let guard = self.inner.lock().unwrap();
 
+        let mut nodes = vec![];
+
         for idx in guard.node_indices() {
             let node = &guard[idx];
+            nodes.push(node.clone());
+        }
+
+        nodes.sort_by_key(|node| node.id.to_string());
+        nodes.dedup_by_key(|node| node.id.to_string());
+
+        for node in nodes.clone() {
+            info!("adding node: {node:?}");
             super::js::add_node(
                 cyto_id,
                 &node.id.to_string(),
@@ -133,83 +144,121 @@ impl RustGraph {
     }
 }
 
-async fn inner_create_graph(
-    app: App,
-    origin: NodeMetadata,
-    dependencies: Vec<Origin>,
-    dependents: Vec<Origin>,
-) -> (DiGraph<NodeMetadata, ()>, NodeIndex) {
-    let dependencies: Vec<CardId> = dependencies
-        .into_iter()
-        .map(|o| o.id().card_id().unwrap())
-        .collect();
-    let dependents: Vec<CardId> = dependents
-        .into_iter()
-        .map(|o| o.id().card_id().unwrap())
-        .collect();
+async fn collect_recursive_dependents(app: App, node: Node) -> Vec<Node> {
+    let mut nodes = vec![];
+    let mut foo = vec![];
+
+    for node in node.collect_dependents() {
+        nodes.push(node.clone());
+        foo.push(node.clone());
+    }
+
+    for node in foo {
+        match node {
+            Node::Card(id) => {
+                let card = app.load_card(id).await;
+                let deps: Vec<Node> = card
+                    .all_dependents()
+                    .await
+                    .into_iter()
+                    .map(Node::Card)
+                    .collect();
+                nodes.extend(deps);
+            }
+            Node::Nope { .. } => {}
+        }
+    }
+
+    nodes.dedup();
+
+    nodes
+}
+
+async fn collect_recursive_dependencies(app: App, node: Node) -> Vec<Node> {
+    let mut nodes = vec![];
+    let mut foo = vec![];
+
+    for node in node.collect_dependencies() {
+        nodes.push(node.clone());
+        foo.push(node.clone());
+    }
+
+    for node in foo {
+        match node {
+            Node::Card(id) => {
+                let card = app.load_card(id).await;
+                let deps: Vec<Node> = card
+                    .all_dependencies()
+                    .await
+                    .into_iter()
+                    .map(Node::Card)
+                    .collect();
+                nodes.extend(deps);
+            }
+            Node::Nope { .. } => {}
+        }
+    }
+
+    nodes.dedup();
+
+    nodes
+}
+
+async fn new_inner_create_graph(app: App, origin: Node) -> (DiGraph<NodeMetadata, ()>, NodeIndex) {
+    info!("UU_______________________");
+    info!("new inner origin: {origin:?}");
 
     let mut graph = DiGraph::new();
-    let origin_index = graph.add_node(origin.clone());
-    let mut node_map: HashMap<String, NodeIndex> = HashMap::new();
-    node_map.insert(origin.id.clone().to_string(), origin_index);
+    let origin_index = graph.add_node(get_meta(&origin).await);
+    let mut node_map: HashMap<NodeId, NodeIndex> = HashMap::new();
+    node_map.insert(origin.id(), origin_index);
+    let mut all_nodes = vec![origin.clone()];
 
-    let mut all_cards = BTreeSet::new();
-
-    for dep in dependencies.clone() {
-        let dep = app.load_card(dep).await;
-        all_cards.insert(dep.clone());
-        for dep in dep.all_dependencies().await {
-            let dep = app.load_card(dep).await;
-            all_cards.insert(dep);
-        }
+    for dep in collect_recursive_dependents(app.clone(), origin.clone()).await {
+        all_nodes.push(dep);
     }
 
-    for dep in dependents.clone() {
-        let dep = app.load_card(dep).await;
-        all_cards.insert(dep.clone());
-        for dep in dep.all_dependents().await {
-            let dep = app.load_card(dep).await;
-            all_cards.insert(dep);
-        }
+    for dep in collect_recursive_dependencies(app.clone(), origin.clone()).await {
+        all_nodes.push(dep);
     }
 
-    for card_ref in &all_cards {
-        let id = card_ref.id.into_inner().to_string();
-        if !node_map.contains_key(&id) {
-            let node = NodeMetadata::from_card(card_ref, false).await;
-            let node_index = graph.add_node(node);
-            node_map.insert(id, node_index);
-        }
+    all_nodes.sort_by_key(|node| node.id().to_string());
+    all_nodes.dedup_by_key(|node| node.id().to_string());
+
+    for node in all_nodes.clone() {
+        let id = node.id();
+        let meta = get_meta(&node).await;
+        let node_idx = graph.add_node(meta);
+        node_map.insert(id, node_idx);
     }
 
-    let mut edges = HashSet::<(NodeIndex, NodeIndex)>::default();
+    let mut edges = vec![];
 
-    for card_ref in &all_cards {
-        let from_id = card_ref.id.to_string();
-        if let Some(&from_idx) = node_map.get(&from_id) {
-            for dependency in card_ref.dependency_ids().await {
-                let to_id = dependency.into_inner().to_string();
-                if let Some(&to_idx) = node_map.get(&to_id) {
-                    edges.insert((from_idx, to_idx));
+    for node in all_nodes.clone() {
+        for dep in node.non_recursive_dependencies(app.inner()).await {
+            if let Some(from) = node_map.get(&node.id()) {
+                if let Some(to) = node_map.get(&dep) {
+                    edges.push((*from, *to));
                 }
             }
         }
     }
 
-    for (from_idx, to_idx) in edges {
-        graph.add_edge(from_idx, to_idx, ());
+    for node in all_nodes {
+        for dep in node.non_recursive_dependents(app.inner()).await {
+            if let Some(to) = node_map.get(&node.id()) {
+                if let Some(from) = node_map.get(&dep) {
+                    edges.push((*from, *to));
+                }
+            }
+        }
     }
 
-    for dep in dependencies {
-        let from_idx = origin_index;
-        let to_idx = *node_map.get(&dep.to_string()).unwrap();
-        graph.add_edge(from_idx, to_idx, ());
-    }
+    edges.sort();
+    edges.dedup();
 
-    for dep in dependents {
-        let from_idx = *node_map.get(&dep.to_string()).unwrap();
-        let to_idx = origin_index;
-        graph.add_edge(from_idx, to_idx, ());
+    for (from, to) in edges {
+        graph.add_edge(from, to, ());
     }
 
     (graph, origin_index)

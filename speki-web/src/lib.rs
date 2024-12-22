@@ -1,7 +1,7 @@
-use std::{cell::RefCell, collections::HashMap};
+use std::{cell::RefCell, collections::HashMap, sync::Arc};
 
 use dioxus::prelude::*;
-use speki_core::{AnyType, Card};
+use speki_core::{AnyType, App, Card};
 use speki_dto::{CType, CardId};
 use tracing::info;
 use uuid::Uuid;
@@ -10,11 +10,11 @@ use wasm_bindgen::prelude::*;
 #[derive(Clone, Debug)]
 pub enum GraphAction {
     NodeClick(NodeId),
-    FromRust(Origin),
+    FromRust(Node),
     EdgeClick((NodeId, NodeId)),
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Hash)]
+#[derive(Clone, Debug, Eq, PartialEq, Hash, Ord, PartialOrd)]
 pub enum NodeId {
     Temp(Uuid),
     Card(Uuid),
@@ -118,7 +118,7 @@ fn yellow_color() -> String {
     String::from("#FFFF00")
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NodeMetadata {
     pub id: NodeId,
     pub label: String,
@@ -127,7 +127,7 @@ pub struct NodeMetadata {
 }
 
 impl NodeMetadata {
-    pub async fn from_card(card: &Card<AnyType>, is_origin: bool) -> Self {
+    pub async fn from_card(card: Arc<Card<AnyType>>, is_origin: bool) -> Self {
         let label = card.print().await;
         let color = if is_origin {
             cyan_color()
@@ -149,8 +149,23 @@ impl NodeMetadata {
     }
 }
 
-#[derive(Debug, Clone)]
-pub enum Origin {
+/*
+wtf i wanna do
+
+collect all nodes
+collect all edges between the nodes
+
+for collecting all nodes and stuff
+
+we know the uninit can have init as deps, but not the other way
+so we can collect all the recursive uninit
+and from those check look through them, collect all the cardids, get all the rec deps from them, and add those as nodes and stuff
+
+
+*/
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Node {
     Card(CardId),
     Nope {
         node: NodeMetadata,
@@ -159,18 +174,70 @@ pub enum Origin {
     },
 }
 
-impl Origin {
+impl Node {
+    pub async fn non_recursive_dependents(&self, app: Arc<App>) -> Vec<NodeId> {
+        match self {
+            Node::Card(id) => app
+                .load_card(*id)
+                .await
+                .unwrap()
+                .dependents()
+                .await
+                .into_iter()
+                .map(|card| NodeId::Card(card.id().into_inner()))
+                .collect(),
+            Node::Nope { dependents, .. } => dependents.into_iter().map(|dep| dep.id()).collect(),
+        }
+    }
+    pub async fn non_recursive_dependencies(&self, app: Arc<App>) -> Vec<NodeId> {
+        match self {
+            Node::Card(id) => app
+                .load_card(*id)
+                .await
+                .unwrap()
+                .dependencies
+                .into_iter()
+                .map(|id| NodeId::Card(id.into_inner()))
+                .collect(),
+            Node::Nope { dependencies, .. } => {
+                dependencies.into_iter().map(|dep| dep.id()).collect()
+            }
+        }
+    }
+
     pub fn is_card(&self) -> bool {
         matches!(self, Self::Card(_))
     }
     pub fn id(&self) -> NodeId {
         match self {
-            Origin::Card(id) => NodeId::new_from_card(*id),
-            Origin::Nope { node, .. } => {
+            Node::Card(id) => NodeId::new_from_card(*id),
+            Node::Nope { node, .. } => {
                 info!("node: {node:?}");
 
                 node.id.clone()
             }
         }
+    }
+
+    pub fn collect_dependents(&self) -> Vec<Self> {
+        let mut result = Vec::new();
+        if let Node::Nope { dependents, .. } = self {
+            for dep in dependents {
+                result.push(dep.clone());
+                result.extend(dep.collect_dependents());
+            }
+        }
+        result
+    }
+
+    pub fn collect_dependencies(&self) -> Vec<Self> {
+        let mut result = Vec::new();
+        if let Node::Nope { dependencies, .. } = self {
+            for dep in dependencies {
+                result.push(dep.clone());
+                result.extend(dep.collect_dependencies());
+            }
+        }
+        result
     }
 }

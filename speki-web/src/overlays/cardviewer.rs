@@ -3,7 +3,7 @@ use std::sync::Arc;
 use dioxus::prelude::*;
 use speki_core::{AnyType, Card, ClassCard, InstanceCard, NormalCard, UnfinishedCard};
 use speki_dto::CardId;
-use speki_web::{NodeId, NodeMetadata};
+use speki_web::{Node, NodeId, NodeMetadata};
 use tracing::info;
 
 use crate::{
@@ -24,6 +24,7 @@ pub struct CardViewer {
     back: BackPut,
     concept: CardRef,
     dependencies: Signal<Vec<CardId>>,
+    dependents: Signal<Vec<Node>>,
     graph: GraphRep,
     save_hook: Option<Arc<Box<dyn Fn(Arc<Card<AnyType>>)>>>,
     is_done: Signal<bool>,
@@ -38,6 +39,11 @@ impl CardViewer {
 
     pub fn with_title(mut self, title: String) -> Self {
         self.title = Some(title);
+        self
+    }
+
+    pub fn with_dependents(mut self, deps: Vec<Node>) -> Self {
+        self.dependents.extend(deps);
         self
     }
 
@@ -59,6 +65,7 @@ impl CardViewer {
             front: frnt,
             back: bck,
             dependencies: Signal::new_in_scope(dependencies.into_iter().collect(), ScopeId(3)),
+            dependents: Signal::new_in_scope(Default::default(), ScopeId(3)),
             graph,
             is_done: Signal::new_in_scope(false, ScopeId(3)),
             concept: CardRef::new(entries.classes.clone()),
@@ -75,6 +82,7 @@ impl CardViewer {
             front,
             back: BackPut::new(),
             dependencies: Signal::new_in_scope(Default::default(), ScopeId(3)),
+            dependents: Signal::new_in_scope(Default::default(), ScopeId(3)),
             graph: GraphRep::default().with_label(label),
             is_done: Signal::new_in_scope(false, ScopeId(3)),
             concept: CardRef::new(CARDS.cloned().classes.clone()),
@@ -139,7 +147,8 @@ impl CardViewer {
     fn set_graph(&self) {
         let node = self.to_node();
         let dependencies = self.dependencies.cloned();
-        self.graph.new_set_card_rep(node, dependencies);
+        self.graph
+            .new_set_card_rep(node, dependencies, self.dependents.cloned());
     }
 
     fn to_node(&self) -> NodeMetadata {
@@ -197,6 +206,8 @@ impl CardViewer {
                     onclick: move |_| {
 
                             let selv = selv3.clone();
+                            let selfnode = selv.to_node();
+                            info!("selfnode: {selfnode:?}");
                             let fun = move |card: Arc<Card<AnyType>>| {
                                 selv.dependencies.clone().write().push(card.id);
                                 selv.set_graph();
@@ -208,7 +219,12 @@ impl CardViewer {
                                 });
                             };
 
-                            let viewer = Self::new().with_hook(Arc::new(Box::new(fun))).with_title("adding dependency".to_string());
+
+                            let viewer = Self::new()
+                                .with_hook(Arc::new(Box::new(fun)))
+                                .with_title("adding dependency".to_string())
+                                .with_dependents(vec![Node::Nope { node: selfnode, dependencies: vec![], dependents: vec![] }]);
+                            viewer.set_graph();
                             OVERLAY.cloned().set(Box::new(viewer));
                     },
                     "add new dependency"

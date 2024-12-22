@@ -233,7 +233,6 @@ function wrapText(text) {
 
 function resizeNodeToFitLabel(node) {
     let circum = maxCircumference(node);
-    console.log(`AA circum max: ${circum}`);
 
     node.style({
         "width": (ele) => circum,

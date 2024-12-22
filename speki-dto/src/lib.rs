@@ -311,7 +311,7 @@ fn parse_review(s: String) -> Vec<Review> {
 #[derive(Serialize, Deserialize, Debug, Clone, Default)]
 pub struct Config;
 
-#[derive(Serialize, Deserialize, Debug, Clone, Default, Copy)]
+#[derive(Serialize, Deserialize, Debug, Clone, Default, Copy, Eq, PartialEq)]
 #[serde(rename_all = "lowercase")]
 pub enum CType {
     Instance,

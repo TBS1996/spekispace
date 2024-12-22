@@ -3,6 +3,7 @@ use std::{fmt::Debug, sync::Arc, time::Duration};
 use speki_core::{AnyType, Card, TimeProvider};
 use speki_dto::{CardId, RawCard};
 use speki_provider::DexieProvider;
+use speki_web::{Node, NodeMetadata};
 use tracing::info;
 
 use crate::{
@@ -15,6 +16,10 @@ use crate::{
 pub struct App(Arc<speki_core::App>);
 
 impl App {
+    pub fn inner(&self) -> Arc<speki_core::App> {
+        self.0.clone()
+    }
+
     pub async fn fill_cache(&self) {
         self.0.fill_cache().await;
     }
@@ -114,3 +119,12 @@ impl CardEntries {
 }
 
 use dioxus::prelude::*;
+
+pub async fn get_meta(node: &Node) -> NodeMetadata {
+    match node {
+        Node::Card(card_id) => {
+            NodeMetadata::from_card(APP.read().load_card(*card_id).await, false).await
+        }
+        Node::Nope { node, .. } => node.clone(),
+    }
+}

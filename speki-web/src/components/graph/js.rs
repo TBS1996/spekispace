@@ -1,4 +1,4 @@
-use speki_web::Origin;
+use speki_web::Node;
 use tracing::info;
 use wasm_bindgen::prelude::*;
 
@@ -13,7 +13,7 @@ extern "C" {
     fn updateLabel(cyto_id: &str, node_id: &str, label: &str);
 }
 
-pub fn update_label(cyto_id: &str, node: Origin, label: &str) {
+pub fn update_label(cyto_id: &str, node: Node, label: &str) {
     info!("new label!: {label}");
     let node_id = node.id().to_string();
     updateLabel(cyto_id, &node_id, label);
