@@ -155,7 +155,7 @@ impl CardViewer {
         NodeMetadata {
             id: NodeId::new_temp(),
             label: self.front.text.cloned(),
-            color: "#42cbf5".to_string(),
+            color: "#858585".to_string(),
             ty: speki_dto::CType::Normal,
         }
     }
