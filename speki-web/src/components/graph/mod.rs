@@ -38,6 +38,7 @@ pub struct GraphRep {
     cyto_id: Arc<String>,
     new_card_hook: Option<Arc<Box<dyn Fn(Arc<Card<AnyType>>)>>>,
     label: Option<Signal<String>>,
+    scope: Arc<AtomicUsize>,
 }
 
 impl Default for GraphRep {
@@ -55,7 +56,12 @@ impl GraphRep {
             cyto_id: Arc::new(id),
             new_card_hook: Default::default(),
             label: Default::default(),
+            scope: Default::default(),
         }
+    }
+
+    pub fn re_render(&self) {
+        ScopeId(self.scope.load(Ordering::SeqCst)).needs_update();
     }
 
     pub fn with_hook(mut self, hook: Arc<Box<dyn Fn(Arc<Card<AnyType>>)>>) -> Self {
@@ -144,6 +150,7 @@ impl GraphRep {
 impl Komponent for GraphRep {
     fn render(&self) -> Element {
         let scope = current_scope_id().unwrap();
+        self.scope.store(scope.0, Ordering::SeqCst);
         info!("init scope: {scope:?}");
         speki_web::set_refresh_scope(self.cyto_id.to_string(), scope);
 

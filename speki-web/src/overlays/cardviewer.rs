@@ -301,6 +301,7 @@ impl Komponent for CardViewer {
         use_effect(move || {
             let _x = dropdown.cloned();
             selv.set_graph();
+            selv.graph.re_render();
         });
 
         let selv = self.clone();
