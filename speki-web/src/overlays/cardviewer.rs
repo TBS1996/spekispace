@@ -207,6 +207,7 @@ impl CardViewer {
 
                             let selv = selv3.clone();
                             let selfnode = selv.to_node();
+                            let selfdependents = selv.dependents.cloned();
                             let scope = current_scope_id().unwrap();
                             info!("@@@ selfnode: {selfnode:?}");
                             let fun = move |card: Arc<Card<AnyType>>| {
@@ -229,7 +230,7 @@ impl CardViewer {
                             let viewer = Self::new()
                                 .with_hook(Arc::new(Box::new(fun)))
                                 .with_title("adding dependency".to_string())
-                                .with_dependents(vec![Node::Nope { node: selfnode, dependencies: vec![], dependents: vec![] }]);
+                                .with_dependents(vec![Node::Nope { node: selfnode, dependencies: vec![], dependents: selfdependents }]);
                             viewer.set_graph();
                             OVERLAY.cloned().set(Box::new(viewer));
                     },
