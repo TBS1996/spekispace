@@ -42,11 +42,11 @@ impl RustGraph {
                 let mut dependencies = vec![];
 
                 for dep in card.dependency_ids().await {
-                    dependencies.push(dep);
+                    dependencies.push(Origin::Card(dep));
                 }
 
                 for dep in card.dependents().await {
-                    dependents.push(dep.id);
+                    dependents.push(Origin::Card(dep.id));
                 }
 
                 let origin = NodeMetadata::from_card(&card, true).await;
@@ -136,9 +136,12 @@ impl RustGraph {
 async fn inner_create_graph(
     app: App,
     origin: NodeMetadata,
-    dependencies: Vec<CardId>,
-    dependents: Vec<CardId>,
+    dependencies: Vec<Origin>,
+    dependents: Vec<Origin>,
 ) -> (DiGraph<NodeMetadata, ()>, NodeIndex) {
+    let dependencies: Vec<CardId> = dependencies.into_iter().map(|o| o.id()).collect();
+    let dependents: Vec<CardId> = dependents.into_iter().map(|o| o.id()).collect();
+
     let mut graph = DiGraph::new();
     let origin_index = graph.add_node(origin.clone());
     let mut node_map: HashMap<String, NodeIndex> = HashMap::new();

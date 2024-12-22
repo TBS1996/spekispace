@@ -115,8 +115,8 @@ pub enum Origin {
     Card(CardId),
     Nope {
         node: NodeMetadata,
-        dependencies: Vec<CardId>,
-        dependents: Vec<CardId>,
+        dependencies: Vec<Self>,
+        dependents: Vec<Self>,
     },
 }
 

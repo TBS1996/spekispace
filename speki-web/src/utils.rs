@@ -28,15 +28,9 @@ impl App {
     }
 
     pub async fn new_from_raw(&self, raw: RawCard) -> Arc<Card<AnyType>> {
-        let card = Arc::new(self.0.new_from_raw(raw).await);
+        let card = self.0.new_from_raw(raw).await;
         CARDS.read().insert(card.clone()).await;
         card
-    }
-}
-
-impl AsRef<speki_core::App> for App {
-    fn as_ref(&self) -> &speki_core::App {
-        &self.0
     }
 }
 

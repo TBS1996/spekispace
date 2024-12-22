@@ -279,10 +279,10 @@ impl App {
         ids
     }
 
-    pub async fn new_from_raw(&self, raw: RawCard) -> Card<AnyType> {
+    pub async fn new_from_raw(&self, raw: RawCard) -> Arc<Card<AnyType>> {
         let mut card = Card::from_raw(raw, self.card_provider.clone(), self.recaller.clone()).await;
         card.persist().await;
-        card
+        self.card_provider.load(card.id).await.unwrap()
     }
 
     pub async fn new_any(&self, any: impl Into<AnyType>) -> Card<AnyType> {

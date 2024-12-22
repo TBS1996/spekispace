@@ -71,7 +71,7 @@ impl GraphRep {
     pub fn new_set_card_rep(&self, node: NodeMetadata, dependencies: Vec<CardId>) {
         let origin = Origin::Nope {
             node,
-            dependencies,
+            dependencies: dependencies.into_iter().map(Origin::Card).collect(),
             dependents: vec![],
         };
         speki_web::set_graphaction(
@@ -191,8 +191,8 @@ impl Komponent for GraphRep {
                             } => {
                                 let totlen = dependencies.len() + dependents.len();
 
-                                dependencies.retain(|dep| dep != &to);
-                                dependents.retain(|dep| dep != &to);
+                                dependencies.retain(|dep| dep.id() != to);
+                                dependents.retain(|dep| dep.id() != to);
 
                                 assert!(totlen != dependencies.len() + dependents.len());
 
