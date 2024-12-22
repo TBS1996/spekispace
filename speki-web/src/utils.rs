@@ -8,7 +8,7 @@ use tracing::info;
 use crate::{
     firebase::{sign_in, FirestoreProvider},
     pages::CardEntry,
-    APP,
+    APP, CARDS,
 };
 
 #[derive(Clone)]
@@ -27,8 +27,10 @@ impl App {
         self.0.load_non_pending(filter).await
     }
 
-    pub async fn new_from_raw(&self, raw: RawCard) -> Card<AnyType> {
-        self.0.new_from_raw(raw).await
+    pub async fn new_from_raw(&self, raw: RawCard) -> Arc<Card<AnyType>> {
+        let card = Arc::new(self.0.new_from_raw(raw).await);
+        CARDS.read().insert(card.clone()).await;
+        card
     }
 }
 
@@ -90,6 +92,16 @@ pub struct CardEntries {
 }
 
 impl CardEntries {
+    pub async fn insert(&self, card: Arc<Card<AnyType>>) {
+        let entry = CardEntry::new(card.clone()).await;
+
+        if card.is_class() {
+            self.classes.clone().write().push(entry.clone());
+        }
+
+        self.cards.clone().write().push(entry);
+    }
+
     pub async fn fill(&self) {
         let app = APP.cloned();
         let mut concept_cards = vec![];
