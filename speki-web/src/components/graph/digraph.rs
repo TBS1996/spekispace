@@ -35,7 +35,7 @@ impl RustGraph {
         let app = APP.cloned();
         let (org_node, dependencies, dependents) = match origin.clone() {
             Origin::Card(id) => {
-                let card = app.0.load_card(id).await.unwrap();
+                let card = app.load_card(id).await;
                 let mut dependents = vec![];
                 let mut dependencies = vec![];
 
@@ -145,20 +145,20 @@ async fn inner_create_graph(
     let mut all_cards = BTreeSet::new();
 
     for dep in dependencies.clone() {
-        let dep = Arc::new(app.0.load_card(dep).await.unwrap());
+        let dep = app.load_card(dep).await;
         all_cards.insert(dep.clone());
         for dep in dep.all_dependencies().await {
-            let dep = app.0.load_card(dep).await.unwrap();
-            all_cards.insert(Arc::new(dep));
+            let dep = app.load_card(dep).await;
+            all_cards.insert(dep);
         }
     }
 
     for dep in dependents.clone() {
-        let dep = Arc::new(app.0.load_card(dep).await.unwrap());
+        let dep = app.load_card(dep).await;
         all_cards.insert(dep.clone());
         for dep in dep.all_dependents().await {
-            let dep = app.0.load_card(dep).await.unwrap();
-            all_cards.insert(Arc::new(dep));
+            let dep = app.load_card(dep).await;
+            all_cards.insert(dep);
         }
     }
 

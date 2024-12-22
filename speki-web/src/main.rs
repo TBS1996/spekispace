@@ -48,7 +48,7 @@ pub fn TheApp() -> Element {
     info!("omg?? scope id: {id:?}");
 
     spawn(async move {
-        APP.read().0.fill_cache().await;
+        APP.read().fill_cache().await;
         CARDS.cloned().fill().await;
     });
 

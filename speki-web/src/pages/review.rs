@@ -7,7 +7,7 @@ use speki_dto::CardId;
 use speki_dto::Recall;
 use tracing::info;
 
-use crate::{components::GraphRep, App, APP, DEFAULT_FILTER};
+use crate::{components::GraphRep, APP, DEFAULT_FILTER};
 
 static REVIEW_STATE: GlobalSignal<ReviewState> = Signal::global(ReviewState::new);
 
@@ -138,7 +138,6 @@ fn review_buttons() -> Element {
 
 #[derive(Clone, Debug)]
 pub struct ReviewState {
-    pub app: App,
     pub card: Signal<Option<Card<AnyType>>>,
     pub queue: Arc<Mutex<Vec<CardId>>>,
     pub tot_len: Signal<usize>,
@@ -205,7 +204,6 @@ impl ReviewState {
 
     pub fn new() -> Self {
         Self {
-            app: APP.cloned(),
             card: Default::default(),
             queue: Default::default(),
             tot_len: Default::default(),
@@ -221,7 +219,7 @@ impl ReviewState {
     pub async fn refresh(&mut self) {
         info!("refreshing..");
         let filter = self.filter.cloned();
-        let cards = self.app.0.load_non_pending(Some(filter)).await;
+        let cards = APP.read().load_non_pending(Some(filter)).await;
         info!("review cards loaded");
         self.tot_len.clone().set(cards.len());
         {
@@ -252,7 +250,7 @@ impl ReviewState {
         let card = self.queue.lock().unwrap().pop();
         let card = match card {
             Some(id) => {
-                let card = self.app.0.load_card(id).await.unwrap();
+                let card = APP.read().load_card(id).await;
                 let front = card.print().await;
                 let back = card
                     .display_backside()
@@ -267,12 +265,11 @@ impl ReviewState {
         };
 
         if let Some(card) = card.as_ref() {
-            let card = Arc::new(card.clone());
-            self.graph.new_set_card(card);
+            self.graph.new_set_card(card.clone());
         }
 
         info!("card set: {:?}", card);
-        self.card.clone().set(card);
+        self.card.clone().set(card.map(Arc::unwrap_or_clone));
         self.pos.clone().set(self.current_pos());
         self.show_backside.set(false);
     }

@@ -163,11 +163,8 @@ impl Komponent for GraphRep {
                     info!("node clicked!");
 
                     spawn(async move {
-                        let Some(card) = app.0.load_card(id).await else {
-                            return;
-                        };
+                        let card = app.load_card(id).await;
 
-                        let card = Arc::new(card);
                         if let Some(hook) = selv.new_card_hook.as_ref() {
                             (hook)(card.clone());
                         }
@@ -183,7 +180,7 @@ impl Komponent for GraphRep {
                         let origin = selv.inner.origin().unwrap();
                         match origin {
                             Origin::Card(_) => {
-                                let mut first = app.0.load_card(from).await.unwrap();
+                                let mut first = Arc::unwrap_or_clone(app.load_card(from).await);
                                 first.rm_dependency(to).await;
                                 selv.set_card(Origin::Card(from)).await;
                             }

@@ -1,6 +1,7 @@
 use std::{fmt::Debug, sync::Arc, time::Duration};
 
-use speki_core::TimeProvider;
+use speki_core::{AnyType, Card, TimeProvider};
+use speki_dto::{CardId, RawCard};
 use speki_provider::DexieProvider;
 use tracing::info;
 
@@ -11,7 +12,25 @@ use crate::{
 };
 
 #[derive(Clone)]
-pub struct App(pub Arc<speki_core::App>);
+pub struct App(Arc<speki_core::App>);
+
+impl App {
+    pub async fn fill_cache(&self) {
+        self.0.fill_cache().await;
+    }
+
+    pub async fn load_card(&self, id: CardId) -> Arc<Card<AnyType>> {
+        Arc::new(self.0.load_card(id).await.unwrap())
+    }
+
+    pub async fn load_non_pending(&self, filter: Option<String>) -> Vec<CardId> {
+        self.0.load_non_pending(filter).await
+    }
+
+    pub async fn new_from_raw(&self, raw: RawCard) -> Card<AnyType> {
+        self.0.new_from_raw(raw).await
+    }
+}
 
 impl AsRef<speki_core::App> for App {
     fn as_ref(&self) -> &speki_core::App {

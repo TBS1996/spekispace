@@ -254,7 +254,7 @@ impl CardViewer {
                                     new_raw.dependencies.insert(dep.into_inner());
                                 }
 
-                                let card = Arc::new(APP.read().0.new_from_raw(new_raw).await);
+                                let card = Arc::new(APP.read().new_from_raw(new_raw).await);
                                 if let Some(hook) = selveste.save_hook.clone() {
                                     (hook)(card);
                                 }
