@@ -26,7 +26,9 @@ impl RustGraph {
     pub fn set_origin_label(&self, label: &str) {
         if let Some(orgidx) = self.org_idx.lock().unwrap().clone() {
             let mut guard = self.inner.lock().unwrap();
-            let node = guard.node_weight_mut(orgidx).unwrap();
+            let Some(node) = guard.node_weight_mut(orgidx) else {
+                return;
+            };
             node.label = label.to_string();
         }
     }
