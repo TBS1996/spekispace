@@ -18,10 +18,7 @@ impl<T> DropDownMenu<T>
 where
     T: Serialize + for<'de> Deserialize<'de> + 'static + Clone + Display,
 {
-    pub fn new<I>(options: I) -> Self
-    where
-        I: IntoIterator<Item = T>,
-    {
+    pub fn new(options: impl IntoIterator<Item = T>) -> Self {
         let options: Vec<T> = options.into_iter().collect();
         assert!(!options.is_empty(), "must provide at least one option");
         let selected = Signal::new_in_scope(options.first().unwrap().clone(), ScopeId(3));
@@ -47,7 +44,7 @@ where
             div {
                 class: "dropdown",
                 select {
-                    class: "w-full border border-gray-300 rounded-md p-2 text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent",
+                    class: "bg-white w-full border border-gray-300 rounded-md p-2 text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent",
                     value: "{val}",
                     onchange: move |evt| {
                         let new_choice: T =  serde_json::from_str(evt.value().as_str()).unwrap();
