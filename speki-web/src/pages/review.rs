@@ -159,9 +159,9 @@ impl ReviewState {
 
         rsx! {
             div {
-                class: "w-full max-w-4xl flex flex-row gap-8 items-start mt-12",
+                class: "w-full max-w-4xl flex flex-col md:flex-row md:gap-8 items-start mt-12 px-4 md:px-0",
                 div {
-                    class: "flex justify-between items-center",
+                    class: "flex justify-between items-center w-full md:w-auto",
                     h2 {
                         class: "text-2xl text-gray-700",
                         "{pos}/{tot}"
@@ -172,7 +172,7 @@ impl ReviewState {
                     class: "w-full flex flex-col items-center gap-6",
 
                     p {
-                        class: "text-lg text-gray-800",
+                        class: "text-lg text-gray-800 text-center",
                         "{front}"
                     }
 
@@ -182,7 +182,7 @@ impl ReviewState {
                         }
 
                         p {
-                            class: "text-lg text-gray-700",
+                            class: "text-lg text-gray-700 text-center",
                             "{back}"
                         }
 
