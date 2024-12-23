@@ -9,11 +9,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Cache Cargo
+      - name: Cache Dioxus Build
         uses: actions/cache@v3
         with:
           path: |
-            ./speki-web/target
+            ./target
             ./speki-web/.cargo/registry
             ./speki-web/.cargo/git
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
@@ -24,11 +24,14 @@ jobs:
         run: |
           docker run --rm \
             -v ${{ github.workspace }}:/workspace \
-            -v /workspace/speki-web/target:/workspace/speki-web/target \
+            -v /workspace/target:/workspace/target \
             -v /workspace/speki-web/.cargo:/workspace/speki-web/.cargo \
             -w /workspace/speki-web \
             nigeleke/docker-dioxus-cli:v0.6.1 \
             dx build --release
+
+      - name: Verify Dioxus Build Output
+        run: ls -lah ./target/dx/speki-web/debug/web/public
 
       - name: Deploy to Firebase Hosting
         uses: FirebaseExtended/action-hosting-deploy@v0
@@ -37,4 +40,3 @@ jobs:
           firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_SPEKI_72569 }}
           channelId: live
           projectId: speki-72569
-
