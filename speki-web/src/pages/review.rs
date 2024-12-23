@@ -54,15 +54,15 @@ pub fn Review() -> Element {
 
 fn recall_button(recall: Recall) -> Element {
     let label = match recall {
-        Recall::None => "unfamiliar",
-        Recall::Late => "recognized",
-        Recall::Some => "recalled",
-        Recall::Perfect => "mastered",
+        Recall::None => "☹️",
+        Recall::Late => "🙁",
+        Recall::Some => "🙂",
+        Recall::Perfect => "😀",
     };
 
     rsx! {
         button {
-            class: "mt-6 inline-flex items-center text-white bg-gray-800 border-0 py-1 px-3 focus:outline-none hover:bg-gray-700 rounded text-base md:mt-0",
+            class: "bg-white mt-6 inline-flex items-center justify-center text-white border-0 py-4 px-6 focus:outline-none hover:bg-gray-700 rounded md:mt-0 text-4xl leading-none",
             onclick: move |_| {
                 spawn(async move{
                     REVIEW_STATE.cloned().do_review(recall).await;
