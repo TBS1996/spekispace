@@ -31,7 +31,7 @@ jobs:
             dx build --release
 
       - name: Verify Dioxus Build Output
-        run: ls -lah ./target/dx/speki-web/debug/web/public
+        run: ls -lah ./target/dx/speki-web/release/web/public
 
       - name: Deploy to Firebase Hosting
         uses: FirebaseExtended/action-hosting-deploy@v0
