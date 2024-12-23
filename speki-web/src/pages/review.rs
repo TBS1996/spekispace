@@ -171,6 +171,66 @@ impl ReviewState {
                 div {
                     class: "w-full flex flex-col items-center gap-6",
 
+                    // Front text
+                    p {
+                        class: "text-lg text-gray-800 text-center",
+                        "{front}"
+                    }
+
+                    // Fixed container for backside content and buttons
+                    div {
+                        class: "flex flex-col items-center w-full",
+                        style: "min-height: 300px; display: flex; justify-content: flex-end; align-items: center;", // Reserve consistent height
+
+                        if show_backside() {
+                            // Backside content
+                            p {
+                                class: "text-lg text-gray-700 text-center mb-4",
+                                "{back}"
+                            }
+
+                            // Review buttons
+                            div {
+                                class: "flex justify-center gap-4",
+                                { review_buttons() }
+                            }
+                        } else {
+                            // Show backside button aligned with review buttons
+                            button {
+                                class: "inline-flex items-center text-white bg-gray-800 border-0 py-1 px-3 focus:outline-none hover:bg-gray-700 rounded text-base",
+                                onclick: move |_| show_backside.set(true),
+                                "show backside"
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+impl ReviewState {
+    fn xrender_queue(&self) -> Element {
+        let back = self.back.clone();
+        let front = self.front.clone();
+        let pos = self.pos.clone();
+        let tot = self.tot_len.clone();
+        let mut show_backside = self.show_backside.clone();
+
+        rsx! {
+            div {
+                class: "w-full max-w-4xl flex flex-col md:flex-row md:gap-8 items-start mt-12 px-4 md:px-0",
+                div {
+                    class: "flex justify-between items-center w-full md:w-auto",
+                    h2 {
+                        class: "text-2xl text-gray-700",
+                        "{pos}/{tot}"
+                    }
+                }
+
+                div {
+                    class: "w-full flex flex-col items-center gap-6",
+
                     p {
                         class: "text-lg text-gray-800 text-center",
                         "{front}"
