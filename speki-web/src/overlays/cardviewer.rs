@@ -295,15 +295,6 @@ impl Komponent for CardViewer {
     fn render(&self) -> Element {
         info!("_XX rendering display_card");
 
-        let dropdown = self.front.dropdown.selected.clone();
-
-        let selv = self.clone();
-        use_effect(move || {
-            let _x = dropdown.cloned();
-            selv.set_graph();
-            selv.graph.re_render();
-        });
-
         let selv = self.clone();
         rsx! {
             div {
