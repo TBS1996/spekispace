@@ -1526,6 +1526,10 @@ html {
   flex: 2;
 }
 
+.flex-shrink-0 {
+  flex-shrink: 0;
+}
+
 .table-fixed {
   table-layout: fixed;
 }
@@ -1697,6 +1701,14 @@ html {
 .py-8 {
   padding-top: 2rem;
   padding-bottom: 2rem;
+}
+
+.pl-12 {
+  padding-left: 3rem;
+}
+
+.pr-0 {
+  padding-right: 0px;
 }
 
 .text-center {

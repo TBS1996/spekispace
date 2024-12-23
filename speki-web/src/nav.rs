@@ -3,17 +3,16 @@ use dioxus::prelude::*;
 use crate::Route;
 
 pub fn image(src: &str, img_size: usize, spin: bool) -> Element {
-    let size = format!("{}px", img_size.to_string());
+    let size = format!("{}px", img_size);
 
-    let class = if spin { "mr-12 animate-spin" } else { "mr-12" };
+    let class = if spin { "animate-spin" } else { "" };
 
     rsx! {
         div {
-            class: "{class}",
-
+            class: "mr-4 flex-shrink-0 flex items-center justify-center", // Prevent shrinking and center the icon
             img {
-                width: "{size}",
-                height: "{size}",
+                class: "{class}",
+                style: "width: {size}; height: {size};", // Explicit size for the icon
                 src: "assets/{src}",
             }
         }
@@ -49,7 +48,8 @@ pub fn nav() -> Element {
     rsx! {
         section { class: "relative",
             nav { class: "flex justify-between",
-                div { class: "px-12 py-8 flex w-full items-center",
+                div { //class: "px-12 py-8 flex w-full items-center",
+                    class: "pl-12 pr-0 py-8 flex w-full items-center", // Left padding (pl-12), no right padding (pr-0)
                     ul { class: "flex flex-row font-semibold font-heading",
                         button {
                             onclick: move |_| {
