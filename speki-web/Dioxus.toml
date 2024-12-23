@@ -16,7 +16,7 @@ asset_dir = "assets"
 [web.app]
 
 # HTML title tag content
-title = "speki-web"
+title = "Speki"
 
 [web.watcher]
 
