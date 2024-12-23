@@ -142,6 +142,7 @@ fn Wrapper() -> Element {
     info!("wrapper scope id: {:?}", current_scope_id().unwrap());
     ROUTE_CHANGE.store(true, Ordering::SeqCst);
     let overlay = OVERLAY.cloned();
+    let start_x = use_signal::<Option<f64>>(Default::default);
 
     let log_event = move |event: Rc<KeyboardData>| {
         if let Key::Escape = event.key() {
@@ -157,10 +158,43 @@ fn Wrapper() -> Element {
 
             crate::nav::nav {}
 
-            if let Some(overlay) = overlay.render() {
-                { overlay }
-            } else {
-                Outlet::<Route> {}
+            div {
+                ontouchstart: move |event| {
+                    let point = event.data().touches().first().unwrap().client_coordinates();
+                    let point = Point {
+                        x: point.x,
+                        y: point.y,
+                    };
+                    if !NONCLICKABLE.read().contains(point) {
+                        start_x.clone().set(Some(point.x));
+                    }
+                },
+                ontouchend: move |event| {
+                    let point = event.data().touches_changed().first().unwrap().client_coordinates();
+                    let x = point.x;
+                    let Some(start_x) = start_x.cloned() else {
+                        return;
+                    };
+                    let diff = x - start_x;
+                    let treshold = 50.;
+                    let route = use_route::<Route>();
+
+                    if diff > treshold  {
+                        if let Some(route) = route.left() {
+                            use_navigator().replace(route);
+                        }
+                    } else if diff < -treshold {
+                        if let Some(route) = route.right() {
+                            use_navigator().replace(route);
+                        }
+                    }
+
+                },
+                if let Some(overlay) = overlay.render() {
+                    { overlay }
+                } else {
+                    Outlet::<Route> {}
+                }
             }
         }
     }
@@ -186,6 +220,24 @@ impl Route {
             Route::Review {} => "review",
             Route::Add {} => "add cards",
             Route::Browse {} => "browse",
+        }
+    }
+
+    fn left(&self) -> Option<Self> {
+        match self {
+            Route::Home {} => None,
+            Route::Review {} => None,
+            Route::Add {} => Some(Self::Review {}),
+            Route::Browse {} => Some(Self::Add {}),
+        }
+    }
+
+    fn right(&self) -> Option<Self> {
+        match self {
+            Route::Home {} => None,
+            Route::Review {} => Some(Self::Add {}),
+            Route::Add {} => Some(Self::Browse {}),
+            Route::Browse {} => None,
         }
     }
 }

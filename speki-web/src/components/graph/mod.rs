@@ -136,7 +136,9 @@ impl GraphRep {
     fn is_dom_rendered(&self) -> bool {
         let x = is_element_present(&self.cyto_id);
         if x {
-            self.coordinates();
+            if let Some(dom) = self.coordinates() {
+                NONCLICKABLE.write().insert(self.cyto_id.to_string(), dom);
+            }
         }
         x
     }
@@ -159,7 +161,10 @@ impl GraphRep {
 impl Komponent for GraphRep {
     fn render(&self) -> Element {
         if let Some(dom) = self.coordinates() {
+            info!("nice, a dom! {dom:?}");
             NONCLICKABLE.write().insert(self.cyto_id.to_string(), dom);
+        } else {
+            info!("oh no theres no dom");
         }
 
         let scope = current_scope_id().unwrap();
