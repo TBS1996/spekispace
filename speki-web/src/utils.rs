@@ -8,6 +8,7 @@ use tracing::info;
 
 use crate::{
     firebase::{sign_in, FirestoreProvider},
+    nav::SYNCING,
     pages::CardEntry,
     APP, CARDS,
 };
@@ -79,7 +80,9 @@ pub async fn sync() {
 
     let fsp: Box<dyn SpekiProvider> = Box::new(FirestoreProvider::new(agent));
 
+    *SYNCING.write() = true;
     DexieProvider.sync(fsp).await;
+    *SYNCING.write() = false;
 
     info!("done syncing maybe!");
 }

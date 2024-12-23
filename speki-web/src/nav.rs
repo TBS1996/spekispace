@@ -2,12 +2,14 @@ use dioxus::prelude::*;
 
 use crate::Route;
 
-pub fn image(src: &str, img_size: usize) -> Element {
+pub fn image(src: &str, img_size: usize, spin: bool) -> Element {
     let size = format!("{}px", img_size.to_string());
+
+    let class = if spin { "mr-12 animate-spin" } else { "mr-12" };
 
     rsx! {
         div {
-            class: "mr-12",
+            class: "{class}",
 
             img {
                 width: "{size}",
@@ -40,6 +42,8 @@ fn route_elm(route: Route) -> Element {
     }
 }
 
+pub static SYNCING: GlobalSignal<bool> = Signal::global(|| false);
+
 #[component]
 pub fn nav() -> Element {
     rsx! {
@@ -53,7 +57,7 @@ pub fn nav() -> Element {
                                     crate::utils::sync().await;
                                 });
                             },
-                            { image("sync.svg",  34) }
+                            { image("sync.svg",  34, SYNCING.cloned()) }
                         }
                         { route_elm(Route::Review {}) }
                         { route_elm(Route::Add {}) }
