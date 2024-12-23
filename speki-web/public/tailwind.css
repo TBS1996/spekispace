@@ -1460,12 +1460,12 @@ html {
   margin-left: 5rem;
 }
 
-.mr-12 {
-  margin-right: 3rem;
-}
-
 .mr-4 {
   margin-right: 1rem;
+}
+
+.mr-8 {
+  margin-right: 2rem;
 }
 
 .mt-12 {
@@ -1484,12 +1484,12 @@ html {
   margin-top: 2rem;
 }
 
-.mr-6 {
-  margin-right: 1.5rem;
+.mt-2 {
+  margin-top: 0.5rem;
 }
 
-.mr-8 {
-  margin-right: 2rem;
+.box-border {
+  box-sizing: border-box;
 }
 
 .block {
@@ -1506,6 +1506,10 @@ html {
 
 .table {
   display: table;
+}
+
+.hidden {
+  display: none;
 }
 
 .h-\[800px\] {
@@ -1526,6 +1530,10 @@ html {
 
 .min-h-screen {
   min-height: 100vh;
+}
+
+.min-h-\[200px\] {
+  min-height: 200px;
 }
 
 .w-1\/12 {
@@ -1552,12 +1560,8 @@ html {
   max-width: 56rem;
 }
 
-.max-w-\[600px\] {
-  max-width: 600px;
-}
-
-.max-w-\[700px\] {
-  max-width: 700px;
+.max-w-\[400px\] {
+  max-width: 400px;
 }
 
 .flex-\[1\] {
@@ -1568,11 +1572,15 @@ html {
   flex: 2;
 }
 
-.flex-shrink-0 {
-  flex-shrink: 0;
+.flex-1 {
+  flex: 1 1 0%;
 }
 
-.shrink-0 {
+.flex-none {
+  flex: none;
+}
+
+.flex-shrink-0 {
   flex-shrink: 0;
 }
 
@@ -1606,10 +1614,6 @@ html {
   flex-direction: column;
 }
 
-.flex-wrap {
-  flex-wrap: wrap;
-}
-
 .flex-nowrap {
   flex-wrap: nowrap;
 }
@@ -1638,25 +1642,10 @@ html {
   gap: 1.5rem;
 }
 
-.gap-8 {
-  gap: 2rem;
-}
-
-.gap-x-6 {
-  -moz-column-gap: 1.5rem;
-       column-gap: 1.5rem;
-}
-
 .space-x-4 > :not([hidden]) ~ :not([hidden]) {
   --tw-space-x-reverse: 0;
   margin-right: calc(1rem * var(--tw-space-x-reverse));
   margin-left: calc(1rem * calc(1 - var(--tw-space-x-reverse)));
-}
-
-.space-y-4 > :not([hidden]) ~ :not([hidden]) {
-  --tw-space-y-reverse: 0;
-  margin-top: calc(1rem * calc(1 - var(--tw-space-y-reverse)));
-  margin-bottom: calc(1rem * var(--tw-space-y-reverse));
 }
 
 .space-x-6 > :not([hidden]) ~ :not([hidden]) {
@@ -1665,8 +1654,18 @@ html {
   margin-left: calc(1.5rem * calc(1 - var(--tw-space-x-reverse)));
 }
 
+.space-y-4 > :not([hidden]) ~ :not([hidden]) {
+  --tw-space-y-reverse: 0;
+  margin-top: calc(1rem * calc(1 - var(--tw-space-y-reverse)));
+  margin-bottom: calc(1rem * var(--tw-space-y-reverse));
+}
+
 .overflow-hidden {
   overflow: hidden;
+}
+
+.overflow-x-hidden {
+  overflow-x: hidden;
 }
 
 .rounded {
@@ -1729,9 +1728,8 @@ html {
   background-color: rgb(255 255 255 / var(--tw-bg-opacity, 1));
 }
 
-.bg-green-400 {
-  --tw-bg-opacity: 1;
-  background-color: rgb(74 222 128 / var(--tw-bg-opacity, 1));
+.p-0 {
+  padding: 0px;
 }
 
 .p-2 {
@@ -1740,15 +1738,6 @@ html {
 
 .p-4 {
   padding: 1rem;
-}
-
-.p-0 {
-  padding: 0px;
-}
-
-.px-12 {
-  padding-left: 3rem;
-  padding-right: 3rem;
 }
 
 .px-3 {
@@ -1776,39 +1765,13 @@ html {
   padding-bottom: 0.5rem;
 }
 
-.py-8 {
-  padding-top: 2rem;
-  padding-bottom: 2rem;
-}
-
 .py-4 {
   padding-top: 1rem;
   padding-bottom: 1rem;
 }
 
-.px-2 {
-  padding-left: 0.5rem;
-  padding-right: 0.5rem;
-}
-
-.pl-12 {
-  padding-left: 3rem;
-}
-
-.pr-0 {
-  padding-right: 0px;
-}
-
 .pl-4 {
   padding-left: 1rem;
-}
-
-.pr-4 {
-  padding-right: 1rem;
-}
-
-.text-left {
-  text-align: left;
 }
 
 .text-center {
@@ -1825,6 +1788,11 @@ html {
   line-height: 2.25rem;
 }
 
+.text-4xl {
+  font-size: 2.25rem;
+  line-height: 2.5rem;
+}
+
 .text-base {
   font-size: 1rem;
   line-height: 1.5rem;
@@ -1838,11 +1806,6 @@ html {
 .text-sm {
   font-size: 0.875rem;
   line-height: 1.25rem;
-}
-
-.text-4xl {
-  font-size: 2.25rem;
-  line-height: 2.5rem;
 }
 
 .font-bold {
@@ -1940,34 +1903,53 @@ html {
     margin-top: 0px;
   }
 
+  .md\:ml-20 {
+    margin-left: 5rem;
+  }
+
+  .md\:block {
+    display: block;
+  }
+
   .md\:w-auto {
     width: auto;
+  }
+
+  .md\:max-w-\[600px\] {
+    max-width: 600px;
+  }
+
+  .md\:max-w-\[700px\] {
+    max-width: 700px;
+  }
+
+  .md\:max-w-\[300px\] {
+    max-width: 300px;
+  }
+
+  .md\:max-w-\[400px\] {
+    max-width: 400px;
+  }
+
+  .md\:max-w-\[500px\] {
+    max-width: 500px;
   }
 
   .md\:flex-row {
     flex-direction: row;
   }
 
-  .md\:justify-start {
-    justify-content: flex-start;
-  }
-
-  .md\:justify-end {
-    justify-content: flex-end;
-  }
-
   .md\:gap-8 {
     gap: 2rem;
+  }
+
+  .md\:p-4 {
+    padding: 1rem;
   }
 
   .md\:px-0 {
     padding-left: 0px;
     padding-right: 0px;
-  }
-
-  .md\:px-12 {
-    padding-left: 3rem;
-    padding-right: 3rem;
   }
 }
 

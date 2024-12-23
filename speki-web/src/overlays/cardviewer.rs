@@ -297,27 +297,28 @@ impl Komponent for CardViewer {
 
         let selv = self.clone();
         rsx! {
+                    div {
+                        class: "flex flex-col w-full h-[800px] mt-8",
+                        if let Some(title) = self.title.as_ref() {
+                            h1 {
+                                class: "text-3xl font-bold mb-4 text-center",
+                                "{title}"
+                            }
+                        }
+                        div {
+            class: "flex flex-col md:flex-row w-full h-full overflow-x-hidden", // Responsive layout
             div {
-                class: "flex flex-col w-full h-[800px] mt-8",
-                if let Some(title) = self.title.as_ref() {
-                    h1 {
-                        class: "text-3xl font-bold mb-4 text-center",
-                        "{title}"
-                    }
-                }
-                div {
-                    class: "flex flex-row w-full h-full",
-                    div {
-                        class: "flex-[2] max-w-[600px] p-4 ml-20",
-                        { selv.render_inputs() }
-                    }
-                    div {
-                        class: "flex-[1] max-w-[700px] max-h-[700px]",
-                        { self.graph.render() }
-                    }
-                }
+                class: "flex-none p-4 w-full max-w-[400px] box-border", // Consistent max width for inputs
+                { selv.render_inputs() }
+            }
+            div {
+                class: "flex-1 w-full max-w-[400px] md:max-w-[700px] max-h-[700px] box-border mt-2 md:mt-0", // Graph container
+                { self.graph.render() }
             }
         }
+
+                    }
+                }
     }
 }
 
