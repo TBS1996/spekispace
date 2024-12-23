@@ -150,7 +150,7 @@ pub struct ReviewState {
 }
 
 impl ReviewState {
-    fn render_queue(&self) -> Element {
+    pub fn render_queue(&self) -> Element {
         let back = self.back.clone();
         let front = self.front.clone();
         let pos = self.pos.clone();
@@ -207,61 +207,6 @@ impl ReviewState {
             }
         }
     }
-}
-
-impl ReviewState {
-    fn xrender_queue(&self) -> Element {
-        let back = self.back.clone();
-        let front = self.front.clone();
-        let pos = self.pos.clone();
-        let tot = self.tot_len.clone();
-        let mut show_backside = self.show_backside.clone();
-
-        rsx! {
-            div {
-                class: "w-full max-w-4xl flex flex-col md:flex-row md:gap-8 items-start mt-12 px-4 md:px-0",
-                div {
-                    class: "flex justify-between items-center w-full md:w-auto",
-                    h2 {
-                        class: "text-2xl text-gray-700",
-                        "{pos}/{tot}"
-                    }
-                }
-
-                div {
-                    class: "w-full flex flex-col items-center gap-6",
-
-                    p {
-                        class: "text-lg text-gray-800 text-center",
-                        "{front}"
-                    }
-
-                    if show_backside() {
-                        div {
-                            class: "w-full border-t-2 border-gray-300 my-6",
-                        }
-
-                        p {
-                            class: "text-lg text-gray-700 text-center",
-                            "{back}"
-                        }
-
-                        div {
-                            class: "flex justify-center gap-4 mt-4",
-                            { review_buttons() }
-                        }
-                    } else {
-                        button {
-                            class: "mt-12 inline-flex items-center text-white bg-gray-800 border-0 py-1 px-3 focus:outline-none hover:bg-gray-700 rounded text-base",
-                            onclick: move |_| show_backside.set(true),
-                            "show backside"
-                        }
-                    }
-                }
-            }
-        }
-    }
-
     pub fn new() -> Self {
         Self {
             card: Default::default(),

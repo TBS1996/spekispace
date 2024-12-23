@@ -160,7 +160,10 @@ fn Wrapper() -> Element {
 
             div {
                 ontouchstart: move |event| {
-                    let point = event.data().touches().first().unwrap().client_coordinates();
+                    let Some(point) = event.data().touches().first().map(|x|x.client_coordinates()) else {
+                        return;
+                    };
+
                     let point = Point {
                         x: point.x,
                         y: point.y,
@@ -170,7 +173,9 @@ fn Wrapper() -> Element {
                     }
                 },
                 ontouchend: move |event| {
-                    let point = event.data().touches_changed().first().unwrap().client_coordinates();
+                    let Some(point) = event.data().touches_changed().first().map(|x|x.client_coordinates()) else {
+                        return;
+                    };
                     let x = point.x;
                     let Some(start_x) = start_x.cloned() else {
                         return;
@@ -188,7 +193,6 @@ fn Wrapper() -> Element {
                             use_navigator().replace(route);
                         }
                     }
-
                 },
                 if let Some(overlay) = overlay.render() {
                     { overlay }
