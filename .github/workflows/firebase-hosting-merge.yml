@@ -30,9 +30,6 @@ jobs:
             nigeleke/docker-dioxus-cli:v0.6.1 \
             dx build --release
 
-      - name: Verify Dioxus Build Output
-        run: ls -lah ./target/dx/speki-web/release/web/public
-
       - name: Deploy to Firebase Hosting
         uses: FirebaseExtended/action-hosting-deploy@v0
         with:
