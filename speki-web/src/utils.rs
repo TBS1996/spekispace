@@ -46,6 +46,14 @@ impl Debug for App {
     }
 }
 
+pub fn is_element_present(id: &str) -> bool {
+    web_sys::window()
+        .and_then(|win| win.document())
+        .unwrap()
+        .get_element_by_id(id)
+        .is_some()
+}
+
 use wasm_bindgen::prelude::*;
 
 #[wasm_bindgen]

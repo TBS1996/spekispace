@@ -16,6 +16,7 @@ use tracing::info;
 use web_sys::window;
 
 use super::Komponent;
+use crate::utils;
 use crate::{TouchRec, APP, NONCLICKABLE, ROUTE_CHANGE};
 
 mod digraph;
@@ -134,7 +135,7 @@ impl GraphRep {
     }
 
     fn is_dom_rendered(&self) -> bool {
-        let x = is_element_present(&self.cyto_id);
+        let x = utils::is_element_present(&self.cyto_id);
         if x {
             if let Some(dom) = self.coordinates() {
                 NONCLICKABLE.write().insert(self.cyto_id.to_string(), dom);
@@ -301,14 +302,6 @@ fn rect(id: &str) -> Option<TouchRec> {
     info!("rect is {rect:?}");
 
     Some(rect)
-}
-
-fn is_element_present(id: &str) -> bool {
-    window()
-        .and_then(|win| win.document())
-        .unwrap()
-        .get_element_by_id(id)
-        .is_some()
 }
 
 fn adjust_graph(cyto_id: &str, origin: String) {

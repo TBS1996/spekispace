@@ -70,20 +70,12 @@ pub struct NonClickable {
     inner: Arc<Mutex<HashMap<Route, HashMap<String, TouchRec>>>>,
 }
 
-fn is_element_present(id: &str) -> bool {
-    web_sys::window()
-        .and_then(|win| win.document())
-        .unwrap()
-        .get_element_by_id(id)
-        .is_some()
-}
-
 impl NonClickable {
     pub fn contains(&self, point: Point) -> bool {
         let route = use_route::<Route>();
         for (id, rec) in self.inner.lock().unwrap().entry(route).or_default().iter() {
             if rec.contains(point) {
-                if is_element_present(id) {
+                if utils::is_element_present(id) {
                     return true;
                 }
             }
