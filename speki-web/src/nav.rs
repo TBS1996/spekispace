@@ -9,28 +9,30 @@ pub fn image(src: &str, img_size: usize, spin: bool) -> Element {
 
     rsx! {
         div {
-            class: "mr-4 flex-shrink-0 flex items-center justify-center", // Prevent shrinking and center the icon
+            class: "mr-4 flex-shrink-0 flex items-center justify-center",
             img {
                 class: "{class}",
-                style: "width: {size}; height: {size};", // Explicit size for the icon
+                style: "width: {size}; height: {size};",
                 src: "assets/{src}",
             }
         }
     }
 }
 
+pub static SYNCING: GlobalSignal<bool> = Signal::global(|| false);
+
 fn route_elm(route: Route) -> Element {
     let is_current = use_route::<Route>() == route;
 
     let classes = if is_current {
-        "font-bold text-gray-950 hover:text-gray-650"
+        "font-bold text-gray-950 hover:text-gray-650 text-lg"
     } else {
-        "text-gray-600 hover:text-gray-500"
+        "text-gray-600 hover:text-gray-500 text-lg"
     };
 
     rsx! {
         li {
-            class: "mr-12",
+            class: "mr-8",
             Link {
                 class: "{classes}",
                 to: route,
@@ -41,28 +43,28 @@ fn route_elm(route: Route) -> Element {
     }
 }
 
-pub static SYNCING: GlobalSignal<bool> = Signal::global(|| false);
-
 #[component]
 pub fn nav() -> Element {
     rsx! {
-        section { class: "relative",
-            nav { class: "flex justify-between",
-                div { //class: "px-12 py-8 flex w-full items-center",
-                    class: "pl-12 pr-0 py-8 flex w-full items-center", // Left padding (pl-12), no right padding (pr-0)
-                    ul { class: "flex flex-row font-semibold font-heading",
+        section {
+            class: "relative w-full",
+            nav {
+                class: "flex justify-between items-center w-full p-0 overflow-hidden",
+                div {
+                    class: "flex w-full items-center lg:pl-12 lg:py-8 pl-4 py-4 flex-nowrap",
+                    ul {
+                        class: "flex flex-row font-semibold font-heading space-x-6",
                         button {
                             onclick: move |_| {
-                                spawn(async move{
+                                spawn(async move {
                                     crate::utils::sync().await;
                                 });
                             },
-                            { image("sync.svg",  34, SYNCING.cloned()) }
+                            { image("sync.svg", 34, SYNCING.cloned()) }
                         }
                         { route_elm(Route::Review {}) }
                         { route_elm(Route::Add {}) }
                         { route_elm(Route::Browse {}) }
-
                     }
                 }
             }
