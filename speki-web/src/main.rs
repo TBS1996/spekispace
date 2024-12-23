@@ -1,8 +1,12 @@
 #![allow(non_snake_case)]
 
 use std::{
+    collections::HashMap,
     rc::Rc,
-    sync::atomic::{AtomicBool, Ordering},
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc, Mutex,
+    },
 };
 
 use dioxus::prelude::*;
@@ -38,9 +42,76 @@ fn main() {
     dioxus::launch(TheApp);
 }
 
+#[derive(Debug, Copy, Clone)]
+pub struct TouchRec {
+    pub x: f64,
+    pub y: f64,
+    pub height: f64,
+    pub width: f64,
+}
+
+impl TouchRec {
+    pub fn contains(&self, point: Point) -> bool {
+        point.x > self.x
+            && point.x < (self.x + self.width)
+            && point.y > self.y
+            && point.y < (self.y + self.height)
+    }
+}
+
+#[derive(Debug, Copy, Clone)]
+pub struct Point {
+    pub x: f64,
+    pub y: f64,
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct NonClickable {
+    inner: Arc<Mutex<HashMap<Route, HashMap<String, TouchRec>>>>,
+}
+
+fn is_element_present(id: &str) -> bool {
+    web_sys::window()
+        .and_then(|win| win.document())
+        .unwrap()
+        .get_element_by_id(id)
+        .is_some()
+}
+
+impl NonClickable {
+    pub fn contains(&self, point: Point) -> bool {
+        let route = use_route::<Route>();
+        for (id, rec) in self.inner.lock().unwrap().entry(route).or_default().iter() {
+            if rec.contains(point) {
+                if is_element_present(id) {
+                    return true;
+                }
+            }
+        }
+
+        false
+    }
+
+    pub fn clear(&self) {
+        let route = use_route::<Route>();
+        self.inner.lock().unwrap().entry(route).or_default().clear();
+    }
+
+    pub fn insert(&self, id: String, rec: TouchRec) {
+        let route = use_route::<Route>();
+        self.inner
+            .lock()
+            .unwrap()
+            .entry(route)
+            .or_default()
+            .insert(id, rec);
+    }
+}
+
 static CARDS: GlobalSignal<CardEntries> = Signal::global(CardEntries::default);
 static APP: GlobalSignal<App> = Signal::global(App::new);
-static OVERLAY: GlobalSignal<OverlayManager> = Signal::global(OverlayManager::new);
+static OVERLAY: GlobalSignal<OverlayManager> = Signal::global(Default::default);
+static NONCLICKABLE: GlobalSignal<NonClickable> = Signal::global(Default::default);
 
 #[component]
 pub fn TheApp() -> Element {

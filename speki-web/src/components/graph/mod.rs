@@ -8,6 +8,7 @@ use std::{
 
 use digraph::RustGraph;
 use dioxus::prelude::*;
+use js_sys::eval;
 use speki_core::{AnyType, Card};
 use speki_dto::CardId;
 use speki_web::{Node, NodeMetadata};
@@ -15,7 +16,7 @@ use tracing::info;
 use web_sys::window;
 
 use super::Komponent;
-use crate::{APP, ROUTE_CHANGE};
+use crate::{TouchRec, APP, NONCLICKABLE, ROUTE_CHANGE};
 
 mod digraph;
 mod js;
@@ -62,6 +63,10 @@ impl GraphRep {
 
     pub fn re_render(&self) {
         ScopeId(self.scope.load(Ordering::SeqCst)).needs_update();
+    }
+
+    pub fn coordinates(&self) -> Option<TouchRec> {
+        rect(&self.cyto_id)
     }
 
     pub fn with_hook(mut self, hook: Arc<Box<dyn Fn(Arc<Card<AnyType>>)>>) -> Self {
@@ -129,7 +134,11 @@ impl GraphRep {
     }
 
     fn is_dom_rendered(&self) -> bool {
-        is_element_present(&self.cyto_id)
+        let x = is_element_present(&self.cyto_id);
+        if x {
+            self.coordinates();
+        }
+        x
     }
 
     async fn create_cyto_instance(&self) {
@@ -149,6 +158,10 @@ impl GraphRep {
 
 impl Komponent for GraphRep {
     fn render(&self) -> Element {
+        if let Some(dom) = self.coordinates() {
+            NONCLICKABLE.write().insert(self.cyto_id.to_string(), dom);
+        }
+
         let scope = current_scope_id().unwrap();
         self.scope.store(scope.0, Ordering::SeqCst);
         info!("init scope: {scope:?}");
@@ -266,6 +279,23 @@ impl Komponent for GraphRep {
             }
         }
     }
+}
+
+fn rect(id: &str) -> Option<TouchRec> {
+    let rec = window()?
+        .document()?
+        .get_element_by_id(id)?
+        .get_bounding_client_rect();
+
+    let rect = TouchRec {
+        x: rec.x(),
+        y: rec.y(),
+        height: rec.height(),
+        width: rec.width(),
+    };
+    info!("rect is {rect:?}");
+
+    Some(rect)
 }
 
 fn is_element_present(id: &str) -> bool {
