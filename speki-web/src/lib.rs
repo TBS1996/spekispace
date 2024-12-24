@@ -149,21 +149,6 @@ impl NodeMetadata {
     }
 }
 
-/*
-wtf i wanna do
-
-collect all nodes
-collect all edges between the nodes
-
-for collecting all nodes and stuff
-
-we know the uninit can have init as deps, but not the other way
-so we can collect all the recursive uninit
-and from those check look through them, collect all the cardids, get all the rec deps from them, and add those as nodes and stuff
-
-
-*/
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Node {
     Card(CardId),
