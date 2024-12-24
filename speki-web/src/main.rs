@@ -169,14 +169,12 @@ fn Wrapper() -> Element {
             onkeydown: move |event| log_event(event.data()),
             class: "h-screen overflow-hidden flex flex-col",
 
-            // Navbar at the top for non-short screens
             if !is_short_screen() {
                 crate::nav::nav {}
             }
 
-            // Main content area
             div {
-                class: "flex-1 overflow-hidden", // Prevent any overflow scrolling in this section
+                class: "flex-1 overflow-hidden",
                 if let Some(overlay) = overlay.render() {
                     { overlay }
                 } else {
@@ -184,7 +182,6 @@ fn Wrapper() -> Element {
                 }
             }
 
-            // Navbar at the bottom for short screens
             if is_short_screen() {
                 crate::nav::nav {}
             }

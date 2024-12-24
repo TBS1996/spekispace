@@ -1559,6 +1559,10 @@ html {
   flex-shrink: 0;
 }
 
+.flex-grow {
+  flex-grow: 1;
+}
+
 .table-fixed {
   table-layout: fixed;
 }
