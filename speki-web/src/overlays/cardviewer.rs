@@ -160,15 +160,114 @@ impl CardViewer {
         }
     }
 
-    fn render_inputs(&self) -> Element {
-        info!("render inputs");
+    fn add_existing_dep(&self) -> Element {
         let selv = self.clone();
-        let selv2 = self.clone();
-        let selv3 = self.clone();
+        rsx! {
+            button {
+                class: "mt-6 inline-flex items-center text-white bg-gray-800 border-0 py-1 px-3 focus:outline-none hover:bg-gray-700 rounded text-base md:mt-0",
+                onclick: move |_| {
+                    let selv = selv.clone();
+
+                    let fun = move |card: Arc<Card<AnyType>>| {
+                        selv.dependencies.clone().write().push(card.id);
+                        selv.set_graph();
+                        let old_card = selv.old_card.cloned();
+                        spawn(async move {
+                            if let Some(old_card) = old_card {
+                                Arc::unwrap_or_clone(old_card).add_dependency(card.id).await;
+                            }
+                        });
+                    };
+
+                    let props = CardSelector::dependency_picker(Box::new(fun));
+                    OVERLAY.cloned().set(Box::new(props));
+                },
+                "add existing dependency"
+            }
+        }
+    }
+
+    fn save_button(&self) -> Element {
+        let selv = self.clone();
+        rsx! {
+            button {
+                class: "mt-6 inline-flex items-center text-white bg-gray-800 border-0 py-1 px-3 focus:outline-none hover:bg-gray-700 rounded text-base md:mt-0",
+                onclick: move |_| {
+                    if let Some(card) = selv.to_card() {
+                        let selveste = selv.clone();
+                        spawn(async move {
+                            let mut new_raw = speki_core::card::new_raw_card(card.ty);
+
+                            if let Some(card) = selveste.old_card.cloned() {
+                                new_raw.id = card.id.into_inner();
+                            }
+
+                            selv.is_done.clone().set(true);
+
+                            for dep in card.deps {
+                                new_raw.dependencies.insert(dep.into_inner());
+                            }
+
+                            let card = APP.read().new_from_raw(new_raw).await;
+                            if let Some(hook) = selveste.save_hook.clone() {
+                                (hook)(card);
+                            }
+                            selveste.reset().await;
+                        });
+                    }
+                },
+                "save"
+            }
+        }
+    }
+
+    fn add_new_dep(&self) -> Element {
+        let selv = self.clone();
+        rsx! {
+                button {
+                    class: "mt-6 inline-flex items-center text-white bg-gray-800 border-0 py-1 px-3 focus:outline-none hover:bg-gray-700 rounded text-base md:mt-0",
+                    onclick: move |_| {
+                        let selv = selv.clone();
+                        let selfnode = selv.to_node();
+                        let selfdependents = selv.dependents.cloned();
+                        let scope = current_scope_id().unwrap();
+
+                        let fun = move |card: Arc<Card<AnyType>>| {
+                            selv.dependencies.clone().write().push(card.id);
+                            let old_card = selv.old_card.cloned();
+                            let selv = selv.clone();
+                            spawn(async move {
+                                if let Some(old_card) = old_card {
+                                    Arc::unwrap_or_clone(old_card).add_dependency(card.id).await;
+                                }
+                                selv.set_graph();
+                                ROUTE_CHANGE.store(true, std::sync::atomic::Ordering::SeqCst);
+                                scope.needs_update();
+                            });
+                        };
+
+                        let viewer = Self::new()
+                            .with_hook(Arc::new(Box::new(fun)))
+                            .with_title("adding dependency".to_string())
+                            .with_dependents(vec![Node::Nope {
+                                node: selfnode,
+                                dependencies: vec![],
+                                dependents: selfdependents,
+                            }]);
+                        viewer.set_graph();
+                        OVERLAY.cloned().set(Box::new(viewer));
+                    },
+                    "add new dependency"
+                }
+        }
+    }
+
+    fn input_elements(&self, ty: CardTy) -> Element {
+        let selv = self.clone();
         rsx! {
             { self.front.render() }
 
-            match *self.front.dropdown.selected.read() {
+            match ty {
                 CardTy::Unfinished => rsx! {},
 
                 CardTy::Normal => rsx! {
@@ -194,91 +293,20 @@ impl CardViewer {
                 },
             }
 
+        }
+    }
+
+    fn render_inputs(&self) -> Element {
+        info!("render inputs");
+        let ty = self.front.dropdown.selected.clone();
+        rsx! {
+
+            {self.input_elements(ty.cloned())}
+
             div {
-                button {
-                    class: "mt-6 inline-flex items-center text-white bg-gray-800 border-0 py-1 px-3 focus:outline-none hover:bg-gray-700 rounded text-base md:mt-0",
-                    onclick: move |_| {
-                        let selv = selv3.clone();
-                        let selfnode = selv3.to_node();
-                        let selfdependents = selv3.dependents.cloned();
-                        let scope = current_scope_id().unwrap();
-
-                        let fun = move |card: Arc<Card<AnyType>>| {
-                            selv3.dependencies.clone().write().push(card.id);
-                            let old_card = selv3.old_card.cloned();
-                            let selv = selv.clone();
-                            spawn(async move {
-                                if let Some(old_card) = old_card {
-                                    Arc::unwrap_or_clone(old_card).add_dependency(card.id).await;
-                                }
-                                selv.set_graph();
-                                ROUTE_CHANGE.store(true, std::sync::atomic::Ordering::SeqCst);
-                                scope.needs_update();
-                            });
-                        };
-
-                        let viewer = Self::new()
-                            .with_hook(Arc::new(Box::new(fun)))
-                            .with_title("adding dependency".to_string())
-                            .with_dependents(vec![Node::Nope {
-                                node: selfnode,
-                                dependencies: vec![],
-                                dependents: selfdependents,
-                            }]);
-                        viewer.set_graph();
-                        OVERLAY.cloned().set(Box::new(viewer));
-                    },
-                    "add new dependency"
-                }
-                button {
-                    class: "mt-6 inline-flex items-center text-white bg-gray-800 border-0 py-1 px-3 focus:outline-none hover:bg-gray-700 rounded text-base md:mt-0",
-                    onclick: move |_| {
-                        let selv = selv2.clone();
-
-                        let fun = move |card: Arc<Card<AnyType>>| {
-                            selv.dependencies.clone().write().push(card.id);
-                            selv.set_graph();
-                            let old_card = selv.old_card.cloned();
-                            spawn(async move {
-                                if let Some(old_card) = old_card {
-                                    Arc::unwrap_or_clone(old_card).add_dependency(card.id).await;
-                                }
-                            });
-                        };
-
-                        let props = CardSelector::dependency_picker(Box::new(fun));
-                        OVERLAY.cloned().set(Box::new(props));
-                    },
-                    "add existing dependency"
-                }
-                button {
-                    class: "mt-6 inline-flex items-center text-white bg-gray-800 border-0 py-1 px-3 focus:outline-none hover:bg-gray-700 rounded text-base md:mt-0",
-                    onclick: move |_| {
-                        if let Some(card) = selv.to_card() {
-                            let selveste = selv.clone();
-                            spawn(async move {
-                                let mut new_raw = speki_core::card::new_raw_card(card.ty);
-
-                                if let Some(card) = selveste.old_card.cloned() {
-                                    new_raw.id = card.id.into_inner();
-                                }
-
-                                selv.is_done.clone().set(true);
-
-                                for dep in card.deps {
-                                    new_raw.dependencies.insert(dep.into_inner());
-                                }
-
-                                let card = APP.read().new_from_raw(new_raw).await;
-                                if let Some(hook) = selveste.save_hook.clone() {
-                                    (hook)(card);
-                                }
-                                selveste.reset().await;
-                            });
-                        }
-                    },
-                    "save"
-                }
+                { self.add_new_dep() }
+                { self.add_existing_dep() }
+                { self.save_button() }
             }
         }
     }
