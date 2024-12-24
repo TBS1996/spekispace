@@ -67,7 +67,7 @@ impl GraphRep {
     }
 
     pub fn coordinates(&self) -> Option<TouchRec> {
-        rect(&self.cyto_id)
+        utils::rect(&self.cyto_id)
     }
 
     pub fn with_hook(mut self, hook: Arc<Box<dyn Fn(Arc<Card<AnyType>>)>>) -> Self {
@@ -285,23 +285,6 @@ impl Komponent for GraphRep {
             }
         }
     }
-}
-
-fn rect(id: &str) -> Option<TouchRec> {
-    let rec = window()?
-        .document()?
-        .get_element_by_id(id)?
-        .get_bounding_client_rect();
-
-    let rect = TouchRec {
-        x: rec.x(),
-        y: rec.y(),
-        height: rec.height(),
-        width: rec.width(),
-    };
-    info!("rect is {rect:?}");
-
-    Some(rect)
 }
 
 fn adjust_graph(cyto_id: &str, origin: String) {

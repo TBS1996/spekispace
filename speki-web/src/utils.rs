@@ -10,7 +10,7 @@ use crate::{
     firebase::{sign_in, FirestoreProvider},
     nav::SYNCING,
     pages::CardEntry,
-    APP, CARDS,
+    TouchRec, APP, CARDS,
 };
 
 #[derive(Clone)]
@@ -44,6 +44,23 @@ impl Debug for App {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_tuple("App").field(&self.0).finish()
     }
+}
+
+pub fn rect(id: &str) -> Option<TouchRec> {
+    let rec = web_sys::window()?
+        .document()?
+        .get_element_by_id(id)?
+        .get_bounding_client_rect();
+
+    let rect = TouchRec {
+        x: rec.x(),
+        y: rec.y(),
+        height: rec.height(),
+        width: rec.width(),
+    };
+    info!("rect is {rect:?}");
+
+    Some(rect)
 }
 
 pub fn is_element_present(id: &str) -> bool {
