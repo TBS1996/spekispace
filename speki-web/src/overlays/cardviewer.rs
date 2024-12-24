@@ -297,28 +297,32 @@ impl Komponent for CardViewer {
 
         let selv = self.clone();
         rsx! {
-                    div {
-                        class: "flex flex-col w-full h-[800px] mt-8",
-                        if let Some(title) = self.title.as_ref() {
-                            h1 {
-                                class: "text-3xl font-bold mb-4 text-center",
-                                "{title}"
-                            }
-                        }
-                        div {
-            class: "flex flex-col md:flex-row w-full h-full overflow-x-hidden", // Responsive layout
             div {
-                class: "flex-none p-4 w-full max-w-[400px] box-border", // Consistent max width for inputs
-                { selv.render_inputs() }
-            }
-            div {
-                class: "flex-1 w-full max-w-[400px] md:max-w-[700px] max-h-[700px] box-border mt-2 md:mt-0", // Graph container
-                { self.graph.render() }
-            }
-        }
-
+                class: "flex flex-col w-full h-[800px] mt-8",
+                if let Some(title) = self.title.as_ref() {
+                    h1 {
+                        class: "text-3xl font-bold mb-4 text-center",
+                        "{title}"
                     }
                 }
+
+
+                div {
+                    class: "flex flex-col md:flex-row w-full h-full overflow-x-hidden", // Responsive layout
+                    div {
+                        class: "flex-none p-4 w-full max-w-[400px] box-border order-2 md:order-1", // Inputs container
+                        { selv.render_inputs() }
+                    }
+                    div {
+                        class: "flex-1 w-full max-w-[400px] md:max-w-[700px] max-h-[700px] box-border mb-2 md:mb-0 order-1 md:order-2", // Graph container
+                        { self.graph.render() }
+                    }
+                }
+
+
+
+            }
+        }
     }
 }
 
