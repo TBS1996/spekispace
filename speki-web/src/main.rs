@@ -167,6 +167,10 @@ fn Wrapper() -> Element {
                     }
                 },
                 ontouchend: move |event| {
+                    let _ = event;
+
+                    // disabled cause it's buggy on my phone, idk
+                    /*
                     let Some(point) = event.data().touches_changed().first().map(|x|x.client_coordinates()) else {
                         return;
                     };
@@ -186,6 +190,7 @@ fn Wrapper() -> Element {
                             navigator.replace(route);
                         }
                     }
+                    */
                 },
                 if let Some(overlay) = overlay.render() {
                     { overlay }
