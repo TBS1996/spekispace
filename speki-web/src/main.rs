@@ -135,6 +135,8 @@ fn Wrapper() -> Element {
     ROUTE_CHANGE.store(true, Ordering::SeqCst);
     let overlay = OVERLAY.cloned();
     let start_x = use_signal::<Option<f64>>(Default::default);
+    let route = use_route::<Route>();
+    let navigator = use_navigator();
 
     let log_event = move |event: Rc<KeyboardData>| {
         if let Key::Escape = event.key() {
@@ -174,15 +176,14 @@ fn Wrapper() -> Element {
                     };
                     let diff = x - start_x;
                     let treshold = 50.;
-                    let route = use_route::<Route>();
 
                     if diff > treshold  {
                         if let Some(route) = route.left() {
-                            use_navigator().replace(route);
+                            navigator.replace(route);
                         }
                     } else if diff < -treshold {
                         if let Some(route) = route.right() {
-                            use_navigator().replace(route);
+                            navigator.replace(route);
                         }
                     }
                 },
