@@ -19,23 +19,8 @@ jobs:
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
             ${{ runner.os }}-cargo-
-
-      - name: Cache Docker Layers
-        uses: actions/cache@v3
-        with:
-          path: /tmp/.docker-cache
-          key: ${{ runner.os }}-docker-${{ hashFiles('Dockerfile') }}
-          restore-keys: |
-            ${{ runner.os }}-docker-
-
       - name: Use Docker to Build with Dioxus CLI
-        env:
-          DOCKER_CACHE_DIR: /tmp/.docker-cache
         run: |
-          mkdir -p $DOCKER_CACHE_DIR
-          docker load < $DOCKER_CACHE_DIR/cached_image.tar || echo "No cache available"
-          docker pull nigeleke/docker-dioxus-cli:v0.6.1 || true
-          docker save nigeleke/docker-dioxus-cli:v0.6.1 > $DOCKER_CACHE_DIR/cached_image.tar
           docker run --rm \
             -v ${{ github.workspace }}:/workspace \
             -v ${{ github.workspace }}/target:/workspace/target \
@@ -43,7 +28,6 @@ jobs:
             -w /workspace/speki-web \
             nigeleke/docker-dioxus-cli:v0.6.1 \
             dx build --release
-
       - name: Verify Firebase Config and Build Output
         continue-on-error: true
         run: |
