@@ -137,7 +137,6 @@ fn Wrapper() -> Element {
     let start_x = use_signal::<Option<f64>>(Default::default);
     let route = use_route::<Route>();
     let navigator = use_navigator();
-    let nonclickable = NONCLICKABLE.cloned();
 
     let log_event = move |event: Rc<KeyboardData>| {
         if let Key::Escape = event.key() {
@@ -163,7 +162,7 @@ fn Wrapper() -> Element {
                         x: point.x,
                         y: point.y,
                     };
-                    if !nonclickable.contains(point) {
+                    if !NONCLICKABLE.read().contains(point) {
                         start_x.clone().set(Some(point.x));
                     }
                 },
