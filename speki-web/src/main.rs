@@ -129,14 +129,21 @@ pub fn TheApp() -> Element {
     }
 }
 
+/// Estimates the screen height in inches.
+pub fn screen_height_in_inches() -> Option<f64> {
+    let window = web_sys::window()?; // Access the browser window
+    let screen = window.screen().unwrap(); // Access the screen object
+    let height_pixels = screen.height().unwrap_or_default() as f64; // Screen height in CSS pixels
+    let device_pixel_ratio = window.device_pixel_ratio(); // Get DPR
+    let dpi = 96.0; // Assume 96 DPI as a baseline for most devices
+    Some(height_pixels / (device_pixel_ratio * dpi)) // Calculate physical size
+}
+
 #[component]
 fn Wrapper() -> Element {
     info!("wrapper scope id: {:?}", current_scope_id().unwrap());
     ROUTE_CHANGE.store(true, Ordering::SeqCst);
     let overlay = OVERLAY.cloned();
-    let start_x = use_signal::<Option<f64>>(Default::default);
-    let route = use_route::<Route>();
-    let navigator = use_navigator();
 
     let log_event = move |event: Rc<KeyboardData>| {
         if let Key::Escape = event.key() {
@@ -144,59 +151,42 @@ fn Wrapper() -> Element {
         }
     };
 
+    let is_short_screen = use_signal(|| false);
+    let height = use_signal(|| 0.0);
+
+    use_effect(move || {
+        let is_short = screen_height_in_inches().unwrap() < 4.;
+        is_short_screen.clone().set(is_short);
+        height
+            .clone()
+            .set(screen_height_in_inches().unwrap_or_default());
+    });
+
     rsx! {
         div {
             id: "receiver",
             tabindex: 0,
             onkeydown: move |event| log_event(event.data()),
+            class: "h-screen overflow-hidden flex flex-col",
 
-            crate::nav::nav {}
+            // Navbar at the top for non-short screens
+            if !is_short_screen() {
+                crate::nav::nav {}
+            }
 
+            // Main content area
             div {
-                ontouchstart: move |event| {
-                    let Some(point) = event.data().touches().first().map(|x|x.client_coordinates()) else {
-                        return;
-                    };
-
-                    let point = Point {
-                        x: point.x,
-                        y: point.y,
-                    };
-                    if !NONCLICKABLE.read().contains(point) {
-                        start_x.clone().set(Some(point.x));
-                    }
-                },
-                ontouchend: move |event| {
-                    let _ = event;
-
-                    // disabled cause it's buggy on my phone, idk
-                    /*
-                    let Some(point) = event.data().touches_changed().first().map(|x|x.client_coordinates()) else {
-                        return;
-                    };
-                    let x = point.x;
-                    let Some(start_x) = start_x.cloned() else {
-                        return;
-                    };
-                    let diff = x - start_x;
-                    let treshold = 50.;
-
-                    if diff > treshold  {
-                        if let Some(route) = route.left() {
-                            navigator.replace(route);
-                        }
-                    } else if diff < -treshold {
-                        if let Some(route) = route.right() {
-                            navigator.replace(route);
-                        }
-                    }
-                    */
-                },
+                class: "flex-1 overflow-hidden", // Prevent any overflow scrolling in this section
                 if let Some(overlay) = overlay.render() {
                     { overlay }
                 } else {
                     Outlet::<Route> {}
                 }
+            }
+
+            // Navbar at the bottom for short screens
+            if is_short_screen() {
+                crate::nav::nav {}
             }
         }
     }
