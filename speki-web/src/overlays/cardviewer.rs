@@ -300,14 +300,10 @@ impl CardViewer {
         info!("render inputs");
         let ty = self.front.dropdown.selected.clone();
         rsx! {
-
-            {self.input_elements(ty.cloned())}
-
-            div {
-                { self.add_new_dep() }
-                { self.add_existing_dep() }
-                { self.save_button() }
-            }
+            { self.input_elements(ty.cloned()) }
+            { self.add_new_dep() }
+            { self.add_existing_dep() }
+            { self.save_button() }
         }
     }
 }
