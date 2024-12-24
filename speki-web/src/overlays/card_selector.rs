@@ -28,6 +28,18 @@ impl CardSelector {
     }
 }
 
+impl Overlay for CardSelector {
+    fn is_done(&self) -> Signal<bool> {
+        self.done.clone()
+    }
+}
+
+impl PartialEq for CardSelector {
+    fn eq(&self, other: &Self) -> bool {
+        self.title == other.title && self.search == other.search
+    }
+}
+
 impl Komponent for CardSelector {
     /// Selects a card from the collection and calls a closure on it.
     fn render(&self) -> Element {
@@ -50,59 +62,57 @@ impl Komponent for CardSelector {
             .collect();
 
         rsx! {
-            h1 { "{title}" }
+            div {
+                class: "h-screen flex flex-col", // Full screen height, flex column layout
 
-            input {
-                class: "bg-white w-full border border-gray-300 rounded-md p-2 mb-4 text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent",
-                value: "{search}",
-                oninput: move |evt| search.set(evt.value().clone()),
-            }
-
-            table {
-                class: "min-w-full table-fixed border-collapse border border-gray-200",
-                thead {
-                    class: "bg-gray-500",
-                    tr {
-                        th { class: "border border-gray-300 px-4 py-2 w-2/3", "Front" }
-                        th { class: "border border-gray-300 px-4 py-2 w-1/12", "Recall" }
-                        th { class: "border border-gray-300 px-4 py-2 w-1/12", "Stability" }
-                    }
+                h1 {
+                    class: "text-lg font-bold mb-4",
+                    "{title}"
                 }
-                tbody {
-                    for (card, _closure, is_done) in filtered_cards {
-                        tr {
-                            class: "hover:bg-gray-50",
-                            onclick: move |_| {
-                                let card = card.clone();
-                                let closure = _closure.clone();
-                                let done = is_done.clone();
-                                spawn(async move {
-                                    closure(card.card.clone());
-                                });
 
-                                done.clone().set(true);
+                input {
+                    class: "bg-white w-full border border-gray-300 rounded-md p-2 mb-4 text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent",
+                    value: "{search}",
+                    oninput: move |evt| search.set(evt.value().clone()),
+                }
 
-                            },
+                div {
+                    class: "flex-1 overflow-y-auto", // Scrollable container, takes up remaining space
+                    table {
+                        class: "min-w-full table-fixed border-collapse border border-gray-200",
+                        thead {
+                            class: "bg-gray-500",
+                            tr {
+                                th { class: "border border-gray-300 px-4 py-2 w-2/3", "Front" }
+                                th { class: "border border-gray-300 px-4 py-2 w-1/12", "Recall" }
+                                th { class: "border border-gray-300 px-4 py-2 w-1/12", "Stability" }
+                            }
+                        }
+                        tbody {
+                            for (card, _closure, is_done) in filtered_cards {
+                                tr {
+                                    class: "hover:bg-gray-50 cursor-pointer",
+                                    onclick: move |_| {
+                                        let card = card.clone();
+                                        let closure = _closure.clone();
+                                        let done = is_done.clone();
+                                        spawn(async move {
+                                            closure(card.card.clone());
+                                        });
 
-                            td { class: "border border-gray-300 px-4 py-2 w-2/3", "{card.front}" }
-                            td { class: "border border-gray-300 px-4 py-2 w-1/12", "{card.card.recall_rate().unwrap_or_default():.2}" }
-                            td { class: "border border-gray-300 px-4 py-2 w-1/12", "{card.card.maybeturity().unwrap_or_default():.1}" }
+                                        done.clone().set(true);
+
+                                    },
+
+                                    td { class: "border border-gray-300 px-4 py-2 w-2/3", "{card.front}" }
+                                    td { class: "border border-gray-300 px-4 py-2 w-1/12", "{card.card.recall_rate().unwrap_or_default():.2}" }
+                                    td { class: "border border-gray-300 px-4 py-2 w-1/12", "{card.card.maybeturity().unwrap_or_default():.1}" }
+                                }
+                            }
                         }
                     }
                 }
             }
         }
-    }
-}
-
-impl Overlay for CardSelector {
-    fn is_done(&self) -> Signal<bool> {
-        self.done.clone()
-    }
-}
-
-impl PartialEq for CardSelector {
-    fn eq(&self, other: &Self) -> bool {
-        self.title == other.title && self.search == other.search
     }
 }
