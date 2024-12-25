@@ -278,11 +278,11 @@ impl CardViewer {
                     { selv.back.render() }
                     div {
                         class: "block text-gray-700 text-sm font-medium mb-2",
+                        style: "margin-right: 81px;",
                         "Parent class"
                         { selv.concept.render() }
                     }
                 },
-
                 CardTy::Instance => rsx! {
                     { selv.back.render() }
                     div {

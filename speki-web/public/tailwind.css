@@ -1603,8 +1603,8 @@ html {
   margin-bottom: 1rem;
 }
 
-.mb-8 {
-  margin-bottom: 2rem;
+.mb-9 {
+  margin-bottom: 2.25rem;
 }
 
 .mr-4 {
@@ -1625,10 +1625,6 @@ html {
 
 .mt-8 {
   margin-top: 2rem;
-}
-
-.mb-9 {
-  margin-bottom: 2.25rem;
 }
 
 .box-border {
@@ -1695,12 +1691,12 @@ html {
   max-width: 1000px;
 }
 
-.max-w-full {
-  max-width: 100%;
-}
-
 .max-w-\[500px\] {
   max-width: 500px;
+}
+
+.max-w-full {
+  max-width: 100%;
 }
 
 .flex-1 {
