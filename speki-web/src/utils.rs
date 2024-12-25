@@ -38,6 +38,13 @@ impl App {
         CARDS.read().insert(card.clone()).await;
         card
     }
+
+    pub async fn new_simple(&self, front: String, back: String) -> Arc<Card<AnyType>> {
+        let id = self.0.add_card(front, back).await;
+        let card = Arc::new(self.0.load_card(id).await.unwrap());
+        CARDS.read().insert(card.clone()).await;
+        card
+    }
 }
 
 impl Debug for App {

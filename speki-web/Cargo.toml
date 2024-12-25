@@ -39,6 +39,7 @@ petgraph.workspace = true
 once_cell.workspace = true
 speki-provider = { workspace = true, features = ["dexie", "browserfs"] }
 strum.workspace = true
+regex.workspace = true
 
 
 speki-dto = { path = "../speki-dto" }
