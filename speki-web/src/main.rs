@@ -152,14 +152,10 @@ fn Wrapper() -> Element {
     };
 
     let is_short_screen = use_signal(|| false);
-    let height = use_signal(|| 0.0);
 
     use_effect(move || {
         let is_short = screen_height_in_inches().unwrap() < 4.;
         is_short_screen.clone().set(is_short);
-        height
-            .clone()
-            .set(screen_height_in_inches().unwrap_or_default());
     });
 
     rsx! {
@@ -169,20 +165,30 @@ fn Wrapper() -> Element {
             onkeydown: move |event| log_event(event.data()),
             class: "h-screen overflow-hidden flex flex-col",
 
+            // Top navbar and content when not short
             if !is_short_screen() {
                 crate::nav::nav {}
-            }
 
-            div {
-                class: "flex-1 overflow-hidden",
-                if let Some(overlay) = overlay.render() {
-                    { overlay }
-                } else {
-                    Outlet::<Route> {}
+                div {
+                    class: "flex-1 overflow-hidden",
+                    if let Some(overlay) = overlay.render() {
+                        { overlay }
+                    } else {
+                        Outlet::<Route> {}
+                    }
                 }
             }
 
             if is_short_screen() {
+                div {
+                    class: "flex-1 overflow-y-auto",
+                    if let Some(overlay) = overlay.render() {
+                        { overlay }
+                    } else {
+                        Outlet::<Route> {}
+                    }
+                }
+
                 crate::nav::nav {}
             }
         }
