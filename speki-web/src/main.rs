@@ -72,7 +72,7 @@ pub struct NonClickable {
 
 impl NonClickable {
     pub fn contains(&self, point: Point) -> bool {
-        let route = use_route::<Route>();
+        let route = CURRENT_ROUTE.cloned();
         for (id, rec) in self.inner.lock().unwrap().entry(route).or_default().iter() {
             if rec.contains(point) {
                 if utils::is_element_present(id) {
@@ -85,12 +85,12 @@ impl NonClickable {
     }
 
     pub fn clear(&self) {
-        let route = use_route::<Route>();
+        let route = CURRENT_ROUTE.cloned();
         self.inner.lock().unwrap().entry(route).or_default().clear();
     }
 
     pub fn insert(&self, id: String, rec: TouchRec) {
-        let route = use_route::<Route>();
+        let route = CURRENT_ROUTE.cloned();
         self.inner
             .lock()
             .unwrap()
@@ -105,6 +105,7 @@ static APP: GlobalSignal<App> = Signal::global(App::new);
 static OVERLAY: GlobalSignal<OverlayManager> = Signal::global(Default::default);
 static NONCLICKABLE: GlobalSignal<NonClickable> = Signal::global(Default::default);
 static IS_SHORT: GlobalSignal<bool> = Signal::global(|| screen_height_in_inches().unwrap() < 4.);
+static CURRENT_ROUTE: GlobalSignal<Route> = Signal::global(|| Route::Home {});
 
 #[component]
 pub fn TheApp() -> Element {
@@ -142,6 +143,7 @@ pub fn screen_height_in_inches() -> Option<f64> {
 
 #[component]
 fn Wrapper() -> Element {
+    *CURRENT_ROUTE.write() = use_route::<Route>();
     info!("wrapper scope id: {:?}", current_scope_id().unwrap());
     ROUTE_CHANGE.store(true, Ordering::SeqCst);
     let overlay = OVERLAY.cloned();

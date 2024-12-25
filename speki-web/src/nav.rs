@@ -1,6 +1,6 @@
 use dioxus::prelude::*;
 
-use crate::Route;
+use crate::{Route, CURRENT_ROUTE};
 
 pub fn image(src: &str, img_size: usize, spin: bool) -> Element {
     let size = format!("{}px", img_size);
@@ -22,7 +22,7 @@ pub fn image(src: &str, img_size: usize, spin: bool) -> Element {
 pub static SYNCING: GlobalSignal<bool> = Signal::global(|| false);
 
 fn route_elm(route: Route) -> Element {
-    let is_current = use_route::<Route>() == route;
+    let is_current = CURRENT_ROUTE.cloned() == route;
 
     let classes = if is_current {
         "font-bold text-gray-950 hover:text-gray-650 text-lg"

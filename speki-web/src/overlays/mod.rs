@@ -6,7 +6,7 @@ use std::{
 use dioxus::prelude::*;
 use tracing::info;
 
-use crate::{components::Komponent, Route, NONCLICKABLE};
+use crate::{components::Komponent, Route, CURRENT_ROUTE, NONCLICKABLE};
 
 pub mod card_selector;
 pub mod cardviewer;
@@ -23,7 +23,7 @@ pub struct OverlayManager {
 
 impl OverlayManager {
     fn update_scope(&self) {
-        let route = use_route::<Route>();
+        let route = CURRENT_ROUTE.cloned();
         self.scopes
             .read()
             .unwrap()
@@ -41,7 +41,9 @@ impl OverlayManager {
     pub fn set(&self, popup: Box<dyn Overlay>) {
         info!("set popup");
         let popup = Arc::new(popup);
-        let route = use_route::<Route>();
+        info!("get route");
+        let route = CURRENT_ROUTE.cloned();
+        info!("route gotten!");
         self.overlays
             .try_write()
             .unwrap()
@@ -78,14 +80,14 @@ impl OverlayManager {
     }
 
     pub fn pop(&self) -> Option<Arc<Box<dyn Overlay>>> {
-        let route = use_route::<Route>();
+        let route = CURRENT_ROUTE.cloned();
         let pop = self.overlays.write().unwrap().get_mut(&route)?.pop();
         self.update_scope();
         pop
     }
 
     fn last(&self) -> Option<Arc<Box<dyn Overlay>>> {
-        let route = use_route::<Route>();
+        let route = CURRENT_ROUTE.cloned();
         self.overlays.read().unwrap().get(&route)?.last().cloned()
     }
 
@@ -102,7 +104,7 @@ impl OverlayManager {
     }
 
     fn set_scope(&self, scope: ScopeId) {
-        let route = use_route::<Route>();
+        let route = CURRENT_ROUTE.cloned();
         self.scopes.write().unwrap().insert(route, scope);
     }
 }
