@@ -22,10 +22,6 @@ pub struct OverlayManager {
 }
 
 impl OverlayManager {
-    pub fn new() -> Self {
-        Self::default()
-    }
-
     fn update_scope(&self) {
         let route = use_route::<Route>();
         self.scopes

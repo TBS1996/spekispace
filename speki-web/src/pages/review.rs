@@ -84,7 +84,7 @@ fn review_start(mut filter: Signal<String>) -> Element {
             if *editing.read() {
                 div{
                     input {
-                        class: "bg-white w-[700px] border border-gray-300 rounded-md p-2 text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent",
+                        class: "bg-white w-full max-w-[1000px] border border-gray-300 rounded-md p-2 text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent",
                         value: "{filter}",
                         oninput: move |evt| filter.set(evt.value().clone()),
                     }
