@@ -8,8 +8,8 @@ use speki_dto::Recall;
 use tracing::info;
 
 use crate::overlays::cardviewer::CardViewer;
-use crate::OVERLAY;
 use crate::{components::GraphRep, APP, DEFAULT_FILTER};
+use crate::{IS_SHORT, OVERLAY};
 
 static REVIEW_STATE: GlobalSignal<ReviewState> = Signal::global(ReviewState::new);
 
@@ -126,14 +126,27 @@ fn review_start(mut filter: Signal<String>) -> Element {
     }
 }
 
-fn review_buttons() -> Element {
+fn review_buttons(mut show_backside: Signal<bool>) -> Element {
     rsx! {
         div {
-            style: "display: flex; gap: 16px; justify-content: center; align-items: center;",
-            { recall_button(Recall::None) }
-            { recall_button(Recall::Late) }
-            { recall_button(Recall::Some) }
-            { recall_button(Recall::Perfect) }
+            class: "flex flex-col items-center justify-center mt-12", // Centralize content and ensure consistent positioning
+            style: "gap: 16px;", // Add spacing if needed
+
+            if !show_backside() {
+                button {
+                    class: "inline-flex items-center text-white bg-gray-800 border-0 py-1 px-3 focus:outline-none hover:bg-gray-700 rounded text-base",
+                    onclick: move |_| show_backside.set(true),
+                    "show backside"
+                }
+            } else {
+                div {
+                    class: "flex gap-4 justify-center items-center", // Keep buttons horizontally aligned
+                    { recall_button(Recall::None) }
+                    { recall_button(Recall::Late) }
+                    { recall_button(Recall::Some) }
+                    { recall_button(Recall::Perfect) }
+                }
+            }
         }
     }
 }
@@ -207,33 +220,44 @@ impl ReviewState {
     fn card_sides(&self) -> Element {
         let front = self.front.clone();
         let back = self.back.clone();
-        let mut show_backside = self.show_backside.clone();
+        let show_backside = self.show_backside.clone();
 
         rsx! {
-            p {
-                class: "text-lg text-gray-800 text-center",
-                "{front}"
-            }
-
             div {
                 class: "flex flex-col items-center w-full",
-                style: "min-height: 300px; display: flex; justify-content: flex-end; align-items: center;", // Reserve consistent height
+                style: "min-height: 300px; justify-content: flex-start; align-items: center;",
 
-                if show_backside() {
-                    p {
-                        class: "text-lg text-gray-700 text-center mb-4",
-                        "{back}"
+                p {
+                    class: "text-lg text-gray-800 text-center mb-10",
+                    "{front}"
+                }
+
+                div {
+                    class: "relative flex flex-col w-full",
+                    style: "height: 200px; justify-content: space-between;",
+
+                    div {
+                        class: "absolute top-0 w-full flex flex-col items-center",
+
+                        if show_backside() {
+                            div {
+                                class: "w-2/4 h-0.5 bg-gray-300",
+                                style: "margin-top: 4px; margin-bottom: 12px;",
+                            }
+                            p {
+                                class: "text-lg text-gray-700 text-center mb-4",
+                                "{back}"
+                            }
+                        } else {
+                            div {
+                                class: "w-2/4 h-0.5 invisible",
+                            }
+                        }
                     }
 
                     div {
-                        class: "flex justify-center gap-4",
-                        { review_buttons() }
-                    }
-                } else {
-                    button {
-                        class: "inline-flex items-center text-white bg-gray-800 border-0 py-1 px-3 focus:outline-none hover:bg-gray-700 rounded text-base",
-                        onclick: move |_| show_backside.set(true),
-                        "show backside"
+                        class: "absolute bottom-0 w-full flex justify-center items-center",
+                        { review_buttons(show_backside) }
                     }
                 }
             }
@@ -244,23 +268,32 @@ impl ReviewState {
         let selv = self.clone();
         let selv2 = self.clone();
 
+        let is_short = IS_SHORT.cloned();
+
+        let card_sides_justify_class = if is_short {
+            "justify-end mb-9"
+        } else {
+            "justify-start"
+        };
+
         rsx! {
             div {
-                class: "w-full max-w-4xl flex flex-col md:flex-row md:gap-8 items-start mt-12 px-4 md:px-0",
-
+                class: "w-full max-w-4xl flex flex-col min-h-screen px-4 md:px-0",
                 div {
-                    class: "w-full flex flex-col items-center gap-6",
+                    class: "w-full flex flex-col items-start gap-6",
+                    { selv.info_bar() }
+                }
+                div {
+                    class: "flex flex-col flex-grow items-center gap-6 {card_sides_justify_class}",
                     div {
-                        class: "w-full flex flex-col items-start gap-6",
-                        { selv.info_bar() }
+                        class: "w-full flex flex-col items-center gap-6",
+                        { selv2.card_sides() }
                     }
-
-                    { selv2.card_sides() }
-
                 }
             }
         }
     }
+
     pub fn new() -> Self {
         Self {
             card: Default::default(),
