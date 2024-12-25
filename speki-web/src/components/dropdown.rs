@@ -2,7 +2,6 @@ use std::fmt::Display;
 
 use dioxus::prelude::*;
 use serde::{Deserialize, Serialize};
-use tracing::info;
 
 use super::Komponent;
 
@@ -13,7 +12,6 @@ where
 {
     pub options: Vec<T>,
     pub selected: Signal<T>,
-    id: ScopeId,
 }
 
 impl<T> DropDownMenu<T>
@@ -24,23 +22,13 @@ where
         let options: Vec<T> = options.into_iter().collect();
         assert!(!options.is_empty(), "must provide at least one option");
         let selected = Signal::new_in_scope(options.first().unwrap().clone(), ScopeId(3));
-        let id = current_scope_id().unwrap();
 
-        Self {
-            options,
-            selected,
-            id,
-        }
+        Self { options, selected }
     }
 
     pub fn reset(&self) {
         let first = self.options.first().unwrap().clone();
         self.selected.clone().set(first);
-    }
-
-    pub fn with_id(mut self, id: ScopeId) -> Self {
-        self.id = id;
-        self
     }
 }
 
@@ -50,7 +38,6 @@ where
 {
     fn render(&self) -> Element {
         let mut dropdown = self.selected.clone();
-        let selv = self.clone();
         let val: String = serde_json::to_string(&dropdown.cloned()).unwrap();
 
         rsx! {
@@ -61,7 +48,6 @@ where
                     value: "{val}",
                     onchange: move |evt| {
                         let new_choice: T =  serde_json::from_str(evt.value().as_str()).unwrap();
-                        selv.id.needs_update();
                         dropdown.set(new_choice);
                     },
 
