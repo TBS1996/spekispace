@@ -331,7 +331,7 @@ impl Komponent for CardViewer {
                 div {
                     class: "flex flex-col md:flex-row w-full h-full overflow-hidden",
                     div {
-                        class: "flex-none p-4 w-full max-w-[1000px] box-border order-2 md:order-1 overflow-y-auto",
+                        class: "flex-none p-4 w-full max-w-[500px] box-border order-2 md:order-1 overflow-y-auto",
                         style: "min-height: 0; max-height: 100%;",
                         { self.render_inputs() }
                     }

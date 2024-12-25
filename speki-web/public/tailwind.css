@@ -1699,6 +1699,10 @@ html {
   max-width: 100%;
 }
 
+.max-w-\[500px\] {
+  max-width: 500px;
+}
+
 .flex-1 {
   flex: 1 1 0%;
 }
