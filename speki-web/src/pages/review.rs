@@ -224,7 +224,10 @@ impl ReviewState {
     pub async fn refresh(&mut self) {
         info!("refreshing..");
         let filter = self.filter.cloned();
-        let cards = APP.read().load_non_pending(Some(filter)).await;
+        let mut cards = APP.read().load_non_pending(Some(filter)).await;
+        let pending = APP.read().load_pending().await;
+        cards.extend(pending);
+
         info!("review cards loaded");
         self.tot_len.clone().set(cards.len());
         {
