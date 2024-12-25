@@ -104,6 +104,7 @@ static CARDS: GlobalSignal<CardEntries> = Signal::global(CardEntries::default);
 static APP: GlobalSignal<App> = Signal::global(App::new);
 static OVERLAY: GlobalSignal<OverlayManager> = Signal::global(Default::default);
 static NONCLICKABLE: GlobalSignal<NonClickable> = Signal::global(Default::default);
+static IS_SHORT: GlobalSignal<bool> = Signal::global(|| screen_height_in_inches().unwrap() < 4.);
 
 #[component]
 pub fn TheApp() -> Element {
@@ -151,13 +152,6 @@ fn Wrapper() -> Element {
         }
     };
 
-    let is_short_screen = use_signal(|| false);
-
-    use_effect(move || {
-        let is_short = screen_height_in_inches().unwrap() < 4.;
-        is_short_screen.clone().set(is_short);
-    });
-
     rsx! {
         div {
             id: "receiver",
@@ -165,8 +159,7 @@ fn Wrapper() -> Element {
             onkeydown: move |event| log_event(event.data()),
             class: "h-screen overflow-hidden flex flex-col",
 
-            // Top navbar and content when not short
-            if !is_short_screen() {
+            if !IS_SHORT() {
                 crate::nav::nav {}
 
                 div {
@@ -179,9 +172,8 @@ fn Wrapper() -> Element {
                 }
             }
 
-            if is_short_screen() {
+            if IS_SHORT() {
                 div {
-                    //class: "flex-1 overflow-y-auto",
                     class: "flex-1 overflow-hidden pb-8",
                     if let Some(overlay) = overlay.render() {
                         { overlay }
