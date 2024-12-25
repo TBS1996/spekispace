@@ -308,12 +308,18 @@ impl CardViewer {
     }
 }
 
+impl Overlay for CardViewer {
+    fn is_done(&self) -> Signal<bool> {
+        self.is_done.clone()
+    }
+}
+
 impl Komponent for CardViewer {
     fn render(&self) -> Element {
         info!("render cardviewer");
         rsx! {
             div {
-                class: "flex flex-col w-full h-[800px] mt-8",
+                class: "flex flex-col w-full h-full mt-8", // Use `h-full` to inherit height from parent
                 if let Some(title) = self.title.as_ref() {
                     h1 {
                         class: "text-3xl font-bold mb-4 text-center",
@@ -322,25 +328,19 @@ impl Komponent for CardViewer {
                 }
 
                 div {
-                    class: "flex flex-col md:flex-row w-full h-full overflow-hidden",
+                    class: "flex flex-col md:flex-row w-full h-full overflow-hidden", // Ensure the child containers don't overflow
                     div {
-                        class: "flex-none p-4 w-full max-w-[400px] box-border order-2 md:order-1 overflow-y-auto", // Inputs container with scroll fallback
-                        style: "min-height: min-content; max-height: 100%;", // Dynamically size inputs
+                        class: "flex-none p-4 w-full max-w-[400px] box-border order-2 md:order-1 overflow-y-auto", // Inputs container
+                        style: "min-height: 0; max-height: 100%;", // Allow it to shrink within the parent's height
                         { self.render_inputs() }
                     }
                     div {
                         class: "flex-1 w-full md:max-w-[700px] box-border mb-2 md:mb-0 order-1 md:order-2", // Graph container
-                        style: "flex-grow: 1;", // Let graph take remaining space
+                        style: "min-height: 0; flex-grow: 1;", // Ensure it doesn't overflow and takes remaining space
                         { self.graph.render() }
                     }
                 }
             }
         }
-    }
-}
-
-impl Overlay for CardViewer {
-    fn is_done(&self) -> Signal<bool> {
-        self.is_done.clone()
     }
 }

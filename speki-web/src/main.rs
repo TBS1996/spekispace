@@ -181,7 +181,8 @@ fn Wrapper() -> Element {
 
             if is_short_screen() {
                 div {
-                    class: "flex-1 overflow-y-auto",
+                    //class: "flex-1 overflow-y-auto",
+                    class: "flex-1 overflow-hidden pb-8",
                     if let Some(overlay) = overlay.render() {
                         { overlay }
                     } else {
