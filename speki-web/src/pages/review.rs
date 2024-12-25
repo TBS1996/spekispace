@@ -223,9 +223,9 @@ impl ReviewState {
 
     pub async fn refresh(&mut self) {
         info!("refreshing..");
-        let filter = self.filter.cloned();
-        let mut cards = APP.read().load_non_pending(Some(filter)).await;
-        let pending = APP.read().load_pending().await;
+        let filter = Some(self.filter.cloned());
+        let mut cards = APP.read().load_non_pending(filter.clone()).await;
+        let pending = APP.read().load_pending(filter).await;
         cards.extend(pending);
 
         info!("review cards loaded");

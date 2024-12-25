@@ -29,8 +29,8 @@ impl App {
         Arc::new(self.0.load_card(id).await.unwrap())
     }
 
-    pub async fn load_pending(&self) -> Vec<CardId> {
-        self.0.load_pending(None).await
+    pub async fn load_pending(&self, filter: Option<String>) -> Vec<CardId> {
+        self.0.load_pending(filter).await
     }
 
     pub async fn load_non_pending(&self, filter: Option<String>) -> Vec<CardId> {
