@@ -22,23 +22,28 @@ pub struct BackPut {
 impl Komponent for BackPut {
     fn render(&self) -> Element {
         rsx! {
-
             div {
-                class: "block text-gray-700 text-sm font-medium mb-2",
+                class: "block text-gray-700 text-sm font-medium mb-2 max-w-full",
                 "Back:"
 
-            div {
-                class: "backside-editor flex items-center space-x-4",
+                div {
+                    class: "backside-editor flex items-center space-x-4",
 
-                match *self.dropdown.selected.read() {
-                    BackOpts::Text => self.render_text(),
-                    BackOpts::Card => self.ref_card.render(),
+                    div {
+                        class: "flex-grow overflow-hidden",
+                        { match *self.dropdown.selected.read() {
+                            BackOpts::Text => self.render_text(),
+                            BackOpts::Card => self.ref_card.render(),
+                        }}
+                    }
+
+                    div {
+                        class: "flex-shrink-0",
+                        style: "width: 65px;",
+                        { self.dropdown.render() }
+                    }
                 }
-
-                { self.dropdown.render() }
-
             }
-        }
         }
     }
 }

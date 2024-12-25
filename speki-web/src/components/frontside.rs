@@ -62,9 +62,13 @@ impl Komponent for FrontPut {
                         oninput: move |evt| text.set(evt.value()),
                     }
 
-                    { self.dropdown.render() }
-                }
 
+                    div {
+                        class: "flex-shrink-0",
+                        style: "width: 65px;",
+                        { self.dropdown.render() }
+                    }
+                }
             }
         }
     }

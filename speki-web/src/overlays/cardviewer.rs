@@ -287,6 +287,7 @@ impl CardViewer {
                     { selv.back.render() }
                     div {
                         class: "block text-gray-700 text-sm font-medium mb-2",
+                        style: "margin-right: 81px;",
                         "Class of instance"
                         { selv.concept.render() }
                     }
@@ -330,7 +331,7 @@ impl Komponent for CardViewer {
                 div {
                     class: "flex flex-col md:flex-row w-full h-full overflow-hidden", // Ensure the child containers don't overflow
                     div {
-                        class: "flex-none p-4 w-full max-w-[400px] box-border order-2 md:order-1 overflow-y-auto", // Inputs container
+                        class: "flex-none p-4 w-full max-w-[1000px] box-border order-2 md:order-1 overflow-y-auto", // Inputs container
                         style: "min-height: 0; max-height: 100%;", // Allow it to shrink within the parent's height
                         { self.render_inputs() }
                     }

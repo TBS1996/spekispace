@@ -44,7 +44,8 @@ where
             div {
                 class: "dropdown",
                 select {
-                    class: "bg-white w-full border border-gray-300 rounded-md p-2 text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent",
+                    class: "appearance-none bg-white w-full border border-gray-300 rounded-md p-2 text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent",
+                    style: "background-image: none;", // Makes the dropdown 20px wider than the parent
                     value: "{val}",
                     onchange: move |evt| {
                         let new_choice: T =  serde_json::from_str(evt.value().as_str()).unwrap();
