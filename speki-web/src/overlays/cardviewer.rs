@@ -320,7 +320,7 @@ impl Komponent for CardViewer {
         info!("render cardviewer");
         rsx! {
             div {
-                class: "flex flex-col w-full h-full mt-8", // Use `h-full` to inherit height from parent
+                class: "flex flex-col w-full h-full mt-8",
                 if let Some(title) = self.title.as_ref() {
                     h1 {
                         class: "text-3xl font-bold mb-4 text-center",
@@ -329,15 +329,15 @@ impl Komponent for CardViewer {
                 }
 
                 div {
-                    class: "flex flex-col md:flex-row w-full h-full overflow-hidden", // Ensure the child containers don't overflow
+                    class: "flex flex-col md:flex-row w-full h-full overflow-hidden",
                     div {
-                        class: "flex-none p-4 w-full max-w-[1000px] box-border order-2 md:order-1 overflow-y-auto", // Inputs container
-                        style: "min-height: 0; max-height: 100%;", // Allow it to shrink within the parent's height
+                        class: "flex-none p-4 w-full max-w-[1000px] box-border order-2 md:order-1 overflow-y-auto",
+                        style: "min-height: 0; max-height: 100%;",
                         { self.render_inputs() }
                     }
                     div {
-                        class: "flex-1 w-full md:max-w-[700px] box-border mb-2 md:mb-0 order-1 md:order-2", // Graph container
-                        style: "min-height: 0; flex-grow: 1;", // Ensure it doesn't overflow and takes remaining space
+                        class: "flex-1 w-full md:max-w-[700px] box-border mb-2 md:mb-0 order-1 md:order-2",
+                        style: "min-height: 0; flex-grow: 1;",
                         { self.graph.render() }
                     }
                 }
