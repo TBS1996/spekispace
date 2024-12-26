@@ -18,6 +18,7 @@ pub struct CardSelector {
     pub cards: Signal<Vec<CardEntry>>,
     pub allow_new: bool,
     pub done: Signal<bool>,
+    pub filter: Option<Arc<Box<dyn Fn(AnyType) -> bool>>>,
 }
 
 impl CardSelector {
@@ -29,7 +30,13 @@ impl CardSelector {
             cards: Signal::new_in_scope(Default::default(), ScopeId::APP),
             allow_new: true,
             done: Signal::new_in_scope(false, ScopeId(3)),
+            filter: None,
         }
+    }
+
+    pub fn with_filter(mut self, filter: Arc<Box<dyn Fn(AnyType) -> bool>>) -> Self {
+        self.filter = Some(filter);
+        self
     }
 }
 
@@ -68,12 +75,20 @@ impl Komponent for CardSelector {
 
         use_hook(move || {
             let sig = self.cards.clone();
+            let selv = self.clone();
             spawn(async move {
                 let cards = APP.cloned().load_all().await;
                 let mut entries = vec![];
 
                 for card in cards {
-                    entries.push(CardEntry::new(card).await);
+                    if selv
+                        .filter
+                        .clone()
+                        .map(|filter| (filter)(card.get_ty()))
+                        .unwrap_or(true)
+                    {
+                        entries.push(CardEntry::new(card).await);
+                    }
                 }
 
                 sig.clone().set(entries);
@@ -104,9 +119,13 @@ impl Komponent for CardSelector {
                                     done.clone().set(true);
                                     (closure)(card);
                                 };
-                                let viewer = CardViewer::new()
+                                let mut viewer = CardViewer::new()
                                     .with_title("create new card".to_string())
                                     .with_hook(Arc::new(Box::new(hook)));
+
+                                if let Some(filter) = selv.filter.clone() {
+                                    viewer = viewer.with_filter(filter);
+                                }
 
                                 crate::OVERLAY.cloned().set(Box::new(viewer));
 

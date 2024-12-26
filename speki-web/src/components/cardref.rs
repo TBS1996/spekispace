@@ -13,6 +13,7 @@ const PLACEHOLDER: &'static str = "pick card...";
 pub struct CardRef {
     card: Signal<Option<CardId>>,
     display: Signal<String>,
+    filter: Option<Arc<Box<dyn Fn(AnyType) -> bool>>>,
 }
 
 impl CardRef {
@@ -20,7 +21,13 @@ impl CardRef {
         Self {
             card: Signal::new_in_scope(Default::default(), ScopeId(3)),
             display: Signal::new_in_scope(PLACEHOLDER.to_string(), ScopeId(3)),
+            filter: None,
         }
+    }
+
+    pub fn with_filter(mut self, filter: Arc<Box<dyn Fn(AnyType) -> bool>>) -> Self {
+        self.filter = Some(filter);
+        self
     }
 
     pub fn reset(&self) {
@@ -52,6 +59,7 @@ impl CardRef {
             cards: Signal::new_in_scope(Default::default(), ScopeId(3)),
             allow_new: true,
             done: Signal::new_in_scope(false, ScopeId(3)),
+            filter: self.filter.clone(),
         };
 
         OVERLAY.cloned().set(Box::new(props));

@@ -29,6 +29,7 @@ pub struct CardViewer {
     save_hook: Option<Arc<Box<dyn Fn(Arc<Card<AnyType>>)>>>,
     is_done: Signal<bool>,
     old_card: Signal<Option<Arc<Card<AnyType>>>>,
+    filter: Option<Arc<Box<dyn Fn(AnyType) -> bool>>>,
 }
 
 impl CardViewer {
@@ -39,6 +40,11 @@ impl CardViewer {
 
     pub fn with_title(mut self, title: String) -> Self {
         self.title = Some(title);
+        self
+    }
+
+    pub fn with_filter(mut self, filter: Arc<Box<dyn Fn(AnyType) -> bool>>) -> Self {
+        self.filter = Some(filter);
         self
     }
 
@@ -60,6 +66,8 @@ impl CardViewer {
 
         let graph = graph.with_label(frnt.text.clone());
 
+        let filter = move |ty: AnyType| ty.is_class();
+
         Self {
             front: frnt,
             back: bck,
@@ -67,16 +75,18 @@ impl CardViewer {
             dependents: Signal::new_in_scope(Default::default(), ScopeId(3)),
             graph,
             is_done: Signal::new_in_scope(false, ScopeId(3)),
-            concept: CardRef::new(),
+            concept: CardRef::new().with_filter(Arc::new(Box::new(filter))),
             old_card: Signal::new_in_scope(Some(card), ScopeId(3)),
             save_hook: None,
             title: None,
+            filter: None,
         }
     }
 
     pub fn new() -> Self {
         let front = FrontPut::new();
         let label = front.text.clone();
+        let filter = move |ty: AnyType| ty.is_class();
         let selv = Self {
             front,
             back: BackPut::new(),
@@ -84,10 +94,11 @@ impl CardViewer {
             dependents: Signal::new_in_scope(Default::default(), ScopeId(3)),
             graph: GraphRep::default().with_label(label),
             is_done: Signal::new_in_scope(false, ScopeId(3)),
-            concept: CardRef::new(),
+            concept: CardRef::new().with_filter(Arc::new(Box::new(filter))),
             old_card: Signal::new_in_scope(None, ScopeId(3)),
             save_hook: None,
             title: None,
+            filter: None,
         };
 
         selv.set_graph();
@@ -188,9 +199,15 @@ impl CardViewer {
 
     fn save_button(&self) -> Element {
         let selv = self.clone();
-        let disabled = selv.to_card().is_none();
 
-        let class = if disabled {
+        let enabled = selv.to_card().is_some_and(|card| {
+            self.filter
+                .as_ref()
+                .map(|filter| (filter)(card.ty))
+                .unwrap_or(true)
+        });
+
+        let class = if !enabled {
             "mt-6 inline-flex items-center text-white bg-gray-400 border-0 py-1 px-3 focus:outline-none cursor-not-allowed opacity-50 rounded text-base md:mt-0"
         } else {
             "mt-6 inline-flex items-center text-white bg-gray-800 border-0 py-1 px-3 focus:outline-none hover:bg-gray-700 rounded text-base md:mt-0"
@@ -199,7 +216,7 @@ impl CardViewer {
         rsx! {
             button {
                 class: "{class}",
-                disabled: disabled,
+                disabled: !enabled,
                 onclick: move |_| {
                     if let Some(card) = selv.to_card() {
                         let selveste = selv.clone();

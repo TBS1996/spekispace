@@ -63,6 +63,7 @@ impl BrowseState {
             search: Default::default(),
             done: Default::default(),
             allow_new: false,
+            filter: None,
         };
 
         Self { browse_page }

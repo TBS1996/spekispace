@@ -254,6 +254,10 @@ impl<T: CardTrait> AsRef<CardId> for Card<T> {
 }
 
 impl Card<AnyType> {
+    pub fn get_ty(&self) -> AnyType {
+        self.data.clone()
+    }
+
     /// Loads all the ancestor ancestor classes
     /// for example, king, human male, human
     pub async fn load_ancestor_classes(&self) -> Vec<CardId> {
