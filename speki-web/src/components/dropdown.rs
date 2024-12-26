@@ -1,4 +1,4 @@
-use std::fmt::Display;
+use std::{fmt::Display, sync::Arc};
 
 use dioxus::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -12,6 +12,7 @@ where
 {
     pub options: Vec<T>,
     pub selected: Signal<T>,
+    pub hook: Option<Arc<Box<dyn Fn(T)>>>,
 }
 
 impl<T> DropDownMenu<T>
@@ -23,7 +24,16 @@ where
         assert!(!options.is_empty(), "must provide at least one option");
         let selected = Signal::new_in_scope(options.first().unwrap().clone(), ScopeId(3));
 
-        Self { options, selected }
+        Self {
+            options,
+            selected,
+            hook: None,
+        }
+    }
+
+    pub fn with_hook(mut self, hook: Arc<Box<dyn Fn(T)>>) -> Self {
+        self.hook = Some(hook);
+        self
     }
 
     pub fn reset(&self) {
@@ -39,6 +49,7 @@ where
     fn render(&self) -> Element {
         let mut dropdown = self.selected.clone();
         let val: String = serde_json::to_string(&dropdown.cloned()).unwrap();
+        let selv = self.clone();
 
         rsx! {
             div {
@@ -49,6 +60,9 @@ where
                     value: "{val}",
                     onchange: move |evt| {
                         let new_choice: T =  serde_json::from_str(evt.value().as_str()).unwrap();
+                        if let Some(hook) = selv.hook.as_ref() {
+                            (hook)(new_choice.clone());
+                        }
                         dropdown.set(new_choice);
                     },
 

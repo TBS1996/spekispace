@@ -15,7 +15,7 @@ use overlays::OverlayManager;
 use utils::CardEntries;
 
 use crate::{
-    pages::{add_card::Add, Browse, Home, Review, Upload},
+    pages::{add_card::Add, Browse, Home, Review},
     utils::App,
 };
 
@@ -201,8 +201,6 @@ pub enum Route {
     Add {},
     #[route("/browse")]
     Browse {},
-    #[route("/upload")]
-    Upload {},
 }
 
 impl Route {
@@ -212,7 +210,6 @@ impl Route {
             Route::Review {} => "review",
             Route::Add {} => "add cards",
             Route::Browse {} => "browse",
-            Route::Upload {} => "upload",
         }
     }
 
@@ -222,7 +219,6 @@ impl Route {
             Route::Review {} => None,
             Route::Add {} => Some(Self::Review {}),
             Route::Browse {} => Some(Self::Add {}),
-            Route::Upload {} => None,
         }
     }
 
@@ -232,7 +228,6 @@ impl Route {
             Route::Review {} => Some(Self::Add {}),
             Route::Add {} => Some(Self::Browse {}),
             Route::Browse {} => None,
-            Route::Upload {} => None,
         }
     }
 }
