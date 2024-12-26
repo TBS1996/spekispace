@@ -1627,6 +1627,10 @@ html {
   margin-top: 2rem;
 }
 
+.ml-10 {
+  margin-left: 2.5rem;
+}
+
 .box-border {
   box-sizing: border-box;
 }

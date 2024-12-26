@@ -172,10 +172,31 @@ impl ReviewState {
         let tot = self.tot_len.clone();
         let currcard = self.card.clone();
         let overlay = OVERLAY.cloned();
+        let card = self.card.clone();
 
         rsx! {
             div {
+
+
+
                 class: "flex justify-start items-center w-full md:w-auto gap-2",
+
+                div {
+                    button {
+                        onclick: move |_| {
+                            card.clone().set(None);
+                        },
+                        "❌"
+                    }
+
+                }
+
+                h2 {
+                    class: "text-2xl text-gray-700",
+                    "{pos}/{tot}"
+                }
+
+
                 button {
                     class: "cursor-pointer text-gray-500 hover:text-gray-700",
                     onclick: move |_| {
@@ -209,10 +230,7 @@ impl ReviewState {
                     },
                     "✏️"
                 }
-                h2 {
-                    class: "text-2xl text-gray-700",
-                    "{pos}/{tot}"
-                }
+
             }
         }
     }

@@ -273,7 +273,6 @@ impl CardViewer {
                 CardTy::Normal => rsx! {
                     { selv.back.render() }
                 },
-
                 CardTy::Class => rsx! {
                     { selv.back.render() }
                     div {
