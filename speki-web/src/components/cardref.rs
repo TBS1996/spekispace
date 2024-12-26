@@ -54,6 +54,7 @@ impl CardRef {
             on_card_selected: Arc::new(Box::new(fun)),
             search: Signal::new_in_scope(Default::default(), ScopeId(3)),
             cards,
+            allow_new: true,
             done: Signal::new_in_scope(false, ScopeId(3)),
         };
 
@@ -68,7 +69,7 @@ impl Komponent for CardRef {
 
         rsx! {
             input {
-                class: "bg-white w-full border border-gray-300 rounded-md p-2 mb-4 text-gray-950 bg-gray-50 cursor-pointer focus:outline-none",
+                class: "bg-white w-full border border-gray-300 rounded-md p-2 mb-4 text-gray-950 cursor-pointer focus:outline-none",
                 value: "{card_display}",
                 readonly: "true",
                 onclick: move |_| {

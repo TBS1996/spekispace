@@ -63,6 +63,7 @@ impl BrowseState {
             on_card_selected: overlay_card_viewer(),
             search: Default::default(),
             done: Default::default(),
+            allow_new: false,
         };
 
         Self { browse_page }

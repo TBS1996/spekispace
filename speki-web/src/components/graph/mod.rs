@@ -8,12 +8,10 @@ use std::{
 
 use digraph::RustGraph;
 use dioxus::prelude::*;
-use js_sys::eval;
 use speki_core::{AnyType, Card};
 use speki_dto::CardId;
 use speki_web::{Node, NodeMetadata};
 use tracing::info;
-use web_sys::window;
 
 use super::Komponent;
 use crate::utils;
@@ -60,10 +58,6 @@ impl GraphRep {
             label: Default::default(),
             scope: Default::default(),
         }
-    }
-
-    pub fn re_render(&self) {
-        ScopeId(self.scope.load(Ordering::SeqCst)).needs_update();
     }
 
     pub fn coordinates(&self) -> Option<TouchRec> {

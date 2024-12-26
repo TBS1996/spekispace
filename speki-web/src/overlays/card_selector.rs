@@ -3,7 +3,12 @@ use std::sync::Arc;
 use dioxus::prelude::*;
 use speki_core::{AnyType, Card};
 
-use crate::{components::Komponent, overlays::Overlay, pages::CardEntry, CARDS};
+use crate::{
+    components::Komponent,
+    overlays::{cardviewer::CardViewer, Overlay},
+    pages::CardEntry,
+    CARDS,
+};
 
 #[derive(Props, Clone)]
 pub struct CardSelector {
@@ -11,6 +16,7 @@ pub struct CardSelector {
     pub search: Signal<String>,
     pub on_card_selected: Arc<Box<dyn Fn(Arc<Card<AnyType>>)>>,
     pub cards: Signal<Vec<CardEntry>>,
+    pub allow_new: bool,
     pub done: Signal<bool>,
 }
 
@@ -23,6 +29,7 @@ impl CardSelector {
             search: Signal::new_in_scope(String::default(), ScopeId(3)),
             on_card_selected: Arc::new(f),
             cards,
+            allow_new: true,
             done: Signal::new_in_scope(false, ScopeId(3)),
         }
     }
@@ -61,20 +68,48 @@ impl Komponent for CardSelector {
             .map(|(card, closure)| (card.clone(), closure, self.done.clone()))
             .collect();
 
+        let selv = self.clone();
+
         rsx! {
             div {
-                class: "h-screen flex flex-col", // Full screen height, flex column layout
+                class: "h-screen flex flex-col w-full max-w-3xl",
 
                 h1 {
                     class: "text-lg font-bold mb-4",
                     "{title}"
                 }
 
-                input {
-                    class: "bg-white w-full border border-gray-300 rounded-md p-2 mb-4 text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent",
-                    value: "{search}",
-                    oninput: move |evt| search.set(evt.value().clone()),
+                div {
+
+                    if self.allow_new {
+                        button {
+                            class: "bg-blue-500 text-white font-medium px-4 py-2 rounded-md hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-300 mr-10",
+                            onclick: move |_| {
+
+                                let done = selv.is_done().clone();
+                                let closure = closure.clone();
+                                let hook = move |card: Arc<Card<AnyType>>| {
+                                    done.clone().set(true);
+                                    (closure)(card);
+                                };
+                                let viewer = CardViewer::new()
+                                    .with_title("create new card".to_string())
+                                    .with_hook(Arc::new(Box::new(hook)));
+
+                                crate::OVERLAY.cloned().set(Box::new(viewer));
+
+                            },
+                            "new card"
+                         }
+                    }
+
+                    input {
+                        class: "bg-white w-full max-w-md border border-gray-300 rounded-md p-2 mb-4 text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent",
+                        value: "{search}",
+                        oninput: move |evt| search.set(evt.value().clone()),
+                    }
                 }
+
 
                 div {
                     class: "flex-1 overflow-y-auto", // Scrollable container, takes up remaining space
