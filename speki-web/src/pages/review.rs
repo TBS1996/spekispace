@@ -258,7 +258,7 @@ impl ReviewState {
 
                 div {
                     class: "relative flex flex-col w-full",
-                    style: "height: 200px; justify-content: space-between;",
+                    style: "height: 300px; justify-content: space-between;",
 
                     div {
                         class: "absolute top-0 w-full flex flex-col items-center",
@@ -280,7 +280,7 @@ impl ReviewState {
                     }
 
                     div {
-                        class: "absolute bottom-0 w-full flex justify-center items-center",
+                        class: "absolute bottom-0 w-full flex justify-center items-center pb-11",
                         { review_buttons(show_backside) }
                     }
                 }
