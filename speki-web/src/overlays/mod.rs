@@ -65,17 +65,25 @@ impl OverlayManager {
         }
 
         let pop = self.get_last_not_done()?;
-
         Some(rsx! {
-        button {
-            class: "float-right mr-4 mb-2",
-            onclick: move |_| {
-                pop.is_done().set(true);
-            },
-            "❌"
-        },
-
-        { pop.render() }
+            div {
+                class: "h-screen flex flex-col",
+                div {
+            //        class: "h-8 bg-white flex items-center justify-end px-4",
+                    class: "h-8 bg-white flex items-center justify-end px-4 max-w-screen-xl mx-auto",
+                    button {
+                        class: "mr-4",
+                        onclick: move |_| {
+                            pop.is_done().set(true);
+                        },
+                        "❌"
+                    }
+                },
+                div {
+                    class: "flex-1 overflow-auto bg-white",
+                    { pop.render() }
+                }
+            }
         })
     }
 
