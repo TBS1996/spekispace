@@ -7,7 +7,7 @@ use tracing::info;
 use crate::{
     components::{GraphRep, Komponent},
     overlays::{card_selector::CardSelector, cardviewer::CardViewer},
-    CARDS, OVERLAY,
+    OVERLAY,
 };
 
 static BROWSE_STATE: GlobalSignal<BrowseState> = Signal::global(BrowseState::new);
@@ -54,12 +54,11 @@ fn overlay_card_viewer() -> Arc<Box<dyn Fn(Arc<Card<AnyType>>)>> {
 
 impl BrowseState {
     pub fn new() -> Self {
-        let entries = CARDS.cloned();
         info!("creating browse state!");
 
         let browse_page = CardSelector {
             title: "browse cards".to_string(),
-            cards: entries.cards.clone(),
+            cards: Default::default(),
             on_card_selected: overlay_card_viewer(),
             search: Default::default(),
             done: Default::default(),

@@ -9,7 +9,7 @@ use tracing::info;
 use crate::{
     components::{BackPut, CardRef, CardTy, FrontPut, GraphRep, Komponent},
     overlays::{card_selector::CardSelector, Overlay},
-    APP, CARDS, OVERLAY, ROUTE_CHANGE,
+    APP, OVERLAY,
 };
 
 pub struct CardRep {
@@ -49,7 +49,6 @@ impl CardViewer {
 
     pub async fn new_from_card(card: Arc<Card<AnyType>>, graph: GraphRep) -> Self {
         graph.new_set_card(card.clone());
-        let entries = CARDS.cloned();
         let dependencies = card.dependency_ids().await;
         let raw = card.to_raw();
         let front = raw.data.front.unwrap_or_default();
@@ -68,7 +67,7 @@ impl CardViewer {
             dependents: Signal::new_in_scope(Default::default(), ScopeId(3)),
             graph,
             is_done: Signal::new_in_scope(false, ScopeId(3)),
-            concept: CardRef::new(entries.classes.clone()),
+            concept: CardRef::new(),
             old_card: Signal::new_in_scope(Some(card), ScopeId(3)),
             save_hook: None,
             title: None,
@@ -85,7 +84,7 @@ impl CardViewer {
             dependents: Signal::new_in_scope(Default::default(), ScopeId(3)),
             graph: GraphRep::default().with_label(label),
             is_done: Signal::new_in_scope(false, ScopeId(3)),
-            concept: CardRef::new(CARDS.cloned().classes.clone()),
+            concept: CardRef::new(),
             old_card: Signal::new_in_scope(None, ScopeId(3)),
             save_hook: None,
             title: None,

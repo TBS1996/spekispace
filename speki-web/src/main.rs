@@ -12,7 +12,6 @@ use std::{
 use dioxus::prelude::*;
 use dioxus_logger::tracing::{info, Level};
 use overlays::OverlayManager;
-use utils::CardEntries;
 
 use crate::{
     pages::{add_card::Add, Browse, Home, Review},
@@ -100,7 +99,6 @@ impl NonClickable {
     }
 }
 
-static CARDS: GlobalSignal<CardEntries> = Signal::global(CardEntries::default);
 static APP: GlobalSignal<App> = Signal::global(App::new);
 static OVERLAY: GlobalSignal<OverlayManager> = Signal::global(Default::default);
 static NONCLICKABLE: GlobalSignal<NonClickable> = Signal::global(Default::default);
@@ -114,7 +112,6 @@ pub fn TheApp() -> Element {
 
     spawn(async move {
         APP.read().fill_cache().await;
-        CARDS.cloned().fill().await;
     });
 
     rsx! {

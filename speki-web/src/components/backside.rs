@@ -7,10 +7,7 @@ use strum::{EnumIter, IntoEnumIterator};
 use tracing::info;
 
 use super::Komponent;
-use crate::{
-    components::{CardRef, DropDownMenu},
-    CARDS,
-};
+use crate::components::{CardRef, DropDownMenu};
 
 #[derive(Clone)]
 pub struct BackPut {
@@ -50,11 +47,10 @@ impl Komponent for BackPut {
 
 impl BackPut {
     pub fn new() -> Self {
-        let entries = CARDS.cloned();
         Self {
             text: Signal::new_in_scope(Default::default(), ScopeId(3)),
             dropdown: DropDownMenu::new(BackOpts::iter()),
-            ref_card: CardRef::new(entries.cards.clone()),
+            ref_card: CardRef::new(),
         }
     }
 

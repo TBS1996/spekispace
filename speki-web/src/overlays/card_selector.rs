@@ -7,7 +7,7 @@ use crate::{
     components::Komponent,
     overlays::{cardviewer::CardViewer, Overlay},
     pages::CardEntry,
-    CARDS,
+    APP,
 };
 
 #[derive(Props, Clone)]
@@ -22,13 +22,11 @@ pub struct CardSelector {
 
 impl CardSelector {
     pub fn dependency_picker(f: Box<dyn Fn(Arc<Card<AnyType>>)>) -> Self {
-        let cards = CARDS.read().cards.clone();
-
         Self {
             title: "set dependency".to_string(),
             search: Signal::new_in_scope(String::default(), ScopeId(3)),
             on_card_selected: Arc::new(f),
-            cards,
+            cards: Signal::new_in_scope(Default::default(), ScopeId::APP),
             allow_new: true,
             done: Signal::new_in_scope(false, ScopeId(3)),
         }
@@ -67,6 +65,20 @@ impl Komponent for CardSelector {
             .zip(std::iter::repeat_with(|| Arc::clone(&closure)))
             .map(|(card, closure)| (card.clone(), closure, self.done.clone()))
             .collect();
+
+        use_hook(move || {
+            let sig = self.cards.clone();
+            spawn(async move {
+                let cards = APP.cloned().load_all().await;
+                let mut entries = vec![];
+
+                for card in cards {
+                    entries.push(CardEntry::new(card).await);
+                }
+
+                sig.clone().set(entries);
+            });
+        });
 
         let selv = self.clone();
 

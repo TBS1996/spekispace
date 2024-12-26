@@ -5,7 +5,7 @@ use speki_core::{AnyType, Card};
 use speki_dto::CardId;
 
 use super::Komponent;
-use crate::{overlays::card_selector, pages::CardEntry, OVERLAY};
+use crate::{overlays::card_selector, OVERLAY};
 
 const PLACEHOLDER: &'static str = "pick card...";
 
@@ -13,15 +13,13 @@ const PLACEHOLDER: &'static str = "pick card...";
 pub struct CardRef {
     card: Signal<Option<CardId>>,
     display: Signal<String>,
-    cards: Signal<Vec<CardEntry>>,
 }
 
 impl CardRef {
-    pub fn new(cards: Signal<Vec<CardEntry>>) -> Self {
+    pub fn new() -> Self {
         Self {
             card: Signal::new_in_scope(Default::default(), ScopeId(3)),
             display: Signal::new_in_scope(PLACEHOLDER.to_string(), ScopeId(3)),
-            cards,
         }
     }
 
@@ -35,8 +33,6 @@ impl CardRef {
     }
 
     pub fn start_ref_search(&self) {
-        let cards = self.cards.clone();
-
         let _selv = self.clone();
 
         let fun = move |card: Arc<Card<AnyType>>| {
@@ -53,7 +49,7 @@ impl CardRef {
             title: "choose reference".to_string(),
             on_card_selected: Arc::new(Box::new(fun)),
             search: Signal::new_in_scope(Default::default(), ScopeId(3)),
-            cards,
+            cards: Signal::new_in_scope(Default::default(), ScopeId(3)),
             allow_new: true,
             done: Signal::new_in_scope(false, ScopeId(3)),
         };

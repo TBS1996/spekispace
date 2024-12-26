@@ -1,5 +1,6 @@
 use std::{fmt::Debug, sync::Arc, time::Duration};
 
+use dioxus::prelude::*;
 use speki_core::{AnyType, Card, TimeProvider};
 use speki_dto::{CardId, RawCard};
 use speki_provider::DexieProvider;
@@ -9,8 +10,7 @@ use tracing::info;
 use crate::{
     firebase::{sign_in, FirestoreProvider},
     nav::SYNCING,
-    pages::CardEntry,
-    TouchRec, APP, CARDS,
+    TouchRec, APP,
 };
 
 #[derive(Clone)]
@@ -23,6 +23,10 @@ impl App {
 
     pub async fn fill_cache(&self) {
         self.0.fill_cache().await;
+    }
+
+    pub async fn load_all(&self) -> Vec<Arc<Card<AnyType>>> {
+        self.0.load_all_cards().await
     }
 
     pub async fn load_card(&self, id: CardId) -> Arc<Card<AnyType>> {
@@ -39,14 +43,12 @@ impl App {
 
     pub async fn new_from_raw(&self, raw: RawCard) -> Arc<Card<AnyType>> {
         let card = self.0.new_from_raw(raw).await;
-        CARDS.read().insert(card.clone()).await;
         card
     }
 
     pub async fn new_simple(&self, front: String, back: String) -> Arc<Card<AnyType>> {
         let id = self.0.add_card(front, back).await;
         let card = Arc::new(self.0.load_card(id).await.unwrap());
-        CARDS.read().insert(card.clone()).await;
         card
     }
 }
@@ -122,42 +124,6 @@ pub async fn sync() {
 
     info!("done syncing maybe!");
 }
-
-#[derive(Clone, Default)]
-pub struct CardEntries {
-    pub cards: Signal<Vec<CardEntry>>,
-    pub classes: Signal<Vec<CardEntry>>,
-}
-
-impl CardEntries {
-    pub async fn insert(&self, card: Arc<Card<AnyType>>) {
-        let entry = CardEntry::new(card.clone()).await;
-
-        if card.is_class() {
-            self.classes.clone().write().push(entry.clone());
-        }
-
-        self.cards.clone().write().push(entry);
-    }
-
-    pub async fn fill(&self) {
-        let app = APP.cloned();
-        let mut concept_cards = vec![];
-        let mut cards = vec![];
-
-        for card in app.0.load_all_cards().await {
-            if card.is_class() {
-                concept_cards.push(CardEntry::new(card.clone()).await);
-            }
-            cards.push(CardEntry::new(card).await);
-        }
-
-        self.cards.clone().set(cards);
-        self.classes.clone().set(concept_cards);
-    }
-}
-
-use dioxus::prelude::*;
 
 pub async fn get_meta(node: &Node) -> NodeMetadata {
     match node {
