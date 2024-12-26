@@ -218,26 +218,13 @@ export function addNode(cyto_id, id, label, backgroundColor, shape) {
     }
 }
 
+
 function wrapText(text) {
-    const words = text.split(" ");
-    let lines = [];
-    let currentLine = "";
-
-    words.forEach((word) => {
-        if ((currentLine + word).length > lineLen) {
-            lines.push(currentLine.trim());
-            currentLine = word + " ";
-        } else {
-            currentLine += word + " ";
-        }
-    });
-
-    if (currentLine.trim()) {
-        lines.push(currentLine.trim());
-    }
-
-    return lines.join("\n");
+    const wrappedText = squarifyString(text, 5.0);
+    return wrappedText.join("\n");
 }
+
+
 
 function resizeNodeToFitLabel(node) {
     let circum = maxCircumference(node);
@@ -246,4 +233,89 @@ function resizeNodeToFitLabel(node) {
         "width": (ele) => circum,
         "height": (ele) => circum,
     });
+}
+
+
+
+function squarifyString(s, height) {
+    const words = s.split(/\s+/);
+    const wordLengths = words.map(word => word.length);
+    const linesLengths = linebreaks(wordLengths, height);
+    const result = [];
+    let wordIndex = 0;
+
+    for (const lineLength of linesLengths) {
+        const line = words.slice(wordIndex, wordIndex + lineLength);
+        result.push(line.join(" "));
+        wordIndex += lineLength;
+    }
+
+    return result;
+}
+
+function dimensions(lines, height) {
+    const totalHeight = lines.length * height;
+    let width = 0;
+
+    for (const line of lines) {
+        const lineLen = countLineLen(line);
+        width = Math.max(width, lineLen);
+    }
+
+    return Math.max(totalHeight, width);
+}
+
+function countLineLen(line) {
+    const wordSum = line.reduce((sum, len) => sum + len, 0);
+    return line.length > 0 ? wordSum + (line.length - 1) : wordSum;
+}
+
+function wordWrap(list, maxLen) {
+    const output = [];
+    let currLine = [];
+
+    for (const elm of list) {
+        currLine.push(elm);
+        if (countLineLen(currLine) > maxLen) {
+            const lastElm = currLine.pop();
+            output.push([...currLine]);
+            currLine = [lastElm];
+        }
+    }
+
+    output.push(currLine);
+    return output;
+}
+
+function linebreaks(list, height) {
+    return minimize(list, height).map(v => v.length);
+}
+
+function minimize(list, height) {
+    if (list.length === 0) {
+        return [];
+    } else if (list.length === 1) {
+        return [list];
+    }
+
+    const totalLen = countLineLen(list);
+    let lineLen = Math.max(...list);
+    let wrapped = wordWrap(list, lineLen);
+    let maxDim = dimensions(wrapped, height);
+
+    for (lineLen += 1; ; lineLen++) {
+        const newWrapped = wordWrap(list, lineLen);
+        const newDim = dimensions(newWrapped, height);
+
+        if (newDim > maxDim) {
+            return wrapped;
+        } else {
+            wrapped = newWrapped;
+            maxDim = newDim;
+        }
+
+        if (lineLen > totalLen) {
+            return wrapped;
+        }
+    }
 }

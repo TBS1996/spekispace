@@ -69,7 +69,6 @@ impl OverlayManager {
             div {
                 class: "h-screen flex flex-col",
                 div {
-            //        class: "h-8 bg-white flex items-center justify-end px-4",
                     class: "h-8 bg-white flex items-center justify-end px-4 max-w-screen-xl mx-auto",
                     button {
                         class: "mr-4",
