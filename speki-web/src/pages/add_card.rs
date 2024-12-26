@@ -3,7 +3,7 @@ use dioxus::prelude::*;
 use crate::{
     components::Komponent,
     overlays::{cardviewer::CardViewer, uploader::Uploader},
-    Route, OVERLAY,
+    IS_SHORT, OVERLAY,
 };
 
 static ADD_CARDS: GlobalSignal<AddCardState> = Signal::global(AddCardState::new);
@@ -26,13 +26,15 @@ pub fn Add() -> Element {
     let selv = ADD_CARDS.cloned();
 
     rsx! {
-        button {
-            class: "px-4 py-1 bg-blue-500 text-white rounded hover:bg-blue-600",
-            onclick: move |_| {
-                OVERLAY.cloned().set(Box::new(Uploader::new()))
+        if !IS_SHORT(){
+            button {
+                class: "px-4 py-1 bg-blue-500 text-white rounded hover:bg-blue-600",
+                onclick: move |_| {
+                    OVERLAY.cloned().set(Box::new(Uploader::new()))
 
-            },
-            "upload from file"
+                },
+                "upload from file"
+            }
         }
         { selv.viewer.render() }
     }
