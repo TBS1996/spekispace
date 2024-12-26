@@ -53,7 +53,6 @@ impl OverlayManager {
             .push(popup);
         self.update_scope();
         let x = NONCLICKABLE.cloned();
-        info!("nonclickables {x:?}");
         NONCLICKABLE.read().clear();
     }
 
@@ -68,7 +67,7 @@ impl OverlayManager {
         let pop = self.get_last_not_done()?;
         Some(rsx! {
             div {
-                class: "h-screen flex flex-col",
+                class: "h-full flex flex-col",
                 div {
                     class: "h-8 bg-white flex items-center justify-end px-4 max-w-screen-xl mx-auto",
                     button {

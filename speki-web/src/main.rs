@@ -158,6 +158,7 @@ fn Wrapper() -> Element {
             onkeydown: move |event| log_event(event.data()),
             class: "h-screen overflow-hidden flex flex-col",
 
+
             if !IS_SHORT() {
                 crate::nav::nav {}
 
