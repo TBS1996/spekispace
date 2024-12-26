@@ -124,18 +124,15 @@ pub struct NodeMetadata {
     pub label: String,
     pub color: String,
     pub ty: CType,
+    pub border: bool,
 }
 
 impl NodeMetadata {
     pub async fn from_card(card: Arc<Card<AnyType>>, is_origin: bool) -> Self {
         let label = card.print().await;
-        let color = if is_origin {
-            cyan_color()
-        } else {
-            match card.recall_rate() {
-                Some(rate) => rate_to_color(rate as f64 * 100.),
-                None => yellow_color(),
-            }
+        let color = match card.recall_rate() {
+            Some(rate) => rate_to_color(rate as f64 * 100.),
+            None => yellow_color(),
         };
 
         let ty = card.card_type().fieldless();
@@ -145,6 +142,7 @@ impl NodeMetadata {
             label,
             color,
             ty,
+            border: is_origin,
         }
     }
 }

@@ -31,7 +31,7 @@ export function createCytoInstance(id) {
                 style: {
                     "background-color": "data(backgroundColor)",
                     "border-color": "#000",
-                    "border-width": 1,
+                    "border-width": "data(border)",
                     "shape": "data(shape)",
                     "label": "data(label)",
                     "color": "#000",
@@ -201,7 +201,7 @@ export function addEdge(id, source, target) {
     }
 }
 
-export function addNode(cyto_id, id, label, backgroundColor, shape) {
+export function addNode(cyto_id, id, label, backgroundColor, shape, border) {
     const cy = getCytoInstance(cyto_id);
     if (cy) {
         const wrappedLabel = wrapText(label); 
@@ -210,7 +210,8 @@ export function addNode(cyto_id, id, label, backgroundColor, shape) {
                 id, 
                 label: wrappedLabel, 
                 backgroundColor, 
-                shape 
+                shape,
+                border: Number(border) * 2
             } 
         });
 

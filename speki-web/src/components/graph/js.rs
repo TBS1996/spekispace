@@ -5,7 +5,7 @@ use wasm_bindgen::prelude::*;
 #[wasm_bindgen(module = "/assets/cyto.js")]
 extern "C" {
     fn createCytoInstance(id: &str);
-    fn addNode(cyto_id: &str, id: &str, label: &str, color: &str, shape: &str);
+    fn addNode(cyto_id: &str, id: &str, label: &str, color: &str, shape: &str, border: bool);
     fn addEdge(cyto_id: &str, source: &str, target: &str);
     fn runLayout(cyto_id: &str, node: &str);
     fn zoomToNode(cyto_id: &str, node_id: &str);
@@ -39,8 +39,8 @@ pub fn create_cyto_instance(id: &str) {
     createCytoInstance(id);
 }
 
-pub fn add_node(cyto_id: &str, id: &str, label: &str, color: &str, shape: &str) {
-    addNode(cyto_id, id, label, color, shape);
+pub fn add_node(cyto_id: &str, id: &str, label: &str, color: &str, shape: &str, border: bool) {
+    addNode(cyto_id, id, label, color, shape, border);
 }
 
 pub fn add_edge(cyto_id: &str, source: &str, target: &str) {

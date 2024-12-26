@@ -167,6 +167,7 @@ impl CardViewer {
             label: self.front.text.cloned(),
             color: "#858585".to_string(),
             ty: self.front.dropdown.selected.cloned().to_ctype(),
+            border: true,
         }
     }
 

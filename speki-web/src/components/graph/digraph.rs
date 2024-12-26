@@ -125,6 +125,7 @@ impl RustGraph {
                 &node.label,
                 &node.color,
                 card_ty_to_shape(node.ty),
+                node.border,
             );
         }
 
