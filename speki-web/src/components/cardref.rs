@@ -60,6 +60,7 @@ impl CardRef {
             allow_new: true,
             done: Signal::new_in_scope(false, ScopeId(3)),
             filter: self.filter.clone(),
+            dependents: vec![],
         };
 
         OVERLAY.cloned().set(Box::new(props));

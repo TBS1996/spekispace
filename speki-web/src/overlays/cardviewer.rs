@@ -154,11 +154,38 @@ impl CardViewer {
         })
     }
 
-    fn set_graph(&self) {
+    pub fn set_graph(&self) {
         let node = self.to_node();
         let dependencies = self.dependencies.cloned();
         self.graph
             .new_set_card_rep(node, dependencies, self.dependents.cloned());
+    }
+
+    async fn to_dep_node(&self) -> Node {
+        let meta = match self.old_card.cloned() {
+            Some(card) => return Node::Card(card.id),
+            None => NodeMetadata {
+                id: NodeId::new_temp(),
+                label: self.front.text.cloned(),
+                color: "#858585".to_string(),
+                ty: self.front.dropdown.selected.cloned().to_ctype(),
+                border: false,
+            },
+        };
+
+        let dependents = self.dependents.cloned();
+        let dependencies: Vec<_> = self
+            .dependencies
+            .cloned()
+            .into_iter()
+            .map(Node::Card)
+            .collect();
+
+        Node::Nope {
+            node: meta,
+            dependencies,
+            dependents,
+        }
     }
 
     fn to_node(&self) -> NodeMetadata {
@@ -178,6 +205,7 @@ impl CardViewer {
                 class: "mt-6 inline-flex items-center text-white bg-gray-800 border-0 py-1 px-3 focus:outline-none hover:bg-gray-700 rounded text-base md:mt-0",
                 onclick: move |_| {
                     let selv = selv.clone();
+                    let selv2 = selv.clone();
 
                     let fun = move |card: Arc<Card<AnyType>>| {
                         selv.dependencies.clone().write().push(card.id);
@@ -190,8 +218,11 @@ impl CardViewer {
                         });
                     };
 
-                    let props = CardSelector::dependency_picker(Box::new(fun));
-                    OVERLAY.cloned().set(Box::new(props));
+                    spawn(async move {
+                        let dependent = selv2.to_dep_node().await;
+                        let props = CardSelector::dependency_picker(Box::new(fun)).with_dependents(vec![dependent]);
+                        OVERLAY.cloned().set(Box::new(props));
+                    });
                 },
                 "add dependency"
             }
@@ -319,7 +350,7 @@ impl Komponent for CardViewer {
                         { self.render_inputs() }
                     }
                     div {
-                        class: "flex-1 w-full md:max-w-[700px] box-border mb-2 md:mb-0 order-1 md:order-2",
+                        class: "flex-1 w-full box-border mb-2 md:mb-0 order-1 md:order-2",
                         style: "min-height: 0; flex-grow: 1;",
                         { self.graph.render() }
                     }

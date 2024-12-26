@@ -64,6 +64,7 @@ impl BrowseState {
             done: Default::default(),
             allow_new: false,
             filter: None,
+            dependents: vec![],
         };
 
         Self { browse_page }

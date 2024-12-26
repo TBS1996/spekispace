@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use dioxus::prelude::*;
 use speki_core::{AnyType, Card};
+use speki_web::Node;
 
 use crate::{
     components::Komponent,
@@ -19,6 +20,7 @@ pub struct CardSelector {
     pub allow_new: bool,
     pub done: Signal<bool>,
     pub filter: Option<Arc<Box<dyn Fn(AnyType) -> bool>>>,
+    pub dependents: Vec<Node>,
 }
 
 impl CardSelector {
@@ -31,7 +33,13 @@ impl CardSelector {
             allow_new: true,
             done: Signal::new_in_scope(false, ScopeId(3)),
             filter: None,
+            dependents: vec![],
         }
+    }
+
+    pub fn with_dependents(mut self, deps: Vec<Node>) -> Self {
+        self.dependents = deps;
+        self
     }
 
     pub fn with_filter(mut self, filter: Arc<Box<dyn Fn(AnyType) -> bool>>) -> Self {
@@ -119,13 +127,17 @@ impl Komponent for CardSelector {
                                     done.clone().set(true);
                                     (closure)(card);
                                 };
+
                                 let mut viewer = CardViewer::new()
                                     .with_title("create new card".to_string())
-                                    .with_hook(Arc::new(Box::new(hook)));
+                                    .with_hook(Arc::new(Box::new(hook)))
+                                    .with_dependents(selv.dependents.clone());
 
                                 if let Some(filter) = selv.filter.clone() {
                                     viewer = viewer.with_filter(filter);
                                 }
+
+                                viewer.set_graph();
 
                                 crate::OVERLAY.cloned().set(Box::new(viewer));
 
