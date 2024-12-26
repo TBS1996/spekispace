@@ -188,9 +188,18 @@ impl CardViewer {
 
     fn save_button(&self) -> Element {
         let selv = self.clone();
+        let disabled = selv.to_card().is_none();
+
+        let class = if disabled {
+            "mt-6 inline-flex items-center text-white bg-gray-400 border-0 py-1 px-3 focus:outline-none cursor-not-allowed opacity-50 rounded text-base md:mt-0"
+        } else {
+            "mt-6 inline-flex items-center text-white bg-gray-800 border-0 py-1 px-3 focus:outline-none hover:bg-gray-700 rounded text-base md:mt-0"
+        };
+
         rsx! {
             button {
-                class: "mt-6 inline-flex items-center text-white bg-gray-800 border-0 py-1 px-3 focus:outline-none hover:bg-gray-700 rounded text-base md:mt-0",
+                class: "{class}",
+                disabled: disabled,
                 onclick: move |_| {
                     if let Some(card) = selv.to_card() {
                         let selveste = selv.clone();
