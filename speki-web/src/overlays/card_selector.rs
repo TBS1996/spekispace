@@ -3,6 +3,7 @@ use std::sync::Arc;
 use dioxus::prelude::*;
 use speki_core::{AnyType, Card};
 use speki_web::Node;
+use tracing::info;
 
 use crate::{
     components::Komponent,
@@ -25,7 +26,8 @@ pub struct CardSelector {
 
 impl CardSelector {
     pub fn dependency_picker(f: Box<dyn Fn(Arc<Card<AnyType>>)>) -> Self {
-        Self {
+        info!("3 scope is ! {:?}", current_scope_id().unwrap());
+        let selv = Self {
             title: "set dependency".to_string(),
             search: Signal::new_in_scope(String::default(), ScopeId(3)),
             on_card_selected: Arc::new(f),
@@ -34,7 +36,15 @@ impl CardSelector {
             done: Signal::new_in_scope(false, ScopeId(3)),
             filter: None,
             dependents: vec![],
-        }
+        };
+
+        let selv2 = selv.clone();
+
+        spawn(async move {
+            selv2.init_lol().await;
+        });
+
+        selv
     }
 
     pub fn with_dependents(mut self, deps: Vec<Node>) -> Self {
@@ -45,6 +55,29 @@ impl CardSelector {
     pub fn with_filter(mut self, filter: Arc<Box<dyn Fn(AnyType) -> bool>>) -> Self {
         self.filter = Some(filter);
         self
+    }
+
+    pub async fn init_lol(&self) {
+        info!("render hook in cardselector :)");
+        let sig = self.cards.clone();
+        let selv = self.clone();
+        spawn(async move {
+            let cards = APP.cloned().load_all().await;
+            let mut entries = vec![];
+
+            for card in cards {
+                if selv
+                    .filter
+                    .clone()
+                    .map(|filter| (filter)(card.get_ty()))
+                    .unwrap_or(true)
+                {
+                    entries.push(CardEntry::new(card).await);
+                }
+            }
+
+            sig.clone().set(entries);
+        });
     }
 }
 
@@ -63,6 +96,7 @@ impl PartialEq for CardSelector {
 impl Komponent for CardSelector {
     /// Selects a card from the collection and calls a closure on it.
     fn render(&self) -> Element {
+        info!("render cardselector");
         let title = &self.title;
         let mut search = self.search.clone();
 
@@ -82,6 +116,7 @@ impl Komponent for CardSelector {
             .collect();
 
         use_hook(move || {
+            info!("render hook in cardselector :)");
             let sig = self.cards.clone();
             let selv = self.clone();
             spawn(async move {

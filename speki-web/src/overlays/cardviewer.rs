@@ -218,10 +218,14 @@ impl CardViewer {
                         });
                     };
 
+                    info!("1 scope is ! {:?}", current_scope_id().unwrap());
+
                     spawn(async move {
                         let dependent = selv2.to_dep_node().await;
                         let props = CardSelector::dependency_picker(Box::new(fun)).with_dependents(vec![dependent]);
                         OVERLAY.cloned().set(Box::new(props));
+                        info!("2 scope is ! {:?}", current_scope_id().unwrap());
+
                     });
                 },
                 "add dependency"
