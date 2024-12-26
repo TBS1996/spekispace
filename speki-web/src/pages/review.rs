@@ -79,9 +79,15 @@ fn recall_button(recall: Recall) -> Element {
 fn review_start(mut filter: Signal<String>) -> Element {
     let mut editing = use_signal(|| false);
 
+    let class = if IS_SHORT.cloned() {
+        "flex flex-col items-center h-screen space-y-4 justify-center"
+    } else {
+        "flex flex-col items-start h-screen space-y-4 pl-32"
+    };
+
     rsx! {
         div {
-            class: "flex flex-col items-center h-screen space-y-4",
+            class: "{class}",
 
             if *editing.read() {
                 div{
