@@ -68,7 +68,7 @@ impl OverlayManager {
 
         Some(rsx! {
         button {
-            class: "float-right mr-4 mb-10",
+            class: "float-right mr-4 mb-2",
             onclick: move |_| {
                 pop.is_done().set(true);
             },

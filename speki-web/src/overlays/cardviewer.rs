@@ -319,7 +319,7 @@ impl Komponent for CardViewer {
         info!("render cardviewer");
         rsx! {
             div {
-                class: "flex flex-col w-full h-full mt-8",
+                class: "flex flex-col w-full h-full",
                 if let Some(title) = self.title.as_ref() {
                     h1 {
                         class: "text-3xl font-bold mb-4 text-center",
