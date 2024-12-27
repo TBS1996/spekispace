@@ -288,6 +288,12 @@ impl ReviewState {
         let selv = self.clone();
         let graph = self.graph.clone();
 
+        let show_graph = if self.show_backside.cloned() {
+            "opacity-100 visible"
+        } else {
+            "opacity-0 invisible"
+        };
+
         rsx! {
             div {
                 class: "h-full w-full flex flex-col",
@@ -304,7 +310,7 @@ impl ReviewState {
 
                     // Graph on narrow screens (on top) and on the right for wider screens
                     div {
-                        class: "flex-1 w-full md:w-1/2 box-border order-1 md:order-2",
+                        class: "flex-1 w-full md:w-1/2 box-border order-1 md:order-2 {show_graph}",
                         style: "min-height: 0; flex-grow: 1;",
                         { graph.render() }
                     }
