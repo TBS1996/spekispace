@@ -174,7 +174,7 @@ fn Wrapper() -> Element {
 
             if IS_SHORT() {
                 div {
-                    class: "flex-1 overflow-hidden pb-8",
+                    class: "flex-1 overflow-hidden",
                     if let Some(overlay) = overlay.render() {
                         { overlay }
                     } else {

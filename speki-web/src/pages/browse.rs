@@ -10,11 +10,15 @@ use crate::{
     OVERLAY,
 };
 
+#[derive(Clone)]
+pub struct BrowseState {
+    pub browse_page: CardSelector,
+}
+
 static BROWSE_STATE: GlobalSignal<BrowseState> = Signal::global(BrowseState::new);
 
 #[component]
 pub fn Browse() -> Element {
-    info!("browse!");
     let browse_state = BROWSE_STATE.cloned();
 
     rsx! {
@@ -35,11 +39,6 @@ impl CardEntry {
             card,
         }
     }
-}
-
-#[derive(Clone)]
-pub struct BrowseState {
-    pub browse_page: CardSelector,
 }
 
 fn overlay_card_viewer() -> Arc<Box<dyn Fn(Arc<Card<AnyType>>)>> {

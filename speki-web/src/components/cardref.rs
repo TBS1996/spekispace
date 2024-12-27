@@ -16,6 +16,24 @@ pub struct CardRef {
     filter: Option<Arc<Box<dyn Fn(AnyType) -> bool>>>,
 }
 
+impl Komponent for CardRef {
+    fn render(&self) -> Element {
+        let card_display = self.display.clone();
+        let selv = self.clone();
+
+        rsx! {
+            input {
+                class: "bg-white w-full border border-gray-300 rounded-md p-2 mb-4 text-gray-950 cursor-pointer focus:outline-none",
+                value: "{card_display}",
+                readonly: "true",
+                onclick: move |_| {
+                    selv.start_ref_search();
+                },
+            }
+        }
+    }
+}
+
 impl CardRef {
     pub fn new() -> Self {
         Self {
@@ -64,23 +82,5 @@ impl CardRef {
         };
 
         OVERLAY.cloned().set(Box::new(props));
-    }
-}
-
-impl Komponent for CardRef {
-    fn render(&self) -> Element {
-        let card_display = self.display.clone();
-        let selv = self.clone();
-
-        rsx! {
-            input {
-                class: "bg-white w-full border border-gray-300 rounded-md p-2 mb-4 text-gray-950 cursor-pointer focus:outline-none",
-                value: "{card_display}",
-                readonly: "true",
-                onclick: move |_| {
-                    selv.start_ref_search();
-                },
-            }
-        }
     }
 }

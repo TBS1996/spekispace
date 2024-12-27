@@ -7,6 +7,7 @@ use speki_dto::CardId;
 use speki_dto::Recall;
 use tracing::info;
 
+use crate::components::Komponent;
 use crate::overlays::cardviewer::CardViewer;
 use crate::{components::GraphRep, APP, DEFAULT_FILTER};
 use crate::{IS_SHORT, OVERLAY};
@@ -42,6 +43,7 @@ pub fn Review() -> Element {
     rsx! {
         div {
             id: "receiver",
+            class: "h-full w-full",
             tabindex: 0,
             onkeydown: move |event| log_event(event.data()),
 
@@ -135,8 +137,7 @@ fn review_start(mut filter: Signal<String>) -> Element {
 fn review_buttons(mut show_backside: Signal<bool>) -> Element {
     rsx! {
         div {
-            class: "flex flex-col items-center justify-center mt-12", // Centralize content and ensure consistent positioning
-            style: "gap: 16px;", // Add spacing if needed
+            class: "flex flex-col items-center justify-center h-[68px]",
 
             if !show_backside() {
                 button {
@@ -146,7 +147,7 @@ fn review_buttons(mut show_backside: Signal<bool>) -> Element {
                 }
             } else {
                 div {
-                    class: "flex gap-4 justify-center items-center", // Keep buttons horizontally aligned
+                    class: "flex gap-4 justify-center items-center",
                     { recall_button(Recall::None) }
                     { recall_button(Recall::Late) }
                     { recall_button(Recall::Some) }
@@ -246,10 +247,15 @@ impl ReviewState {
         let back = self.back.clone();
         let show_backside = self.show_backside.clone();
 
+        let backside_visibility_class = if show_backside() {
+            "opacity-100 visible"
+        } else {
+            "opacity-0 invisible"
+        };
+
         rsx! {
             div {
                 class: "flex flex-col items-center w-full",
-                style: "min-height: 300px; justify-content: flex-start; align-items: center;",
 
                 p {
                     class: "text-lg text-gray-800 text-center mb-10",
@@ -257,32 +263,22 @@ impl ReviewState {
                 }
 
                 div {
-                    class: "relative flex flex-col w-full",
-                    style: "height: 300px; justify-content: space-between;",
+                    class: "flex flex-col w-full items-center",
 
                     div {
-                        class: "absolute top-0 w-full flex flex-col items-center",
-
-                        if show_backside() {
-                            div {
-                                class: "w-2/4 h-0.5 bg-gray-300",
-                                style: "margin-top: 4px; margin-bottom: 12px;",
-                            }
-                            p {
-                                class: "text-lg text-gray-700 text-center mb-4",
-                                "{back}"
-                            }
-                        } else {
-                            div {
-                                class: "w-2/4 h-0.5 invisible",
-                            }
-                        }
+                        class: "w-2/4 h-0.5 bg-gray-300",
+                        style: "margin-top: 4px; margin-bottom: 12px;",
                     }
 
-                    div {
-                        class: "absolute bottom-0 w-full flex justify-center items-center pb-11",
-                        { review_buttons(show_backside) }
+                    p {
+                        class: "text-lg text-gray-700 text-center mb-4 {backside_visibility_class}",
+                        "{back}"
                     }
+                }
+
+                div {
+                    class: "w-full flex justify-center items-center",
+                    { review_buttons(show_backside) }
                 }
             }
         }
@@ -290,28 +286,34 @@ impl ReviewState {
 
     pub fn render_queue(&self) -> Element {
         let selv = self.clone();
-        let selv2 = self.clone();
-
-        let is_short = IS_SHORT.cloned();
-
-        let card_sides_justify_class = if is_short {
-            "justify-end mb-9"
-        } else {
-            "justify-start"
-        };
+        let graph = self.graph.clone();
 
         rsx! {
             div {
-                class: "w-full max-w-4xl flex flex-col min-h-screen px-4 md:px-0",
+                class: "h-full w-full flex flex-col",
+
+                // Info Bar
                 div {
-                    class: "w-full flex flex-col items-start gap-6",
+                    class: "flex-none w-full",
                     { selv.info_bar() }
                 }
+
+                // Responsive layout for graph and card sides
                 div {
-                    class: "flex flex-col flex-grow items-center gap-6 {card_sides_justify_class}",
+                    class: "flex flex-col md:flex-row w-full h-full overflow-hidden",
+
+                    // Graph on narrow screens (on top) and on the right for wider screens
                     div {
-                        class: "w-full flex flex-col items-center gap-6",
-                        { selv2.card_sides() }
+                        class: "flex-1 w-full md:w-1/2 box-border order-1 md:order-2",
+                        style: "min-height: 0; flex-grow: 1;",
+                        { graph.render() }
+                    }
+
+                    // Card sides on narrow screens (on bottom) and on the left for wider screens
+                    div {
+                        class: "flex-none w-full md:w-1/2 p-4 box-border overflow-y-auto overflow-x-hidden order-2 md:order-1",
+                        style: "min-height: 0; max-height: 100%;",
+                        { self.card_sides() }
                     }
                 }
             }

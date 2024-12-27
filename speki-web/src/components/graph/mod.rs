@@ -273,9 +273,12 @@ impl Komponent for GraphRep {
 
         rsx! {
             div {
-                id: "{cyto_id}",
-                class: "w-full h-full",
+                class: "flex flex-col grow w-full h-full",
+                div {
+                    id: "{cyto_id}",
+                    class: "w-full h-full",
 
+                }
             }
         }
     }
