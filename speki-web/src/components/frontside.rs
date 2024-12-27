@@ -7,7 +7,7 @@ use strum::{EnumIter, IntoEnumIterator};
 use tracing::info;
 
 use super::Komponent;
-use crate::components::DropDownMenu;
+use crate::{components::DropDownMenu, IS_SHORT};
 
 #[derive(EnumIter, Clone, Serialize, Deserialize)]
 pub enum CardTy {
@@ -62,15 +62,20 @@ pub struct FrontPut {
 impl Komponent for FrontPut {
     fn render(&self) -> Element {
         let mut text = self.text.clone();
+        let placeholder = if IS_SHORT.cloned() { "Front side" } else { "" };
         rsx! {
             div {
-                class: "block text-gray-700 text-sm font-medium mb-2",
-                "Front:"
+                class: "block text-gray-700 text-sm font-medium ",
+                if !IS_SHORT() {
+                    "Front:"
+                }
+
                 div {
                     class: "backside-editor flex items-center space-x-4",
 
                     input {
                         class: "bg-white w-full border border-gray-300 rounded-md p-2 mb-4 text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent",
+                        placeholder: "{placeholder}",
                         value: "{text}",
                         oninput: move |evt| text.set(evt.value()),
                     }

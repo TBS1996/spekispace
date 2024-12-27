@@ -3,7 +3,6 @@ use std::fmt::{Debug, Display};
 use dioxus::prelude::*;
 use serde::{Deserialize, Serialize};
 use speki_dto::BackSide;
-use speki_web::Node;
 use strum::{EnumIter, IntoEnumIterator};
 use tracing::info;
 
@@ -11,7 +10,7 @@ use super::Komponent;
 use crate::{
     components::{CardRef, DropDownMenu},
     overlays::cardviewer::TempNode,
-    APP,
+    APP, IS_SHORT,
 };
 
 #[derive(Clone)]
@@ -25,8 +24,10 @@ impl Komponent for BackPut {
     fn render(&self) -> Element {
         rsx! {
             div {
-                class: "block text-gray-700 text-sm font-medium mb-2 max-w-full",
-                "Back:"
+                class: "block text-gray-700 text-sm font-medium max-w-full",
+                if !IS_SHORT() {
+                    "Back:"
+                }
 
                 div {
                     class: "backside-editor flex items-center space-x-4",
@@ -106,11 +107,13 @@ impl BackPut {
     }
 
     fn render_text(&self) -> Element {
+        let placeholder = if IS_SHORT.cloned() { "Back side" } else { "" };
         let mut sig = self.text.clone();
         rsx! {
             input {
                 class: "bg-white w-full border border-gray-300 rounded-md p-2 mb-4 text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent",
                 value: "{sig}",
+                placeholder: "{placeholder}",
                 oninput: move |evt| sig.set(evt.value()),
             }
         }

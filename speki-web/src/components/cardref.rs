@@ -3,14 +3,10 @@ use std::sync::Arc;
 use dioxus::prelude::*;
 use speki_core::{AnyType, Card};
 use speki_dto::CardId;
-use speki_web::Node;
 
 use super::{CardTy, Komponent};
 use crate::{
-    overlays::{
-        card_selector::{self, CardSelector},
-        cardviewer::{CardViewer, TempNode},
-    },
+    overlays::{card_selector::CardSelector, cardviewer::TempNode},
     OVERLAY,
 };
 

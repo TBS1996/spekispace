@@ -265,7 +265,7 @@ impl CardViewer {
         let selv = self.clone();
         rsx! {
             button {
-                class: "mt-6 inline-flex items-center text-white bg-gray-800 border-0 py-1 px-3 focus:outline-none hover:bg-gray-700 rounded text-base md:mt-0",
+                class: "mt-2 inline-flex items-center text-white bg-gray-800 border-0 py-1 px-3 focus:outline-none hover:bg-gray-700 rounded text-base md:mt-0",
                 onclick: move |_| {
                     let selv = selv.clone();
                     let selv2 = selv.clone();
@@ -307,9 +307,9 @@ impl CardViewer {
         });
 
         let class = if !enabled {
-            "mt-6 inline-flex items-center text-white bg-gray-400 border-0 py-1 px-3 focus:outline-none cursor-not-allowed opacity-50 rounded text-base md:mt-0"
+            "mt-2 inline-flex items-center text-white bg-gray-400 border-0 py-1 px-3 focus:outline-none cursor-not-allowed opacity-50 rounded text-base md:mt-0"
         } else {
-            "mt-6 inline-flex items-center text-white bg-gray-800 border-0 py-1 px-3 focus:outline-none hover:bg-gray-700 rounded text-base md:mt-0"
+            "mt-2 inline-flex items-center text-white bg-gray-800 border-0 py-1 px-3 focus:outline-none hover:bg-gray-700 rounded text-base md:mt-0"
         };
 
         rsx! {
@@ -383,9 +383,13 @@ impl CardViewer {
         info!("render inputs");
         let ty = self.front.dropdown.selected.clone();
         rsx! {
-            { self.input_elements(ty.cloned()) }
-            { self.add_dep() }
-            { self.save_button() }
+            div {
+                { self.input_elements(ty.cloned()) }
+            }
+            div {
+                { self.add_dep() }
+                { self.save_button() }
+            }
         }
     }
 }
@@ -412,7 +416,7 @@ impl Komponent for CardViewer {
                 div {
                     class: "flex flex-col md:flex-row w-full h-full overflow-hidden",
                     div {
-                        class: "flex-none p-4 w-full max-w-[500px] box-border order-2 md:order-1 overflow-y-auto",
+                        class: "flex-none p-2 w-full max-w-[500px] box-border order-2 md:order-1 overflow-y-auto",
                         style: "min-height: 0; max-height: 100%;",
                         { self.render_inputs() }
                     }
