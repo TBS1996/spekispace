@@ -9,7 +9,7 @@ use tracing::info;
 use crate::{
     components::{BackPut, CardRef, CardTy, DropDownMenu, FrontPut, GraphRep, Komponent},
     overlays::{card_selector::CardSelector, Overlay},
-    APP, OVERLAY,
+    APP, IS_SHORT, OVERLAY,
 };
 
 #[derive(Clone)]
@@ -413,6 +413,7 @@ impl CardViewer {
 
     fn input_elements(&self, ty: CardTy) -> Element {
         let selv = self.clone();
+        let is_short = IS_SHORT.cloned();
         rsx! {
             { self.front.render() }
 
@@ -424,20 +425,37 @@ impl CardViewer {
                 },
                 CardTy::Class => rsx! {
                     { selv.back.render() }
-                    div {
-                        class: "block text-gray-700 text-sm font-medium mb-2",
-                        style: "margin-right: 81px;",
-                        "Parent class"
-                        { selv.concept.render() }
+                    if !is_short {
+                        div {
+                            class: "block text-gray-700 text-sm font-medium mb-2",
+                            style: "margin-right: 81px;",
+                            "Parent class"
+                            { selv.concept.render() }
+                        }
+                    } else {
+                        div {
+                            class: "block text-gray-700 text-sm font-medium",
+                            style: "margin-right: 81px;",
+                            { selv.concept.with_placeholder("pick parent class").render() }
+                        }
                     }
                 },
                 CardTy::Instance => rsx! {
                     { selv.back.render() }
-                    div {
-                        class: "block text-gray-700 text-sm font-medium mb-2",
-                        style: "margin-right: 81px;",
-                        "Class of instance"
-                        { selv.concept.render() }
+
+                    if !is_short {
+                        div {
+                            class: "block text-gray-700 text-sm font-medium mb-2",
+                            style: "margin-right: 81px;",
+                            "Class of instance"
+                            { selv.concept.render() }
+                        }
+                    } else {
+                        div {
+                            class: "block text-gray-700 text-sm font-medium",
+                            style: "margin-right: 81px;",
+                            { selv.concept.with_placeholder("pick class of instance").render() }
+                        }
                     }
                 },
             }

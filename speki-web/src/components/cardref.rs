@@ -22,6 +22,7 @@ pub struct CardRef {
     allowed: Vec<CardTy>,
     on_select: Option<Arc<Box<dyn Fn(Arc<Card<AnyType>>)>>>,
     on_deselect: Option<Arc<Box<dyn Fn(Arc<Card<AnyType>>)>>>,
+    placeholder: Signal<&'static str>,
 }
 
 impl Komponent for CardRef {
@@ -31,14 +32,15 @@ impl Komponent for CardRef {
         let selv2 = self.clone();
 
         let is_selected = self.card.read().is_some();
+        let placeholder = self.placeholder.clone();
 
         rsx! {
             div {
                 class: "relative w-full",
                 // Container to position the input and the button
                 input {
-                    class: "bg-white w-full border border-gray-300 rounded-md p-2 mb-4 text-gray-950 cursor-pointer focus:outline-none",
-                    placeholder: "{PLACEHOLDER}",
+                    class: "bg-white w-full border border-gray-300 rounded-md p-2 mb-2 text-gray-950 cursor-pointer focus:outline-none",
+                    placeholder: "{placeholder()}",
                     value: "{card_display}",
                     readonly: "true",
                     onclick: move |_| {
@@ -80,7 +82,13 @@ impl CardRef {
             allowed: vec![],
             on_select: None,
             on_deselect: None,
+            placeholder: Signal::new_in_scope(PLACEHOLDER, ScopeId::APP),
         }
+    }
+
+    pub fn with_placeholder(self, placeholder: &'static str) -> Self {
+        self.placeholder.clone().set(placeholder);
+        self
     }
 
     pub fn with_deselect(mut self, f: Arc<Box<dyn Fn(Arc<Card<AnyType>>)>>) -> Self {
