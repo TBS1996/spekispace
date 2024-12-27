@@ -3,12 +3,14 @@ use std::fmt::{Debug, Display};
 use dioxus::prelude::*;
 use serde::{Deserialize, Serialize};
 use speki_dto::BackSide;
+use speki_web::Node;
 use strum::{EnumIter, IntoEnumIterator};
 use tracing::info;
 
 use super::Komponent;
 use crate::{
     components::{CardRef, DropDownMenu},
+    overlays::cardviewer::TempNode,
     APP,
 };
 
@@ -77,6 +79,11 @@ impl BackPut {
         self.text.clone().set(Default::default());
         self.dropdown.reset();
         self.ref_card.reset();
+    }
+
+    pub fn with_dependents(mut self, deps: TempNode) -> Self {
+        self.ref_card = self.ref_card.with_dependents(deps);
+        self
     }
 
     pub fn to_backside(&self) -> Option<BackSide> {

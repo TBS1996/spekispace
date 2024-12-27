@@ -21,7 +21,7 @@ pub struct CardSelector {
     pub allow_new: bool,
     pub done: Signal<bool>,
     pub filter: Option<Arc<Box<dyn Fn(AnyType) -> bool>>>,
-    pub dependents: Vec<Node>,
+    pub dependents: Signal<Vec<Node>>,
 }
 
 impl CardSelector {
@@ -35,7 +35,7 @@ impl CardSelector {
             allow_new: true,
             done: Signal::new_in_scope(false, ScopeId(3)),
             filter: None,
-            dependents: vec![],
+            dependents: Signal::new_in_scope(vec![], ScopeId(3)),
         };
 
         let selv2 = selv.clone();
@@ -47,8 +47,8 @@ impl CardSelector {
         selv
     }
 
-    pub fn with_dependents(mut self, deps: Vec<Node>) -> Self {
-        self.dependents = deps;
+    pub fn with_dependents(self, deps: Vec<Node>) -> Self {
+        self.dependents.clone().set(deps);
         self
     }
 
@@ -166,7 +166,7 @@ impl Komponent for CardSelector {
                                 let mut viewer = CardViewer::new()
                                     .with_title("create new card".to_string())
                                     .with_hook(Arc::new(Box::new(hook)))
-                                    .with_dependents(selv.dependents.clone());
+                                    .with_dependents(selv.dependents.cloned());
 
                                 if let Some(filter) = selv.filter.clone() {
                                     viewer = viewer.with_filter(filter);

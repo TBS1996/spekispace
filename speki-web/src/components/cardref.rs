@@ -3,9 +3,16 @@ use std::sync::Arc;
 use dioxus::prelude::*;
 use speki_core::{AnyType, Card};
 use speki_dto::CardId;
+use speki_web::Node;
 
 use super::Komponent;
-use crate::{overlays::card_selector, OVERLAY};
+use crate::{
+    overlays::{
+        card_selector,
+        cardviewer::{CardViewer, TempNode},
+    },
+    OVERLAY,
+};
 
 const PLACEHOLDER: &'static str = "pick card...";
 
@@ -14,6 +21,7 @@ pub struct CardRef {
     card: Signal<Option<CardId>>,
     display: Signal<String>,
     filter: Option<Arc<Box<dyn Fn(AnyType) -> bool>>>,
+    dependent: Option<TempNode>,
 }
 
 impl Komponent for CardRef {
@@ -40,7 +48,13 @@ impl CardRef {
             card: Signal::new_in_scope(Default::default(), ScopeId(3)),
             display: Signal::new_in_scope(PLACEHOLDER.to_string(), ScopeId(3)),
             filter: None,
+            dependent: None,
         }
+    }
+
+    pub fn with_dependents(mut self, deps: TempNode) -> Self {
+        self.dependent = Some(deps);
+        self
     }
 
     pub fn with_filter(mut self, filter: Arc<Box<dyn Fn(AnyType) -> bool>>) -> Self {
@@ -74,6 +88,12 @@ impl CardRef {
             });
         };
 
+        let dependents = self
+            .dependent
+            .clone()
+            .map(|node| vec![node.into()])
+            .unwrap_or_default();
+
         let props = card_selector::CardSelector {
             title: "choose reference".to_string(),
             on_card_selected: Arc::new(Box::new(fun)),
@@ -82,8 +102,13 @@ impl CardRef {
             allow_new: true,
             done: Signal::new_in_scope(false, ScopeId(3)),
             filter: self.filter.clone(),
-            dependents: vec![],
+            dependents: Signal::new_in_scope(dependents, ScopeId(3)),
         };
+
+        let _props = props.clone();
+        spawn(async move {
+            _props.clone().init_lol().await;
+        });
 
         OVERLAY.cloned().set(Box::new(props));
     }

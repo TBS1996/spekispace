@@ -7,10 +7,53 @@ use speki_web::{Node, NodeId, NodeMetadata};
 use tracing::info;
 
 use crate::{
-    components::{backside::BackOpts, BackPut, CardRef, CardTy, FrontPut, GraphRep, Komponent},
+    components::{BackPut, CardRef, CardTy, FrontPut, GraphRep, Komponent},
     overlays::{card_selector::CardSelector, Overlay},
     APP, OVERLAY,
 };
+
+#[derive(Clone)]
+pub enum TempNode {
+    Old(CardId),
+    New {
+        id: NodeId,
+        front: FrontPut,
+        dependencies: Signal<Vec<CardId>>,
+        dependents: Signal<Vec<Node>>,
+    },
+}
+
+impl From<TempNode> for Node {
+    fn from(value: TempNode) -> Self {
+        match value {
+            TempNode::Old(card) => Self::Card(card),
+            TempNode::New {
+                id,
+                front,
+                dependencies,
+                dependents,
+            } => {
+                let node = NodeMetadata {
+                    id,
+                    label: front.text.cloned(),
+                    color: "#858585".to_string(),
+                    ty: front.dropdown.selected.cloned().to_ctype(),
+                    border: false,
+                };
+
+                let dependents = dependents.cloned();
+                let dependencies: Vec<_> =
+                    dependencies.cloned().into_iter().map(Node::Card).collect();
+
+                Self::Nope {
+                    node,
+                    dependencies,
+                    dependents,
+                }
+            }
+        }
+    }
+}
 
 pub struct CardRep {
     ty: AnyType,
@@ -30,6 +73,7 @@ pub struct CardViewer {
     is_done: Signal<bool>,
     old_card: Signal<Option<Arc<Card<AnyType>>>>,
     filter: Option<Arc<Box<dyn Fn(AnyType) -> bool>>>,
+    tempnode: TempNode,
 }
 
 impl CardViewer {
@@ -54,10 +98,13 @@ impl CardViewer {
     }
 
     pub async fn new_from_card(card: Arc<Card<AnyType>>, graph: GraphRep) -> Self {
+        let tempnode = TempNode::Old(card.id);
         let filter = move |ty: AnyType| ty.is_class();
 
         let raw = card.to_raw();
-        let concept = CardRef::new().with_filter(Arc::new(Box::new(filter)));
+        let concept = CardRef::new()
+            .with_filter(Arc::new(Box::new(filter)))
+            .with_dependents(tempnode.clone());
         if let Some(class) = raw.data.class().map(CardId) {
             let class = APP.read().load_card(class).await;
             concept.set_ref(class).await;
@@ -65,7 +112,7 @@ impl CardViewer {
 
         graph.new_set_card(card.clone());
         let dependencies = card.dependency_ids().await;
-        let bck = BackPut::new(raw.data.back.clone());
+        let bck = BackPut::new(raw.data.back.clone()).with_dependents(tempnode.clone());
         let front = raw.data.front.unwrap_or_default();
         let back = raw.data.back.unwrap_or_default().to_string();
         let frnt = FrontPut::new(CardTy::from_ctype(card.get_ty().fieldless()));
@@ -86,26 +133,43 @@ impl CardViewer {
             save_hook: None,
             title: None,
             filter: None,
-            concept,
+            concept: concept.clone(),
+            tempnode,
         }
     }
 
     pub fn new() -> Self {
         let front = FrontPut::new(CardTy::Normal);
-        let label = front.text.clone();
+        let dependencies = Signal::new_in_scope(Default::default(), ScopeId(3));
+        let dependents = Signal::new_in_scope(Default::default(), ScopeId(3));
+
+        let tempnode = TempNode::New {
+            id: NodeId::new_temp(),
+            front: front.clone(),
+            dependencies: dependencies.clone(),
+            dependents: dependents.clone(),
+        };
+
+        let back = BackPut::new(None).with_dependents(tempnode.clone());
         let filter = move |ty: AnyType| ty.is_class();
+        let concept = CardRef::new()
+            .with_filter(Arc::new(Box::new(filter)))
+            .with_dependents(tempnode.clone());
+
+        let label = front.text.clone();
         let selv = Self {
+            concept,
             front,
-            back: BackPut::new(None),
-            dependencies: Signal::new_in_scope(Default::default(), ScopeId(3)),
-            dependents: Signal::new_in_scope(Default::default(), ScopeId(3)),
+            back,
             graph: GraphRep::default().with_label(label),
             is_done: Signal::new_in_scope(false, ScopeId(3)),
-            concept: CardRef::new().with_filter(Arc::new(Box::new(filter))),
             old_card: Signal::new_in_scope(None, ScopeId(3)),
             save_hook: None,
             title: None,
             filter: None,
+            dependencies,
+            dependents,
+            tempnode,
         };
 
         selv.set_graph();
@@ -173,33 +237,6 @@ impl CardViewer {
             .new_set_card_rep(node, dependencies, self.dependents.cloned());
     }
 
-    async fn to_dep_node(&self) -> Node {
-        let meta = match self.old_card.cloned() {
-            Some(card) => return Node::Card(card.id),
-            None => NodeMetadata {
-                id: NodeId::new_temp(),
-                label: self.front.text.cloned(),
-                color: "#858585".to_string(),
-                ty: self.front.dropdown.selected.cloned().to_ctype(),
-                border: false,
-            },
-        };
-
-        let dependents = self.dependents.cloned();
-        let dependencies: Vec<_> = self
-            .dependencies
-            .cloned()
-            .into_iter()
-            .map(Node::Card)
-            .collect();
-
-        Node::Nope {
-            node: meta,
-            dependencies,
-            dependents,
-        }
-    }
-
     fn to_node(&self) -> NodeMetadata {
         NodeMetadata {
             id: NodeId::new_temp(),
@@ -233,7 +270,7 @@ impl CardViewer {
                     info!("1 scope is ! {:?}", current_scope_id().unwrap());
 
                     spawn(async move {
-                        let dependent = selv2.to_dep_node().await;
+                        let dependent: Node = selv2.tempnode.clone().into();
                         let props = CardSelector::dependency_picker(Box::new(fun)).with_dependents(vec![dependent]);
                         OVERLAY.cloned().set(Box::new(props));
                         info!("2 scope is ! {:?}", current_scope_id().unwrap());
