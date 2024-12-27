@@ -80,6 +80,11 @@ impl BackPut {
         }
     }
 
+    pub fn with_deselect(mut self, f: Arc<Box<dyn Fn(Arc<Card<AnyType>>)>>) -> Self {
+        self.ref_card = self.ref_card.with_deselect(f);
+        self
+    }
+
     pub fn with_closure(mut self, f: Arc<Box<dyn Fn(Arc<Card<AnyType>>)>>) -> Self {
         self.ref_card = self.ref_card.with_closure(f);
         self

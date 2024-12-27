@@ -164,9 +164,19 @@ impl CardViewer {
                 deps.clone().write().push(card.id);
                 refresh_graph(graph, front, deps, dependents.clone());
             }));
+        let _front = frnt.clone();
+        let _graph = graph.clone();
+        let af: Arc<Box<dyn Fn(Arc<Card<AnyType>>)>> =
+            Arc::new(Box::new(move |card: Arc<Card<AnyType>>| {
+                let graph = _graph.clone();
+                let front = _front.clone();
+                let deps = dependencies.clone();
+                deps.clone().write().retain(|dep| *dep != card.id);
+                refresh_graph(graph, front, deps, dependents.clone());
+            }));
 
-        let bck = bck.with_closure(f.clone());
-        let concept = concept.with_closure(f.clone());
+        let bck = bck.with_closure(f.clone()).with_deselect(af.clone());
+        let concept = concept.with_closure(f.clone()).with_deselect(af.clone());
 
         Self {
             front: frnt,
@@ -204,6 +214,17 @@ impl CardViewer {
                 refresh_graph(graph, front, deps, dependents.clone());
             }));
 
+        let _front = front.clone();
+        let _graph = graph.clone();
+        let af: Arc<Box<dyn Fn(Arc<Card<AnyType>>)>> =
+            Arc::new(Box::new(move |card: Arc<Card<AnyType>>| {
+                let graph = _graph.clone();
+                let front = _front.clone();
+                let deps = dependencies.clone();
+                deps.clone().write().retain(|dep| *dep != card.id);
+                refresh_graph(graph, front, deps, dependents.clone());
+            }));
+
         let tempnode = TempNode::New {
             id: NodeId::new_temp(),
             front: front.clone(),
@@ -213,13 +234,15 @@ impl CardViewer {
 
         let back = BackPut::new(None)
             .with_dependents(tempnode.clone())
-            .with_closure(f.clone());
+            .with_closure(f.clone())
+            .with_deselect(af.clone());
         let filter = move |ty: AnyType| ty.is_class();
         let concept = CardRef::new()
             .with_filter(Arc::new(Box::new(filter)))
             .with_dependents(tempnode.clone())
             .with_allowed(vec![CardTy::Class])
-            .with_closure(f.clone());
+            .with_closure(f.clone())
+            .with_deselect(af.clone());
 
         let selv = Self {
             concept,
