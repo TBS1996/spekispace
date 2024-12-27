@@ -141,7 +141,6 @@ impl Komponent for Uploader {
                     "Upload Cards"
                 }
 
-                // mid section
                 div {
                     class: "flex flex-col md:flex-row gap-20 md:gap-5 max-h-[400px] overflow-y-auto",
                     div {
@@ -172,7 +171,6 @@ impl Komponent for Uploader {
 
                     }
 
-                    // regex input
                     div {
                         class: "flex flex-col w-full md:w-1/3",
                         label {
@@ -197,7 +195,6 @@ impl Komponent for Uploader {
                         }
                     }
 
-                    // extracted cards
                     div {
                         class: "flex flex-col w-full md:w-1/3",
                         h2 {

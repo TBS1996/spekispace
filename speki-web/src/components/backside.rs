@@ -1,7 +1,11 @@
-use std::fmt::{Debug, Display};
+use std::{
+    fmt::{Debug, Display},
+    sync::Arc,
+};
 
 use dioxus::prelude::*;
 use serde::{Deserialize, Serialize};
+use speki_core::{AnyType, Card};
 use speki_dto::BackSide;
 use strum::{EnumIter, IntoEnumIterator};
 use tracing::info;
@@ -74,6 +78,11 @@ impl BackPut {
             dropdown: DropDownMenu::new(BackOpts::iter(), Some(backopt)),
             ref_card,
         }
+    }
+
+    pub fn with_closure(mut self, f: Arc<Box<dyn Fn(Arc<Card<AnyType>>)>>) -> Self {
+        self.ref_card = self.ref_card.with_closure(f);
+        self
     }
 
     pub fn reset(&self) {

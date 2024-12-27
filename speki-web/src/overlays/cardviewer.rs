@@ -55,6 +55,23 @@ impl From<TempNode> for Node {
     }
 }
 
+fn refresh_graph(
+    graph: GraphRep,
+    front: FrontPut,
+    dependencies: Signal<Vec<CardId>>,
+    dependents: Signal<Vec<Node>>,
+) {
+    let node = NodeMetadata {
+        id: NodeId::new_temp(),
+        label: front.text.cloned(),
+        color: "#858585".to_string(),
+        ty: front.dropdown.selected.cloned().to_ctype(),
+        border: true,
+    };
+
+    graph.new_set_card_rep(node, dependencies.cloned(), dependents.cloned());
+}
+
 pub struct CardRep {
     ty: AnyType,
     deps: Vec<CardId>,
@@ -133,11 +150,29 @@ impl CardViewer {
 
         let graph = graph.with_label(frnt.text.clone());
 
+        let dependencies: Signal<Vec<CardId>> =
+            Signal::new_in_scope(dependencies.into_iter().collect(), ScopeId(3));
+        let dependents: Signal<Vec<Node>> = Signal::new_in_scope(Default::default(), ScopeId(3));
+
+        let _front = frnt.clone();
+        let _graph = graph.clone();
+        let f: Arc<Box<dyn Fn(Arc<Card<AnyType>>)>> =
+            Arc::new(Box::new(move |card: Arc<Card<AnyType>>| {
+                let graph = _graph.clone();
+                let front = _front.clone();
+                let deps = dependencies.clone();
+                deps.clone().write().push(card.id);
+                refresh_graph(graph, front, deps, dependents.clone());
+            }));
+
+        let bck = bck.with_closure(f.clone());
+        let concept = concept.with_closure(f.clone());
+
         Self {
             front: frnt,
             back: bck,
-            dependencies: Signal::new_in_scope(dependencies.into_iter().collect(), ScopeId(3)),
-            dependents: Signal::new_in_scope(Default::default(), ScopeId(3)),
+            dependents,
+            dependencies,
             graph,
             is_done: Signal::new_in_scope(false, ScopeId(3)),
             old_card: Signal::new_in_scope(Some(card), ScopeId(3)),
@@ -152,8 +187,22 @@ impl CardViewer {
 
     pub fn new() -> Self {
         let front = FrontPut::new(CardTy::Normal);
-        let dependencies = Signal::new_in_scope(Default::default(), ScopeId(3));
+        let dependencies: Signal<Vec<CardId>> =
+            Signal::new_in_scope(Default::default(), ScopeId(3));
         let dependents = Signal::new_in_scope(Default::default(), ScopeId(3));
+        let label = front.text.clone();
+        let graph = GraphRep::default().with_label(label);
+        let _graph = graph.clone();
+        let _front = front.clone();
+
+        let f: Arc<Box<dyn Fn(Arc<Card<AnyType>>)>> =
+            Arc::new(Box::new(move |card: Arc<Card<AnyType>>| {
+                let graph = _graph.clone();
+                let front = _front.clone();
+                let deps = dependencies.clone();
+                deps.clone().write().push(card.id);
+                refresh_graph(graph, front, deps, dependents.clone());
+            }));
 
         let tempnode = TempNode::New {
             id: NodeId::new_temp(),
@@ -162,19 +211,21 @@ impl CardViewer {
             dependents: dependents.clone(),
         };
 
-        let back = BackPut::new(None).with_dependents(tempnode.clone());
+        let back = BackPut::new(None)
+            .with_dependents(tempnode.clone())
+            .with_closure(f.clone());
         let filter = move |ty: AnyType| ty.is_class();
         let concept = CardRef::new()
             .with_filter(Arc::new(Box::new(filter)))
             .with_dependents(tempnode.clone())
-            .with_allowed(vec![CardTy::Class]);
+            .with_allowed(vec![CardTy::Class])
+            .with_closure(f.clone());
 
-        let label = front.text.clone();
         let selv = Self {
             concept,
             front,
             back,
-            graph: GraphRep::default().with_label(label),
+            graph,
             is_done: Signal::new_in_scope(false, ScopeId(3)),
             old_card: Signal::new_in_scope(None, ScopeId(3)),
             save_hook: None,
@@ -245,20 +296,12 @@ impl CardViewer {
     }
 
     pub fn set_graph(&self) {
-        let node = self.to_node();
-        let dependencies = self.dependencies.cloned();
-        self.graph
-            .new_set_card_rep(node, dependencies, self.dependents.cloned());
-    }
-
-    fn to_node(&self) -> NodeMetadata {
-        NodeMetadata {
-            id: NodeId::new_temp(),
-            label: self.front.text.cloned(),
-            color: "#858585".to_string(),
-            ty: self.front.dropdown.selected.cloned().to_ctype(),
-            border: true,
-        }
+        refresh_graph(
+            self.graph.clone(),
+            self.front.clone(),
+            self.dependencies.clone(),
+            self.dependents.clone(),
+        );
     }
 
     fn add_dep(&self) -> Element {

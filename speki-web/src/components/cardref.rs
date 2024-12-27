@@ -19,6 +19,7 @@ pub struct CardRef {
     filter: Option<Arc<Box<dyn Fn(AnyType) -> bool>>>,
     dependent: Option<TempNode>,
     allowed: Vec<CardTy>,
+    on_select: Option<Arc<Box<dyn Fn(Arc<Card<AnyType>>)>>>,
 }
 
 impl Komponent for CardRef {
@@ -47,7 +48,13 @@ impl CardRef {
             filter: None,
             dependent: None,
             allowed: vec![],
+            on_select: None,
         }
+    }
+
+    pub fn with_closure(mut self, f: Arc<Box<dyn Fn(Arc<Card<AnyType>>)>>) -> Self {
+        self.on_select = Some(f);
+        self
     }
 
     pub fn with_allowed(mut self, deps: Vec<CardTy>) -> Self {
@@ -84,8 +91,13 @@ impl CardRef {
     pub fn start_ref_search(&self) {
         let _selv = self.clone();
 
+        let f = self.on_select.clone();
         let fun = move |card: Arc<Card<AnyType>>| {
             let selv = _selv.clone();
+            if let Some(fun) = f.clone() {
+                fun(card.clone());
+            }
+
             spawn(async move {
                 selv.set_ref(card).await;
             });
