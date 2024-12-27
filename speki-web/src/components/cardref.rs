@@ -5,7 +5,7 @@ use speki_core::{AnyType, Card};
 use speki_dto::CardId;
 use speki_web::Node;
 
-use super::Komponent;
+use super::{CardTy, Komponent};
 use crate::{
     overlays::{
         card_selector::{self, CardSelector},
@@ -22,6 +22,7 @@ pub struct CardRef {
     display: Signal<String>,
     filter: Option<Arc<Box<dyn Fn(AnyType) -> bool>>>,
     dependent: Option<TempNode>,
+    allowed: Vec<CardTy>,
 }
 
 impl Komponent for CardRef {
@@ -49,7 +50,13 @@ impl CardRef {
             display: Signal::new_in_scope(PLACEHOLDER.to_string(), ScopeId(3)),
             filter: None,
             dependent: None,
+            allowed: vec![],
         }
+    }
+
+    pub fn with_allowed(mut self, deps: Vec<CardTy>) -> Self {
+        self.allowed = deps;
+        self
     }
 
     pub fn with_dependents(mut self, deps: TempNode) -> Self {
@@ -95,7 +102,8 @@ impl CardRef {
             .unwrap_or_default();
 
         let props =
-            CardSelector::ref_picker(Arc::new(Box::new(fun)), dependents, self.filter.clone());
+            CardSelector::ref_picker(Arc::new(Box::new(fun)), dependents, self.filter.clone())
+                .with_allowed_cards(self.allowed.clone());
 
         OVERLAY.cloned().set(Box::new(props));
     }

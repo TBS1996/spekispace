@@ -6,7 +6,7 @@ use speki_web::Node;
 use tracing::info;
 
 use crate::{
-    components::{GraphRep, Komponent},
+    components::{CardTy, GraphRep, Komponent},
     overlays::{cardviewer::CardViewer, Overlay},
     pages::CardEntry,
     APP, OVERLAY,
@@ -32,6 +32,7 @@ pub struct CardSelector {
     done: Signal<bool>,
     filter: Option<Arc<Box<dyn Fn(AnyType) -> bool>>>,
     dependents: Signal<Vec<Node>>,
+    allowed_cards: Vec<CardTy>,
 }
 
 impl Default for CardSelector {
@@ -51,6 +52,7 @@ impl CardSelector {
             done: Signal::new_in_scope(Default::default(), ScopeId::APP),
             filter: None,
             dependents: Signal::new_in_scope(Default::default(), ScopeId::APP),
+            allowed_cards: vec![],
         }
     }
 
@@ -62,12 +64,11 @@ impl CardSelector {
         let selv = Self {
             title: "choose reference".to_string(),
             on_card_selected: fun,
-            search: Signal::new_in_scope(Default::default(), ScopeId(3)),
-            cards: Signal::new_in_scope(Default::default(), ScopeId(3)),
             allow_new: true,
             done: Signal::new_in_scope(false, ScopeId(3)),
             filter,
             dependents: Signal::new_in_scope(dependents, ScopeId(3)),
+            ..Default::default()
         };
 
         let selv2 = selv.clone();
@@ -100,6 +101,11 @@ impl CardSelector {
 
     pub fn with_dependents(self, deps: Vec<Node>) -> Self {
         self.dependents.clone().set(deps);
+        self
+    }
+
+    pub fn with_allowed_cards(mut self, deps: Vec<CardTy>) -> Self {
+        self.allowed_cards = deps;
         self
     }
 
@@ -222,7 +228,8 @@ impl Komponent for CardSelector {
                                 let mut viewer = CardViewer::new()
                                     .with_title("create new card".to_string())
                                     .with_hook(Arc::new(Box::new(hook)))
-                                    .with_dependents(selv.dependents.cloned());
+                                    .with_dependents(selv.dependents.cloned())
+                                    .with_allowed_cards(selv.allowed_cards.clone());
 
                                 if let Some(filter) = selv.filter.clone() {
                                     viewer = viewer.with_filter(filter);

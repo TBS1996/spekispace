@@ -7,7 +7,7 @@ use speki_web::{Node, NodeId, NodeMetadata};
 use tracing::info;
 
 use crate::{
-    components::{BackPut, CardRef, CardTy, FrontPut, GraphRep, Komponent},
+    components::{BackPut, CardRef, CardTy, DropDownMenu, FrontPut, GraphRep, Komponent},
     overlays::{card_selector::CardSelector, Overlay},
     APP, OVERLAY,
 };
@@ -74,6 +74,7 @@ pub struct CardViewer {
     old_card: Signal<Option<Arc<Card<AnyType>>>>,
     filter: Option<Arc<Box<dyn Fn(AnyType) -> bool>>>,
     tempnode: TempNode,
+    allowed_cards: Vec<CardTy>,
 }
 
 impl CardViewer {
@@ -92,6 +93,15 @@ impl CardViewer {
         self
     }
 
+    pub fn with_allowed_cards(mut self, allowed: Vec<CardTy>) -> Self {
+        if allowed.is_empty() {
+            return self;
+        }
+        self.front.dropdown = DropDownMenu::new(allowed.clone(), None);
+        self.allowed_cards = allowed;
+        self
+    }
+
     pub fn with_dependents(mut self, deps: Vec<Node>) -> Self {
         self.dependents.extend(deps);
         self
@@ -104,7 +114,8 @@ impl CardViewer {
         let raw = card.to_raw();
         let concept = CardRef::new()
             .with_filter(Arc::new(Box::new(filter)))
-            .with_dependents(tempnode.clone());
+            .with_dependents(tempnode.clone())
+            .with_allowed(vec![CardTy::Class]);
         if let Some(class) = raw.data.class().map(CardId) {
             let class = APP.read().load_card(class).await;
             concept.set_ref(class).await;
@@ -135,6 +146,7 @@ impl CardViewer {
             filter: None,
             concept: concept.clone(),
             tempnode,
+            allowed_cards: vec![],
         }
     }
 
@@ -154,7 +166,8 @@ impl CardViewer {
         let filter = move |ty: AnyType| ty.is_class();
         let concept = CardRef::new()
             .with_filter(Arc::new(Box::new(filter)))
-            .with_dependents(tempnode.clone());
+            .with_dependents(tempnode.clone())
+            .with_allowed(vec![CardTy::Class]);
 
         let label = front.text.clone();
         let selv = Self {
@@ -170,6 +183,7 @@ impl CardViewer {
             dependencies,
             dependents,
             tempnode,
+            allowed_cards: vec![],
         };
 
         selv.set_graph();
