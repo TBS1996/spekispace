@@ -298,24 +298,20 @@ impl ReviewState {
             div {
                 class: "h-full w-full flex flex-col",
 
-                // Info Bar
                 div {
                     class: "flex-none w-full",
                     { selv.info_bar() }
                 }
 
-                // Responsive layout for graph and card sides
                 div {
                     class: "flex flex-col md:flex-row w-full h-full overflow-hidden",
 
-                    // Graph on narrow screens (on top) and on the right for wider screens
                     div {
                         class: "flex-1 w-full md:w-1/2 box-border order-1 md:order-2 {show_graph}",
                         style: "min-height: 0; flex-grow: 1;",
                         { graph.render() }
                     }
 
-                    // Card sides on narrow screens (on bottom) and on the left for wider screens
                     div {
                         class: "flex-none w-full md:w-1/2 p-4 box-border overflow-y-auto overflow-x-hidden order-2 md:order-1",
                         style: "min-height: 0; max-height: 100%;",

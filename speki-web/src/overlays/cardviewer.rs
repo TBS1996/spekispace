@@ -119,6 +119,11 @@ impl CardViewer {
         let frontside = self.front.clone();
 
         let front = format!("{}", frontside.text.cloned());
+
+        if front.is_empty() {
+            return None;
+        }
+
         let ty = match self.front.dropdown.selected.cloned() {
             CardTy::Normal => {
                 let back = backside.to_backside()?;
