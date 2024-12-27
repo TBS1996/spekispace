@@ -4,11 +4,7 @@ use dioxus::prelude::*;
 use speki_core::{AnyType, Card};
 use tracing::info;
 
-use crate::{
-    components::{GraphRep, Komponent},
-    overlays::{card_selector::CardSelector, cardviewer::CardViewer},
-    OVERLAY,
-};
+use crate::{components::Komponent, overlays::card_selector::CardSelector};
 
 #[derive(Clone)]
 pub struct BrowseState {
@@ -41,30 +37,11 @@ impl CardEntry {
     }
 }
 
-fn overlay_card_viewer() -> Arc<Box<dyn Fn(Arc<Card<AnyType>>)>> {
-    Arc::new(Box::new(move |card: Arc<Card<AnyType>>| {
-        spawn(async move {
-            let graph = GraphRep::new().with_hook(overlay_card_viewer());
-            let viewer = CardViewer::new_from_card(card, graph).await;
-            OVERLAY.cloned().replace(Box::new(viewer));
-        });
-    }))
-}
-
 impl BrowseState {
     pub fn new() -> Self {
         info!("creating browse state!");
 
-        let browse_page = CardSelector {
-            title: "browse cards".to_string(),
-            cards: Default::default(),
-            on_card_selected: overlay_card_viewer(),
-            search: Default::default(),
-            done: Default::default(),
-            allow_new: false,
-            filter: None,
-            dependents: Default::default(),
-        };
+        let browse_page = CardSelector::new().with_title("Browse cards".to_string());
 
         Self { browse_page }
     }

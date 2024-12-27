@@ -8,7 +8,7 @@ use speki_web::Node;
 use super::Komponent;
 use crate::{
     overlays::{
-        card_selector,
+        card_selector::{self, CardSelector},
         cardviewer::{CardViewer, TempNode},
     },
     OVERLAY,
@@ -94,21 +94,8 @@ impl CardRef {
             .map(|node| vec![node.into()])
             .unwrap_or_default();
 
-        let props = card_selector::CardSelector {
-            title: "choose reference".to_string(),
-            on_card_selected: Arc::new(Box::new(fun)),
-            search: Signal::new_in_scope(Default::default(), ScopeId(3)),
-            cards: Signal::new_in_scope(Default::default(), ScopeId(3)),
-            allow_new: true,
-            done: Signal::new_in_scope(false, ScopeId(3)),
-            filter: self.filter.clone(),
-            dependents: Signal::new_in_scope(dependents, ScopeId(3)),
-        };
-
-        let _props = props.clone();
-        spawn(async move {
-            _props.clone().init_lol().await;
-        });
+        let props =
+            CardSelector::ref_picker(Arc::new(Box::new(fun)), dependents, self.filter.clone());
 
         OVERLAY.cloned().set(Box::new(props));
     }

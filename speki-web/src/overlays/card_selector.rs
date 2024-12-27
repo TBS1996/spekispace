@@ -6,36 +6,87 @@ use speki_web::Node;
 use tracing::info;
 
 use crate::{
-    components::Komponent,
+    components::{GraphRep, Komponent},
     overlays::{cardviewer::CardViewer, Overlay},
     pages::CardEntry,
-    APP,
+    APP, OVERLAY,
 };
+
+pub fn overlay_card_viewer() -> Arc<Box<dyn Fn(Arc<Card<AnyType>>)>> {
+    Arc::new(Box::new(move |card: Arc<Card<AnyType>>| {
+        spawn(async move {
+            let graph = GraphRep::new().with_hook(overlay_card_viewer());
+            let viewer = CardViewer::new_from_card(card, graph).await;
+            OVERLAY.cloned().replace(Box::new(viewer));
+        });
+    }))
+}
 
 #[derive(Props, Clone)]
 pub struct CardSelector {
-    pub title: String,
-    pub search: Signal<String>,
-    pub on_card_selected: Arc<Box<dyn Fn(Arc<Card<AnyType>>)>>,
-    pub cards: Signal<Vec<CardEntry>>,
-    pub allow_new: bool,
-    pub done: Signal<bool>,
-    pub filter: Option<Arc<Box<dyn Fn(AnyType) -> bool>>>,
-    pub dependents: Signal<Vec<Node>>,
+    title: String,
+    search: Signal<String>,
+    on_card_selected: Arc<Box<dyn Fn(Arc<Card<AnyType>>)>>,
+    cards: Signal<Vec<CardEntry>>,
+    allow_new: bool,
+    done: Signal<bool>,
+    filter: Option<Arc<Box<dyn Fn(AnyType) -> bool>>>,
+    dependents: Signal<Vec<Node>>,
+}
+
+impl Default for CardSelector {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl CardSelector {
+    pub fn new() -> Self {
+        Self {
+            title: "select card".to_string(),
+            search: Signal::new_in_scope(Default::default(), ScopeId::APP),
+            on_card_selected: overlay_card_viewer(),
+            cards: Signal::new_in_scope(Default::default(), ScopeId::APP),
+            allow_new: false,
+            done: Signal::new_in_scope(Default::default(), ScopeId::APP),
+            filter: None,
+            dependents: Signal::new_in_scope(Default::default(), ScopeId::APP),
+        }
+    }
+
+    pub fn ref_picker(
+        fun: Arc<Box<dyn Fn(Arc<Card<AnyType>>)>>,
+        dependents: Vec<Node>,
+        filter: Option<Arc<Box<dyn Fn(AnyType) -> bool>>>,
+    ) -> Self {
+        let selv = Self {
+            title: "choose reference".to_string(),
+            on_card_selected: fun,
+            search: Signal::new_in_scope(Default::default(), ScopeId(3)),
+            cards: Signal::new_in_scope(Default::default(), ScopeId(3)),
+            allow_new: true,
+            done: Signal::new_in_scope(false, ScopeId(3)),
+            filter,
+            dependents: Signal::new_in_scope(dependents, ScopeId(3)),
+        };
+
+        let selv2 = selv.clone();
+
+        spawn(async move {
+            selv2.init_lol().await;
+        });
+
+        selv
+    }
+
     pub fn dependency_picker(f: Box<dyn Fn(Arc<Card<AnyType>>)>) -> Self {
         info!("3 scope is ! {:?}", current_scope_id().unwrap());
         let selv = Self {
             title: "set dependency".to_string(),
-            search: Signal::new_in_scope(String::default(), ScopeId(3)),
             on_card_selected: Arc::new(f),
-            cards: Signal::new_in_scope(Default::default(), ScopeId::APP),
             allow_new: true,
-            done: Signal::new_in_scope(false, ScopeId(3)),
             filter: None,
-            dependents: Signal::new_in_scope(vec![], ScopeId(3)),
+            ..Default::default()
         };
 
         let selv2 = selv.clone();
@@ -49,6 +100,11 @@ impl CardSelector {
 
     pub fn with_dependents(self, deps: Vec<Node>) -> Self {
         self.dependents.clone().set(deps);
+        self
+    }
+
+    pub fn with_title(mut self, title: String) -> Self {
+        self.title = title;
         self
     }
 

@@ -132,7 +132,7 @@ impl NodeMetadata {
         let label = card.print().await;
         let color = match card.recall_rate() {
             Some(rate) => rate_to_color(rate as f64 * 100.),
-            None => yellow_color(),
+            None => cyan_color(),
         };
 
         let ty = card.card_type().fieldless();
