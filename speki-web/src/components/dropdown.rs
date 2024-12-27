@@ -4,6 +4,8 @@ use dioxus::prelude::*;
 use serde::{Deserialize, Serialize};
 use tracing::info;
 
+use crate::CURRENT_ROUTE;
+
 use super::Komponent;
 
 #[derive(Clone)]
@@ -65,6 +67,12 @@ where
         let val: String = serde_json::to_string(&dropdown.cloned()).unwrap();
         info!("val: {val:?}");
         let selv = self.clone();
+
+        use_hook(|| {
+            let _ = CURRENT_ROUTE.cloned();
+            dropdown.clone().set(dropdown.cloned());
+            selv.init.clone().set(true);
+        });
 
         // hack: without this it then at first it renders the first value in the options regardless of the default value set.
         if !selv.init.cloned() {
