@@ -2,6 +2,7 @@ use std::fmt::Display;
 
 use dioxus::prelude::*;
 use serde::{Deserialize, Serialize};
+use speki_core::AnyType;
 use speki_dto::CType;
 use strum::{EnumIter, IntoEnumIterator};
 use tracing::info;
@@ -88,16 +89,11 @@ impl Komponent for FrontPut {
 }
 
 impl FrontPut {
-    pub fn new() -> Self {
+    pub fn new(default: CardTy) -> Self {
         Self {
-            dropdown: DropDownMenu::new(CardTy::iter()),
+            dropdown: DropDownMenu::new(CardTy::iter(), Some(default)),
             text: Signal::new_in_scope(Default::default(), ScopeId(3)),
         }
-    }
-
-    pub fn with_default(mut self, ty: CardTy) -> Self {
-        self.dropdown = self.dropdown.with_default(ty);
-        self
     }
 
     pub fn reset(&self) {

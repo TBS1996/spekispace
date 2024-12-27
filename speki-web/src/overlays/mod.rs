@@ -52,7 +52,7 @@ impl OverlayManager {
             .or_default()
             .push(popup);
         self.update_scope();
-        let x = NONCLICKABLE.cloned();
+        let _x = NONCLICKABLE.cloned();
         NONCLICKABLE.read().clear();
     }
 

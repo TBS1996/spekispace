@@ -7,7 +7,7 @@ use speki_web::{Node, NodeId, NodeMetadata};
 use tracing::info;
 
 use crate::{
-    components::{BackPut, CardRef, CardTy, FrontPut, GraphRep, Komponent},
+    components::{backside::BackOpts, BackPut, CardRef, CardTy, FrontPut, GraphRep, Komponent},
     overlays::{card_selector::CardSelector, Overlay},
     APP, OVERLAY,
 };
@@ -54,19 +54,26 @@ impl CardViewer {
     }
 
     pub async fn new_from_card(card: Arc<Card<AnyType>>, graph: GraphRep) -> Self {
+        let filter = move |ty: AnyType| ty.is_class();
+
+        let raw = card.to_raw();
+        let concept = CardRef::new().with_filter(Arc::new(Box::new(filter)));
+        if let Some(class) = raw.data.class().map(CardId) {
+            let class = APP.read().load_card(class).await;
+            concept.set_ref(class).await;
+        }
+
         graph.new_set_card(card.clone());
         let dependencies = card.dependency_ids().await;
-        let raw = card.to_raw();
+        let bck = BackPut::new(raw.data.back.clone());
         let front = raw.data.front.unwrap_or_default();
         let back = raw.data.back.unwrap_or_default().to_string();
-        let frnt = FrontPut::new().with_default(CardTy::from_ctype(card.get_ty().fieldless()));
+        let frnt = FrontPut::new(CardTy::from_ctype(card.get_ty().fieldless()));
         frnt.text.clone().set(front);
-        let bck = BackPut::new();
+
         bck.text.clone().set(back);
 
         let graph = graph.with_label(frnt.text.clone());
-
-        let filter = move |ty: AnyType| ty.is_class();
 
         Self {
             front: frnt,
@@ -75,21 +82,21 @@ impl CardViewer {
             dependents: Signal::new_in_scope(Default::default(), ScopeId(3)),
             graph,
             is_done: Signal::new_in_scope(false, ScopeId(3)),
-            concept: CardRef::new().with_filter(Arc::new(Box::new(filter))),
             old_card: Signal::new_in_scope(Some(card), ScopeId(3)),
             save_hook: None,
             title: None,
             filter: None,
+            concept,
         }
     }
 
     pub fn new() -> Self {
-        let front = FrontPut::new();
+        let front = FrontPut::new(CardTy::Normal);
         let label = front.text.clone();
         let filter = move |ty: AnyType| ty.is_class();
         let selv = Self {
             front,
-            back: BackPut::new(),
+            back: BackPut::new(None),
             dependencies: Signal::new_in_scope(Default::default(), ScopeId(3)),
             dependents: Signal::new_in_scope(Default::default(), ScopeId(3)),
             graph: GraphRep::default().with_label(label),

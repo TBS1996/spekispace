@@ -1,4 +1,4 @@
-mod backside;
+pub mod backside;
 mod cardref;
 mod dropdown;
 mod frontside;

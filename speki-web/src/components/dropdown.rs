@@ -2,6 +2,7 @@ use std::{fmt::Display, sync::Arc};
 
 use dioxus::prelude::*;
 use serde::{Deserialize, Serialize};
+use tracing::info;
 
 use super::Komponent;
 
@@ -13,27 +14,33 @@ where
     pub options: Vec<T>,
     pub selected: Signal<T>,
     pub hook: Option<Arc<Box<dyn Fn(T)>>>,
+    init: Signal<bool>,
 }
 
 impl<T> DropDownMenu<T>
 where
     T: Serialize + for<'de> Deserialize<'de> + 'static + Clone + Display,
 {
-    pub fn new(options: impl IntoIterator<Item = T>) -> Self {
+    pub fn new(options: impl IntoIterator<Item = T>, default: Option<T>) -> Self {
+        info!("creating dopdown");
         let options: Vec<T> = options.into_iter().collect();
         assert!(!options.is_empty(), "must provide at least one option");
-        let selected = Signal::new_in_scope(options.first().unwrap().clone(), ScopeId(3));
+
+        let selected = match default {
+            Some(x) => x,
+            None => options.iter().next().cloned().unwrap(),
+        };
+
+        info!("selected val is: {selected}");
+
+        let selected = Signal::new_in_scope(selected, ScopeId(3));
 
         Self {
             options,
             selected,
             hook: None,
+            init: Signal::new_in_scope(false, ScopeId::APP),
         }
-    }
-
-    pub fn with_default(mut self, ty: T) -> Self {
-        self.selected.clone().set(ty);
-        self
     }
 
     pub fn with_hook(mut self, hook: Arc<Box<dyn Fn(T)>>) -> Self {
@@ -52,17 +59,26 @@ where
     T: Serialize + for<'de> Deserialize<'de> + 'static + Clone + Display,
 {
     fn render(&self) -> Element {
+        info!("render dropdown");
         let mut dropdown = self.selected.clone();
+        info!("dropdown: {dropdown}");
         let val: String = serde_json::to_string(&dropdown.cloned()).unwrap();
+        info!("val: {val:?}");
         let selv = self.clone();
+
+        // hack: without this it then at first it renders the first value in the options regardless of the default value set.
+        if !selv.init.cloned() {
+            dropdown.clone().set(dropdown.cloned());
+            selv.init.clone().set(true);
+        }
 
         rsx! {
             div {
                 class: "dropdown",
                 select {
                     class: "appearance-none bg-white w-full border border-gray-300 rounded-md p-2 text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent",
-                    style: "background-image: none;", // Makes the dropdown 20px wider than the parent
-                    value: "{val}",
+                    style: "background-image: none;",
+                    value: serde_json::to_string(&dropdown.cloned()).unwrap(),
                     onchange: move |evt| {
                         let new_choice: T =  serde_json::from_str(evt.value().as_str()).unwrap();
                         if let Some(hook) = selv.hook.as_ref() {

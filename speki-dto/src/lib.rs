@@ -382,6 +382,18 @@ impl From<String> for BackSide {
 }
 
 impl BackSide {
+    pub fn is_ref(&self) -> bool {
+        matches!(self, Self::Card(_))
+    }
+
+    pub fn as_card(&self) -> Option<CardId> {
+        if let Self::Card(card) = self {
+            Some(*card)
+        } else {
+            None
+        }
+    }
+
     pub fn to_string(&self) -> String {
         let mut s = serde_json::to_string(self).unwrap();
         s.remove(0);
@@ -473,6 +485,12 @@ pub struct RawType {
     pub start_time: Option<String>,
     pub end_time: Option<String>,
     pub parent_event: Option<Uuid>,
+}
+
+impl RawType {
+    pub fn class(&self) -> Option<Uuid> {
+        self.class.clone()
+    }
 }
 
 #[derive(Serialize, Deserialize, Default, Debug, Clone)]

@@ -57,16 +57,20 @@ impl CardRef {
         self.card.clone()
     }
 
+    pub async fn set_ref(&self, card: Arc<Card<AnyType>>) {
+        let id = card.id;
+        self.card.clone().set(Some(id));
+        let display = card.print().await;
+        self.display.clone().set(display);
+    }
+
     pub fn start_ref_search(&self) {
         let _selv = self.clone();
 
         let fun = move |card: Arc<Card<AnyType>>| {
             let selv = _selv.clone();
-            let id = card.id;
-            selv.card.clone().set(Some(id));
             spawn(async move {
-                let display = card.print().await;
-                selv.display.clone().set(display);
+                selv.set_ref(card).await;
             });
         };
 

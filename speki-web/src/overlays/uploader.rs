@@ -95,7 +95,8 @@ impl Uploader {
                 .set(QA::extract(regex.cloned(), content.cloned()));
         };
 
-        let dropdown = DropDownMenu::new(Extraction::iter()).with_hook(Arc::new(Box::new(hook)));
+        let dropdown =
+            DropDownMenu::new(Extraction::iter(), None).with_hook(Arc::new(Box::new(hook)));
 
         Self {
             content,
