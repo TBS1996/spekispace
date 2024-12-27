@@ -4,6 +4,7 @@ use dioxus::prelude::*;
 use serde::{Deserialize, Serialize};
 use speki_dto::CType;
 use strum::{EnumIter, IntoEnumIterator};
+use tracing::info;
 
 use super::Komponent;
 use crate::components::DropDownMenu;
@@ -23,6 +24,18 @@ impl CardTy {
             CardTy::Instance => CType::Instance,
             CardTy::Class => CType::Class,
             CardTy::Unfinished => CType::Unfinished,
+        }
+    }
+
+    pub fn from_ctype(ty: CType) -> Self {
+        match ty {
+            CType::Instance => Self::Instance,
+            CType::Normal => Self::Normal,
+            CType::Unfinished => Self::Unfinished,
+            CType::Attribute => Self::Normal,
+            CType::Class => Self::Class,
+            CType::Statement => Self::Unfinished,
+            CType::Event => Self::Normal,
         }
     }
 }
@@ -82,7 +95,13 @@ impl FrontPut {
         }
     }
 
+    pub fn with_default(mut self, ty: CardTy) -> Self {
+        self.dropdown = self.dropdown.with_default(ty);
+        self
+    }
+
     pub fn reset(&self) {
+        info!("resetting frontput");
         self.text.clone().set(Default::default());
     }
 }

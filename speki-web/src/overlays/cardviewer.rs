@@ -59,7 +59,7 @@ impl CardViewer {
         let raw = card.to_raw();
         let front = raw.data.front.unwrap_or_default();
         let back = raw.data.back.unwrap_or_default().to_string();
-        let frnt = FrontPut::new();
+        let frnt = FrontPut::new().with_default(CardTy::from_ctype(card.get_ty().fieldless()));
         frnt.text.clone().set(front);
         let bck = BackPut::new();
         bck.text.clone().set(back);

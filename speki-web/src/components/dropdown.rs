@@ -31,6 +31,11 @@ where
         }
     }
 
+    pub fn with_default(mut self, ty: T) -> Self {
+        self.selected.clone().set(ty);
+        self
+    }
+
     pub fn with_hook(mut self, hook: Arc<Box<dyn Fn(T)>>) -> Self {
         self.hook = Some(hook);
         self
