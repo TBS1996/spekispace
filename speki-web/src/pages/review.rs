@@ -58,10 +58,10 @@ pub fn Review() -> Element {
 
 fn recall_button(recall: Recall) -> Element {
     let label = match recall {
-        Recall::None => "☹️",
-        Recall::Late => "🙁",
+        Recall::None => "😡",
+        Recall::Late => "😠",
         Recall::Some => "🙂",
-        Recall::Perfect => "😀",
+        Recall::Perfect => "😁",
     };
 
     rsx! {
