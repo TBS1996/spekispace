@@ -189,6 +189,7 @@ impl Komponent for Uploader {
                                 oninput: move |evt| {
                                     regex.clone().set(evt.value().clone());
                                     cards.clone().set(QA::extract(regex.cloned(), content.cloned()));
+                                    dropdown.set(Extraction::Custom);
                                 },
                             }
 

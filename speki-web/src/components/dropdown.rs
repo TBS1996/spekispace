@@ -45,6 +45,10 @@ where
         }
     }
 
+    pub fn set(&self, choice: T) {
+        self.selected.clone().set(choice);
+    }
+
     pub fn with_hook(mut self, hook: Arc<Box<dyn Fn(T)>>) -> Self {
         self.hook = Some(hook);
         self
@@ -70,13 +74,13 @@ where
 
         use_hook(|| {
             let _ = CURRENT_ROUTE.cloned();
-            dropdown.clone().set(dropdown.cloned());
+            selv.set(dropdown.cloned());
             selv.init.clone().set(true);
         });
 
         // hack: without this it then at first it renders the first value in the options regardless of the default value set.
         if !selv.init.cloned() {
-            dropdown.clone().set(dropdown.cloned());
+            selv.set(dropdown.cloned());
             selv.init.clone().set(true);
         }
 
