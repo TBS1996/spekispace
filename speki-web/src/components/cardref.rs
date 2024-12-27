@@ -153,10 +153,14 @@ impl CardRef {
             .map(|node| vec![node.into()])
             .unwrap_or_default();
 
-        let props =
-            CardSelector::ref_picker(Arc::new(Box::new(fun)), dependents, self.filter.clone())
-                .with_allowed_cards(self.allowed.clone());
+        let filter = self.filter.clone();
+        let allowed = self.allowed.clone();
+        spawn(async move {
+            let props = CardSelector::ref_picker(Arc::new(Box::new(fun)), dependents, filter)
+                .await
+                .with_allowed_cards(allowed);
 
-        OVERLAY.cloned().set(Box::new(props));
+            OVERLAY.cloned().set(Box::new(props));
+        });
     }
 }

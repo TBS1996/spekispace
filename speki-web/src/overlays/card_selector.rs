@@ -56,7 +56,7 @@ impl CardSelector {
         }
     }
 
-    pub fn ref_picker(
+    pub async fn ref_picker(
         fun: Arc<Box<dyn Fn(Arc<Card<AnyType>>)>>,
         dependents: Vec<Node>,
         filter: Option<Arc<Box<dyn Fn(AnyType) -> bool>>>,
@@ -73,14 +73,12 @@ impl CardSelector {
 
         let selv2 = selv.clone();
 
-        spawn(async move {
-            selv2.init_lol().await;
-        });
+        selv2.init_lol().await;
 
         selv
     }
 
-    pub fn dependency_picker(f: Box<dyn Fn(Arc<Card<AnyType>>)>) -> Self {
+    pub async fn dependency_picker(f: Box<dyn Fn(Arc<Card<AnyType>>)>) -> Self {
         info!("3 scope is ! {:?}", current_scope_id().unwrap());
         let selv = Self {
             title: "set dependency".to_string(),
@@ -91,10 +89,8 @@ impl CardSelector {
         };
 
         let selv2 = selv.clone();
-
-        spawn(async move {
-            selv2.init_lol().await;
-        });
+        selv2.init_lol().await;
+        info!("after init!");
 
         selv
     }
@@ -123,23 +119,21 @@ impl CardSelector {
         info!("render hook in cardselector :)");
         let sig = self.cards.clone();
         let selv = self.clone();
-        spawn(async move {
-            let cards = APP.cloned().load_all().await;
-            let mut entries = vec![];
+        let cards = APP.cloned().load_all().await;
+        let mut entries = vec![];
 
-            for card in cards {
-                if selv
-                    .filter
-                    .clone()
-                    .map(|filter| (filter)(card.get_ty()))
-                    .unwrap_or(true)
-                {
-                    entries.push(CardEntry::new(card).await);
-                }
+        for card in cards {
+            if selv
+                .filter
+                .clone()
+                .map(|filter| (filter)(card.get_ty()))
+                .unwrap_or(true)
+            {
+                entries.push(CardEntry::new(card).await);
             }
+        }
 
-            sig.clone().set(entries);
-        });
+        sig.clone().set(entries);
     }
 }
 
@@ -178,7 +172,7 @@ impl Komponent for CardSelector {
             .collect();
 
         use_hook(move || {
-            info!("render hook in cardselector :)");
+            info!("rendering uhhh hook in cardselector :)");
             let sig = self.cards.clone();
             let selv = self.clone();
             spawn(async move {
