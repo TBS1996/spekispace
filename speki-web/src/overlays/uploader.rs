@@ -7,7 +7,7 @@ use strum::{EnumIter, IntoEnumIterator};
 use tracing::info;
 
 use crate::{
-    components::{DropDownMenu, Komponent},
+    components::{CardRef, CardTy, DropDownMenu, Komponent},
     overlays::Overlay,
     APP,
 };
@@ -77,6 +77,7 @@ pub struct Uploader {
     cards: Signal<Vec<QA>>,
     dropdown: DropDownMenu<Extraction>,
     _done: Signal<bool>,
+    concept: CardRef,
 }
 
 impl Uploader {
@@ -85,6 +86,7 @@ impl Uploader {
             Signal::new_in_scope(Extraction::Tabs.regex().unwrap().to_string(), ScopeId(3));
         let content: Signal<String> = Signal::new_in_scope(Default::default(), ScopeId(3));
         let cards = Signal::new_in_scope(Default::default(), ScopeId(3));
+        let concept = CardRef::new().with_allowed(vec![CardTy::Class]);
 
         let hook = move |e: Extraction| {
             if let Some(re) = e.regex() {
@@ -104,6 +106,7 @@ impl Uploader {
             cards,
             _done: Signal::new_in_scope(Default::default(), ScopeId(3)),
             dropdown,
+            concept,
         }
     }
 }
@@ -131,6 +134,8 @@ impl Komponent for Uploader {
         };
 
         let dropdown = self.dropdown.clone();
+        let concept = self.concept.clone();
+        let concept2 = self.concept.clone();
 
         rsx! {
             div {
@@ -140,6 +145,13 @@ impl Komponent for Uploader {
                     class: "text-3xl font-bold text-center",
                     "Upload Cards"
                 }
+
+
+                        div {
+                            class: "block text-gray-700 text-sm font-medium max-w-[100px] mx-auto",
+                            style: "margin-right: 81px;",
+                            { concept.with_placeholder("pick class of instance").render() }
+                        }
 
                 div {
                     class: "flex flex-col md:flex-row gap-20 md:gap-5 max-h-[400px] overflow-y-auto",
@@ -221,10 +233,22 @@ impl Komponent for Uploader {
                             let app = app.clone();
                             let entries = cards.cloned();
                             let content = content.clone();
+                            let concept = concept2.clone();
                             spawn(async move {
-                                for card in entries {
-                                    app.new_simple(card.q, card.a).await;
+
+                                match concept.selected_card().cloned() {
+                                    Some(class) => {
+                                        for card in entries {
+                                            app.new_instance(card.q, Some(card.a), class).await;
+                                        }
+                                    },
+                                    None => {
+                                        for card in entries {
+                                            app.new_simple(card.q, card.a).await;
+                                        }
+                                    },
                                 }
+
 
                                 content.clone().set(Default::default());
                                 cards.clone().set(Default::default());

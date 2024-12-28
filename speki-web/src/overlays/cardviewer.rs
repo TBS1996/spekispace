@@ -253,7 +253,9 @@ impl CardViewer {
             .with_dependents(tempnode.clone())
             .with_closure(f.clone())
             .with_deselect(af.clone());
+
         let filter = move |ty: AnyType| ty.is_class();
+
         let concept = CardRef::new()
             .with_filter(Arc::new(Box::new(filter)))
             .with_dependents(tempnode.clone())

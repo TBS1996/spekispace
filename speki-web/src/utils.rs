@@ -51,6 +51,18 @@ impl App {
         card
     }
 
+    pub async fn new_instance(
+        &self,
+        front: String,
+        back: Option<String>,
+        class: CardId,
+    ) -> Arc<Card<AnyType>> {
+        info!("new simple");
+        let id = self.0.add_instance(front, back, class).await;
+        let card = Arc::new(self.0.load_card(id).await.unwrap());
+        card
+    }
+
     pub async fn new_simple(&self, front: String, back: String) -> Arc<Card<AnyType>> {
         info!("new simple");
         let id = self.0.add_card(front, back).await;
