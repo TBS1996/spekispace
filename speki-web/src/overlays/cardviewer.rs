@@ -399,6 +399,8 @@ impl CardViewer {
     fn save_button(&self) -> Element {
         let selv = self.clone();
 
+        let is_new = self.old_card.as_ref().is_none();
+
         let enabled = selv.to_card().is_some_and(|card| {
             self.filter
                 .as_ref()
@@ -440,7 +442,11 @@ impl CardViewer {
                         });
                     }
                 },
-                "save"
+                if is_new {
+                    "create"
+                } else {
+                    "save"
+                }
             }
         }
     }
