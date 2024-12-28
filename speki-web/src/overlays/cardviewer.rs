@@ -60,13 +60,17 @@ fn refresh_graph(
     front: FrontPut,
     dependencies: Signal<Vec<CardId>>,
     dependents: Signal<Vec<Node>>,
+    card: Option<NodeMetadata>,
 ) {
-    let node = NodeMetadata {
-        id: NodeId::new_temp(),
-        label: front.text.cloned(),
-        color: "#858585".to_string(),
-        ty: front.dropdown.selected.cloned().to_ctype(),
-        border: true,
+    let node = match card {
+        Some(node) => node,
+        None => NodeMetadata {
+            id: NodeId::new_temp(),
+            label: front.text.cloned(),
+            color: "#858585".to_string(),
+            ty: front.dropdown.selected.cloned().to_ctype(),
+            border: true,
+        },
     };
 
     graph.new_set_card_rep(node, dependencies.cloned(), dependents.cloned());
@@ -89,6 +93,7 @@ pub struct CardViewer {
     save_hook: Option<Arc<Box<dyn Fn(Arc<Card<AnyType>>)>>>,
     is_done: Signal<bool>,
     old_card: Signal<Option<Arc<Card<AnyType>>>>,
+    old_meta: Signal<Option<NodeMetadata>>,
     filter: Option<Arc<Box<dyn Fn(AnyType) -> bool>>>,
     tempnode: TempNode,
     allowed_cards: Vec<CardTy>,
@@ -125,6 +130,8 @@ impl CardViewer {
     }
 
     pub async fn new_from_card(card: Arc<Card<AnyType>>, graph: GraphRep) -> Self {
+        let meta = NodeMetadata::from_card(card.clone(), true).await;
+
         let tempnode = TempNode::Old(card.id);
         let filter = move |ty: AnyType| ty.is_class();
 
@@ -156,23 +163,28 @@ impl CardViewer {
 
         let _front = frnt.clone();
         let _graph = graph.clone();
+        let id = card.id;
+        let _meta = meta.clone();
         let f: Arc<Box<dyn Fn(Arc<Card<AnyType>>)>> =
             Arc::new(Box::new(move |card: Arc<Card<AnyType>>| {
                 let graph = _graph.clone();
                 let front = _front.clone();
+                let meta = _meta.clone();
                 let deps = dependencies.clone();
                 deps.clone().write().push(card.id);
-                refresh_graph(graph, front, deps, dependents.clone());
+                refresh_graph(graph, front, deps, dependents.clone(), Some(meta));
             }));
         let _front = frnt.clone();
         let _graph = graph.clone();
+        let _meta = meta.clone();
         let af: Arc<Box<dyn Fn(Arc<Card<AnyType>>)>> =
             Arc::new(Box::new(move |card: Arc<Card<AnyType>>| {
                 let graph = _graph.clone();
                 let front = _front.clone();
                 let deps = dependencies.clone();
+                let meta = _meta.clone();
                 deps.clone().write().retain(|dep| *dep != card.id);
-                refresh_graph(graph, front, deps, dependents.clone());
+                refresh_graph(graph, front, deps, dependents.clone(), Some(meta));
             }));
 
         let bck = bck.with_closure(f.clone()).with_deselect(af.clone());
@@ -192,6 +204,7 @@ impl CardViewer {
             concept: concept.clone(),
             tempnode,
             allowed_cards: vec![],
+            old_meta: Signal::new_in_scope(Some(meta), ScopeId::APP),
         }
     }
 
@@ -211,7 +224,7 @@ impl CardViewer {
                 let front = _front.clone();
                 let deps = dependencies.clone();
                 deps.clone().write().push(card.id);
-                refresh_graph(graph, front, deps, dependents.clone());
+                refresh_graph(graph, front, deps, dependents.clone(), None);
             }));
 
         let _front = front.clone();
@@ -222,7 +235,7 @@ impl CardViewer {
                 let front = _front.clone();
                 let deps = dependencies.clone();
                 deps.clone().write().retain(|dep| *dep != card.id);
-                refresh_graph(graph, front, deps, dependents.clone());
+                refresh_graph(graph, front, deps, dependents.clone(), None);
             }));
 
         let tempnode = TempNode::New {
@@ -258,6 +271,7 @@ impl CardViewer {
             dependents,
             tempnode,
             allowed_cards: vec![],
+            old_meta: Signal::new_in_scope(None, ScopeId::APP),
         };
 
         selv.set_graph();
@@ -324,6 +338,7 @@ impl CardViewer {
             self.front.clone(),
             self.dependencies.clone(),
             self.dependents.clone(),
+            self.old_meta.cloned(),
         );
     }
 

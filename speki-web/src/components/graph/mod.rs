@@ -91,11 +91,15 @@ impl GraphRep {
         );
     }
 
-    pub fn new_set_card(&self, card: Arc<Card<AnyType>>) {
+    pub fn new_set_card_id(&self, card: CardId) {
         speki_web::set_graphaction(
             self.cyto_id.to_string(),
-            speki_web::GraphAction::FromRust(Node::Card(card.id)),
+            speki_web::GraphAction::FromRust(Node::Card(card)),
         );
+    }
+
+    pub fn new_set_card(&self, card: Arc<Card<AnyType>>) {
+        self.new_set_card_id(card.id);
     }
 
     async fn set_card(&self, origin: Node) {

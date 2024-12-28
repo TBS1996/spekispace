@@ -1517,6 +1517,10 @@ html {
   margin-bottom: 1rem;
 }
 
+.ml-6 {
+  margin-left: 1.5rem;
+}
+
 .mr-10 {
   margin-right: 2.5rem;
 }
@@ -1543,18 +1547,6 @@ html {
 
 .mt-8 {
   margin-top: 2rem;
-}
-
-.ml-3 {
-  margin-left: 0.75rem;
-}
-
-.ml-4 {
-  margin-left: 1rem;
-}
-
-.ml-6 {
-  margin-left: 1.5rem;
 }
 
 .box-border {
