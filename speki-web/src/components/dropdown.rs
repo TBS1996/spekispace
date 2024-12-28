@@ -65,11 +65,8 @@ where
     T: Serialize + for<'de> Deserialize<'de> + 'static + Clone + Display,
 {
     fn render(&self) -> Element {
-        info!("render dropdown");
         let mut dropdown = self.selected.clone();
-        info!("dropdown: {dropdown}");
         let val: String = serde_json::to_string(&dropdown.cloned()).unwrap();
-        info!("val: {val:?}");
         let selv = self.clone();
 
         use_hook(|| {

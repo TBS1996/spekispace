@@ -77,7 +77,6 @@ pub fn rect(id: &str) -> Option<TouchRec> {
         height: rec.height(),
         width: rec.width(),
     };
-    info!("rect is {rect:?}");
 
     Some(rect)
 }

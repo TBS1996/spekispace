@@ -96,7 +96,7 @@ impl CardSelector {
     }
 
     pub fn with_dependents(self, deps: Vec<Node>) -> Self {
-        self.dependents.clone().set(deps);
+        self.dependents.clone().write().extend(deps);
         self
     }
 

@@ -163,7 +163,6 @@ impl CardViewer {
 
         let _front = frnt.clone();
         let _graph = graph.clone();
-        let id = card.id;
         let _meta = meta.clone();
         let f: Arc<Box<dyn Fn(Arc<Card<AnyType>>)>> =
             Arc::new(Box::new(move |card: Arc<Card<AnyType>>| {
@@ -337,6 +336,11 @@ impl CardViewer {
     }
 
     pub fn set_graph(&self) {
+        if let Some(card) = self.old_card.cloned() {
+            self.graph.new_set_card(card.clone());
+            return;
+        }
+
         refresh_graph(
             self.graph.clone(),
             self.front.clone(),
@@ -388,7 +392,6 @@ impl CardViewer {
                         let props = CardSelector::dependency_picker(Box::new(fun)).await.with_dependents(vec![dependent]);
                         OVERLAY.cloned().set(Box::new(props));
                         info!("2 scope is ! {:?}", current_scope_id().unwrap());
-
                     });
                 },
                 "add dependency"

@@ -328,7 +328,7 @@ impl CardProvider {
     }
 
     async fn update_dependents(&self, card: Arc<Card<AnyType>>) {
-        info!("updating cache dependents");
+        trace!("updating cache dependents");
         let mut guard = self.inner.write().unwrap();
         for dep in card.dependency_ids().await {
             guard.dependents.entry(dep).or_default().insert(card.id);
