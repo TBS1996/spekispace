@@ -105,6 +105,11 @@ impl CardViewer {
         self
     }
 
+    pub fn with_front_text(mut self, text: String) -> Self {
+        self.front.text.clone().set(text);
+        self
+    }
+
     pub fn with_title(mut self, title: String) -> Self {
         self.title = Some(title);
         self

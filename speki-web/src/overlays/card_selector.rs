@@ -223,7 +223,8 @@ impl Komponent for CardSelector {
                                     .with_title("create new card".to_string())
                                     .with_hook(Arc::new(Box::new(hook)))
                                     .with_dependents(selv.dependents.cloned())
-                                    .with_allowed_cards(selv.allowed_cards.clone());
+                                    .with_allowed_cards(selv.allowed_cards.clone())
+                                    .with_front_text(selv.search.cloned());
 
                                 if let Some(filter) = selv.filter.clone() {
                                     viewer = viewer.with_filter(filter);
