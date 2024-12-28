@@ -32,6 +32,16 @@ impl Debug for CardProvider {
 }
 
 impl CardProvider {
+    pub fn set_dependent(&self, dependency: CardId, dependent: CardId) {
+        self.inner
+            .write()
+            .unwrap()
+            .dependents
+            .entry(dependency)
+            .or_default()
+            .insert(dependent);
+    }
+
     pub async fn remove_card(&self, card_id: CardId) {
         let _ = self.load(card_id).await; // ensure card is in cache first.
         let (card, _revs, _deps) = self.remove_entry(card_id);
@@ -318,7 +328,7 @@ impl CardProvider {
     }
 
     async fn update_dependents(&self, card: Arc<Card<AnyType>>) {
-        trace!("updating cache dependents");
+        info!("updating cache dependents");
         let mut guard = self.inner.write().unwrap();
         for dep in card.dependency_ids().await {
             guard.dependents.entry(dep).or_default().insert(card.id);

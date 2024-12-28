@@ -46,11 +46,13 @@ impl App {
     }
 
     pub async fn new_from_raw(&self, raw: RawCard) -> Arc<Card<AnyType>> {
+        info!("new from raw");
         let card = self.0.new_from_raw(raw).await;
         card
     }
 
     pub async fn new_simple(&self, front: String, back: String) -> Arc<Card<AnyType>> {
+        info!("new simple");
         let id = self.0.add_card(front, back).await;
         let card = Arc::new(self.0.load_card(id).await.unwrap());
         card

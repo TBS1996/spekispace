@@ -538,6 +538,12 @@ impl Card<AnyType> {
         self.card_provider
             .save_reviews(self.id, self.history.clone())
             .await;
+
+        let id = self.id;
+
+        for dependency in self.dependency_ids().await {
+            self.card_provider.set_dependent(dependency, id);
+        }
     }
 
     async fn is_resolved(&self) -> bool {
