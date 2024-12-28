@@ -500,8 +500,15 @@ impl Card<AnyType> {
     pub async fn add_dependency(&mut self, dependency: CardId) {
         info!("for card: {} inserting dependency: {}", self.id, dependency);
         if self.id() == dependency {
+            info!("not adding dep cause theyre the same lol");
             return;
         }
+
+        if self.all_dependents().await.contains(&dependency) {
+            tracing::warn!("failed to insert dependency due to cycle!");
+            return;
+        }
+
         self.dependencies.insert(dependency);
         self.persist().await;
     }

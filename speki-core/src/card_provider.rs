@@ -193,7 +193,7 @@ impl CardProvider {
     }
 
     pub async fn dependents(&self, id: CardId) -> BTreeSet<Arc<Card<AnyType>>> {
-        info!("dependents of: {}", id);
+        trace!("dependents of: {}", id);
         let mut out = BTreeSet::default();
         let deps = self
             .inner

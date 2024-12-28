@@ -9,7 +9,6 @@ use tracing::info;
 
 use crate::components::Komponent;
 use crate::overlays::cardviewer::CardViewer;
-use crate::overlays::Overlay;
 use crate::{components::GraphRep, APP, DEFAULT_FILTER};
 use crate::{IS_SHORT, OVERLAY};
 
