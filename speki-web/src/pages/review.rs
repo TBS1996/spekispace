@@ -9,6 +9,7 @@ use tracing::info;
 
 use crate::components::Komponent;
 use crate::overlays::cardviewer::CardViewer;
+use crate::overlays::Overlay;
 use crate::{components::GraphRep, APP, DEFAULT_FILTER};
 use crate::{IS_SHORT, OVERLAY};
 
@@ -109,7 +110,7 @@ fn review_start(mut filter: Signal<String>) -> Element {
                     onclick: move |_| {
                         info!("Starting review...");
                         spawn(async move {
-                            REVIEW_STATE.cloned().refresh().await;
+                            REVIEW_STATE.cloned().start_review().await;
                         });
                     },
                     if editing() {
@@ -169,6 +170,8 @@ pub struct ReviewState {
     pub show_backside: Signal<bool>,
     pub filter: Signal<String>,
     pub graph: GraphRep,
+    pub show_graph: Signal<bool>,
+    pub dependencies: Signal<Vec<(String, Arc<Card<AnyType>>, Self)>>,
 }
 
 impl ReviewState {
@@ -180,13 +183,12 @@ impl ReviewState {
         let currcard = self.card.clone();
         let overlay = OVERLAY.cloned();
         let card = self.card.clone();
+        let show_graph = self.show_graph.clone();
+        let selv = self.clone();
 
         rsx! {
             div {
-
-
-
-                class: "flex justify-start items-center w-full md:w-auto gap-2",
+                class: "flex justify-start items-center w-full md:w-auto gap-5",
 
                 div {
                     button {
@@ -229,7 +231,7 @@ impl ReviewState {
 
                         };
 
-                                    let overlay = overlay.clone();
+                        let overlay = overlay.clone();
                         spawn(async move {
                             let viewer = CardViewer::new_from_card(Arc::new(card), Default::default()).await.with_hook(Arc::new(Box::new(fun)));
                             overlay.set(Box::new(viewer));
@@ -238,6 +240,23 @@ impl ReviewState {
                     "✏️"
                 }
 
+
+                button {
+                    class: "cursor-pointer text-gray-500 hover:text-gray-700",
+                    onclick: move |_| {
+                        let to_show = !show_graph.cloned();
+                        show_graph.clone().set(to_show);
+
+                        if to_show {
+                            if let Some(card) = selv.card.cloned(){
+                                selv.graph.new_set_card(card.into());
+                            }
+
+                        }
+
+                    },
+                    "toggle graph"
+                }
             }
         }
     }
@@ -287,6 +306,8 @@ impl ReviewState {
     pub fn render_queue(&self) -> Element {
         let selv = self.clone();
         let graph = self.graph.clone();
+        let graph_toggle = self.show_graph.clone();
+        let deps = self.dependencies.clone();
 
         let show_graph = if self.show_backside.cloned() {
             "opacity-100 visible"
@@ -307,9 +328,45 @@ impl ReviewState {
                     class: "flex flex-col md:flex-row w-full h-full overflow-hidden",
 
                     div {
-                        class: "flex-1 w-full md:w-1/2 box-border order-1 md:order-2 {show_graph}",
+                        class: "flex-1 w-full md:w-1/2 box-border order-1 md:order-2 relative",
                         style: "min-height: 0; flex-grow: 1;",
-                        { graph.render() }
+
+                        if graph_toggle() {
+                            div {
+                                class: "{show_graph} absolute top-0 left-0 w-full h-full",
+                                { graph.render() }
+                            }
+                        } else {
+                            div {
+                                class: "flex flex-col {show_graph} absolute top-0 left-0 w-1/2 h-auto bg-white p-2 shadow-md rounded-md overflow-y-auto",
+                                h4 {
+                                    class: "font-bold mb-2",
+                                    "Dependencies"
+                                }
+                                for (name, card, selv) in deps() {
+                                    button {
+                                        class: "mb-1 p-1 bg-gray-100 rounded-md text-left",
+                                        onclick: move|_|{
+                                            let selv = selv.clone();
+                                            let card = card.clone();
+                                            spawn(async move{
+                                                let fun: Box<dyn Fn(Arc<Card<AnyType>>)> = Box::new(move |_: Arc<Card<AnyType>>| {
+                                                    let selv = selv.clone();
+                                                    spawn(async move{
+                                                        selv.refresh().await;
+                                                    });
+                                                });
+
+                                                let viewer = CardViewer::new_from_card(card, Default::default()).await.with_hook(Arc::new(fun));
+                                                OVERLAY.write().set(Box::new(viewer));
+
+                                            });
+                                        },
+                                        "{name}"
+                                    }
+                                }
+                            }
+                        }
                     }
 
                     div {
@@ -333,10 +390,12 @@ impl ReviewState {
             show_backside: Default::default(),
             filter: Signal::new(DEFAULT_FILTER.to_string()),
             graph: Default::default(),
+            show_graph: Default::default(),
+            dependencies: Default::default(),
         }
     }
 
-    pub async fn refresh(&mut self) {
+    pub async fn start_review(&mut self) {
         info!("refreshing..");
         let filter = Some(self.filter.cloned());
         let mut cards = APP.read().load_non_pending(filter.clone()).await;
@@ -369,6 +428,26 @@ impl ReviewState {
         self.tot_len - self.queue.lock().unwrap().len()
     }
 
+    async fn refresh(&self) {
+        info!("refreshing!");
+        if let Some(card) = self.card.cloned() {
+            let card = APP.read().load_card(card.id).await;
+            self.graph.new_set_card(card.clone().into());
+
+            let mut deps = vec![];
+            for dep in &card.dependency_ids().await {
+                let dep = APP.read().load_card(*dep).await;
+                let s = dep.print().await;
+                deps.push((s, dep, self.clone()));
+            }
+
+            self.dependencies.clone().set(deps);
+            self.card.clone().set(Some(Arc::unwrap_or_clone(card)))
+        } else {
+            self.dependencies.clone().write().clear();
+        }
+    }
+
     async fn next_card(&mut self) {
         let card = self.queue.lock().unwrap().pop();
         let card = match card {
@@ -387,13 +466,10 @@ impl ReviewState {
             None => None,
         };
 
-        if let Some(card) = card.as_ref() {
-            self.graph.new_set_card(card.clone());
-        }
-
         info!("card set: {:?}", card);
         self.card.clone().set(card.map(Arc::unwrap_or_clone));
         self.pos.clone().set(self.current_pos());
         self.show_backside.set(false);
+        self.refresh().await;
     }
 }

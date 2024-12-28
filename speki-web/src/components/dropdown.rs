@@ -66,7 +66,6 @@ where
 {
     fn render(&self) -> Element {
         let mut dropdown = self.selected.clone();
-        let val: String = serde_json::to_string(&dropdown.cloned()).unwrap();
         let selv = self.clone();
 
         use_hook(|| {
