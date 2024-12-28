@@ -11,6 +11,7 @@ use crate::{components::Komponent, Route, CURRENT_ROUTE, NONCLICKABLE};
 pub mod card_selector;
 pub mod cardviewer;
 pub mod uploader;
+pub mod yesno;
 
 pub trait Overlay: Komponent {
     fn is_done(&self) -> Signal<bool>;

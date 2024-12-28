@@ -8,7 +8,7 @@ use tracing::info;
 
 use crate::{
     components::{BackPut, CardRef, CardTy, DropDownMenu, FrontPut, GraphRep, Komponent},
-    overlays::{card_selector::CardSelector, Overlay},
+    overlays::{card_selector::CardSelector, yesno::Yesno, Overlay},
     APP, IS_SHORT, OVERLAY,
 };
 
@@ -360,10 +360,15 @@ impl CardViewer {
             button {
                 class: "mt-2 inline-flex items-center text-white bg-gray-800 border-0 py-1 px-3 focus:outline-none hover:bg-gray-700 rounded text-base md:mt-0",
                 onclick: move |_| {
-                    spawn(async move {
-                        APP.read().delete_card(card).await;
-                        OVERLAY.read().pop();
+                    let fun: Box<dyn Fn()> = Box::new(move || {
+                        spawn(async move {
+                            APP.read().delete_card(card).await;
+                            OVERLAY.read().pop();
+                        });
                     });
+
+                    let yesno = Yesno::new("Really delete card?".to_string(), Arc::new(fun));
+                    OVERLAY.read().set(Box::new(yesno));
                 },
                 "delete card"
             }
