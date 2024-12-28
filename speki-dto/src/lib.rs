@@ -361,6 +361,7 @@ pub enum BackSide {
     List(Vec<CardId>),
     Time(TimeStamp),
     Trivial, // Answer is obvious, used when card is more of a dependency anchor
+    Invalid, // A reference card was deleted
 }
 
 impl Default for BackSide {
@@ -372,16 +373,35 @@ impl Default for BackSide {
 impl From<String> for BackSide {
     fn from(s: String) -> Self {
         if let Ok(uuid) = Uuid::parse_str(&s) {
-            BackSide::Card(CardId(uuid))
+            Self::Card(CardId(uuid))
         } else if let Some(timestamp) = TimeStamp::from_string(s.clone()) {
-            BackSide::Time(timestamp)
+            Self::Time(timestamp)
+        } else if s.as_str() == Self::INVALID_STR {
+            Self::Invalid
         } else {
-            BackSide::Text(s)
+            Self::Text(s)
         }
     }
 }
 
 impl BackSide {
+    pub const INVALID_STR: &'static str = "__INVALID__";
+
+    pub fn invalidate_if_has_ref(&mut self, dep: CardId) {
+        let has_ref = match self {
+            BackSide::Card(card_id) => card_id == &dep,
+            BackSide::List(vec) => vec.contains(&dep),
+            BackSide::Text(_) => false,
+            BackSide::Time(_) => false,
+            BackSide::Trivial => false,
+            BackSide::Invalid => false,
+        };
+
+        if has_ref {
+            *self = Self::Invalid;
+        }
+    }
+
     pub fn is_ref(&self) -> bool {
         matches!(self, Self::Card(_))
     }
@@ -413,6 +433,7 @@ impl BackSide {
             }
             BackSide::Time(_) => {}
             BackSide::Trivial => {}
+            BackSide::Invalid => {}
         }
 
         set
@@ -456,6 +477,7 @@ impl Serialize for BackSide {
     {
         match *self {
             BackSide::Trivial => serializer.serialize_bool(false),
+            BackSide::Invalid => serializer.serialize_str(Self::INVALID_STR),
             BackSide::Time(ref t) => serializer.serialize_str(&t.serialize()),
             BackSide::Text(ref s) => serializer.serialize_str(s),
             BackSide::Card(ref id) => serializer.serialize_str(&id.0.to_string()),

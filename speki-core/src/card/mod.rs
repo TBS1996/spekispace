@@ -92,6 +92,69 @@ pub enum AnyType {
 }
 
 impl AnyType {
+    fn invalidate_backside(&mut self, id: CardId) {
+        let backside = match self {
+            AnyType::Instance(InstanceCard { back, .. }) => back.as_mut(),
+            AnyType::Normal(NormalCard { back, .. }) => Some(back),
+            AnyType::Unfinished(_) => None,
+            AnyType::Attribute(AttributeCard { back, .. }) => Some(back),
+            AnyType::Class(ClassCard { back, .. }) => Some(back),
+            AnyType::Statement(_) => None,
+            AnyType::Event(_) => None,
+        };
+
+        if let Some(back) = backside {
+            back.invalidate_if_has_ref(id);
+        }
+    }
+
+    // if a card is deleted that is being referenced we might have to change the card type
+    pub fn remove_dep(&mut self, id: CardId) {
+        self.invalidate_backside(id);
+
+        match self {
+            AnyType::Instance(InstanceCard {
+                ref name,
+                ref back,
+                class,
+            }) => {
+                if *class == id {
+                    match back.clone() {
+                        Some(backside) => {
+                            *self = Self::Normal(NormalCard {
+                                front: name.clone(),
+                                back: backside,
+                            })
+                        }
+                        None => {
+                            *self = Self::Unfinished(UnfinishedCard {
+                                front: name.clone(),
+                            })
+                        }
+                    }
+                }
+            }
+            AnyType::Normal(_) => {}
+            AnyType::Unfinished(_) => {}
+            AnyType::Attribute(_) => {}
+            AnyType::Class(ClassCard {
+                name,
+                back,
+                parent_class,
+            }) => {
+                if *parent_class == Some(id) {
+                    *self = Self::Class(ClassCard {
+                        name: name.clone(),
+                        back: back.clone(),
+                        parent_class: None,
+                    });
+                }
+            }
+            AnyType::Statement(_) => {}
+            AnyType::Event(_) => {}
+        };
+    }
+
     pub fn type_name(&self) -> &str {
         match self {
             AnyType::Unfinished(_) => "unfinished",
@@ -425,6 +488,7 @@ impl Card<AnyType> {
 
     pub async fn rm_dependency(&mut self, dependency: CardId) -> bool {
         let res = self.dependencies.remove(&dependency);
+        self.data.remove_dep(dependency);
         self.persist().await;
         res
     }
@@ -533,6 +597,7 @@ impl Card<AnyType> {
     pub async fn display_backside(&self) -> Option<String> {
         Some(match self.back_side()? {
             BackSide::Trivial => format!("…"),
+            BackSide::Invalid => "invalid: referenced a deleted card".to_string(),
             BackSide::Time(time) => format!("🕒 {}", time),
             BackSide::Text(s) => s.to_owned(),
             BackSide::Card(id) => {
