@@ -301,6 +301,10 @@ impl CardViewer {
             CardTy::Normal => {
                 let back = backside.to_backside()?;
 
+                if back.is_empty_text() {
+                    return None;
+                }
+
                 AnyType::Normal(NormalCard { front, back })
             }
             CardTy::Class => {

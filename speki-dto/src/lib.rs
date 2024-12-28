@@ -422,6 +422,14 @@ impl From<String> for BackSide {
 impl BackSide {
     pub const INVALID_STR: &'static str = "__INVALID__";
 
+    pub fn is_empty_text(&self) -> bool {
+        if let Self::Text(s) = self {
+            s.is_empty()
+        } else {
+            false
+        }
+    }
+
     pub fn invalidate_if_has_ref(&mut self, dep: CardId) {
         let has_ref = match self {
             BackSide::Card(card_id) => card_id == &dep,

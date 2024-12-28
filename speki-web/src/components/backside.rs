@@ -110,11 +110,6 @@ impl BackPut {
             BackOpts::Text => {
                 let s = self.text.cloned();
                 info!("text is: {s}");
-
-                if s.is_empty() {
-                    return None;
-                };
-
                 Some(BackSide::Text(s))
             }
         }
