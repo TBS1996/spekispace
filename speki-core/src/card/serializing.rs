@@ -198,6 +198,7 @@ impl From<Card<AnyType>> for RawCard {
                 .collect(),
             tags: card.tags,
             suspended: card.suspended.is_suspended(),
+            deleted: false,
         }
     }
 }

@@ -21,6 +21,10 @@ impl App {
         self.0.clone()
     }
 
+    pub async fn delete_card(&self, id: CardId) {
+        self.0.card_provider.remove_card(id).await;
+    }
+
     pub async fn fill_cache(&self) {
         self.0.fill_cache().await;
     }

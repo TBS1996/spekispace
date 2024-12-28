@@ -62,7 +62,14 @@ pub trait SpekiProvider: Sync {
         self.load_all_content(Cty::Card)
             .await
             .into_iter()
-            .map(|content| toml::from_str(&content).unwrap())
+            .filter_map(|content| {
+                let card = toml::from_str::<RawCard>(&content).unwrap();
+                if !card.deleted {
+                    Some(card)
+                } else {
+                    None
+                }
+            })
             .collect()
     }
 
@@ -72,9 +79,15 @@ pub trait SpekiProvider: Sync {
     }
 
     async fn load_card(&self, id: CardId) -> Option<RawCard> {
-        self.load_content(id.into_inner(), Cty::Card)
-            .await
-            .map(|card| toml::from_str(&card).unwrap())
+        let content = self.load_content(id.into_inner(), Cty::Card).await?;
+
+        let card = toml::from_str::<RawCard>(&content).unwrap();
+
+        if card.deleted {
+            None
+        } else {
+            Some(card)
+        }
     }
 
     async fn delete_card(&self, id: CardId) {
@@ -154,7 +167,15 @@ pub trait SpekiProvider: Sync {
         self.load_all_cards()
             .await
             .into_iter()
-            .map(|raw| CardId(raw.id))
+            .filter_map(|raw| {
+                info!("loading raw: {raw:?}");
+
+                if !raw.deleted {
+                    Some(CardId(raw.id))
+                } else {
+                    None
+                }
+            })
             .collect()
     }
 
@@ -167,18 +188,26 @@ pub trait SpekiProvider: Sync {
     async fn sync(&self, other: Box<dyn SpekiProvider>) {
         info!("loading cards 1");
         let mut map1: HashMap<CardId, RawCard> = self
-            .load_all_cards()
+            .load_all_content(Cty::Card)
             .await
             .into_iter()
-            .map(|card| (CardId(card.id), card))
+            .map(|card| {
+                let card: RawCard = toml::from_str(&card).unwrap();
+
+                (CardId(card.id), card)
+            })
             .collect();
 
         info!("loading cards 2");
         let mut map2: HashMap<CardId, RawCard> = other
-            .load_all_cards()
+            .load_all_content(Cty::Card)
             .await
             .into_iter()
-            .map(|card| (CardId(card.id), card))
+            .map(|card| {
+                let card: RawCard = toml::from_str(&card).unwrap();
+
+                (CardId(card.id), card)
+            })
             .collect();
 
         let mut ids: HashSet<CardId> = map1.keys().map(|key| *key).collect();
@@ -191,11 +220,17 @@ pub trait SpekiProvider: Sync {
                 (None, None) => panic!(),
                 (None, Some(card)) => self.save_card(card).await,
                 (Some(card), None) => other.save_card(card).await,
-                (Some(card1), Some(card2)) => {
+                (Some(mut card1), Some(mut card2)) => {
                     let lm1 = self.last_modified_card(CardId(card1.id)).await;
                     let lm2 = self.last_modified_card(CardId(card2.id)).await;
 
-                    if lm1 > lm2 {
+                    if card1.deleted && !card2.deleted {
+                        card2.deleted = true;
+                        self.save_card(card2).await;
+                    } else if !card1.deleted && card2.deleted {
+                        card1.deleted = true;
+                        other.save_card(card1).await;
+                    } else if lm1 > lm2 {
                         self.save_card(card2).await;
                     } else if lm1 < lm2 {
                         other.save_card(card1).await;
@@ -526,6 +561,8 @@ pub struct RawCard {
     pub tags: BTreeMap<String, String>,
     #[serde(default, skip_serializing_if = "is_false")]
     pub suspended: bool,
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub deleted: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

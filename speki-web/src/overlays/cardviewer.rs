@@ -342,6 +342,21 @@ impl CardViewer {
         );
     }
 
+    fn delete(&self, card: CardId) -> Element {
+        rsx! {
+            button {
+                class: "mt-2 inline-flex items-center text-white bg-gray-800 border-0 py-1 px-3 focus:outline-none hover:bg-gray-700 rounded text-base md:mt-0",
+                onclick: move |_| {
+                    spawn(async move {
+                        APP.read().delete_card(card).await;
+                        OVERLAY.read().pop();
+                    });
+                },
+                "delete card"
+            }
+        }
+    }
+
     fn add_dep(&self) -> Element {
         let selv = self.clone();
         rsx! {
@@ -486,6 +501,10 @@ impl CardViewer {
                 { self.input_elements(ty.cloned()) }
             }
             div {
+                if let Some(card) = self.old_card.cloned() {
+                    {self.delete(card.id)}
+
+                }
                 { self.add_dep() }
                 { self.save_button() }
             }

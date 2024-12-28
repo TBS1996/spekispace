@@ -518,6 +518,10 @@ impl Card<AnyType> {
         }
     }
 
+    pub async fn delete_card(self) {
+        self.card_provider.remove_card(self.id).await;
+    }
+
     pub async fn into_type(self, data: impl Into<AnyType>) -> Card<AnyType> {
         let id = self.id();
         let mut raw: RawCard = self.clone().into();

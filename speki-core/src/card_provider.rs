@@ -5,6 +5,8 @@ use crate::{
 };
 use dioxus_logger::tracing::{info, trace};
 use speki_dto::{AttributeId, CardId, RawCard, Review};
+use std::future::Future;
+use std::pin::Pin;
 use std::{
     collections::{BTreeSet, HashMap, HashSet},
     fmt::Debug,
@@ -29,10 +31,34 @@ impl Debug for CardProvider {
     }
 }
 
-use std::future::Future;
-use std::pin::Pin;
-
 impl CardProvider {
+    pub async fn remove_card(&self, card_id: CardId) {
+        let _ = self.load(card_id).await; // ensure card is in cache first.
+        let (card, _revs, _deps) = self.remove_entry(card_id);
+
+        let mut raw_card: RawCard = {
+            let card = Arc::unwrap_or_clone(card.unwrap().card);
+            card.into()
+        };
+
+        raw_card.deleted = true;
+        self.provider.save_card(raw_card).await;
+
+        // Other cards may depend on this now-deleted card, so we loop through them all to remove their dependency on it (if any).
+        for card in self.load_all().await {
+            let mut card = Arc::unwrap_or_clone(card);
+            card.rm_dependency(card_id).await;
+        }
+    }
+
+    fn remove_entry(&self, id: CardId) -> (Option<CardCache>, Option<RevCache>, Option<DepCache>) {
+        let mut guard = self.inner.write().unwrap();
+        let card = guard.cards.remove(&id);
+        let rev = guard.reviews.remove(&id);
+        let deps = guard.dependents.remove(&id);
+        (card, rev, deps)
+    }
+
     pub fn min_rec_recall_rate(
         &self,
         id: CardId,
@@ -134,12 +160,15 @@ impl CardProvider {
         let filtered_cards = futures::future::join_all(card_ids.into_iter().map(|id| {
             let filter = &filter;
             async move {
-                let card = self.load(id).await.unwrap();
-
-                if filter(card.clone()).await {
-                    Some(card)
-                } else {
-                    None
+                match self.load(id).await {
+                    Some(card) => {
+                        if filter(card.clone()).await {
+                            Some(card)
+                        } else {
+                            None
+                        }
+                    }
+                    None => None,
                 }
             }
         }))
@@ -238,6 +267,11 @@ impl CardProvider {
     async fn load_uncached(&self, id: CardId) -> Option<Card<AnyType>> {
         trace!("load uncached");
         let raw_card = self.provider.load_card(id).await?;
+
+        if raw_card.deleted {
+            return None;
+        }
+
         let reviews = self.provider.load_reviews(id).await;
         let history = Reviews(reviews);
         let data = into_any(raw_card.data, self);
@@ -367,3 +401,5 @@ struct RevCache {
     fetched: Duration,
     review: Reviews,
 }
+
+type DepCache = HashSet<CardId>;
