@@ -12,7 +12,6 @@ use samsvar::json;
 use samsvar::Matcher;
 use serializing::from_any;
 use serializing::into_any;
-use serializing::into_raw_card;
 use speki_dto::BackSide;
 use speki_dto::CType;
 use speki_dto::CardId;
@@ -340,7 +339,7 @@ impl Card<AnyType> {
     }
 
     pub fn to_raw(&self) -> RawCard {
-        into_raw_card(self.clone())
+        self.clone().into()
     }
 
     pub async fn update_with_raw(&mut self, raw: RawCard) {
@@ -521,7 +520,7 @@ impl Card<AnyType> {
 
     pub async fn into_type(self, data: impl Into<AnyType>) -> Card<AnyType> {
         let id = self.id();
-        let mut raw = into_raw_card(self.clone());
+        let mut raw: RawCard = self.clone().into();
         raw.data = from_any(data.into());
         let card = Card::from_raw(raw, self.card_provider.clone(), self.recaller.clone()).await;
         self.card_provider.save_card(card).await;

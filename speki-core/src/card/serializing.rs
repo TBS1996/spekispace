@@ -186,17 +186,19 @@ pub fn new_normal(normal: NormalCard) -> RawCard {
     }
 }
 
-pub fn into_raw_card(card: Card<AnyType>) -> RawCard {
-    RawCard {
-        id: card.id.into_inner(),
-        data: from_any(card.data),
-        dependencies: card
-            .dependencies
-            .into_iter()
-            .map(|id| id.into_inner())
-            .collect(),
-        tags: card.tags,
-        suspended: card.suspended.is_suspended(),
+impl From<Card<AnyType>> for RawCard {
+    fn from(card: Card<AnyType>) -> Self {
+        RawCard {
+            id: card.id.into_inner(),
+            data: from_any(card.data),
+            dependencies: card
+                .dependencies
+                .into_iter()
+                .map(|id| id.into_inner())
+                .collect(),
+            tags: card.tags,
+            suspended: card.suspended.is_suspended(),
+        }
     }
 }
 

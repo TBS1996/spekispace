@@ -1,13 +1,10 @@
 use crate::{
-    card::{
-        serializing::{into_any, into_raw_card},
-        RecallRate,
-    },
+    card::{serializing::into_any, RecallRate},
     reviews::Reviews,
     AnyType, Attribute, Card, Provider, Recaller, TimeGetter,
 };
 use dioxus_logger::tracing::{info, trace};
-use speki_dto::{AttributeId, CardId, Review};
+use speki_dto::{AttributeId, CardId, RawCard, Review};
 use std::{
     collections::{BTreeSet, HashMap, HashSet},
     fmt::Debug,
@@ -216,7 +213,7 @@ impl CardProvider {
 
     pub async fn save_card(&self, card: Card<AnyType>) {
         self.update_cache(Arc::new(card.clone()));
-        let raw = into_raw_card(card);
+        let raw: RawCard = card.into();
         self.provider.save_card(raw).await;
     }
 
