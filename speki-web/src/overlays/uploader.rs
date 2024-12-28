@@ -1,10 +1,9 @@
 use dioxus::prelude::*;
 use dioxus_elements::FileEngine;
-use regex::Regex;
+use fancy_regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use strum::{EnumIter, IntoEnumIterator};
-use tracing::info;
 
 use crate::{
     components::{CardRef, CardTy, DropDownMenu, Komponent},
@@ -52,19 +51,28 @@ struct QA {
 
 impl QA {
     fn extract(re: String, content: String) -> Vec<Self> {
+        // Compile the regex using `fancy-regex`
         let Ok(re) = Regex::new(&re) else {
-            info!("invalid regex: {re:?}");
+            eprintln!("Invalid regex: {re:?}");
             return vec![];
         };
 
-        re.captures_iter(&content)
-            .map(|cap| Self {
-                q: cap
-                    .get(1)
-                    .map_or("".to_string(), |m| m.as_str().to_string()),
-                a: cap
-                    .get(2)
-                    .map_or("".to_string(), |m| m.as_str().to_string()),
+        // Split the content by lines and apply the regex to each line
+        content
+            .lines()
+            .filter_map(|line| {
+                // Use `re.captures` which returns `Result`
+                match re.captures(line) {
+                    Ok(Some(cap)) => Some(Self {
+                        a: cap
+                            .get(1)
+                            .map_or("".to_string(), |m| m.as_str().to_string()), // Capture the answer first
+                        q: cap
+                            .get(2)
+                            .map_or("".to_string(), |m| m.as_str().to_string()), // Capture the question second
+                    }),
+                    _ => None,
+                }
             })
             .collect()
     }
@@ -81,6 +89,19 @@ pub struct Uploader {
 }
 
 impl Uploader {
+    pub fn flip_qa(&self) {
+        let mut qa = self.cards.cloned();
+        for x in &mut qa {
+            let q = x.q.clone();
+            let a = x.a.clone();
+
+            x.q = a;
+            x.a = q;
+        }
+
+        self.cards.clone().set(qa);
+    }
+
     pub fn new() -> Self {
         let regex: Signal<String> =
             Signal::new_in_scope(Extraction::Tabs.regex().unwrap().to_string(), ScopeId(3));
@@ -136,6 +157,7 @@ impl Komponent for Uploader {
         let dropdown = self.dropdown.clone();
         let concept = self.concept.clone();
         let concept2 = self.concept.clone();
+        let selv = self.clone();
 
         rsx! {
             div {
@@ -204,6 +226,15 @@ impl Komponent for Uploader {
                             }
 
                             {dropdown.render()}
+                            div {
+                                button {
+                                    onclick: move |_| {
+                                        let selv = selv.clone();
+                                        selv.flip_qa();
+                                    },
+                                    "flip qa"
+                                }
+                            }
                         }
                     }
 
