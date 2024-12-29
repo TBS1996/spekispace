@@ -27,7 +27,7 @@ pub mod reviews;
 pub use attribute::Attribute;
 pub use card::Card;
 pub use card::{
-    CardType, AttributeCard, CardTrait, ClassCard, EventCard, InstanceCard, NormalCard,
+    AttributeCard, CardTrait, CardType, ClassCard, EventCard, InstanceCard, NormalCard,
     StatementCard, UnfinishedCard,
 };
 pub use common::current_time;
@@ -289,7 +289,7 @@ impl App {
             Card::from_raw(raw_card, self.card_provider.clone(), self.recaller.clone()).await;
 
         self.card_provider.save_card(card).await;
-        Arc::unwrap_or_clone(self.card_provider.load(CardId(id)).await.unwrap())
+        Arc::unwrap_or_clone(self.card_provider.load(id).await.unwrap())
     }
 }
 

@@ -1,7 +1,7 @@
 use std::{cell::RefCell, collections::HashMap, sync::Arc};
 
 use dioxus::prelude::*;
-use speki_core::{CardType, App, Card};
+use speki_core::{App, Card};
 use speki_dto::{CType, CardId};
 use tracing::info;
 use uuid::Uuid;
@@ -24,12 +24,12 @@ impl NodeId {
     pub fn card_id(&self) -> Option<CardId> {
         match self {
             NodeId::Temp(_) => None,
-            NodeId::Card(uuid) => Some(CardId(*uuid)),
+            NodeId::Card(uuid) => Some(*uuid),
         }
     }
 
     pub fn new_from_card(id: CardId) -> Self {
-        Self::Card(id.into_inner())
+        Self::Card(id)
     }
 
     pub fn new_temp() -> Self {
@@ -114,10 +114,6 @@ fn cyan_color() -> String {
     String::from("#00FFFF")
 }
 
-fn yellow_color() -> String {
-    String::from("#FFFF00")
-}
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NodeMetadata {
     pub id: NodeId,
@@ -167,7 +163,7 @@ impl Node {
                 .dependents()
                 .await
                 .into_iter()
-                .map(|card| NodeId::Card(card.id().into_inner()))
+                .map(|card| NodeId::Card(card.id()))
                 .collect(),
             Node::Nope { dependents, .. } => dependents.into_iter().map(|dep| dep.id()).collect(),
         }
@@ -181,7 +177,7 @@ impl Node {
                 .dependency_ids()
                 .await
                 .into_iter()
-                .map(|id| NodeId::Card(id.into_inner()))
+                .map(|id| NodeId::Card(id))
                 .collect(),
             Node::Nope { dependencies, .. } => {
                 dependencies.into_iter().map(|dep| dep.id()).collect()

@@ -3,7 +3,7 @@ use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 
 use dioxus::prelude::*;
-use speki_core::{CardType, Card};
+use speki_core::Card;
 use speki_dto::CardId;
 use speki_dto::Recall;
 use tracing::info;

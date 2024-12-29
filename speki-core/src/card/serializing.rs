@@ -4,13 +4,12 @@ use omtrent::TimeStamp;
 use serde::de::{self, Deserializer};
 use serde::{Deserialize, Serialize};
 use speki_dto::RawCard;
-use speki_dto::{AttributeId, CardId};
 use speki_dto::{CType, RawType};
 use toml::Value;
 use uuid::Uuid;
 
 use super::{
-    CardType, AttributeCard, Card, ClassCard, EventCard, InstanceCard, IsSuspended, NormalCard,
+    AttributeCard, Card, CardType, ClassCard, EventCard, InstanceCard, IsSuspended, NormalCard,
     StatementCard, UnfinishedCard,
 };
 use crate::card_provider::CardProvider;
@@ -19,7 +18,7 @@ pub fn into_any(raw: RawType, card_provider: &CardProvider) -> CardType {
     match raw.ty {
         CType::Instance => InstanceCard {
             name: raw.front.unwrap(),
-            class: raw.class.map(CardId).unwrap(),
+            class: raw.class.unwrap(),
             back: raw.back,
         }
         .into(),
@@ -33,16 +32,16 @@ pub fn into_any(raw: RawType, card_provider: &CardProvider) -> CardType {
         }
         .into(),
         CType::Attribute => AttributeCard {
-            attribute: AttributeId(raw.attribute.unwrap()),
+            attribute: raw.attribute.unwrap(),
             back: raw.back.unwrap(),
-            instance: CardId(raw.instance.unwrap()),
+            instance: raw.instance.unwrap(),
             card_provider: card_provider.clone(),
         }
         .into(),
         CType::Class => ClassCard {
             name: raw.front.unwrap(),
             back: raw.back.unwrap(),
-            parent_class: raw.class.map(CardId),
+            parent_class: raw.class,
         }
         .into(),
         CType::Statement => StatementCard {
@@ -58,7 +57,7 @@ pub fn into_any(raw: RawType, card_provider: &CardProvider) -> CardType {
                 .flatten()
                 .unwrap_or_default(),
             end_time: raw.end_time.clone().map(TimeStamp::from_string).flatten(),
-            parent_event: raw.parent_event.map(CardId),
+            parent_event: raw.parent_event,
         }
         .into(),
     }
@@ -71,7 +70,7 @@ pub fn from_any(ty: CardType) -> RawType {
 
     match ty {
         CardType::Instance(InstanceCard { name, class, back }) => {
-            raw.class = Some(class.into_inner());
+            raw.class = Some(class);
             raw.front = Some(name);
             raw.back = back;
         }
@@ -88,9 +87,9 @@ pub fn from_any(ty: CardType) -> RawType {
             instance,
             card_provider: _,
         }) => {
-            raw.attribute = Some(attribute.into_inner());
+            raw.attribute = Some(attribute);
             raw.back = Some(back);
-            raw.instance = Some(instance.into_inner());
+            raw.instance = Some(instance);
         }
         CardType::Class(ClassCard {
             name,
@@ -99,7 +98,7 @@ pub fn from_any(ty: CardType) -> RawType {
         }) => {
             raw.front = Some(name);
             raw.back = Some(back);
-            raw.class = parent_class.map(CardId::into_inner);
+            raw.class = parent_class;
         }
         CardType::Statement(StatementCard { front }) => {
             raw.front = Some(front);
@@ -113,7 +112,7 @@ pub fn from_any(ty: CardType) -> RawType {
             raw.front = Some(front);
             raw.start_time = Some(start_time.serialize());
             raw.end_time = end_time.map(|t| t.serialize());
-            raw.parent_event = parent_event.map(CardId::into_inner);
+            raw.parent_event = parent_event;
         }
     };
 
@@ -189,13 +188,9 @@ pub fn new_normal(normal: NormalCard) -> RawCard {
 impl From<Card> for RawCard {
     fn from(card: Card) -> Self {
         RawCard {
-            id: card.id.into_inner(),
+            id: card.id,
             data: from_any(card.ty),
-            dependencies: card
-                .dependencies
-                .into_iter()
-                .map(|id| id.into_inner())
-                .collect(),
+            dependencies: card.dependencies,
             tags: card.tags,
             suspended: card.suspended.is_suspended(),
             deleted: false,

@@ -1,5 +1,4 @@
 use async_trait::async_trait;
-use core::fmt;
 use omtrent::TimeStamp;
 use serde::{ser::SerializeSeq, Deserialize, Deserializer, Serialize};
 use serde_json::Value;
@@ -79,7 +78,7 @@ pub trait SpekiProvider: Sync {
     }
 
     async fn load_card(&self, id: CardId) -> Option<RawCard> {
-        let content = self.load_content(id.into_inner(), Cty::Card).await?;
+        let content = self.load_content(id, Cty::Card).await?;
 
         let card = toml::from_str::<RawCard>(&content).unwrap();
 
@@ -91,7 +90,7 @@ pub trait SpekiProvider: Sync {
     }
 
     async fn delete_card(&self, id: CardId) {
-        self.delete_content(id.into_inner(), Cty::Card).await;
+        self.delete_content(id, Cty::Card).await;
     }
 
     async fn load_all_attributes(&self) -> Vec<AttributeDTO> {
@@ -105,24 +104,24 @@ pub trait SpekiProvider: Sync {
     async fn save_attribute(&self, attribute: AttributeDTO) {
         self.save_content(
             Cty::Attribute,
-            attribute.id.into_inner(),
+            attribute.id,
             toml::to_string(&attribute).unwrap(),
         )
         .await;
     }
 
     async fn load_attribute(&self, id: AttributeId) -> Option<AttributeDTO> {
-        self.load_content(id.into_inner(), Cty::Attribute)
+        self.load_content(id, Cty::Attribute)
             .await
             .map(|card| toml::from_str(&card).unwrap())
     }
 
     async fn delete_attribute(&self, id: AttributeId) {
-        self.delete_content(id.into_inner(), Cty::Attribute).await;
+        self.delete_content(id, Cty::Attribute).await;
     }
 
     async fn load_reviews(&self, id: CardId) -> Vec<Review> {
-        let Some(s) = self.load_content(id.into_inner(), Cty::Review).await else {
+        let Some(s) = self.load_content(id, Cty::Review).await else {
             return vec![];
         };
 
@@ -142,26 +141,24 @@ pub trait SpekiProvider: Sync {
             s.push_str(&format!("{} {}\n", stamp, grade));
         }
 
-        self.save_content(Cty::Review, id.into_inner(), s).await;
+        self.save_content(Cty::Review, id, s).await;
     }
 
     async fn load_config(&self) -> Config;
     async fn save_config(&self, config: Config);
 
     async fn last_modified_card(&self, id: CardId) -> Duration {
-        self.last_modified(id.into_inner(), Cty::Card)
-            .await
-            .unwrap_or_default()
+        self.last_modified(id, Cty::Card).await.unwrap_or_default()
     }
 
     async fn last_modified_attribute(&self, id: AttributeId) -> Duration {
-        self.last_modified(id.into_inner(), Cty::Attribute)
+        self.last_modified(id, Cty::Attribute)
             .await
             .unwrap_or_default()
     }
 
     async fn last_modified_reviews(&self, id: CardId) -> Option<Duration> {
-        self.last_modified(id.into_inner(), Cty::Review).await
+        self.last_modified(id, Cty::Review).await
     }
     async fn load_card_ids(&self) -> Vec<CardId> {
         self.load_all_cards()
@@ -171,7 +168,7 @@ pub trait SpekiProvider: Sync {
                 info!("loading raw: {raw:?}");
 
                 if !raw.deleted {
-                    Some(CardId(raw.id))
+                    Some(raw.id)
                 } else {
                     None
                 }
@@ -194,7 +191,7 @@ pub trait SpekiProvider: Sync {
             .map(|card| {
                 let card: RawCard = toml::from_str(&card).unwrap();
 
-                (CardId(card.id), card)
+                (card.id, card)
             })
             .collect();
 
@@ -206,7 +203,7 @@ pub trait SpekiProvider: Sync {
             .map(|card| {
                 let card: RawCard = toml::from_str(&card).unwrap();
 
-                (CardId(card.id), card)
+                (card.id, card)
             })
             .collect();
 
@@ -221,8 +218,8 @@ pub trait SpekiProvider: Sync {
                 (None, Some(card)) => self.save_card(card).await,
                 (Some(card), None) => other.save_card(card).await,
                 (Some(mut card1), Some(mut card2)) => {
-                    let lm1 = self.last_modified_card(CardId(card1.id)).await;
-                    let lm2 = self.last_modified_card(CardId(card2.id)).await;
+                    let lm1 = self.last_modified_card(card1.id).await;
+                    let lm2 = self.last_modified_card(card2.id).await;
 
                     if card1.deleted && !card2.deleted {
                         card2.deleted = true;
@@ -250,7 +247,7 @@ pub trait SpekiProvider: Sync {
             info!("syncing review");
             let id = *id;
 
-            match (map1.remove(&id.into_inner()), map2.remove(&id.into_inner())) {
+            match (map1.remove(&id), map2.remove(&id)) {
                 (None, None) => continue,
                 (None, Some(rev2)) => self.save_reviews(id, rev2).await,
                 (Some(rev1), None) => other.save_reviews(id, rev1).await,
@@ -359,35 +356,7 @@ pub enum CType {
     Event,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, Ord, Eq, PartialEq, PartialOrd, Copy, Hash)]
-#[serde(transparent)]
-pub struct CardId(pub Uuid);
-
-impl FromStr for CardId {
-    type Err = uuid::Error;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Uuid::from_str(s).map(CardId)
-    }
-}
-
-impl AsRef<Uuid> for CardId {
-    fn as_ref(&self) -> &Uuid {
-        &self.0
-    }
-}
-
-impl CardId {
-    pub fn into_inner(self) -> Uuid {
-        self.0
-    }
-}
-
-impl fmt::Display for CardId {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.0)
-    }
-}
+pub type CardId = Uuid;
 
 #[derive(Ord, PartialOrd, Eq, Hash, PartialEq, Debug, Clone)]
 pub enum BackSide {
@@ -408,7 +377,7 @@ impl Default for BackSide {
 impl From<String> for BackSide {
     fn from(s: String) -> Self {
         if let Ok(uuid) = Uuid::parse_str(&s) {
-            Self::Card(CardId(uuid))
+            Self::Card(uuid)
         } else if let Some(timestamp) = TimeStamp::from_string(s.clone()) {
             Self::Time(timestamp)
         } else if s.as_str() == Self::INVALID_STR {
@@ -496,7 +465,7 @@ impl<'de> Deserialize<'de> for BackSide {
                 for item in arr {
                     if let Value::String(ref s) = item {
                         if let Ok(uuid) = Uuid::parse_str(s) {
-                            ids.push(CardId(uuid));
+                            ids.push(uuid);
                         } else {
                             return Err(serde::de::Error::custom("Invalid UUID in array"));
                         }
@@ -523,11 +492,11 @@ impl Serialize for BackSide {
             BackSide::Invalid => serializer.serialize_str(Self::INVALID_STR),
             BackSide::Time(ref t) => serializer.serialize_str(&t.serialize()),
             BackSide::Text(ref s) => serializer.serialize_str(s),
-            BackSide::Card(ref id) => serializer.serialize_str(&id.0.to_string()),
+            BackSide::Card(ref id) => serializer.serialize_str(&id.to_string()),
             BackSide::List(ref ids) => {
                 let mut seq = serializer.serialize_seq(Some(ids.len()))?;
                 for id in ids {
-                    seq.serialize_element(&id.0.to_string())?;
+                    seq.serialize_element(&id.to_string())?;
                 }
                 seq.end()
             }
@@ -581,27 +550,7 @@ pub struct AttributeDTO {
     pub back_type: Option<CardId>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, Ord, Eq, PartialEq, PartialOrd, Copy, Hash)]
-#[serde(transparent)]
-pub struct AttributeId(pub Uuid);
-
-impl AsRef<Uuid> for AttributeId {
-    fn as_ref(&self) -> &Uuid {
-        &self.0
-    }
-}
-
-impl fmt::Display for AttributeId {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.0)
-    }
-}
-
-impl AttributeId {
-    pub fn into_inner(self) -> Uuid {
-        self.0
-    }
-}
+pub type AttributeId = Uuid;
 
 #[derive(Ord, PartialOrd, Eq, PartialEq, Hash, Clone, Debug, Default)]
 pub struct Review {

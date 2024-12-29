@@ -378,12 +378,12 @@ impl Card {
         recaller: Recaller,
         reviews: Vec<Review>,
     ) -> Card {
-        let id = CardId(raw_card.id);
+        let id = raw_card.id;
 
         Self {
             id,
             ty: into_any(raw_card.data, &card_provider),
-            dependencies: raw_card.dependencies.into_iter().map(CardId).collect(),
+            dependencies: raw_card.dependencies,
             tags: raw_card.tags,
             history: Reviews(reviews),
             suspended: IsSuspended::from(raw_card.suspended),
@@ -398,7 +398,7 @@ impl Card {
         card_provider: CardProvider,
         recaller: Recaller,
     ) -> Card {
-        let id = CardId(raw_card.id);
+        let id = raw_card.id;
         let reviews = card_provider.load_reviews(id).await;
 
         Self::from_raw_with_reviews(raw_card, card_provider, recaller, reviews.0)

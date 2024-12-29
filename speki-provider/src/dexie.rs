@@ -42,11 +42,7 @@ impl SpekiProvider for DexieProvider {
     }
 
     async fn load_card_ids(&self) -> Vec<CardId> {
-        load_ids(Cty::Card)
-            .await
-            .into_iter()
-            .map(|id| CardId(id))
-            .collect()
+        load_ids(Cty::Card).await.into_iter().collect()
     }
 
     async fn load_config(&self) -> Config {

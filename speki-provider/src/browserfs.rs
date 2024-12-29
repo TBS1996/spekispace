@@ -180,7 +180,7 @@ impl SpekiProvider for BrowserFsProvider {
         js::load_filenames(self.folder_path(Cty::Card).to_str().unwrap())
             .await
             .into_iter()
-            .map(|id| CardId(id.parse().unwrap()))
+            .map(|id| id.parse().unwrap())
             .collect()
     }
 

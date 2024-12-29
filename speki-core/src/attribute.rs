@@ -3,7 +3,6 @@ use std::time::Duration;
 use crate::App;
 use crate::{card_provider::CardProvider, Provider};
 use speki_dto::{AttributeDTO, AttributeId, CardId};
-use uuid::Uuid;
 
 pub struct AttrProvider {
     provider: Provider,
@@ -133,7 +132,7 @@ impl Attribute {
     ) -> AttributeId {
         let x = Self {
             pattern,
-            id: AttributeId(Uuid::new_v4()),
+            id: AttributeId::new_v4(),
             class: concept,
             back_type,
             card_provider: app.card_provider.clone(),

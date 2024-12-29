@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use dioxus::prelude::*;
-use speki_core::{CardType, Card, ClassCard, InstanceCard, NormalCard, UnfinishedCard};
+use speki_core::{Card, CardType, ClassCard, InstanceCard, NormalCard, UnfinishedCard};
 use speki_dto::CardId;
 use speki_web::{Node, NodeId, NodeMetadata};
 use tracing::info;
@@ -105,7 +105,7 @@ impl CardViewer {
         self
     }
 
-    pub fn with_front_text(mut self, text: String) -> Self {
+    pub fn with_front_text(self, text: String) -> Self {
         self.front.text.clone().set(text);
         self
     }
@@ -145,7 +145,7 @@ impl CardViewer {
             .with_filter(Arc::new(Box::new(filter)))
             .with_dependents(tempnode.clone())
             .with_allowed(vec![CardTy::Class]);
-        if let Some(class) = raw.data.class().map(CardId) {
+        if let Some(class) = raw.data.class() {
             let class = APP.read().load_card(class).await;
             concept.set_ref(class).await;
         }
@@ -436,13 +436,13 @@ impl CardViewer {
                             let mut new_raw = speki_core::card::new_raw_card(card.ty);
 
                             if let Some(card) = selveste.old_card.cloned() {
-                                new_raw.id = card.id().into_inner();
+                                new_raw.id = card.id();
                             }
 
                             selv.is_done.clone().set(true);
 
                             for dep in card.deps {
-                                new_raw.dependencies.insert(dep.into_inner());
+                                new_raw.dependencies.insert(dep);
                             }
 
                             let card = APP.read().new_from_raw(new_raw).await;

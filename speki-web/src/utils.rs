@@ -1,7 +1,7 @@
 use std::{fmt::Debug, sync::Arc, time::Duration};
 
 use dioxus::prelude::*;
-use speki_core::{Card, CardType, TimeProvider};
+use speki_core::{Card, TimeProvider};
 use speki_dto::{CardId, RawCard};
 use speki_provider::DexieProvider;
 use speki_web::{Node, NodeMetadata};
