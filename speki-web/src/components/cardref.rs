@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{fmt::Debug, sync::Arc};
 
 use dioxus::prelude::*;
 use speki_core::{AnyType, Card};
@@ -23,6 +23,16 @@ pub struct CardRef {
     on_select: Option<Arc<Box<dyn Fn(Arc<Card<AnyType>>)>>>,
     on_deselect: Option<Arc<Box<dyn Fn(Arc<Card<AnyType>>)>>>,
     placeholder: Signal<&'static str>,
+}
+
+impl Debug for CardRef {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("CardRef")
+            .field("card", &self.card)
+            .field("display", &self.display)
+            .field("placeholder", &self.placeholder)
+            .finish()
+    }
 }
 
 impl Komponent for CardRef {

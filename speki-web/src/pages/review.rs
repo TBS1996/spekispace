@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 
@@ -7,7 +8,7 @@ use speki_dto::CardId;
 use speki_dto::Recall;
 use tracing::info;
 
-use crate::components::Komponent;
+use crate::components::{CardRef, Komponent};
 use crate::overlays::cardviewer::CardViewer;
 use crate::{components::GraphRep, APP, DEFAULT_FILTER};
 use crate::{IS_SHORT, OVERLAY};
@@ -22,6 +23,7 @@ pub fn Review() -> Element {
     let _card = card.clone();
     let reviewing = use_memo(move || _card().is_some());
     let filter_sig = review.filter.clone();
+    let cardref = review.dependents.clone();
 
     let log_event = move |event: Rc<KeyboardData>| {
         let _review = review.clone();
@@ -50,7 +52,7 @@ pub fn Review() -> Element {
             if reviewing() {
               { rev2.render_queue() }
             } else {
-                { review_start(filter_sig) }
+                { review_start(filter_sig, cardref) }
             }
         }
     }
@@ -78,7 +80,7 @@ fn recall_button(recall: Recall) -> Element {
     }
 }
 
-fn review_start(mut filter: Signal<String>) -> Element {
+fn review_start(mut filter: Signal<String>, cardref: CardRef) -> Element {
     let mut editing = use_signal(|| false);
 
     let class = if IS_SHORT.cloned() {
@@ -90,6 +92,13 @@ fn review_start(mut filter: Signal<String>) -> Element {
     rsx! {
         div {
             class: "{class}",
+
+
+                div {
+                    p{"review dependents"}
+                    { cardref.render() }
+                }
+
 
             if *editing.read() {
                 div{
@@ -171,6 +180,7 @@ pub struct ReviewState {
     pub graph: GraphRep,
     pub show_graph: Signal<bool>,
     pub dependencies: Signal<Vec<(String, Arc<Card<AnyType>>, Self)>>,
+    pub dependents: CardRef,
 }
 
 impl ReviewState {
@@ -391,17 +401,34 @@ impl ReviewState {
             graph: Default::default(),
             show_graph: Default::default(),
             dependencies: Default::default(),
+            dependents: CardRef::new(),
         }
     }
 
     pub async fn start_review(&mut self) {
         info!("refreshing..");
         let filter = Some(self.filter.cloned());
-        let mut cards = APP.read().load_non_pending(filter.clone()).await;
-        let pending = APP.read().load_pending(filter).await;
-        cards.extend(pending);
+        let mut cards = vec![];
+        let mut set: HashSet<CardId> = HashSet::new();
+        set.extend(APP.read().load_non_pending(filter.clone()).await);
+        set.extend(APP.read().load_pending(filter).await);
 
-        info!("review cards loaded");
+        if let Some(dep) = self.dependents.selected_card().cloned() {
+            info!("loading deps..");
+            for dep in APP.read().load_card(dep).await.all_dependents().await {
+                info!("deps loaded");
+                if set.contains(&dep) {
+                    info!("set contains");
+                    cards.push(dep);
+                }
+            }
+        } else {
+            for c in set {
+                cards.push(c);
+            }
+        }
+
+        info!("review cards loaded, so many cards: {}", cards.len());
         self.tot_len.clone().set(cards.len());
         {
             info!("setting queue");
