@@ -13,7 +13,6 @@ use samsvar::Schema;
 use speki_dto::AttributeId;
 use speki_dto::RawCard;
 use speki_dto::SpekiProvider;
-use tracing::instrument;
 use tracing::trace;
 
 use crate::card::serializing::new_raw_card;
@@ -97,7 +96,6 @@ impl App {
         info!("cache filled in {:.4} seconds!", elapsed.as_secs_f32());
     }
 
-    #[instrument]
     pub async fn load_all_cards(&self) -> Vec<Arc<Card<AnyType>>> {
         self.card_provider.load_all().await
     }
@@ -146,48 +144,19 @@ impl App {
         self.card_provider.load_all_card_ids().await
     }
 
-    #[instrument]
-    pub async fn load_non_pending(&self, filter: Option<String>) -> Vec<CardId> {
-        info!("loading card ids");
-
-        let schema = filter.map(|filter| Schema::new(filter).unwrap());
-        let schema = Arc::new(schema);
-        info!("schema is: {:?}", schema);
-
-        let filter = {
-            let schema = schema.clone();
-            move |card: Arc<Card<AnyType>>| {
-                let schema = schema.clone();
-                async move {
-                    match &*schema {
-                        Some(sch) => card.eval_schema(sch).await,
-                        None => true,
-                    }
-                }
-            }
-        };
-
-        self.card_provider
-            .filtered_load(filter)
-            .await
-            .into_iter()
-            .map(|card| card.id)
-            .collect()
-    }
-
     pub async fn load_and_persist(&self) {
         for card in self.load_all_cards().await {
             Arc::unwrap_or_clone(card).persist().await;
         }
     }
 
-    pub async fn cards_filtered(&self, filter: String) -> Vec<CardId> {
+    pub async fn cards_filtered(&self, filter: String) -> Vec<Arc<Card<AnyType>>> {
         let cards = self.load_all_cards().await;
         let mut ids = vec![];
 
         for card in cards {
             if card.eval(filter.clone()).await {
-                ids.push(card.id());
+                ids.push(card);
             }
         }
         ids
@@ -252,6 +221,34 @@ impl App {
             .await
             .into_iter()
             .filter(|card| card.is_class())
+            .collect()
+    }
+
+    pub async fn load_non_pending(&self, filter: Option<String>) -> Vec<CardId> {
+        info!("loading card ids");
+
+        let schema = filter.map(|filter| Schema::new(filter).unwrap());
+        let schema = Arc::new(schema);
+        info!("schema is: {:?}", schema);
+
+        let filter = {
+            let schema = schema.clone();
+            move |card: Arc<Card<AnyType>>| {
+                let schema = schema.clone();
+                async move {
+                    match &*schema {
+                        Some(sch) => card.eval_schema(sch).await,
+                        None => true,
+                    }
+                }
+            }
+        };
+
+        self.card_provider
+            .filtered_load(filter)
+            .await
+            .into_iter()
+            .map(|card| card.id)
             .collect()
     }
 

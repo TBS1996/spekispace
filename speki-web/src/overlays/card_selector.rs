@@ -119,7 +119,7 @@ impl CardSelector {
         info!("render hook in cardselector :)");
         let sig = self.cards.clone();
         let selv = self.clone();
-        let cards = APP.cloned().load_all().await;
+        let cards = APP.cloned().load_all(None).await;
         let mut entries = vec![];
 
         for card in cards {
@@ -176,7 +176,7 @@ impl Komponent for CardSelector {
             let sig = self.cards.clone();
             let selv = self.clone();
             spawn(async move {
-                let cards = APP.cloned().load_all().await;
+                let cards = APP.cloned().load_all(None).await;
                 let mut entries = vec![];
 
                 for card in cards {

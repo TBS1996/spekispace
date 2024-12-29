@@ -410,8 +410,13 @@ impl ReviewState {
         let filter = Some(self.filter.cloned());
         let mut cards = vec![];
         let mut set: HashSet<CardId> = HashSet::new();
-        set.extend(APP.read().load_non_pending(filter.clone()).await);
-        set.extend(APP.read().load_pending(filter).await);
+        set.extend(
+            APP.read()
+                .load_all(filter.clone())
+                .await
+                .into_iter()
+                .map(|card| card.id),
+        );
 
         if let Some(dep) = self.dependents.selected_card().cloned() {
             info!("loading deps..");

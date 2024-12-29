@@ -713,7 +713,6 @@ impl<T: CardTrait> Card<T> {
         &self.history.0
     }
 
-    #[allow(dead_code)]
     pub fn is_pending(&self) -> bool {
         self.history.is_empty()
     }
@@ -747,6 +746,7 @@ impl Matcher for Card<AnyType> {
     async fn get_val(&self, key: &str) -> Option<samsvar::Value> {
         match key {
             "front" => json!(self.data.display_front().await),
+            "pending" => json!(self.is_pending()),
             "back" => json!(self.display_backside().await.unwrap_or_default()),
             "suspended" => json!(&self.is_suspended()),
             "finished" => json!(&self.is_finished()),

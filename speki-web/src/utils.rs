@@ -29,20 +29,15 @@ impl App {
         self.0.fill_cache().await;
     }
 
-    pub async fn load_all(&self) -> Vec<Arc<Card<AnyType>>> {
-        self.0.load_all_cards().await
+    pub async fn load_all(&self, filter: Option<String>) -> Vec<Arc<Card<AnyType>>> {
+        match filter {
+            Some(filter) => self.0.cards_filtered(filter).await,
+            None => self.0.load_all_cards().await,
+        }
     }
 
     pub async fn load_card(&self, id: CardId) -> Arc<Card<AnyType>> {
         Arc::new(self.0.load_card(id).await.unwrap())
-    }
-
-    pub async fn load_pending(&self, filter: Option<String>) -> Vec<CardId> {
-        self.0.load_pending(filter).await
-    }
-
-    pub async fn load_non_pending(&self, filter: Option<String>) -> Vec<CardId> {
-        self.0.load_non_pending(filter).await
     }
 
     pub async fn new_from_raw(&self, raw: RawCard) -> Arc<Card<AnyType>> {
