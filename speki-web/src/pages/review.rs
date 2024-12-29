@@ -3,7 +3,7 @@ use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 
 use dioxus::prelude::*;
-use speki_core::{AnyType, Card};
+use speki_core::{CardType, Card};
 use speki_dto::CardId;
 use speki_dto::Recall;
 use tracing::info;
@@ -169,7 +169,7 @@ fn review_buttons(mut show_backside: Signal<bool>) -> Element {
 
 #[derive(Clone, Debug)]
 pub struct ReviewState {
-    pub card: Signal<Option<Card<AnyType>>>,
+    pub card: Signal<Option<Card>>,
     pub queue: Arc<Mutex<Vec<CardId>>>,
     pub tot_len: Signal<usize>,
     pub pos: Signal<usize>,
@@ -179,7 +179,7 @@ pub struct ReviewState {
     pub filter: Signal<String>,
     pub graph: GraphRep,
     pub show_graph: Signal<bool>,
-    pub dependencies: Signal<Vec<(String, Arc<Card<AnyType>>, Self)>>,
+    pub dependencies: Signal<Vec<(String, Arc<Card>, Self)>>,
     pub dependents: CardRef,
 }
 
@@ -225,7 +225,7 @@ impl ReviewState {
 
                         let front = front.clone();
                         let back = back.clone();
-                        let fun = move |card: Arc<Card<AnyType>>| {
+                        let fun = move |card: Arc<Card>| {
                             spawn(async move{
                                 let f = card.print().await;
                                 let b = card
@@ -359,7 +359,7 @@ impl ReviewState {
                                             let selv = selv.clone();
                                             let card = card.clone();
                                             spawn(async move{
-                                                let fun: Box<dyn Fn(Arc<Card<AnyType>>)> = Box::new(move |_: Arc<Card<AnyType>>| {
+                                                let fun: Box<dyn Fn(Arc<Card>)> = Box::new(move |_: Arc<Card>| {
                                                     let selv = selv.clone();
                                                     spawn(async move{
                                                         selv.refresh().await;

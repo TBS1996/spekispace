@@ -80,7 +80,7 @@ impl IsSuspended {
 }
 
 #[derive(Debug, Clone)]
-pub enum AnyType {
+pub enum CardType {
     Instance(InstanceCard),
     Normal(NormalCard),
     Unfinished(UnfinishedCard),
@@ -90,16 +90,40 @@ pub enum AnyType {
     Event(EventCard),
 }
 
-impl AnyType {
+impl CardType {
+    pub async fn get_dependencies(&self) -> BTreeSet<CardId> {
+        match self {
+            CardType::Instance(card) => card.get_dependencies().await,
+            CardType::Normal(card) => card.get_dependencies().await,
+            CardType::Unfinished(card) => card.get_dependencies().await,
+            CardType::Attribute(card) => card.get_dependencies().await,
+            CardType::Class(card) => card.get_dependencies().await,
+            CardType::Statement(card) => card.get_dependencies().await,
+            CardType::Event(card) => card.get_dependencies().await,
+        }
+    }
+
+    pub async fn display_front(&self) -> String {
+        match self {
+            CardType::Instance(card) => card.display_front().await,
+            CardType::Normal(card) => card.display_front().await,
+            CardType::Unfinished(card) => card.display_front().await,
+            CardType::Attribute(card) => card.display_front().await,
+            CardType::Class(card) => card.display_front().await,
+            CardType::Statement(card) => card.display_front().await,
+            CardType::Event(card) => card.display_front().await,
+        }
+    }
+
     fn invalidate_backside(&mut self, id: CardId) {
         let backside = match self {
-            AnyType::Instance(InstanceCard { back, .. }) => back.as_mut(),
-            AnyType::Normal(NormalCard { back, .. }) => Some(back),
-            AnyType::Unfinished(_) => None,
-            AnyType::Attribute(AttributeCard { back, .. }) => Some(back),
-            AnyType::Class(ClassCard { back, .. }) => Some(back),
-            AnyType::Statement(_) => None,
-            AnyType::Event(_) => None,
+            CardType::Instance(InstanceCard { back, .. }) => back.as_mut(),
+            CardType::Normal(NormalCard { back, .. }) => Some(back),
+            CardType::Unfinished(_) => None,
+            CardType::Attribute(AttributeCard { back, .. }) => Some(back),
+            CardType::Class(ClassCard { back, .. }) => Some(back),
+            CardType::Statement(_) => None,
+            CardType::Event(_) => None,
         };
 
         if let Some(back) = backside {
@@ -112,7 +136,7 @@ impl AnyType {
         self.invalidate_backside(id);
 
         match self {
-            AnyType::Instance(InstanceCard {
+            CardType::Instance(InstanceCard {
                 ref name,
                 ref back,
                 class,
@@ -133,10 +157,10 @@ impl AnyType {
                     }
                 }
             }
-            AnyType::Normal(_) => {}
-            AnyType::Unfinished(_) => {}
-            AnyType::Attribute(_) => {}
-            AnyType::Class(ClassCard {
+            CardType::Normal(_) => {}
+            CardType::Unfinished(_) => {}
+            CardType::Attribute(_) => {}
+            CardType::Class(ClassCard {
                 name,
                 back,
                 parent_class,
@@ -149,33 +173,33 @@ impl AnyType {
                     });
                 }
             }
-            AnyType::Statement(_) => {}
-            AnyType::Event(_) => {}
+            CardType::Statement(_) => {}
+            CardType::Event(_) => {}
         };
     }
 
     pub fn type_name(&self) -> &str {
         match self {
-            AnyType::Unfinished(_) => "unfinished",
-            AnyType::Statement(_) => "statement",
-            AnyType::Attribute(_) => "attribute",
-            AnyType::Instance(_) => "instance",
-            AnyType::Normal(_) => "normal",
-            AnyType::Class(_) => "class",
-            AnyType::Event(_) => "event",
+            CardType::Unfinished(_) => "unfinished",
+            CardType::Statement(_) => "statement",
+            CardType::Attribute(_) => "attribute",
+            CardType::Instance(_) => "instance",
+            CardType::Normal(_) => "normal",
+            CardType::Class(_) => "class",
+            CardType::Event(_) => "event",
         }
     }
 
     /// This is mainly just so i dont forget to update the CType when the AnyType changes
     pub fn fieldless(&self) -> CType {
         match self {
-            AnyType::Instance(_) => CType::Instance,
-            AnyType::Normal(_) => CType::Normal,
-            AnyType::Unfinished(_) => CType::Unfinished,
-            AnyType::Attribute(_) => CType::Attribute,
-            AnyType::Class(_) => CType::Class,
-            AnyType::Statement(_) => CType::Statement,
-            AnyType::Event(_) => CType::Event,
+            CardType::Instance(_) => CType::Instance,
+            CardType::Normal(_) => CType::Normal,
+            CardType::Unfinished(_) => CType::Unfinished,
+            CardType::Attribute(_) => CType::Attribute,
+            CardType::Class(_) => CType::Class,
+            CardType::Statement(_) => CType::Statement,
+            CardType::Event(_) => CType::Event,
         }
     }
 
@@ -191,20 +215,20 @@ impl AnyType {
 
     pub fn set_backside(self, new_back: BackSide, card_provider: &CardProvider) -> Self {
         match self {
-            x @ AnyType::Event(_) => x,
-            x @ AnyType::Instance(_) => x,
-            x @ AnyType::Statement(_) => x,
-            AnyType::Normal(NormalCard { front, .. }) => NormalCard {
+            x @ CardType::Event(_) => x,
+            x @ CardType::Instance(_) => x,
+            x @ CardType::Statement(_) => x,
+            CardType::Normal(NormalCard { front, .. }) => NormalCard {
                 front,
                 back: new_back,
             }
             .into(),
-            AnyType::Unfinished(UnfinishedCard { front }) => NormalCard {
+            CardType::Unfinished(UnfinishedCard { front }) => NormalCard {
                 front,
                 back: new_back,
             }
             .into(),
-            AnyType::Attribute(AttributeCard {
+            CardType::Attribute(AttributeCard {
                 attribute,
                 instance: concept_card,
                 ..
@@ -225,41 +249,13 @@ impl AnyType {
     }
 }
 
-#[async_trait::async_trait(?Send)]
-impl CardTrait for AnyType {
-    async fn get_dependencies(&self) -> BTreeSet<CardId> {
-        match self {
-            AnyType::Instance(card) => card.get_dependencies().await,
-            AnyType::Normal(card) => card.get_dependencies().await,
-            AnyType::Unfinished(card) => card.get_dependencies().await,
-            AnyType::Attribute(card) => card.get_dependencies().await,
-            AnyType::Class(card) => card.get_dependencies().await,
-            AnyType::Statement(card) => card.get_dependencies().await,
-            AnyType::Event(card) => card.get_dependencies().await,
-        }
-    }
-
-    async fn display_front(&self) -> String {
-        match self {
-            AnyType::Instance(card) => card.display_front().await,
-            AnyType::Normal(card) => card.display_front().await,
-            AnyType::Unfinished(card) => card.display_front().await,
-            AnyType::Attribute(card) => card.display_front().await,
-            AnyType::Class(card) => card.display_front().await,
-            AnyType::Statement(card) => card.display_front().await,
-            AnyType::Event(card) => card.display_front().await,
-        }
-    }
-}
-
 /// Represents a card that has been saved as a toml file, which is basically anywhere in the codebase
 /// except for when youre constructing a new card.
-/// Don't save this in containers or pass to functions, rather use the Id, and get new instances of SavedCard from the cache.
-/// Also, every time you mutate it, call the persist() method.
+/// Every time you mutate it, call the persist() method.
 #[derive(Clone)]
-pub struct Card<T: CardTrait + ?Sized> {
+pub struct Card {
     id: CardId,
-    data: T,
+    ty: CardType,
     dependencies: BTreeSet<CardId>,
     tags: BTreeMap<String, String>,
     history: Reviews,
@@ -269,7 +265,7 @@ pub struct Card<T: CardTrait + ?Sized> {
     last_modified: Duration,
 }
 
-impl<T: CardTrait + ?Sized> PartialEq for Card<T> {
+impl PartialEq for Card {
     fn eq(&self, other: &Self) -> bool {
         self.id == other.id
     }
@@ -277,25 +273,25 @@ impl<T: CardTrait + ?Sized> PartialEq for Card<T> {
 
 use std::cmp::Ordering;
 
-impl<T: CardTrait + ?Sized> Ord for Card<T> {
+impl Ord for Card {
     fn cmp(&self, other: &Self) -> Ordering {
         self.id.cmp(&other.id)
     }
 }
 
-impl<T: CardTrait + ?Sized> PartialOrd for Card<T> {
+impl PartialOrd for Card {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         self.id.partial_cmp(&other.id)
     }
 }
 
-impl<T: CardTrait + ?Sized> Eq for Card<T> {}
+impl Eq for Card {}
 
-impl<T: CardTrait + ?Sized> Debug for Card<T> {
+impl Debug for Card {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let mut s = String::new();
         s.push_str(&format!("{:?}\n", self.id));
-        s.push_str(&format!("{:?}\n", self.data));
+        s.push_str(&format!("{:?}\n", self.ty));
 
         write!(f, "{}", s)
     }
@@ -303,21 +299,21 @@ impl<T: CardTrait + ?Sized> Debug for Card<T> {
 
 use futures::executor::block_on;
 
-impl<T: CardTrait> std::fmt::Display for Card<T> {
+impl std::fmt::Display for Card {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", block_on(self.data.display_front()))
+        write!(f, "{}", block_on(self.ty.display_front()))
     }
 }
 
-impl<T: CardTrait> AsRef<CardId> for Card<T> {
+impl AsRef<CardId> for Card {
     fn as_ref(&self) -> &CardId {
         &self.id
     }
 }
 
-impl Card<AnyType> {
-    pub fn get_ty(&self) -> AnyType {
-        self.data.clone()
+impl Card {
+    pub fn get_ty(&self) -> CardType {
+        self.ty.clone()
     }
 
     /// Loads all the ancestor ancestor classes
@@ -422,12 +418,12 @@ impl Card<AnyType> {
         card_provider: CardProvider,
         recaller: Recaller,
         reviews: Vec<Review>,
-    ) -> Card<AnyType> {
+    ) -> Card {
         let id = CardId(raw_card.id);
 
-        Card::<AnyType> {
+        Self {
             id,
-            data: into_any(raw_card.data, &card_provider),
+            ty: into_any(raw_card.data, &card_provider),
             dependencies: raw_card.dependencies.into_iter().map(CardId).collect(),
             tags: raw_card.tags,
             history: Reviews(reviews),
@@ -442,52 +438,52 @@ impl Card<AnyType> {
         raw_card: RawCard,
         card_provider: CardProvider,
         recaller: Recaller,
-    ) -> Card<AnyType> {
+    ) -> Card {
         let id = CardId(raw_card.id);
         let reviews = card_provider.load_reviews(id).await;
 
         Self::from_raw_with_reviews(raw_card, card_provider, recaller, reviews.0)
     }
 
-    pub fn card_type(&self) -> &AnyType {
-        &self.data
+    pub fn card_type(&self) -> &CardType {
+        &self.ty
     }
 
     /// Returns the class this card belongs to (if any)
     pub fn parent_class(&self) -> Option<CardId> {
-        match &self.data {
-            AnyType::Instance(instance) => Some(instance.class),
-            AnyType::Class(class) => class.parent_class,
-            AnyType::Normal(_) => None,
-            AnyType::Unfinished(_) => None,
-            AnyType::Attribute(_) => None,
-            AnyType::Statement(_) => None,
-            AnyType::Event(_) => None,
+        match &self.ty {
+            CardType::Instance(instance) => Some(instance.class),
+            CardType::Class(class) => class.parent_class,
+            CardType::Normal(_) => None,
+            CardType::Unfinished(_) => None,
+            CardType::Attribute(_) => None,
+            CardType::Statement(_) => None,
+            CardType::Event(_) => None,
         }
     }
 
     pub fn is_finished(&self) -> bool {
-        self.data.is_finished()
+        self.ty.is_finished()
     }
 
     pub fn is_class(&self) -> bool {
-        self.data.is_class()
+        self.ty.is_class()
     }
 
     pub fn is_instance(&self) -> bool {
-        self.data.is_instance()
+        self.ty.is_instance()
     }
 
-    pub async fn set_ref(mut self, reff: CardId) -> Card<AnyType> {
+    pub async fn set_ref(mut self, reff: CardId) -> Card {
         let backside = BackSide::Card(reff);
-        self.data = self.data.set_backside(backside, &self.card_provider);
+        self.ty = self.ty.set_backside(backside, &self.card_provider);
         self.persist().await;
         self
     }
 
     pub async fn rm_dependency(&mut self, dependency: CardId) -> bool {
         let res = self.dependencies.remove(&dependency);
-        self.data.remove_dep(dependency);
+        self.ty.remove_dep(dependency);
         self.persist().await;
         res
     }
@@ -515,13 +511,13 @@ impl Card<AnyType> {
 
     pub fn back_side(&self) -> Option<&BackSide> {
         match self.card_type() {
-            AnyType::Instance(instance) => instance.back.as_ref(),
-            AnyType::Attribute(card) => Some(&card.back),
-            AnyType::Normal(card) => Some(&card.back),
-            AnyType::Class(card) => Some(&card.back),
-            AnyType::Unfinished(_) => None?,
-            AnyType::Statement(_) => None?,
-            AnyType::Event(_) => None?,
+            CardType::Instance(instance) => instance.back.as_ref(),
+            CardType::Attribute(card) => Some(&card.back),
+            CardType::Normal(card) => Some(&card.back),
+            CardType::Class(card) => Some(&card.back),
+            CardType::Unfinished(_) => None?,
+            CardType::Statement(_) => None?,
+            CardType::Event(_) => None?,
         }
     }
 
@@ -529,7 +525,7 @@ impl Card<AnyType> {
         self.card_provider.remove_card(self.id).await;
     }
 
-    pub async fn into_type(self, data: impl Into<AnyType>) -> Card<AnyType> {
+    pub async fn into_type(self, data: impl Into<CardType>) -> Card {
         let id = self.id();
         let mut raw: RawCard = self.clone().into();
         raw.data = from_any(data.into());
@@ -635,7 +631,7 @@ impl Card<AnyType> {
     }
 }
 
-impl<T: CardTrait> Card<T> {
+impl Card {
     pub fn history(&self) -> &Reviews {
         &self.history
     }
@@ -706,7 +702,7 @@ impl<T: CardTrait> Card<T> {
     }
 
     pub async fn print(&self) -> String {
-        self.data.display_front().await
+        self.ty.display_front().await
     }
 
     pub fn reviews(&self) -> &Vec<Review> {
@@ -731,7 +727,7 @@ impl<T: CardTrait> Card<T> {
 
     pub async fn dependency_ids(&self) -> BTreeSet<CardId> {
         let mut deps = self.dependencies.clone();
-        deps.extend(self.data.get_dependencies().await);
+        deps.extend(self.ty.get_dependencies().await);
         deps
     }
 
@@ -741,11 +737,11 @@ impl<T: CardTrait> Card<T> {
 }
 
 #[async_trait(?Send)]
-impl Matcher for Card<AnyType> {
+impl Matcher for Card {
     #[instrument]
     async fn get_val(&self, key: &str) -> Option<samsvar::Value> {
         match key {
-            "front" => json!(self.data.display_front().await),
+            "front" => json!(self.ty.display_front().await),
             "pending" => json!(self.is_pending()),
             "back" => json!(self.display_backside().await.unwrap_or_default()),
             "suspended" => json!(&self.is_suspended()),
@@ -789,7 +785,7 @@ impl Matcher for Card<AnyType> {
 #[cfg(test)]
 mod tests {
 
-    use super::{AnyType, Card};
+    use super::Card;
     use crate::{
         card_provider::CardProvider, Provider, Recaller, SimpleRecall, TimeGetter, TimeProvider,
     };
@@ -942,7 +938,7 @@ mod tests {
             self.time_provider.inc(inc);
         }
 
-        async fn insert_card(&self) -> Card<AnyType> {
+        async fn insert_card(&self) -> Card {
             let raw = raw_dummy().await;
             let card = Card::from_raw(raw, self.card_provider.clone(), self.recaller.clone()).await;
             let id = card.id;

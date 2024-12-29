@@ -60,33 +60,33 @@ impl CardTrait for UnfinishedCard {
     }
 }
 
-impl From<StatementCard> for AnyType {
+impl From<StatementCard> for CardType {
     fn from(value: StatementCard) -> Self {
         Self::Statement(value)
     }
 }
 
-impl From<NormalCard> for AnyType {
+impl From<NormalCard> for CardType {
     fn from(value: NormalCard) -> Self {
         Self::Normal(value)
     }
 }
-impl From<UnfinishedCard> for AnyType {
+impl From<UnfinishedCard> for CardType {
     fn from(value: UnfinishedCard) -> Self {
         Self::Unfinished(value)
     }
 }
-impl From<AttributeCard> for AnyType {
+impl From<AttributeCard> for CardType {
     fn from(value: AttributeCard) -> Self {
         Self::Attribute(value)
     }
 }
-impl From<InstanceCard> for AnyType {
+impl From<InstanceCard> for CardType {
     fn from(value: InstanceCard) -> Self {
         Self::Instance(value)
     }
 }
-impl From<ClassCard> for AnyType {
+impl From<ClassCard> for CardType {
     fn from(value: ClassCard) -> Self {
         Self::Class(value)
     }
@@ -204,7 +204,7 @@ impl EventCard {
     pub async fn valid_sub_event(&self, other: CardId, app: &App) -> bool {
         let other = app.load_card(other).await.unwrap();
 
-        let AnyType::Event(other) = other.data else {
+        let CardType::Event(other) = other.ty else {
             panic!("wrong type");
         };
 
@@ -213,7 +213,7 @@ impl EventCard {
 
     pub async fn valid_parent_event(&self, parent: CardId, app: &App) -> bool {
         let parent = app.load_card(parent).await.unwrap();
-        let AnyType::Event(parent) = parent.data else {
+        let CardType::Event(parent) = parent.ty else {
             panic!("wrong type");
         };
 
@@ -221,7 +221,7 @@ impl EventCard {
     }
 }
 
-impl From<EventCard> for AnyType {
+impl From<EventCard> for CardType {
     fn from(value: EventCard) -> Self {
         Self::Event(value)
     }

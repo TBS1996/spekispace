@@ -5,7 +5,7 @@ use std::{
 
 use dioxus::prelude::*;
 use serde::{Deserialize, Serialize};
-use speki_core::{AnyType, Card};
+use speki_core::{CardType, Card};
 use speki_dto::BackSide;
 use strum::{EnumIter, IntoEnumIterator};
 use tracing::info;
@@ -80,12 +80,12 @@ impl BackPut {
         }
     }
 
-    pub fn with_deselect(mut self, f: Arc<Box<dyn Fn(Arc<Card<AnyType>>)>>) -> Self {
+    pub fn with_deselect(mut self, f: Arc<Box<dyn Fn(Arc<Card>)>>) -> Self {
         self.ref_card = self.ref_card.with_deselect(f);
         self
     }
 
-    pub fn with_closure(mut self, f: Arc<Box<dyn Fn(Arc<Card<AnyType>>)>>) -> Self {
+    pub fn with_closure(mut self, f: Arc<Box<dyn Fn(Arc<Card>)>>) -> Self {
         self.ref_card = self.ref_card.with_closure(f);
         self
     }

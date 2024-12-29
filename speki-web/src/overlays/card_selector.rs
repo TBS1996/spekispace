@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use dioxus::prelude::*;
-use speki_core::{AnyType, Card};
+use speki_core::{CardType, Card};
 use speki_web::Node;
 use tracing::info;
 
@@ -12,8 +12,8 @@ use crate::{
     APP, OVERLAY,
 };
 
-pub fn overlay_card_viewer() -> Arc<Box<dyn Fn(Arc<Card<AnyType>>)>> {
-    Arc::new(Box::new(move |card: Arc<Card<AnyType>>| {
+pub fn overlay_card_viewer() -> Arc<Box<dyn Fn(Arc<Card>)>> {
+    Arc::new(Box::new(move |card: Arc<Card>| {
         spawn(async move {
             let graph = GraphRep::new().with_hook(overlay_card_viewer());
             let viewer = CardViewer::new_from_card(card, graph).await;
@@ -26,11 +26,11 @@ pub fn overlay_card_viewer() -> Arc<Box<dyn Fn(Arc<Card<AnyType>>)>> {
 pub struct CardSelector {
     title: String,
     search: Signal<String>,
-    on_card_selected: Arc<Box<dyn Fn(Arc<Card<AnyType>>)>>,
+    on_card_selected: Arc<Box<dyn Fn(Arc<Card>)>>,
     cards: Signal<Vec<CardEntry>>,
     allow_new: bool,
     done: Signal<bool>,
-    filter: Option<Arc<Box<dyn Fn(AnyType) -> bool>>>,
+    filter: Option<Arc<Box<dyn Fn(CardType) -> bool>>>,
     dependents: Signal<Vec<Node>>,
     allowed_cards: Vec<CardTy>,
 }
@@ -57,9 +57,9 @@ impl CardSelector {
     }
 
     pub async fn ref_picker(
-        fun: Arc<Box<dyn Fn(Arc<Card<AnyType>>)>>,
+        fun: Arc<Box<dyn Fn(Arc<Card>)>>,
         dependents: Vec<Node>,
-        filter: Option<Arc<Box<dyn Fn(AnyType) -> bool>>>,
+        filter: Option<Arc<Box<dyn Fn(CardType) -> bool>>>,
     ) -> Self {
         let selv = Self {
             title: "choose reference".to_string(),
@@ -78,7 +78,7 @@ impl CardSelector {
         selv
     }
 
-    pub async fn dependency_picker(f: Box<dyn Fn(Arc<Card<AnyType>>)>) -> Self {
+    pub async fn dependency_picker(f: Box<dyn Fn(Arc<Card>)>) -> Self {
         info!("3 scope is ! {:?}", current_scope_id().unwrap());
         let selv = Self {
             title: "set dependency".to_string(),
@@ -110,7 +110,7 @@ impl CardSelector {
         self
     }
 
-    pub fn with_filter(mut self, filter: Arc<Box<dyn Fn(AnyType) -> bool>>) -> Self {
+    pub fn with_filter(mut self, filter: Arc<Box<dyn Fn(CardType) -> bool>>) -> Self {
         self.filter = Some(filter);
         self
     }
@@ -214,7 +214,7 @@ impl Komponent for CardSelector {
 
                                 let done = selv.is_done().clone();
                                 let closure = closure.clone();
-                                let hook = move |card: Arc<Card<AnyType>>| {
+                                let hook = move |card: Arc<Card>| {
                                     done.clone().set(true);
                                     (closure)(card);
                                 };

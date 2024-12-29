@@ -10,12 +10,12 @@ use toml::Value;
 use uuid::Uuid;
 
 use super::{
-    AnyType, AttributeCard, Card, ClassCard, EventCard, InstanceCard, IsSuspended, NormalCard,
+    CardType, AttributeCard, Card, ClassCard, EventCard, InstanceCard, IsSuspended, NormalCard,
     StatementCard, UnfinishedCard,
 };
 use crate::card_provider::CardProvider;
 
-pub fn into_any(raw: RawType, card_provider: &CardProvider) -> AnyType {
+pub fn into_any(raw: RawType, card_provider: &CardProvider) -> CardType {
     match raw.ty {
         CType::Instance => InstanceCard {
             name: raw.front.unwrap(),
@@ -64,25 +64,25 @@ pub fn into_any(raw: RawType, card_provider: &CardProvider) -> AnyType {
     }
 }
 
-pub fn from_any(ty: AnyType) -> RawType {
+pub fn from_any(ty: CardType) -> RawType {
     let mut raw = RawType::default();
     let fieldless = ty.fieldless();
     raw.ty = fieldless;
 
     match ty {
-        AnyType::Instance(InstanceCard { name, class, back }) => {
+        CardType::Instance(InstanceCard { name, class, back }) => {
             raw.class = Some(class.into_inner());
             raw.front = Some(name);
             raw.back = back;
         }
-        AnyType::Normal(NormalCard { front, back }) => {
+        CardType::Normal(NormalCard { front, back }) => {
             raw.front = Some(front);
             raw.back = Some(back);
         }
-        AnyType::Unfinished(UnfinishedCard { front }) => {
+        CardType::Unfinished(UnfinishedCard { front }) => {
             raw.front = Some(front);
         }
-        AnyType::Attribute(AttributeCard {
+        CardType::Attribute(AttributeCard {
             attribute,
             back,
             instance,
@@ -92,7 +92,7 @@ pub fn from_any(ty: AnyType) -> RawType {
             raw.back = Some(back);
             raw.instance = Some(instance.into_inner());
         }
-        AnyType::Class(ClassCard {
+        CardType::Class(ClassCard {
             name,
             back,
             parent_class,
@@ -101,10 +101,10 @@ pub fn from_any(ty: AnyType) -> RawType {
             raw.back = Some(back);
             raw.class = parent_class.map(CardId::into_inner);
         }
-        AnyType::Statement(StatementCard { front }) => {
+        CardType::Statement(StatementCard { front }) => {
             raw.front = Some(front);
         }
-        AnyType::Event(EventCard {
+        CardType::Event(EventCard {
             front,
             start_time,
             end_time,
@@ -120,16 +120,16 @@ pub fn from_any(ty: AnyType) -> RawType {
     raw
 }
 
-pub fn new_raw_card(card: impl Into<AnyType>) -> RawCard {
-    let card: AnyType = card.into();
+pub fn new_raw_card(card: impl Into<CardType>) -> RawCard {
+    let card: CardType = card.into();
     match card {
-        AnyType::Instance(concept) => new_concept(concept),
-        AnyType::Normal(normal) => new_normal(normal),
-        AnyType::Unfinished(unfinished) => new_unfinished(unfinished),
-        AnyType::Attribute(attribute) => new_attribute(attribute),
-        AnyType::Class(class) => new_class(class),
-        AnyType::Statement(statement) => new_statement(statement),
-        AnyType::Event(event) => new_event(event),
+        CardType::Instance(concept) => new_concept(concept),
+        CardType::Normal(normal) => new_normal(normal),
+        CardType::Unfinished(unfinished) => new_unfinished(unfinished),
+        CardType::Attribute(attribute) => new_attribute(attribute),
+        CardType::Class(class) => new_class(class),
+        CardType::Statement(statement) => new_statement(statement),
+        CardType::Event(event) => new_event(event),
     }
 }
 
@@ -186,11 +186,11 @@ pub fn new_normal(normal: NormalCard) -> RawCard {
     }
 }
 
-impl From<Card<AnyType>> for RawCard {
-    fn from(card: Card<AnyType>) -> Self {
+impl From<Card> for RawCard {
+    fn from(card: Card) -> Self {
         RawCard {
             id: card.id.into_inner(),
-            data: from_any(card.data),
+            data: from_any(card.ty),
             dependencies: card
                 .dependencies
                 .into_iter()

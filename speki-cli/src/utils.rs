@@ -1,5 +1,5 @@
 use dialoguer::{theme::ColorfulTheme, Input, Select};
-use speki_core::{AnyType, App, Attribute, Card, CardId};
+use speki_core::{CardType, App, Attribute, Card, CardId};
 use speki_dto::AttributeId;
 use speki_provider::paths;
 use std::path::Path;
@@ -17,14 +17,14 @@ pub fn notify(msg: impl Into<String>) {
 }
 
 pub async fn select_from_subclass_cards(app: &App, class: CardId) -> Option<CardId> {
-    let cards: Vec<Arc<Card<AnyType>>> = app
+    let cards: Vec<Arc<Card>> = app
         .load_all_cards()
         .await
         .into_iter()
         .filter(|card| block_on(card.load_ancestor_classes()).contains(&class))
         .collect();
 
-    enumselector::select_item_with_formatter(cards, |card: &Arc<Card<AnyType>>| {
+    enumselector::select_item_with_formatter(cards, |card: &Arc<Card>| {
         block_on(card.print())
     })?
     .id()
@@ -32,13 +32,13 @@ pub async fn select_from_subclass_cards(app: &App, class: CardId) -> Option<Card
 }
 
 pub async fn select_from_all_instance_cards(app: &App) -> Option<CardId> {
-    let cards: Vec<Arc<Card<AnyType>>> = app
+    let cards: Vec<Arc<Card>> = app
         .load_all_cards()
         .await
         .into_iter()
         .filter(|card| card.is_instance())
         .collect();
-    enumselector::select_item_with_formatter(cards, |card: &Arc<Card<AnyType>>| {
+    enumselector::select_item_with_formatter(cards, |card: &Arc<Card>| {
         block_on(card.print())
     })?
     .id()
@@ -50,7 +50,7 @@ use std::sync::Arc;
 
 pub async fn select_from_all_class_cards(app: &App) -> Option<CardId> {
     let cards = app.load_all_cards().await;
-    enumselector::select_item_with_formatter(cards, |card: &Arc<Card<AnyType>>| {
+    enumselector::select_item_with_formatter(cards, |card: &Arc<Card>| {
         block_on(card.print())
     })?
     .id()
@@ -77,7 +77,7 @@ pub fn select_from_attributes(attributes: Vec<Attribute>) -> Option<AttributeId>
 pub async fn select_from_all_cards(app: &App) -> Option<CardId> {
     enumselector::select_item_with_formatter(
         app.load_all_cards().await,
-        |card: &Arc<Card<AnyType>>| block_on(card.print()).to_owned(),
+        |card: &Arc<Card>| block_on(card.print()).to_owned(),
     )?
     .id()
     .into()

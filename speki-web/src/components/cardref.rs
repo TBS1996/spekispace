@@ -1,7 +1,7 @@
 use std::{fmt::Debug, sync::Arc};
 
 use dioxus::prelude::*;
-use speki_core::{AnyType, Card};
+use speki_core::{Card, CardType};
 use speki_dto::CardId;
 use tracing::info;
 
@@ -17,11 +17,11 @@ const PLACEHOLDER: &'static str = "pick card...";
 pub struct CardRef {
     card: Signal<Option<CardId>>,
     display: Signal<String>,
-    filter: Option<Arc<Box<dyn Fn(AnyType) -> bool>>>,
+    filter: Option<Arc<Box<dyn Fn(CardType) -> bool>>>,
     dependent: Option<TempNode>,
     allowed: Vec<CardTy>,
-    on_select: Option<Arc<Box<dyn Fn(Arc<Card<AnyType>>)>>>,
-    on_deselect: Option<Arc<Box<dyn Fn(Arc<Card<AnyType>>)>>>,
+    on_select: Option<Arc<Box<dyn Fn(Arc<Card>)>>>,
+    on_deselect: Option<Arc<Box<dyn Fn(Arc<Card>)>>>,
     placeholder: Signal<&'static str>,
 }
 
@@ -101,12 +101,12 @@ impl CardRef {
         self
     }
 
-    pub fn with_deselect(mut self, f: Arc<Box<dyn Fn(Arc<Card<AnyType>>)>>) -> Self {
+    pub fn with_deselect(mut self, f: Arc<Box<dyn Fn(Arc<Card>)>>) -> Self {
         self.on_deselect = Some(f);
         self
     }
 
-    pub fn with_closure(mut self, f: Arc<Box<dyn Fn(Arc<Card<AnyType>>)>>) -> Self {
+    pub fn with_closure(mut self, f: Arc<Box<dyn Fn(Arc<Card>)>>) -> Self {
         self.on_select = Some(f);
         self
     }
@@ -121,7 +121,7 @@ impl CardRef {
         self
     }
 
-    pub fn with_filter(mut self, filter: Arc<Box<dyn Fn(AnyType) -> bool>>) -> Self {
+    pub fn with_filter(mut self, filter: Arc<Box<dyn Fn(CardType) -> bool>>) -> Self {
         self.filter = Some(filter);
         self
     }
@@ -135,7 +135,7 @@ impl CardRef {
         self.card.clone()
     }
 
-    pub async fn set_ref(&self, card: Arc<Card<AnyType>>) {
+    pub async fn set_ref(&self, card: Arc<Card>) {
         let id = card.id();
         self.card.clone().set(Some(id));
         let display = card.print().await;
@@ -146,7 +146,7 @@ impl CardRef {
         let _selv = self.clone();
 
         let f = self.on_select.clone();
-        let fun = move |card: Arc<Card<AnyType>>| {
+        let fun = move |card: Arc<Card>| {
             let selv = _selv.clone();
             if let Some(fun) = f.clone() {
                 fun(card.clone());

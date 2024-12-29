@@ -1,6 +1,4 @@
-use crate::{
-    card::RecallRate, reviews::Reviews, AnyType, Attribute, Card, Provider, Recaller, TimeGetter,
-};
+use crate::{card::RecallRate, reviews::Reviews, Attribute, Card, Provider, Recaller, TimeGetter};
 use dioxus_logger::tracing::{info, trace};
 use speki_dto::{AttributeId, CardId, RawCard, Review};
 use std::future::Future;
@@ -156,9 +154,9 @@ impl CardProvider {
         guard.reviews = rev_caches;
     }
 
-    pub async fn filtered_load<F, Fut>(&self, filter: F) -> Vec<Arc<Card<AnyType>>>
+    pub async fn filtered_load<F, Fut>(&self, filter: F) -> Vec<Arc<Card>>
     where
-        F: Fn(Arc<Card<AnyType>>) -> Fut + Send + Sync,
+        F: Fn(Arc<Card>) -> Fut + Send + Sync,
         Fut: std::future::Future<Output = bool>,
     {
         info!("loading card ids");
@@ -185,12 +183,12 @@ impl CardProvider {
         filtered_cards.into_iter().filter_map(|card| card).collect()
     }
 
-    pub async fn load_all(&self) -> Vec<Arc<Card<AnyType>>> {
-        let filter = |_: Arc<Card<AnyType>>| async move { true };
+    pub async fn load_all(&self) -> Vec<Arc<Card>> {
+        let filter = |_: Arc<Card>| async move { true };
         self.filtered_load(filter).await
     }
 
-    pub async fn dependents(&self, id: CardId) -> BTreeSet<Arc<Card<AnyType>>> {
+    pub async fn dependents(&self, id: CardId) -> BTreeSet<Arc<Card>> {
         trace!("dependents of: {}", id);
         let mut out = BTreeSet::default();
         let deps = self
@@ -211,7 +209,7 @@ impl CardProvider {
         out
     }
 
-    pub async fn load(&self, id: CardId) -> Option<Arc<Card<AnyType>>> {
+    pub async fn load(&self, id: CardId) -> Option<Arc<Card>> {
         trace!("loading card for id: {}", id);
         if let (Some(card), Some(_)) = (
             self.load_cached_card(id).await,
@@ -248,7 +246,7 @@ impl CardProvider {
         self.provider.delete_card(id).await;
     }
 
-    pub async fn save_card(&self, card: Card<AnyType>) {
+    pub async fn save_card(&self, card: Card) {
         self.update_cache(Arc::new(card.clone()));
         let raw: RawCard = card.into();
         self.provider.save_card(raw).await;
@@ -272,7 +270,7 @@ impl CardProvider {
         }
     }
 
-    async fn load_uncached(&self, id: CardId) -> Option<Card<AnyType>> {
+    async fn load_uncached(&self, id: CardId) -> Option<Card> {
         trace!("load uncached");
         let raw_card = self.provider.load_card(id).await?;
 
@@ -309,7 +307,7 @@ impl CardProvider {
         }
     }
 
-    async fn update_dependents(&self, card: Arc<Card<AnyType>>) {
+    async fn update_dependents(&self, card: Arc<Card>) {
         trace!("updating cache dependents");
         let mut guard = self.inner.write().unwrap();
         for dep in card.dependency_ids().await {
@@ -330,7 +328,7 @@ impl CardProvider {
         }
     }
 
-    async fn load_cached_card(&self, id: CardId) -> Option<Arc<Card<AnyType>>> {
+    async fn load_cached_card(&self, id: CardId) -> Option<Arc<Card>> {
         let cached = self.load_cached_entry(id).await?;
 
         if self.check_modified {
@@ -347,7 +345,7 @@ impl CardProvider {
         }
     }
 
-    fn update_cache(&self, card: Arc<Card<AnyType>>) {
+    fn update_cache(&self, card: Arc<Card>) {
         trace!("updating cache for card: {}", card.id());
         let now = self.time_provider.current_time();
         let mut guard = self.inner.write().unwrap();
@@ -367,7 +365,7 @@ impl CardProvider {
         guard.reviews.insert(id, cached_reviews);
     }
 
-    async fn fresh_load(&self, id: CardId) -> Option<Arc<Card<AnyType>>> {
+    async fn fresh_load(&self, id: CardId) -> Option<Arc<Card>> {
         let uncached = self.load_uncached(id).await?;
         let uncached = Arc::new(uncached);
         self.update_dependents(uncached.clone()).await;
@@ -385,7 +383,7 @@ struct Inner {
 #[derive(Clone, Debug)]
 struct CardCache {
     fetched: Duration,
-    card: Arc<Card<AnyType>>,
+    card: Arc<Card>,
     min_rec_recall: Option<RecallRate>,
 }
 

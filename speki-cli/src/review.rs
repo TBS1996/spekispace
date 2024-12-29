@@ -9,7 +9,7 @@ use crate::{
 use dialoguer::{theme::ColorfulTheme, Input, Select};
 use rand::prelude::*;
 use speki_core::{
-    AnyType, Attribute, AttributeCard, BackSide, Card, CardId, ClassCard, EventCard, InstanceCard,
+    CardType, Attribute, AttributeCard, BackSide, Card, CardId, ClassCard, EventCard, InstanceCard,
     StatementCard,
 };
 use speki_dto::Recall;
@@ -173,7 +173,7 @@ async fn handle_review_action(app: &App, card: CardId, action: ReviewAction) -> 
     }
 }
 
-async fn create_attribute_card(card: &Card<AnyType>, app: &App) -> Option<AttributeCard> {
+async fn create_attribute_card(card: &Card, app: &App) -> Option<AttributeCard> {
     notify(format!("Which instance ?"));
     let instance_id = select_from_all_instance_cards(app).await?;
     let instance = app.load_card(instance_id).await.unwrap();
@@ -224,16 +224,16 @@ async fn handle_action(app: &App, card: CardId, action: CardAction) -> ControlFl
 
     match action {
         CardAction::IntoAttribute => match card.card_type() {
-            AnyType::Normal(_) | AnyType::Unfinished(_) => {
+            CardType::Normal(_) | CardType::Unfinished(_) => {
                 if let Some(attr) = create_attribute_card(&card, app).await {
                     card.into_type(attr).await;
                 }
             }
-            AnyType::Attribute(_) => {}
-            AnyType::Instance(_) => {}
-            AnyType::Class(_) => {}
-            AnyType::Statement(_) => {}
-            AnyType::Event(_) => {}
+            CardType::Attribute(_) => {}
+            CardType::Instance(_) => {}
+            CardType::Class(_) => {}
+            CardType::Statement(_) => {}
+            CardType::Event(_) => {}
         },
 
         CardAction::IntoInstance => {
@@ -370,7 +370,7 @@ async fn handle_action(app: &App, card: CardId, action: CardAction) -> ControlFl
         }
 
         CardAction::ParentClass => {
-            if let AnyType::Class(class) = card.card_type() {
+            if let CardType::Class(class) = card.card_type() {
                 if let Some(parent_class) = select_from_all_class_cards(app).await {
                     if parent_class != card.id() {
                         let mut class = class.clone();
@@ -464,7 +464,7 @@ async fn print_card(app: &App, card: CardId, mut show_backside: bool) -> Control
     let card = app.load_card(card).await.unwrap();
 
     let var_name = match card.card_type() {
-        AnyType::Instance(instance) => match card.back_side() {
+        CardType::Instance(instance) => match card.back_side() {
             Some(_) => {
                 let parent_class = app.load_card(instance.class).await.unwrap();
                 let front = format!(
@@ -482,28 +482,28 @@ async fn print_card(app: &App, card: CardId, mut show_backside: bool) -> Control
             }
         },
 
-        AnyType::Normal(_) => {
+        CardType::Normal(_) => {
             let front = card.print().await;
             let back = card.display_backside().await.unwrap_or_default();
             (front, back)
         }
-        AnyType::Unfinished(_) => {
+        CardType::Unfinished(_) => {
             show_backside = true;
             let front = card.print().await;
             let back = String::from("card has no answer yet");
             (front, back)
         }
-        AnyType::Attribute(_) => {
+        CardType::Attribute(_) => {
             let front = card.print().await;
             let back = card.display_backside().await.unwrap_or_default();
             (front, back)
         }
-        AnyType::Class(_) => {
+        CardType::Class(_) => {
             let front = card.print().await;
             let back = card.display_backside().await.unwrap_or_default();
             (front, back)
         }
-        AnyType::Statement(_) | AnyType::Event(_) => {
+        CardType::Statement(_) | CardType::Event(_) => {
             show_backside = true;
             let front = card.print().await;
             let back = String::default();

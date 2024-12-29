@@ -1,7 +1,7 @@
 use std::{fmt::Debug, sync::Arc, time::Duration};
 
 use dioxus::prelude::*;
-use speki_core::{AnyType, Card, TimeProvider};
+use speki_core::{Card, CardType, TimeProvider};
 use speki_dto::{CardId, RawCard};
 use speki_provider::DexieProvider;
 use speki_web::{Node, NodeMetadata};
@@ -29,18 +29,18 @@ impl App {
         self.0.fill_cache().await;
     }
 
-    pub async fn load_all(&self, filter: Option<String>) -> Vec<Arc<Card<AnyType>>> {
+    pub async fn load_all(&self, filter: Option<String>) -> Vec<Arc<Card>> {
         match filter {
             Some(filter) => self.0.cards_filtered(filter).await,
             None => self.0.load_all_cards().await,
         }
     }
 
-    pub async fn load_card(&self, id: CardId) -> Arc<Card<AnyType>> {
+    pub async fn load_card(&self, id: CardId) -> Arc<Card> {
         Arc::new(self.0.load_card(id).await.unwrap())
     }
 
-    pub async fn new_from_raw(&self, raw: RawCard) -> Arc<Card<AnyType>> {
+    pub async fn new_from_raw(&self, raw: RawCard) -> Arc<Card> {
         info!("new from raw");
         let card = self.0.new_from_raw(raw).await;
         card
@@ -51,14 +51,14 @@ impl App {
         front: String,
         back: Option<String>,
         class: CardId,
-    ) -> Arc<Card<AnyType>> {
+    ) -> Arc<Card> {
         info!("new simple");
         let id = self.0.add_instance(front, back, class).await;
         let card = Arc::new(self.0.load_card(id).await.unwrap());
         card
     }
 
-    pub async fn new_simple(&self, front: String, back: String) -> Arc<Card<AnyType>> {
+    pub async fn new_simple(&self, front: String, back: String) -> Arc<Card> {
         info!("new simple");
         let id = self.0.add_card(front, back).await;
         let card = Arc::new(self.0.load_card(id).await.unwrap());

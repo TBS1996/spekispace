@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use dioxus::prelude::*;
-use speki_core::{AnyType, Card, ClassCard, InstanceCard, NormalCard, UnfinishedCard};
+use speki_core::{CardType, Card, ClassCard, InstanceCard, NormalCard, UnfinishedCard};
 use speki_dto::CardId;
 use speki_web::{Node, NodeId, NodeMetadata};
 use tracing::info;
@@ -77,7 +77,7 @@ fn refresh_graph(
 }
 
 pub struct CardRep {
-    ty: AnyType,
+    ty: CardType,
     deps: Vec<CardId>,
 }
 
@@ -90,17 +90,17 @@ pub struct CardViewer {
     dependencies: Signal<Vec<CardId>>,
     dependents: Signal<Vec<Node>>,
     graph: GraphRep,
-    save_hook: Option<Arc<Box<dyn Fn(Arc<Card<AnyType>>)>>>,
+    save_hook: Option<Arc<Box<dyn Fn(Arc<Card>)>>>,
     is_done: Signal<bool>,
-    old_card: Signal<Option<Arc<Card<AnyType>>>>,
+    old_card: Signal<Option<Arc<Card>>>,
     old_meta: Signal<Option<NodeMetadata>>,
-    filter: Option<Arc<Box<dyn Fn(AnyType) -> bool>>>,
+    filter: Option<Arc<Box<dyn Fn(CardType) -> bool>>>,
     tempnode: TempNode,
     allowed_cards: Vec<CardTy>,
 }
 
 impl CardViewer {
-    pub fn with_hook(mut self, hook: Arc<Box<dyn Fn(Arc<Card<AnyType>>)>>) -> Self {
+    pub fn with_hook(mut self, hook: Arc<Box<dyn Fn(Arc<Card>)>>) -> Self {
         self.save_hook = Some(hook);
         self
     }
@@ -115,7 +115,7 @@ impl CardViewer {
         self
     }
 
-    pub fn with_filter(mut self, filter: Arc<Box<dyn Fn(AnyType) -> bool>>) -> Self {
+    pub fn with_filter(mut self, filter: Arc<Box<dyn Fn(CardType) -> bool>>) -> Self {
         self.filter = Some(filter);
         self
     }
@@ -134,11 +134,11 @@ impl CardViewer {
         self
     }
 
-    pub async fn new_from_card(card: Arc<Card<AnyType>>, graph: GraphRep) -> Self {
+    pub async fn new_from_card(card: Arc<Card>, graph: GraphRep) -> Self {
         let meta = NodeMetadata::from_card(card.clone(), true).await;
 
         let tempnode = TempNode::Old(card.id());
-        let filter = move |ty: AnyType| ty.is_class();
+        let filter = move |ty: CardType| ty.is_class();
 
         let raw = card.to_raw();
         let concept = CardRef::new()
@@ -169,27 +169,25 @@ impl CardViewer {
         let _front = frnt.clone();
         let _graph = graph.clone();
         let _meta = meta.clone();
-        let f: Arc<Box<dyn Fn(Arc<Card<AnyType>>)>> =
-            Arc::new(Box::new(move |card: Arc<Card<AnyType>>| {
-                let graph = _graph.clone();
-                let front = _front.clone();
-                let meta = _meta.clone();
-                let deps = dependencies.clone();
-                deps.clone().write().push(card.id());
-                refresh_graph(graph, front, deps, dependents.clone(), Some(meta));
-            }));
+        let f: Arc<Box<dyn Fn(Arc<Card>)>> = Arc::new(Box::new(move |card: Arc<Card>| {
+            let graph = _graph.clone();
+            let front = _front.clone();
+            let meta = _meta.clone();
+            let deps = dependencies.clone();
+            deps.clone().write().push(card.id());
+            refresh_graph(graph, front, deps, dependents.clone(), Some(meta));
+        }));
         let _front = frnt.clone();
         let _graph = graph.clone();
         let _meta = meta.clone();
-        let af: Arc<Box<dyn Fn(Arc<Card<AnyType>>)>> =
-            Arc::new(Box::new(move |card: Arc<Card<AnyType>>| {
-                let graph = _graph.clone();
-                let front = _front.clone();
-                let deps = dependencies.clone();
-                let meta = _meta.clone();
-                deps.clone().write().retain(|dep| *dep != card.id());
-                refresh_graph(graph, front, deps, dependents.clone(), Some(meta));
-            }));
+        let af: Arc<Box<dyn Fn(Arc<Card>)>> = Arc::new(Box::new(move |card: Arc<Card>| {
+            let graph = _graph.clone();
+            let front = _front.clone();
+            let deps = dependencies.clone();
+            let meta = _meta.clone();
+            deps.clone().write().retain(|dep| *dep != card.id());
+            refresh_graph(graph, front, deps, dependents.clone(), Some(meta));
+        }));
 
         let bck = bck.with_closure(f.clone()).with_deselect(af.clone());
         let concept = concept.with_closure(f.clone()).with_deselect(af.clone());
@@ -222,25 +220,23 @@ impl CardViewer {
         let _graph = graph.clone();
         let _front = front.clone();
 
-        let f: Arc<Box<dyn Fn(Arc<Card<AnyType>>)>> =
-            Arc::new(Box::new(move |card: Arc<Card<AnyType>>| {
-                let graph = _graph.clone();
-                let front = _front.clone();
-                let deps = dependencies.clone();
-                deps.clone().write().push(card.id());
-                refresh_graph(graph, front, deps, dependents.clone(), None);
-            }));
+        let f: Arc<Box<dyn Fn(Arc<Card>)>> = Arc::new(Box::new(move |card: Arc<Card>| {
+            let graph = _graph.clone();
+            let front = _front.clone();
+            let deps = dependencies.clone();
+            deps.clone().write().push(card.id());
+            refresh_graph(graph, front, deps, dependents.clone(), None);
+        }));
 
         let _front = front.clone();
         let _graph = graph.clone();
-        let af: Arc<Box<dyn Fn(Arc<Card<AnyType>>)>> =
-            Arc::new(Box::new(move |card: Arc<Card<AnyType>>| {
-                let graph = _graph.clone();
-                let front = _front.clone();
-                let deps = dependencies.clone();
-                deps.clone().write().retain(|dep| *dep != card.id());
-                refresh_graph(graph, front, deps, dependents.clone(), None);
-            }));
+        let af: Arc<Box<dyn Fn(Arc<Card>)>> = Arc::new(Box::new(move |card: Arc<Card>| {
+            let graph = _graph.clone();
+            let front = _front.clone();
+            let deps = dependencies.clone();
+            deps.clone().write().retain(|dep| *dep != card.id());
+            refresh_graph(graph, front, deps, dependents.clone(), None);
+        }));
 
         let tempnode = TempNode::New {
             id: NodeId::new_temp(),
@@ -254,7 +250,7 @@ impl CardViewer {
             .with_closure(f.clone())
             .with_deselect(af.clone());
 
-        let filter = move |ty: AnyType| ty.is_class();
+        let filter = move |ty: CardType| ty.is_class();
 
         let concept = CardRef::new()
             .with_filter(Arc::new(Box::new(filter)))
@@ -311,13 +307,13 @@ impl CardViewer {
                     return None;
                 }
 
-                AnyType::Normal(NormalCard { front, back })
+                CardType::Normal(NormalCard { front, back })
             }
             CardTy::Class => {
                 let parent_class = self.concept.selected_card().cloned();
                 let back = backside.to_backside()?;
 
-                AnyType::Class(ClassCard {
+                CardType::Class(ClassCard {
                     name: front,
                     back,
                     parent_class,
@@ -327,13 +323,13 @@ impl CardViewer {
                 let class = self.concept.selected_card().cloned()?;
                 let back = backside.to_backside();
 
-                AnyType::Instance(InstanceCard {
+                CardType::Instance(InstanceCard {
                     name: front,
                     back,
                     class,
                 })
             }
-            CardTy::Unfinished => AnyType::Unfinished(UnfinishedCard { front }),
+            CardTy::Unfinished => CardType::Unfinished(UnfinishedCard { front }),
         };
 
         Some(CardRep {
@@ -386,7 +382,7 @@ impl CardViewer {
                     let selv = selv.clone();
                     let selv2 = selv.clone();
 
-                    let fun = move |card: Arc<Card<AnyType>>| {
+                    let fun = move |card: Arc<Card>| {
                         selv.dependencies.clone().write().push(card.id());
                         selv.set_graph();
                         let old_card = selv.old_card.cloned();

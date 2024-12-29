@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use dioxus::prelude::*;
-use speki_core::{AnyType, Card};
+use speki_core::{CardType, Card};
 use tracing::info;
 
 use crate::{components::Komponent, overlays::card_selector::CardSelector};
@@ -25,11 +25,11 @@ pub fn Browse() -> Element {
 #[derive(Clone)]
 pub struct CardEntry {
     pub front: String,
-    pub card: Arc<Card<AnyType>>,
+    pub card: Arc<Card>,
 }
 
 impl CardEntry {
-    pub async fn new(card: Arc<Card<AnyType>>) -> Self {
+    pub async fn new(card: Arc<Card>) -> Self {
         Self {
             front: card.print().await,
             card,

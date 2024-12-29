@@ -1,7 +1,7 @@
 use std::{cell::RefCell, collections::HashMap, sync::Arc};
 
 use dioxus::prelude::*;
-use speki_core::{AnyType, App, Card};
+use speki_core::{CardType, App, Card};
 use speki_dto::{CType, CardId};
 use tracing::info;
 use uuid::Uuid;
@@ -128,7 +128,7 @@ pub struct NodeMetadata {
 }
 
 impl NodeMetadata {
-    pub async fn from_card(card: Arc<Card<AnyType>>, is_origin: bool) -> Self {
+    pub async fn from_card(card: Arc<Card>, is_origin: bool) -> Self {
         let label = card.print().await;
         let color = match card.recall_rate() {
             Some(rate) => rate_to_color(rate as f64 * 100.),

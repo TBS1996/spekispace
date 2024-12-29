@@ -27,7 +27,7 @@ pub mod reviews;
 pub use attribute::Attribute;
 pub use card::Card;
 pub use card::{
-    AnyType, AttributeCard, CardTrait, ClassCard, EventCard, InstanceCard, NormalCard,
+    CardType, AttributeCard, CardTrait, ClassCard, EventCard, InstanceCard, NormalCard,
     StatementCard, UnfinishedCard,
 };
 pub use common::current_time;
@@ -96,15 +96,15 @@ impl App {
         info!("cache filled in {:.4} seconds!", elapsed.as_secs_f32());
     }
 
-    pub async fn load_all_cards(&self) -> Vec<Arc<Card<AnyType>>> {
+    pub async fn load_all_cards(&self) -> Vec<Arc<Card>> {
         self.card_provider.load_all().await
     }
 
-    pub async fn save_card_not_reviews(&self, card: Card<AnyType>) {
+    pub async fn save_card_not_reviews(&self, card: Card) {
         self.card_provider.save_card(card).await;
     }
 
-    pub async fn save_card(&self, card: Card<AnyType>) {
+    pub async fn save_card(&self, card: Card) {
         self.card_provider
             .save_reviews(card.id(), card.history().clone())
             .await;
@@ -112,7 +112,7 @@ impl App {
         self.card_provider.save_card(card).await;
     }
 
-    pub async fn load_card(&self, id: CardId) -> Option<Card<AnyType>> {
+    pub async fn load_card(&self, id: CardId) -> Option<Card> {
         trace!("loading card: {id}");
         let card = self.card_provider.load(id).await;
         trace!("card loaded i guess: {card:?}");
@@ -150,7 +150,7 @@ impl App {
         }
     }
 
-    pub async fn cards_filtered(&self, filter: String) -> Vec<Arc<Card<AnyType>>> {
+    pub async fn cards_filtered(&self, filter: String) -> Vec<Arc<Card>> {
         let cards = self.load_all_cards().await;
         let mut ids = vec![];
 
@@ -216,7 +216,7 @@ impl App {
         Ok(())
     }
 
-    pub async fn load_class_cards(&self) -> Vec<Arc<Card<AnyType>>> {
+    pub async fn load_class_cards(&self) -> Vec<Arc<Card>> {
         self.load_all_cards()
             .await
             .into_iter()
@@ -233,7 +233,7 @@ impl App {
 
         let filter = {
             let schema = schema.clone();
-            move |card: Arc<Card<AnyType>>| {
+            move |card: Arc<Card>| {
                 let schema = schema.clone();
                 async move {
                     match &*schema {
@@ -276,13 +276,13 @@ impl App {
         ids
     }
 
-    pub async fn new_from_raw(&self, raw: RawCard) -> Arc<Card<AnyType>> {
+    pub async fn new_from_raw(&self, raw: RawCard) -> Arc<Card> {
         let mut card = Card::from_raw(raw, self.card_provider.clone(), self.recaller.clone()).await;
         card.persist().await;
         self.card_provider.load(card.id()).await.unwrap()
     }
 
-    pub async fn new_any(&self, any: impl Into<AnyType>) -> Card<AnyType> {
+    pub async fn new_any(&self, any: impl Into<CardType>) -> Card {
         let raw_card = new_raw_card(any);
         let id = raw_card.id;
         let card =

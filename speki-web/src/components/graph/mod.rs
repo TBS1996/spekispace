@@ -8,7 +8,7 @@ use std::{
 
 use digraph::RustGraph;
 use dioxus::prelude::*;
-use speki_core::{AnyType, Card};
+use speki_core::{CardType, Card};
 use speki_dto::CardId;
 use speki_web::{Node, NodeMetadata};
 use tracing::info;
@@ -36,7 +36,7 @@ pub struct GraphRep {
     inner: RustGraph,
     is_init: Arc<AtomicBool>,
     cyto_id: Arc<String>,
-    new_card_hook: Option<Arc<Box<dyn Fn(Arc<Card<AnyType>>)>>>,
+    new_card_hook: Option<Arc<Box<dyn Fn(Arc<Card>)>>>,
     label: Option<Signal<String>>,
     scope: Arc<AtomicUsize>,
 }
@@ -64,7 +64,7 @@ impl GraphRep {
         utils::rect(&self.cyto_id)
     }
 
-    pub fn with_hook(mut self, hook: Arc<Box<dyn Fn(Arc<Card<AnyType>>)>>) -> Self {
+    pub fn with_hook(mut self, hook: Arc<Box<dyn Fn(Arc<Card>)>>) -> Self {
         self.new_card_hook = Some(hook);
         self
     }
@@ -98,7 +98,7 @@ impl GraphRep {
         );
     }
 
-    pub fn new_set_card(&self, card: Arc<Card<AnyType>>) {
+    pub fn new_set_card(&self, card: Arc<Card>) {
         self.new_set_card_id(card.id());
     }
 

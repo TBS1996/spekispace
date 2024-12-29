@@ -6,7 +6,7 @@ use incread::inc_path;
 use review::{review_menu, view_card};
 use speki_core::{current_time, App, TimeProvider};
 use speki_core::{
-    AnyType, Attribute, AttributeCard, BackSide, CType, Card, CardId, ClassCard, EventCard,
+    CardType, Attribute, AttributeCard, BackSide, CType, Card, CardId, ClassCard, EventCard,
     InstanceCard, NormalCard, SimpleRecall, StatementCard, TimeStamp, UnfinishedCard,
 };
 use utils::{
@@ -142,13 +142,13 @@ pub fn get_timestamp(front: &str) -> TimeStamp {
     }
 }
 
-pub async fn create_card(ty: CType, app: &App) -> Option<Card<AnyType>> {
+pub async fn create_card(ty: CType, app: &App) -> Option<Card> {
     let ty = create_type(ty, app).await?;
     Some(app.new_any(ty).await)
 }
 
-pub async fn create_type(ty: CType, app: &App) -> Option<AnyType> {
-    let any: AnyType = match ty {
+pub async fn create_type(ty: CType, app: &App) -> Option<CardType> {
+    let any: CardType = match ty {
         CType::Instance => new_instance(app).await?.into(),
         CType::Normal => new_normal()?.into(),
         CType::Unfinished => new_unfinished()?.into(),
@@ -255,7 +255,7 @@ async fn print_card_info(app: &App, id: CardId) {
     let card = app.load_card(id).await.unwrap();
     let dependencies = card.dependency_ids().await;
 
-    if let AnyType::Instance(ty) = card.card_type() {
+    if let CardType::Instance(ty) = card.card_type() {
         let concept = app.load_card(ty.class).await.unwrap().print().await;
         println!("concept: {}", concept);
     }
