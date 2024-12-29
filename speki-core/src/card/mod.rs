@@ -8,6 +8,7 @@ use std::time::Duration;
 use async_trait::async_trait;
 use core::f32;
 use dioxus_logger::tracing::instrument;
+use futures::executor::block_on;
 use samsvar::json;
 use samsvar::Matcher;
 use serializing::from_any;
@@ -297,8 +298,6 @@ impl Debug for Card {
     }
 }
 
-use futures::executor::block_on;
-
 impl std::fmt::Display for Card {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", block_on(self.ty.display_front()))
@@ -338,12 +337,6 @@ impl Card {
         self.clone().into()
     }
 
-    pub async fn update_with_raw(&mut self, raw: RawCard) {
-        assert_eq!(self.id.into_inner(), raw.id);
-        *self = Self::from_raw(raw, self.card_provider.clone(), self.recaller.clone()).await;
-        self.persist().await;
-    }
-
     pub async fn add_review(&mut self, recall: Recall) {
         let review = Review {
             timestamp: self.time_provider().current_time(),
@@ -353,40 +346,6 @@ impl Card {
 
         self.history.0.push(review);
         self.persist().await;
-    }
-
-    pub fn override_reviews(&mut self, reviews: Vec<Review>) {
-        self.history = Reviews(reviews);
-    }
-
-    pub async fn should_review(&self) -> bool {
-        if self.recall_rate().unwrap_or_default() > 0.8 {
-            return false;
-        }
-
-        /*
-        if self.min_rec_recall_rate().await < 0.8 {
-            return false;
-        }
-        */
-
-        if self.is_suspended() {
-            return false;
-        }
-
-        if self.lapses_last_day() > 2 {
-            return false;
-        }
-
-        if self.lapses_last_week() > 5 {
-            return false;
-        }
-
-        if self.lapses_last_month() > 7 {
-            return false;
-        }
-
-        true
     }
 
     pub fn time_provider(&self) -> TimeGetter {
@@ -486,11 +445,6 @@ impl Card {
         self.ty.remove_dep(dependency);
         self.persist().await;
         res
-    }
-
-    pub async fn refresh(self) -> Arc<Self> {
-        info!("refreshing card: {}", self.id);
-        self.card_provider.load(self.id).await.unwrap()
     }
 
     pub async fn add_dependency(&mut self, dependency: CardId) {
@@ -629,21 +583,9 @@ impl Card {
             }),
         })
     }
-}
 
-impl Card {
     pub fn history(&self) -> &Reviews {
         &self.history
-    }
-
-    pub async fn save_new_reviews(&self) {
-        if self.history.is_empty() {
-            return;
-        }
-
-        self.card_provider
-            .save_reviews(self.id, self.history.clone())
-            .await;
     }
 
     fn current_time(&self) -> Duration {
