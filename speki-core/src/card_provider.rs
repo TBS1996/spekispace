@@ -1,7 +1,5 @@
 use crate::{
-    card::{serializing::into_any, RecallRate},
-    reviews::Reviews,
-    AnyType, Attribute, Card, Provider, Recaller, TimeGetter,
+    card::RecallRate, reviews::Reviews, AnyType, Attribute, Card, Provider, Recaller, TimeGetter,
 };
 use dioxus_logger::tracing::{info, trace};
 use speki_dto::{AttributeId, CardId, RawCard, Review};
@@ -149,8 +147,8 @@ impl CardProvider {
                 min_rec_recall: None,
             };
 
-            rev_caches.insert(entry.card.id, reventry);
-            cards.insert(entry.card.id, entry);
+            rev_caches.insert(entry.card.id(), reventry);
+            cards.insert(entry.card.id(), entry);
         }
 
         let mut guard = self.inner.write().unwrap();
@@ -278,26 +276,10 @@ impl CardProvider {
         trace!("load uncached");
         let raw_card = self.provider.load_card(id).await?;
 
-        if raw_card.deleted {
-            return None;
-        }
-
         let reviews = self.provider.load_reviews(id).await;
-        let history = Reviews(reviews);
-        let data = into_any(raw_card.data, self);
-        let last_modified = self.provider.last_modified_card(id).await;
 
-        let card = Card::<AnyType> {
-            id,
-            data,
-            dependencies: raw_card.dependencies.into_iter().map(CardId).collect(),
-            tags: raw_card.tags,
-            history,
-            suspended: crate::card::IsSuspended::from(raw_card.suspended),
-            card_provider: self.clone(),
-            recaller: self.recaller.clone(),
-            last_modified,
-        };
+        let card =
+            Card::from_raw_with_reviews(raw_card, self.clone(), self.recaller.clone(), reviews);
 
         Some(card)
     }
@@ -331,7 +313,7 @@ impl CardProvider {
         trace!("updating cache dependents");
         let mut guard = self.inner.write().unwrap();
         for dep in card.dependency_ids().await {
-            guard.dependents.entry(dep).or_default().insert(card.id);
+            guard.dependents.entry(dep).or_default().insert(card.id());
         }
     }
 
@@ -366,14 +348,14 @@ impl CardProvider {
     }
 
     fn update_cache(&self, card: Arc<Card<AnyType>>) {
-        trace!("updating cache for card: {}", card.id);
+        trace!("updating cache for card: {}", card.id());
         let now = self.time_provider.current_time();
         let mut guard = self.inner.write().unwrap();
-        let id = card.id;
+        let id = card.id();
 
         let cached_reviews = RevCache {
             fetched: now,
-            review: card.history.clone(),
+            review: card.history().clone(),
         };
         let cached_card = CardCache {
             fetched: now,

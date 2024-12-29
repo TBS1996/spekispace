@@ -415,7 +415,7 @@ impl ReviewState {
                 .load_all(filter.clone())
                 .await
                 .into_iter()
-                .map(|card| card.id),
+                .map(|card| card.id()),
         );
 
         if let Some(dep) = self.dependents.selected_card().cloned() {
@@ -462,7 +462,7 @@ impl ReviewState {
     async fn refresh(&self) {
         info!("refreshing!");
         if let Some(card) = self.card.cloned() {
-            let card = APP.read().load_card(card.id).await;
+            let card = APP.read().load_card(card.id()).await;
             self.graph.new_set_card(card.clone().into());
 
             let mut deps = vec![];

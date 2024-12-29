@@ -106,7 +106,7 @@ impl App {
 
     pub async fn save_card(&self, card: Card<AnyType>) {
         self.card_provider
-            .save_reviews(card.id, card.history.clone())
+            .save_reviews(card.id(), card.history().clone())
             .await;
 
         self.card_provider.save_card(card).await;
@@ -248,7 +248,7 @@ impl App {
             .filtered_load(filter)
             .await
             .into_iter()
-            .map(|card| card.id)
+            .map(|card| card.id())
             .collect()
     }
 
@@ -279,7 +279,7 @@ impl App {
     pub async fn new_from_raw(&self, raw: RawCard) -> Arc<Card<AnyType>> {
         let mut card = Card::from_raw(raw, self.card_provider.clone(), self.recaller.clone()).await;
         card.persist().await;
-        self.card_provider.load(card.id).await.unwrap()
+        self.card_provider.load(card.id()).await.unwrap()
     }
 
     pub async fn new_any(&self, any: impl Into<AnyType>) -> Card<AnyType> {

@@ -99,7 +99,7 @@ impl GraphRep {
     }
 
     pub fn new_set_card(&self, card: Arc<Card<AnyType>>) {
-        self.new_set_card_id(card.id);
+        self.new_set_card_id(card.id());
     }
 
     async fn set_card(&self, origin: Node) {

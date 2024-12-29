@@ -138,7 +138,7 @@ impl NodeMetadata {
         let ty = card.card_type().fieldless();
 
         Self {
-            id: NodeId::new_from_card(card.id),
+            id: NodeId::new_from_card(card.id()),
             label,
             color,
             ty,
@@ -178,7 +178,8 @@ impl Node {
                 .load_card(*id)
                 .await
                 .unwrap()
-                .dependencies
+                .dependency_ids()
+                .await
                 .into_iter()
                 .map(|id| NodeId::Card(id.into_inner()))
                 .collect(),

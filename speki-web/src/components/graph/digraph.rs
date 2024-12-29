@@ -48,7 +48,7 @@ impl RustGraph {
 
                 for dep in card.dependents().await {
                     info!("adding dependent to origin: {dep:?}");
-                    dependents.push(Node::Card(dep.id));
+                    dependents.push(Node::Card(dep.id()));
                 }
 
                 let node = NodeMetadata::from_card(card, true).await;

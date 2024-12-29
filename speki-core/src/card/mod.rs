@@ -258,15 +258,15 @@ impl CardTrait for AnyType {
 /// Also, every time you mutate it, call the persist() method.
 #[derive(Clone)]
 pub struct Card<T: CardTrait + ?Sized> {
-    pub id: CardId,
-    pub data: T,
-    pub dependencies: BTreeSet<CardId>,
-    pub tags: BTreeMap<String, String>,
-    pub history: Reviews,
-    pub suspended: IsSuspended,
-    pub card_provider: CardProvider,
-    pub recaller: Recaller,
-    pub last_modified: Duration,
+    id: CardId,
+    data: T,
+    dependencies: BTreeSet<CardId>,
+    tags: BTreeMap<String, String>,
+    history: Reviews,
+    suspended: IsSuspended,
+    card_provider: CardProvider,
+    recaller: Recaller,
+    last_modified: Duration,
 }
 
 impl<T: CardTrait + ?Sized> PartialEq for Card<T> {

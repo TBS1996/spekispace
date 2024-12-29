@@ -15,7 +15,7 @@ pub async fn unfinished(app: &App) {
     cards.shuffle(&mut rand::thread_rng());
 
     for card in cards {
-        let card_id = card.id;
+        let card_id = card.id();
         loop {
             let front = app.load_card(card_id).await.unwrap().print().await;
             clear_terminal();

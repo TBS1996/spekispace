@@ -251,7 +251,7 @@ async fn handle_action(app: &App, card: CardId, action: CardAction) -> ControlFl
         CardAction::NewDependency => {
             println!("add dependency");
             if let Some(new_card) = add_any_card(app).await {
-                app.load_card(card.id)
+                app.load_card(card.id())
                     .await
                     .unwrap()
                     .add_dependency(new_card)
@@ -273,7 +273,7 @@ async fn handle_action(app: &App, card: CardId, action: CardAction) -> ControlFl
                 app.load_card(new_card)
                     .await
                     .unwrap()
-                    .add_dependency(card.id)
+                    .add_dependency(card.id())
                     .await;
             }
         }
@@ -282,7 +282,7 @@ async fn handle_action(app: &App, card: CardId, action: CardAction) -> ControlFl
                 app.load_card(dep)
                     .await
                     .unwrap()
-                    .add_dependency(card.id)
+                    .add_dependency(card.id())
                     .await;
             }
         }

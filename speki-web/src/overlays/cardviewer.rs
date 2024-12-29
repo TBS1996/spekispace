@@ -137,7 +137,7 @@ impl CardViewer {
     pub async fn new_from_card(card: Arc<Card<AnyType>>, graph: GraphRep) -> Self {
         let meta = NodeMetadata::from_card(card.clone(), true).await;
 
-        let tempnode = TempNode::Old(card.id);
+        let tempnode = TempNode::Old(card.id());
         let filter = move |ty: AnyType| ty.is_class();
 
         let raw = card.to_raw();
@@ -175,7 +175,7 @@ impl CardViewer {
                 let front = _front.clone();
                 let meta = _meta.clone();
                 let deps = dependencies.clone();
-                deps.clone().write().push(card.id);
+                deps.clone().write().push(card.id());
                 refresh_graph(graph, front, deps, dependents.clone(), Some(meta));
             }));
         let _front = frnt.clone();
@@ -187,7 +187,7 @@ impl CardViewer {
                 let front = _front.clone();
                 let deps = dependencies.clone();
                 let meta = _meta.clone();
-                deps.clone().write().retain(|dep| *dep != card.id);
+                deps.clone().write().retain(|dep| *dep != card.id());
                 refresh_graph(graph, front, deps, dependents.clone(), Some(meta));
             }));
 
@@ -227,7 +227,7 @@ impl CardViewer {
                 let graph = _graph.clone();
                 let front = _front.clone();
                 let deps = dependencies.clone();
-                deps.clone().write().push(card.id);
+                deps.clone().write().push(card.id());
                 refresh_graph(graph, front, deps, dependents.clone(), None);
             }));
 
@@ -238,7 +238,7 @@ impl CardViewer {
                 let graph = _graph.clone();
                 let front = _front.clone();
                 let deps = dependencies.clone();
-                deps.clone().write().retain(|dep| *dep != card.id);
+                deps.clone().write().retain(|dep| *dep != card.id());
                 refresh_graph(graph, front, deps, dependents.clone(), None);
             }));
 
@@ -387,12 +387,12 @@ impl CardViewer {
                     let selv2 = selv.clone();
 
                     let fun = move |card: Arc<Card<AnyType>>| {
-                        selv.dependencies.clone().write().push(card.id);
+                        selv.dependencies.clone().write().push(card.id());
                         selv.set_graph();
                         let old_card = selv.old_card.cloned();
                         spawn(async move {
                             if let Some(old_card) = old_card {
-                                Arc::unwrap_or_clone(old_card).add_dependency(card.id).await;
+                                Arc::unwrap_or_clone(old_card).add_dependency(card.id()).await;
                             }
                         });
                     };
@@ -440,7 +440,7 @@ impl CardViewer {
                             let mut new_raw = speki_core::card::new_raw_card(card.ty);
 
                             if let Some(card) = selveste.old_card.cloned() {
-                                new_raw.id = card.id.into_inner();
+                                new_raw.id = card.id().into_inner();
                             }
 
                             selv.is_done.clone().set(true);
@@ -527,7 +527,7 @@ impl CardViewer {
             }
             div {
                 if let Some(card) = self.old_card.cloned() {
-                    {self.delete(card.id)}
+                    {self.delete(card.id())}
 
                 }
                 { self.add_dep() }

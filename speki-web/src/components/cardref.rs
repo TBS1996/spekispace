@@ -136,7 +136,7 @@ impl CardRef {
     }
 
     pub async fn set_ref(&self, card: Arc<Card<AnyType>>) {
-        let id = card.id;
+        let id = card.id();
         self.card.clone().set(Some(id));
         let display = card.print().await;
         self.display.clone().set(display);
