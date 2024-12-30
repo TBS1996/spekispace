@@ -7,10 +7,10 @@ use card::RecallRate;
 use card_provider::CardProvider;
 use dioxus_logger::tracing::info;
 use eyre::Result;
-use reviews::Reviews;
 use samsvar::Matcher;
 use samsvar::Schema;
 use speki_dto::AttributeId;
+use speki_dto::History;
 use speki_dto::RawCard;
 use speki_dto::SpekiProvider;
 use tracing::trace;
@@ -22,7 +22,6 @@ pub mod card;
 mod card_provider;
 mod common;
 mod recall_rate;
-pub mod reviews;
 
 pub use attribute::Attribute;
 pub use card::Card;
@@ -38,7 +37,7 @@ pub use speki_dto::CType;
 pub use speki_dto::CardId;
 
 pub trait RecallCalc {
-    fn recall_rate(&self, reviews: &Reviews, current_unix: Duration) -> Option<RecallRate>;
+    fn recall_rate(&self, reviews: &History, current_unix: Duration) -> Option<RecallRate>;
 }
 
 pub trait TimeProvider {

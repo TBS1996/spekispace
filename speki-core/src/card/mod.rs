@@ -16,6 +16,7 @@ use serializing::into_any;
 use speki_dto::BackSide;
 use speki_dto::CType;
 use speki_dto::CardId;
+use speki_dto::History;
 use speki_dto::RawCard;
 use speki_dto::Recall;
 use speki_dto::Review;
@@ -23,7 +24,6 @@ use tracing::info;
 
 use crate::card_provider::CardProvider;
 use crate::recall_rate::SimpleRecall;
-use crate::reviews::Reviews;
 use crate::RecallCalc;
 use crate::Recaller;
 use crate::TimeGetter;
@@ -259,7 +259,7 @@ pub struct Card {
     ty: CardType,
     dependencies: BTreeSet<CardId>,
     tags: BTreeMap<String, String>,
-    history: Reviews,
+    history: History,
     suspended: IsSuspended,
     card_provider: CardProvider,
     recaller: Recaller,
@@ -344,7 +344,7 @@ impl Card {
             time_spent: Default::default(),
         };
 
-        self.history.0.push(review);
+        self.history.push(review);
         self.persist().await;
     }
 
@@ -376,7 +376,7 @@ impl Card {
         raw_card: RawCard,
         card_provider: CardProvider,
         recaller: Recaller,
-        reviews: Vec<Review>,
+        history: History,
     ) -> Card {
         let id = raw_card.id;
 
@@ -385,7 +385,7 @@ impl Card {
             ty: into_any(raw_card.data, &card_provider),
             dependencies: raw_card.dependencies,
             tags: raw_card.tags,
-            history: Reviews(reviews),
+            history,
             suspended: IsSuspended::from(raw_card.suspended),
             card_provider,
             recaller,
@@ -401,7 +401,7 @@ impl Card {
         let id = raw_card.id;
         let reviews = card_provider.load_reviews(id).await;
 
-        Self::from_raw_with_reviews(raw_card, card_provider, recaller, reviews.0)
+        Self::from_raw_with_reviews(raw_card, card_provider, recaller, reviews)
     }
 
     pub fn card_type(&self) -> &CardType {
@@ -584,7 +584,7 @@ impl Card {
         })
     }
 
-    pub fn history(&self) -> &Reviews {
+    pub fn history(&self) -> &History {
         &self.history
     }
 
@@ -593,11 +593,7 @@ impl Card {
     }
 
     fn time_passed_since_last_review(&self) -> Option<Duration> {
-        if self.current_time() < self.history.0.last()?.timestamp {
-            return Duration::default().into();
-        }
-
-        Some(self.current_time() - self.history.0.last()?.timestamp)
+        self.history.time_since_last_review(self.current_time())
     }
 
     pub fn recall_rate_at(&self, current_unix: Duration) -> Option<RecallRate> {
@@ -645,10 +641,6 @@ impl Card {
 
     pub async fn print(&self) -> String {
         self.ty.display_front().await
-    }
-
-    pub fn reviews(&self) -> &Vec<Review> {
-        &self.history.0
     }
 
     pub fn is_pending(&self) -> bool {

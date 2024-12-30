@@ -1,22 +1,22 @@
 use std::time::Duration;
 
-use speki_dto::Recall;
+use speki_dto::{History, Recall};
 
-use crate::{card::RecallRate, reviews::Reviews, RecallCalc};
+use crate::{card::RecallRate, RecallCalc};
 
 pub struct SimpleRecall;
 
 impl RecallCalc for SimpleRecall {
-    fn recall_rate(&self, reviews: &Reviews, current_unix: Duration) -> Option<RecallRate> {
+    fn recall_rate(&self, reviews: &History, current_unix: Duration) -> Option<RecallRate> {
         simple_recall_rate(reviews, current_unix)
     }
 }
 
-fn simple_recall_rate(reviews: &Reviews, current_unix: Duration) -> Option<RecallRate> {
+fn simple_recall_rate(reviews: &History, current_unix: Duration) -> Option<RecallRate> {
     let days_passed = reviews.time_since_last_review(current_unix)?;
     let stability = stability(reviews)?;
     let randomized_stability =
-        randomize_factor(stability.as_secs_f32(), reviews.0.last().unwrap().timestamp);
+        randomize_factor(stability.as_secs_f32(), reviews.last().unwrap().timestamp);
     let stability = Duration::from_secs_f32(randomized_stability);
     Some(calculate_recall_rate(&days_passed, &stability))
 }
@@ -55,8 +55,8 @@ fn new_stability(
     }
 }
 
-fn stability(reviews: &Reviews) -> Option<Duration> {
-    let reviews = &reviews.0;
+fn stability(reviews: &History) -> Option<Duration> {
+    let reviews = reviews.inner();
     if reviews.is_empty() {
         return None;
     }

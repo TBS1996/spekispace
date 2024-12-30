@@ -16,6 +16,91 @@ pub enum Cty {
     Card,
 }
 
+#[derive(Ord, PartialOrd, Eq, PartialEq, Hash, Clone, Debug, Deserialize, Serialize)]
+pub struct History {
+    id: Uuid,
+    reviews: Vec<Review>,
+}
+
+impl History {
+    pub fn inner(&self) -> &Vec<Review> {
+        &self.reviews
+    }
+
+    pub fn last(&self) -> Option<Review> {
+        self.reviews.last().cloned()
+    }
+
+    pub fn lapses_since(&self, dur: Duration, current_time: Duration) -> u32 {
+        let since = current_time - dur;
+        self.reviews
+            .iter()
+            .fold(0, |lapses, review| match review.grade {
+                Recall::None | Recall::Late => {
+                    if review.timestamp < since {
+                        0
+                    } else {
+                        lapses + 1
+                    }
+                }
+                Recall::Some | Recall::Perfect => 0,
+            })
+    }
+
+    pub fn lapses(&self) -> u32 {
+        self.reviews
+            .iter()
+            .fold(0, |lapses, review| match review.grade {
+                Recall::None | Recall::Late => lapses + 1,
+                Recall::Some | Recall::Perfect => 0,
+            })
+    }
+
+    pub fn time_since_last_review(&self, current_unix: Duration) -> Option<Duration> {
+        let last = self.reviews.last()?;
+        Some(current_unix - last.timestamp)
+    }
+
+    pub fn len(&self) -> usize {
+        self.reviews.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
+    pub fn new(id: CardId) -> Self {
+        Self {
+            id,
+            reviews: vec![],
+        }
+    }
+
+    pub fn push(&mut self, review: Review) {
+        self.reviews.push(review);
+    }
+
+    pub fn insert_many(&mut self, reviews: impl IntoIterator<Item = Review>) {
+        self.reviews.extend(reviews);
+        self.reviews.sort_by_key(|r| r.timestamp);
+        self.reviews.dedup();
+    }
+
+    pub fn merge_into(&mut self, other: Self) {
+        self.insert_many(other.reviews);
+    }
+}
+
+#[derive(Ord, PartialOrd, Eq, PartialEq, Hash, Clone, Debug, Default, Deserialize, Serialize)]
+pub struct Review {
+    // When (unix time) did the review take place?
+    pub timestamp: Duration,
+    // Recall grade.
+    pub grade: Recall,
+    // How long you spent before attempting recall.
+    pub time_spent: Duration,
+}
+
 #[derive(Debug, Deserialize, Clone)]
 pub struct Record {
     pub content: String,
@@ -49,11 +134,11 @@ pub trait SpekiProvider: Sync {
 
     async fn delete_content(&self, id: Uuid, ty: Cty);
 
-    async fn load_all_reviews(&self) -> HashMap<Uuid, Vec<Review>> {
+    async fn load_all_reviews(&self) -> HashMap<Uuid, History> {
         self.load_all_records(Cty::Review)
             .await
             .into_iter()
-            .map(|rev| (rev.0, parse_review(rev.1.content)))
+            .map(|rev| (rev.0, parse_history(rev.1.content, rev.0)))
             .collect()
     }
 
@@ -120,27 +205,16 @@ pub trait SpekiProvider: Sync {
         self.delete_content(id, Cty::Attribute).await;
     }
 
-    async fn load_reviews(&self, id: CardId) -> Vec<Review> {
+    async fn load_reviews(&self, id: CardId) -> History {
         let Some(s) = self.load_content(id, Cty::Review).await else {
-            return vec![];
+            return History::new(id);
         };
 
-        parse_review(s)
+        parse_history(s, id)
     }
 
-    async fn save_reviews(&self, id: CardId, reviews: Vec<Review>) {
-        let mut s = String::new();
-        for r in reviews {
-            let stamp = r.timestamp.as_secs().to_string();
-            let grade = match r.grade {
-                Recall::None => "1",
-                Recall::Late => "2",
-                Recall::Some => "3",
-                Recall::Perfect => "4",
-            };
-            s.push_str(&format!("{} {}\n", stamp, grade));
-        }
-
+    async fn save_reviews(&self, id: CardId, reviews: History) {
+        let s = toml::to_string(&reviews).unwrap();
         self.save_content(Cty::Review, id, s).await;
     }
 
@@ -239,9 +313,9 @@ pub trait SpekiProvider: Sync {
         info!("REVIEW SYNCING");
 
         info!("loading self reviews");
-        let mut map1: HashMap<Uuid, Vec<Review>> = self.load_all_reviews().await;
+        let mut map1: HashMap<Uuid, History> = self.load_all_reviews().await;
         info!("loading other reviews");
-        let mut map2: HashMap<Uuid, Vec<Review>> = other.load_all_reviews().await;
+        let mut map2: HashMap<Uuid, History> = other.load_all_reviews().await;
 
         for id in &ids {
             info!("syncing review");
@@ -261,9 +335,7 @@ pub trait SpekiProvider: Sync {
 
                     let combined = {
                         let mut cmb = rev1.clone();
-                        cmb.extend(rev2);
-                        cmb.dedup();
-                        cmb.sort_by_key(|rev| rev.timestamp);
+                        cmb.merge_into(rev2);
                         cmb
                     };
 
@@ -318,6 +390,17 @@ pub trait SpekiProvider: Sync {
                     }
                 }
             }
+        }
+    }
+}
+
+fn parse_history(s: String, id: Uuid) -> History {
+    if let Ok(history) = toml::from_str(&s) {
+        history
+    } else {
+        History {
+            id,
+            reviews: parse_review(s),
         }
     }
 }
@@ -551,16 +634,6 @@ pub struct AttributeDTO {
 }
 
 pub type AttributeId = Uuid;
-
-#[derive(Ord, PartialOrd, Eq, PartialEq, Hash, Clone, Debug, Default)]
-pub struct Review {
-    // When (unix time) did the review take place?
-    pub timestamp: Duration,
-    // Recall grade.
-    pub grade: Recall,
-    // How long you spent before attempting recall.
-    pub time_spent: Duration,
-}
 
 #[derive(
     Ord, PartialOrd, Eq, PartialEq, Hash, Deserialize, Serialize, Debug, Default, Clone, Copy,

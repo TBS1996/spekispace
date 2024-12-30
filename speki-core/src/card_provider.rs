@@ -1,6 +1,6 @@
-use crate::{card::RecallRate, reviews::Reviews, Attribute, Card, Provider, Recaller, TimeGetter};
+use crate::{card::RecallRate, Attribute, Card, Provider, Recaller, TimeGetter};
 use dioxus_logger::tracing::{info, trace};
-use speki_dto::{AttributeId, CardId, RawCard, Review};
+use speki_dto::{AttributeId, CardId, History, RawCard, Review};
 use std::future::Future;
 use std::pin::Pin;
 use std::{
@@ -128,7 +128,9 @@ impl CardProvider {
         let fetched = self.time_provider.current_time();
 
         for card in raw_cards {
-            let rev = reviews.remove(&card.id).unwrap_or_default();
+            let rev = reviews
+                .remove(&card.id)
+                .unwrap_or_else(|| History::new(card.id));
             let card =
                 Card::from_raw_with_reviews(card, self.clone(), self.recaller.clone(), rev.clone());
             let card = Arc::new(card);
@@ -136,7 +138,7 @@ impl CardProvider {
 
             let reventry = RevCache {
                 fetched,
-                review: Reviews(rev),
+                review: rev,
             };
 
             let entry = CardCache {
@@ -230,12 +232,12 @@ impl CardProvider {
             .await
             .map(|dto| Attribute::from_dto(dto, self.clone(), modified))
     }
-    pub async fn load_reviews(&self, id: CardId) -> Reviews {
-        Reviews(self.provider.load_reviews(id).await)
+    pub async fn load_reviews(&self, id: CardId) -> History {
+        self.provider.load_reviews(id).await
     }
 
-    pub async fn save_reviews(&self, id: CardId, reviews: Reviews) {
-        self.provider.save_reviews(id, reviews.into_inner()).await;
+    pub async fn save_reviews(&self, id: CardId, reviews: History) {
+        self.provider.save_reviews(id, reviews).await;
     }
 
     pub async fn add_review(&self, id: CardId, review: Review) {
@@ -282,7 +284,7 @@ impl CardProvider {
         Some(card)
     }
 
-    async fn load_cached_reviews(&self, id: CardId) -> Option<Reviews> {
+    async fn load_cached_reviews(&self, id: CardId) -> Option<History> {
         trace!("attempting review cache load for: {}", id);
         let guard = self.inner.read().unwrap();
         let cached = match guard.reviews.get(&id) {
@@ -389,7 +391,7 @@ struct CardCache {
 
 struct RevCache {
     fetched: Duration,
-    review: Reviews,
+    review: History,
 }
 
 type DepCache = HashSet<CardId>;
