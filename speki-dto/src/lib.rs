@@ -141,6 +141,21 @@ trait Item {
             MergeRes::Neither
         }
     }
+
+    fn into_record(self) -> Record
+    where
+        Self: Sized,
+    {
+        let id = self.id().to_string();
+        let last_modified = self.last_modified().as_secs();
+        let content = self.serialize();
+
+        Record {
+            id,
+            content,
+            last_modified,
+        }
+    }
 }
 
 enum MergeRes<T> {
@@ -237,6 +252,7 @@ pub struct Review {
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct Record {
+    pub id: String,
     pub content: String,
     pub last_modified: u64,
 }
@@ -264,7 +280,7 @@ pub trait SpekiProvider: Sync {
             .collect()
     }
 
-    async fn save_content(&self, ty: Cty, id: Uuid, content: String);
+    async fn save_content(&self, ty: Cty, record: Record);
 
     async fn delete_content(&self, id: Uuid, ty: Cty);
 
@@ -292,8 +308,8 @@ pub trait SpekiProvider: Sync {
     }
 
     async fn save_card(&self, card: RawCard) {
-        self.save_content(Cty::Card, card.id, toml::to_string(&card).unwrap())
-            .await;
+        let record = card.into_record();
+        self.save_content(Cty::Card, record).await;
     }
 
     async fn load_card(&self, id: CardId) -> Option<RawCard> {
@@ -321,12 +337,8 @@ pub trait SpekiProvider: Sync {
     }
 
     async fn save_attribute(&self, attribute: AttributeDTO) {
-        self.save_content(
-            Cty::Attribute,
-            attribute.id,
-            toml::to_string(&attribute).unwrap(),
-        )
-        .await;
+        self.save_content(Cty::Attribute, attribute.into_record())
+            .await;
     }
 
     async fn load_attribute(&self, id: AttributeId) -> Option<AttributeDTO> {
@@ -348,9 +360,7 @@ pub trait SpekiProvider: Sync {
     }
 
     async fn save_reviews(&self, reviews: History) {
-        let id = reviews.id;
-        let s = toml::to_string(&reviews).unwrap();
-        self.save_content(Cty::Review, id, s).await;
+        self.save_content(Cty::Review, reviews.into_record()).await;
     }
 
     async fn load_config(&self) -> Config;

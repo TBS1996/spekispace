@@ -52,8 +52,10 @@ fn load_record_from_path(path: &Path) -> Option<Record> {
         return None;
     }
     let content = fs::read_to_string(&path).unwrap();
+    let id = path.file_name().unwrap().to_str().unwrap().to_string();
     let last_modified = last_modified_path(path).unwrap().as_secs();
     Some(Record {
+        id,
         content,
         last_modified,
     })
@@ -92,8 +94,11 @@ impl SpekiProvider for FileProvider {
         out
     }
 
-    async fn save_content(&self, ty: Cty, id: Uuid, content: String) {
-        let path = file_path(ty, id);
+    async fn save_content(&self, ty: Cty, record: Record) {
+        let id = record.id;
+        let content = record.content;
+
+        let path = file_path(ty, id.parse().unwrap());
         let mut file = fs::File::create(path).unwrap();
         file.write_all(&mut content.as_bytes()).unwrap();
     }

@@ -35,10 +35,11 @@ impl SpekiProvider for DexieProvider {
         deleteContent(&cty_as_jsvalue(ty), &id);
     }
 
-    async fn save_content(&self, ty: Cty, id: Uuid, content: String) {
-        let id = JsValue::from_str(&id.to_string());
-        let content = JsValue::from_str(&content);
-        saveContent(&cty_as_jsvalue(ty), &id, &content);
+    async fn save_content(&self, ty: Cty, record: Record) {
+        let id = JsValue::from_str(&record.id.to_string());
+        let content = JsValue::from_str(&record.content);
+        let last_modified = JsValue::from_str(&record.last_modified.to_string());
+        saveContent(&cty_as_jsvalue(ty), &id, &content, &last_modified);
     }
 
     async fn load_card_ids(&self) -> Vec<CardId> {
@@ -59,7 +60,7 @@ extern "C" {
     fn loadRecord(table: &JsValue, id: &JsValue) -> Promise;
     fn loadAllRecords(table: &JsValue) -> Promise;
 
-    fn saveContent(table: &JsValue, id: &JsValue, content: &JsValue);
+    fn saveContent(table: &JsValue, id: &JsValue, content: &JsValue, last_modified: &JsValue);
     fn deleteContent(table: &JsValue, id: &JsValue);
     fn loadAllIds(table: &JsValue) -> Promise;
 }

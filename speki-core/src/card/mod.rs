@@ -768,6 +768,7 @@ mod tests {
             };
 
             let record = Record {
+                id: id.to_string(),
                 content: s,
                 last_modified: self.time.current_time().as_secs(),
             };
@@ -812,8 +813,8 @@ mod tests {
             self.get_all(ty)
         }
 
-        async fn save_content(&self, ty: Cty, id: Uuid, content: String) {
-            self.save(ty, id, content);
+        async fn save_content(&self, ty: Cty, record: Record) {
+            self.save(ty, record.id.parse().unwrap(), record.content);
         }
 
         async fn delete_content(&self, id: Uuid, ty: Cty) {

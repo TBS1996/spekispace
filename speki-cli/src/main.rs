@@ -6,7 +6,7 @@ use incread::inc_path;
 use review::{review_menu, view_card};
 use speki_core::{current_time, App, TimeProvider};
 use speki_core::{
-    CardType, Attribute, AttributeCard, BackSide, CType, Card, CardId, ClassCard, EventCard,
+    Attribute, AttributeCard, BackSide, CType, Card, CardId, CardType, ClassCard, EventCard,
     InstanceCard, NormalCard, SimpleRecall, StatementCard, TimeStamp, UnfinishedCard,
 };
 use utils::{
@@ -328,7 +328,6 @@ async fn main() {
     } else if cli.recall.is_some() {
         let id = cli.recall.unwrap();
         let id: uuid::Uuid = id.parse().unwrap();
-        let id = CardId(id);
         let x = app.load_card(id).await.unwrap().recall_rate();
         dbg!(x);
     } else if cli.concept.is_some() {

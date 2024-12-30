@@ -47,6 +47,7 @@ export async function loadRecord(userId, tableName, contentId) {
 
   const data = docSnap.data();
   return {
+    id: docSnap.id,
     content: data.content,
     last_modified: data.lastModified ? Math.floor(data.lastModified.toMillis() / 1000) : null 
   };
@@ -84,12 +85,12 @@ export async function loadAllIds(userId, tableName) {
   return querySnapshot.docs.map(doc => doc.id);
 }
 
-export async function saveContent(userId, tableName, contentId, content) {
+export async function saveContent(userId, tableName, contentId, content, lastModified) {
     const docRef = doc(db, `users/${userId}/${tableName}`, contentId);
     await setDoc(docRef, {
         id: contentId,
         content,
-        lastModified: serverTimestamp()
+        lastModified
     }, { merge: true });
 }
 

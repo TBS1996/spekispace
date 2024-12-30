@@ -164,8 +164,11 @@ impl SpekiProvider for BrowserFsProvider {
         js::load_all_files(self.folder_path(ty)).await
     }
 
-    async fn save_content(&self, ty: Cty, id: Uuid, content: String) {
-        js::save_file(self.content_path(ty, id), &content);
+    async fn save_content(&self, ty: Cty, record: Record) {
+        js::save_file(
+            self.content_path(ty, record.id.parse().unwrap()),
+            &record.content,
+        );
     }
 
     async fn load_content(&self, id: Uuid, ty: Cty) -> Option<String> {
