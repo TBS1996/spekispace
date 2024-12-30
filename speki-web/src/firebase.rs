@@ -4,6 +4,7 @@ use gloo_utils::format::JsValueSerdeExt;
 use js_sys::{Object, Promise};
 use serde_json::Value;
 use speki_dto::{Config, Cty, Record, SpekiProvider};
+use tracing::info;
 use uuid::Uuid;
 use wasm_bindgen::prelude::*;
 
@@ -34,27 +35,21 @@ impl FirestoreProvider {
 
 use std::time::Duration;
 
-pub fn duration_to_firestore_timestamp(duration: Duration) -> JsValue {
-    // Create a new JavaScript object
-    let obj = Object::new();
-
-    // Add "seconds" field from the `Duration`
+fn duration_to_firestore_jsvalue(duration: Duration) -> JsValue {
+    let obj = js_sys::Object::new();
     js_sys::Reflect::set(
         &obj,
         &JsValue::from("seconds"),
-        &JsValue::from(duration.as_secs() as i64), // Firestore expects `seconds` as i64
+        &JsValue::from_f64(duration.as_secs() as f64),
     )
     .unwrap();
-
-    // Add "nanos" field from the `Duration`
     js_sys::Reflect::set(
         &obj,
         &JsValue::from("nanos"),
-        &JsValue::from(duration.subsec_nanos() as i32), // Firestore expects `nanos` as i32
+        &JsValue::from_f64(duration.subsec_nanos() as f64),
     )
     .unwrap();
-
-    obj.into() // Convert the object to a JsValue
+    obj.into()
 }
 
 use async_trait::async_trait;
@@ -79,12 +74,51 @@ impl SpekiProvider for FirestoreProvider {
         records
     }
 
+    async fn save_contents(&self, ty: Cty, records: Vec<Record>) {
+        info!("from rust starting save-conents");
+        use js_sys::{Array, Object};
+
+        let table = JsValue::from_str(as_str(ty));
+        let user_id = self.user_id();
+
+        let js_records = Array::new();
+
+        for record in records {
+            let js_record = Object::new();
+
+            js_sys::Reflect::set(
+                &js_record,
+                &JsValue::from("id"),
+                &JsValue::from_str(&record.id.to_string()),
+            )
+            .unwrap();
+            js_sys::Reflect::set(
+                &js_record,
+                &JsValue::from("content"),
+                &JsValue::from_str(&record.content),
+            )
+            .unwrap();
+            js_sys::Reflect::set(
+                &js_record,
+                &JsValue::from("lastModified"),
+                &duration_to_firestore_jsvalue(Duration::from_secs(record.last_modified)),
+            )
+            .unwrap();
+
+            js_records.push(&js_record);
+        }
+
+        let js_records_value: JsValue = js_records.into();
+
+        saveContents(&user_id, &table, &js_records_value);
+    }
+
     async fn save_content(&self, ty: Cty, record: Record) {
         let table = JsValue::from_str(as_str(ty));
         let content_id = JsValue::from_str(&record.id.to_string());
         let content = JsValue::from_str(&record.content);
         let last_modified =
-            duration_to_firestore_timestamp(Duration::from_secs(record.last_modified));
+            duration_to_firestore_jsvalue(Duration::from_secs(record.last_modified));
 
         saveContent(
             &self.user_id(),
@@ -117,6 +151,8 @@ extern "C" {
         content: &JsValue,
         last_modified: &JsValue,
     );
+
+    fn saveContents(user_id: &JsValue, table: &JsValue, contents: &JsValue);
     fn deleteContent(user_id: &JsValue, table: &JsValue, id: &JsValue);
     fn loadRecord(user_id: &JsValue, table: &JsValue, id: &JsValue) -> Promise;
     fn loadAllRecords(user_id: &JsValue, table: &JsValue) -> Promise;

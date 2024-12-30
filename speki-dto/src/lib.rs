@@ -282,6 +282,12 @@ pub trait SpekiProvider: Sync {
 
     async fn save_content(&self, ty: Cty, record: Record);
 
+    async fn save_contents(&self, ty: Cty, records: Vec<Record>) {
+        for record in records {
+            self.save_content(ty, record).await;
+        }
+    }
+
     async fn delete_content(&self, id: Uuid, ty: Cty);
 
     async fn load_all_reviews(&self) -> HashMap<Uuid, History> {
@@ -459,13 +465,24 @@ pub trait SpekiProvider: Sync {
             }
         }
 
-        for card in self_update {
-            self.save_card(card).await;
-        }
+        self.save_contents(
+            Cty::Card,
+            self_update
+                .into_iter()
+                .map(|card| card.into_record())
+                .collect(),
+        )
+        .await;
 
-        for card in other_update {
-            other.save_card(card).await;
-        }
+        other
+            .save_contents(
+                Cty::Card,
+                other_update
+                    .into_iter()
+                    .map(|card| card.into_record())
+                    .collect(),
+            )
+            .await;
 
         ids
     }
@@ -507,13 +524,24 @@ pub trait SpekiProvider: Sync {
             }
         }
 
-        for rev in self_update {
-            self.save_reviews(rev).await;
-        }
+        self.save_contents(
+            Cty::Review,
+            self_update
+                .into_iter()
+                .map(|card| card.into_record())
+                .collect(),
+        )
+        .await;
 
-        for rev in other_update {
-            other.save_reviews(rev).await;
-        }
+        other
+            .save_contents(
+                Cty::Review,
+                other_update
+                    .into_iter()
+                    .map(|card| card.into_record())
+                    .collect(),
+            )
+            .await;
     }
 
     async fn sync_attributes(&self, other: &Box<dyn SpekiProvider>) {
@@ -565,13 +593,24 @@ pub trait SpekiProvider: Sync {
             }
         }
 
-        for rev in self_update {
-            self.save_attribute(rev).await;
-        }
+        self.save_contents(
+            Cty::Attribute,
+            self_update
+                .into_iter()
+                .map(|card| card.into_record())
+                .collect(),
+        )
+        .await;
 
-        for rev in other_update {
-            other.save_attribute(rev).await;
-        }
+        other
+            .save_contents(
+                Cty::Attribute,
+                other_update
+                    .into_iter()
+                    .map(|card| card.into_record())
+                    .collect(),
+            )
+            .await;
     }
 
     async fn sync(&self, other: &Box<dyn SpekiProvider>) {

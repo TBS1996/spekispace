@@ -1,5 +1,5 @@
 import { 
-  getFirestore, collection, doc, setDoc, getDocs, getDoc, deleteDoc, serverTimestamp 
+  getFirestore, collection, doc, setDoc, getDocs, getDoc, deleteDoc, writeBatch
 } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-app.js';
 import { 
@@ -66,8 +66,9 @@ export async function loadAllRecords(userId, tableName) {
   querySnapshot.forEach(doc => {
     const data = doc.data();
     resultMap[doc.id] = {
+      id: doc.id,
       content: data.content,
-      last_modified: data.lastModified ? Math.floor(data.lastModified.toMillis() / 1000) : null 
+      last_modified: data.lastModified.seconds
     };
   });
 
@@ -83,6 +84,22 @@ export async function loadAllIds(userId, tableName) {
   const querySnapshot = await getDocs(colRef);
   console.log(`done loading`)
   return querySnapshot.docs.map(doc => doc.id);
+}
+
+export async function saveContents(userId, tableName, contents) {
+    console.log(`staring batch save conents`);
+    const batch = writeBatch(db);
+
+    contents.forEach(({ id, content, lastModified }) => {
+        const docRef = doc(db, `users/${userId}/${tableName}`, id);
+        batch.set(docRef, {
+            id,
+            content,
+            lastModified
+        }, { merge: true });
+    });
+
+    await batch.commit();
 }
 
 export async function saveContent(userId, tableName, contentId, content, lastModified) {

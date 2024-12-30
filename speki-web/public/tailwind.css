@@ -1652,6 +1652,10 @@ html {
   display: table;
 }
 
+.contents {
+  display: contents;
+}
+
 .h-0\.5 {
   height: 0.125rem;
 }
