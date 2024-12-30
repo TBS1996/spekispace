@@ -236,8 +236,8 @@ impl CardProvider {
         self.provider.load_reviews(id).await
     }
 
-    pub async fn save_reviews(&self, id: CardId, reviews: History) {
-        self.provider.save_reviews(id, reviews).await;
+    pub async fn save_reviews(&self, reviews: History) {
+        self.provider.save_reviews(reviews).await;
     }
 
     pub async fn add_review(&self, id: CardId, review: Review) {

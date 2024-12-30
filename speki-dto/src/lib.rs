@@ -16,6 +16,140 @@ pub enum Cty {
     Card,
 }
 
+impl Item for History {
+    fn last_modified(&self) -> Duration {
+        self.reviews
+            .iter()
+            .max()
+            .map(|rev| rev.timestamp)
+            .unwrap_or_default()
+    }
+
+    fn id(&self) -> Uuid {
+        self.id
+    }
+
+    fn serialize(&self) -> String {
+        toml::to_string(self).unwrap()
+    }
+
+    fn identifier(&self) -> &'static str {
+        "reviews"
+    }
+
+    fn merge(mut self, other: Self) -> MergeRes<Self>
+    where
+        Self: Sized,
+    {
+        debug_assert!(self.id == other.id);
+
+        let selflen = self.reviews.len();
+        let otherlen = other.reviews.len();
+
+        if selflen == otherlen {
+            return MergeRes::Neither;
+        }
+
+        let merged = {
+            self.merge_into(other);
+            self
+        };
+
+        let mergedlen = merged.len();
+
+        if mergedlen == selflen {
+            MergeRes::Other(merged)
+        } else if mergedlen == otherlen {
+            MergeRes::Selv(merged)
+        } else {
+            MergeRes::Both(merged)
+        }
+    }
+}
+
+impl Item for AttributeDTO {
+    fn last_modified(&self) -> Duration {
+        self.last_modified
+    }
+
+    fn id(&self) -> Uuid {
+        self.id
+    }
+
+    fn serialize(&self) -> String {
+        toml::to_string(self).unwrap()
+    }
+
+    fn identifier(&self) -> &'static str {
+        "attributes"
+    }
+}
+
+impl Item for RawCard {
+    fn last_modified(&self) -> Duration {
+        self.last_modified
+    }
+
+    fn id(&self) -> Uuid {
+        self.id
+    }
+
+    fn serialize(&self) -> String {
+        toml::to_string(self).unwrap()
+    }
+
+    fn identifier(&self) -> &'static str {
+        "cards"
+    }
+
+    fn merge(self, other: Self) -> MergeRes<Self>
+    where
+        Self: Sized,
+    {
+        let selfmod = self.last_modified();
+        let othermod = other.last_modified();
+
+        if self.deleted && !other.deleted {
+            MergeRes::Other(self)
+        } else if !self.deleted && other.deleted {
+            MergeRes::Selv(other)
+        } else if selfmod > othermod {
+            MergeRes::Other(self)
+        } else if selfmod < othermod {
+            MergeRes::Selv(other)
+        } else {
+            MergeRes::Neither
+        }
+    }
+}
+
+trait Item {
+    fn last_modified(&self) -> Duration;
+    fn id(&self) -> Uuid;
+    fn serialize(&self) -> String;
+    fn identifier(&self) -> &'static str;
+    /// Returns whehter hte returned value should be saved to self, other, enither, or both.
+    fn merge(self, other: Self) -> MergeRes<Self>
+    where
+        Self: Sized,
+    {
+        if self.last_modified() > other.last_modified() {
+            MergeRes::Other(self)
+        } else if self.last_modified() < other.last_modified() {
+            MergeRes::Selv(other)
+        } else {
+            MergeRes::Neither
+        }
+    }
+}
+
+enum MergeRes<T> {
+    Selv(T),
+    Other(T),
+    Both(T),
+    Neither,
+}
+
 #[derive(Ord, PartialOrd, Eq, PartialEq, Hash, Clone, Debug, Deserialize, Serialize)]
 pub struct History {
     id: Uuid,
@@ -213,7 +347,8 @@ pub trait SpekiProvider: Sync {
         parse_history(s, id)
     }
 
-    async fn save_reviews(&self, id: CardId, reviews: History) {
+    async fn save_reviews(&self, reviews: History) {
+        let id = reviews.id;
         let s = toml::to_string(&reviews).unwrap();
         self.save_content(Cty::Review, id, s).await;
     }
@@ -253,11 +388,14 @@ pub trait SpekiProvider: Sync {
     async fn add_review(&self, id: CardId, review: Review) {
         let mut reviews = self.load_reviews(id).await;
         reviews.push(review);
-        self.save_reviews(id, reviews).await;
+        self.save_reviews(reviews).await;
     }
 
-    async fn sync(&self, other: Box<dyn SpekiProvider>) {
+    async fn sync_cards(&self, other: &Box<dyn SpekiProvider>) -> HashSet<CardId> {
         info!("loading cards 1");
+        let mut self_update = vec![];
+        let mut other_update = vec![];
+
         let mut map1: HashMap<CardId, RawCard> = self
             .load_all_content(Cty::Card)
             .await
@@ -289,73 +427,91 @@ pub trait SpekiProvider: Sync {
             let id = *id;
             match (map1.remove(&id), map2.remove(&id)) {
                 (None, None) => panic!(),
-                (None, Some(card)) => self.save_card(card).await,
-                (Some(card), None) => other.save_card(card).await,
-                (Some(mut card1), Some(mut card2)) => {
-                    let lm1 = self.last_modified_card(card1.id).await;
-                    let lm2 = self.last_modified_card(card2.id).await;
-
-                    if card1.deleted && !card2.deleted {
-                        card2.deleted = true;
-                        self.save_card(card2).await;
-                    } else if !card1.deleted && card2.deleted {
-                        card1.deleted = true;
-                        other.save_card(card1).await;
-                    } else if lm1 > lm2 {
-                        self.save_card(card2).await;
-                    } else if lm1 < lm2 {
-                        other.save_card(card1).await;
-                    }
+                (None, Some(card)) => {
+                    self_update.push(card);
                 }
+                (Some(card), None) => {
+                    other_update.push(card);
+                }
+                (Some(card1), Some(card2)) => match card1.merge(card2) {
+                    MergeRes::Both(card) => {
+                        self_update.push(card.clone());
+                        other_update.push(card);
+                    }
+                    MergeRes::Selv(card) => {
+                        self_update.push(card);
+                    }
+                    MergeRes::Other(card) => {
+                        other_update.push(card);
+                    }
+                    MergeRes::Neither => {}
+                },
             }
         }
 
-        info!("REVIEW SYNCING");
+        for card in self_update {
+            self.save_card(card).await;
+        }
 
+        for card in other_update {
+            other.save_card(card).await;
+        }
+
+        ids
+    }
+
+    async fn sync_reviews(&self, other: &Box<dyn SpekiProvider>, ids: HashSet<CardId>) {
         info!("loading self reviews");
-        let mut map1: HashMap<Uuid, History> = self.load_all_reviews().await;
+        let mut selfmap: HashMap<Uuid, History> = self.load_all_reviews().await;
         info!("loading other reviews");
-        let mut map2: HashMap<Uuid, History> = other.load_all_reviews().await;
+        let mut othermap: HashMap<Uuid, History> = other.load_all_reviews().await;
+
+        let mut self_update = vec![];
+        let mut other_update = vec![];
 
         for id in &ids {
             info!("syncing review");
             let id = *id;
 
-            match (map1.remove(&id), map2.remove(&id)) {
+            match (selfmap.remove(&id), othermap.remove(&id)) {
                 (None, None) => continue,
-                (None, Some(rev2)) => self.save_reviews(id, rev2).await,
-                (Some(rev1), None) => other.save_reviews(id, rev1).await,
-                (Some(rev1), Some(rev2)) => {
-                    let rev1_qty = rev1.len();
-                    let rev2_qty = rev2.len();
-
-                    if rev1_qty == rev2_qty {
-                        continue;
-                    }
-
-                    let combined = {
-                        let mut cmb = rev1.clone();
-                        cmb.merge_into(rev2);
-                        cmb
-                    };
-
-                    let comb_qty = combined.len();
-
-                    if comb_qty > rev1_qty {
-                        info!("save reviews to self");
-                        self.save_reviews(id, combined.clone()).await;
-                    }
-
-                    if comb_qty > rev1_qty {
-                        info!("save reviews to other");
-                        other.save_reviews(id, combined.clone()).await;
-                    }
+                (None, Some(rev2)) => {
+                    self_update.push(rev2);
                 }
+                (Some(rev1), None) => {
+                    other_update.push(rev1);
+                }
+                (Some(rev1), Some(rev2)) => match rev1.merge(rev2) {
+                    MergeRes::Both(rev) => {
+                        self_update.push(rev.clone());
+                        other_update.push(rev);
+                    }
+                    MergeRes::Selv(rev) => {
+                        self_update.push(rev);
+                    }
+                    MergeRes::Other(rev) => {
+                        other_update.push(rev);
+                    }
+                    MergeRes::Neither => {}
+                },
             }
         }
 
+        for rev in self_update {
+            self.save_reviews(rev).await;
+        }
+
+        for rev in other_update {
+            other.save_reviews(rev).await;
+        }
+    }
+
+    async fn sync_attributes(&self, other: &Box<dyn SpekiProvider>) {
+        let mut self_update = vec![];
+        let mut other_update = vec![];
+
         info!("fetching attributes 1");
-        let mut map1: HashMap<AttributeId, AttributeDTO> = self
+        let mut selfmap: HashMap<AttributeId, AttributeDTO> = self
             .load_all_attributes()
             .await
             .into_iter()
@@ -363,34 +519,55 @@ pub trait SpekiProvider: Sync {
             .collect();
 
         info!("fetching attributes 2");
-        let mut map2: HashMap<AttributeId, AttributeDTO> = other
+        let mut othermap: HashMap<AttributeId, AttributeDTO> = other
             .load_all_attributes()
             .await
             .into_iter()
             .map(|card| (card.id, card))
             .collect();
 
-        let mut ids: HashSet<AttributeId> = map1.keys().map(|key| *key).collect();
-        ids.extend(map2.keys());
+        let mut ids: HashSet<AttributeId> = selfmap.keys().map(|key| *key).collect();
+        ids.extend(othermap.keys());
 
         for id in ids {
             info!("syncing attribute");
-            match (map1.remove(&id), map2.remove(&id)) {
+            match (selfmap.remove(&id), othermap.remove(&id)) {
                 (None, None) => panic!(),
-                (None, Some(card)) => self.save_attribute(card).await,
-                (Some(card), None) => other.save_attribute(card).await,
-                (Some(card1), Some(card2)) => {
-                    let lm1 = self.last_modified_attribute(card1.id).await;
-                    let lm2 = self.last_modified_attribute(card2.id).await;
-
-                    if lm1 > lm2 {
-                        self.save_attribute(card2).await;
-                    } else if lm1 < lm2 {
-                        other.save_attribute(card1).await;
-                    }
+                (None, Some(card)) => {
+                    self_update.push(card);
                 }
+                (Some(card), None) => {
+                    other_update.push(card);
+                }
+                (Some(card1), Some(card2)) => match card1.merge(card2) {
+                    MergeRes::Both(rev) => {
+                        self_update.push(rev.clone());
+                        other_update.push(rev);
+                    }
+                    MergeRes::Selv(rev) => {
+                        self_update.push(rev);
+                    }
+                    MergeRes::Other(rev) => {
+                        other_update.push(rev);
+                    }
+                    MergeRes::Neither => {}
+                },
             }
         }
+
+        for rev in self_update {
+            self.save_attribute(rev).await;
+        }
+
+        for rev in other_update {
+            other.save_attribute(rev).await;
+        }
+    }
+
+    async fn sync(&self, other: &Box<dyn SpekiProvider>) {
+        let ids = self.sync_cards(other).await;
+        self.sync_reviews(other, ids).await;
+        self.sync_attributes(other).await;
     }
 }
 
@@ -623,6 +800,8 @@ pub struct RawCard {
     pub suspended: bool,
     #[serde(default, skip_serializing_if = "is_false")]
     pub deleted: bool,
+    #[serde(default)]
+    pub last_modified: Duration,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -631,6 +810,8 @@ pub struct AttributeDTO {
     pub id: AttributeId,
     pub class: CardId,
     pub back_type: Option<CardId>,
+    #[serde(default)]
+    pub last_modified: Duration,
 }
 
 pub type AttributeId = Uuid;

@@ -105,7 +105,7 @@ impl App {
 
     pub async fn save_card(&self, card: Card) {
         self.card_provider
-            .save_reviews(card.id(), card.history().clone())
+            .save_reviews(card.history().clone())
             .await;
 
         self.card_provider.save_card(card).await;

@@ -131,7 +131,7 @@ pub async fn sync() {
     let fsp: Box<dyn SpekiProvider> = Box::new(FirestoreProvider::new(agent));
 
     *SYNCING.write() = true;
-    DexieProvider.sync(fsp).await;
+    DexieProvider.sync(&fsp).await;
     *SYNCING.write() = false;
 
     info!("done syncing maybe!");

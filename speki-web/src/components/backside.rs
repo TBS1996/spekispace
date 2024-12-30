@@ -5,7 +5,7 @@ use std::{
 
 use dioxus::prelude::*;
 use serde::{Deserialize, Serialize};
-use speki_core::{CardType, Card};
+use speki_core::Card;
 use speki_dto::BackSide;
 use strum::{EnumIter, IntoEnumIterator};
 use tracing::info;

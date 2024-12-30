@@ -194,6 +194,7 @@ impl From<Card> for RawCard {
             tags: card.tags,
             suspended: card.suspended.is_suspended(),
             deleted: false,
+            last_modified: card.last_modified,
         }
     }
 }

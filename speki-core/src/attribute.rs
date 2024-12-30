@@ -103,6 +103,7 @@ impl Attribute {
             id: self.id,
             class: self.class,
             back_type: self.back_type,
+            last_modified: self.last_modified,
         }
     }
 

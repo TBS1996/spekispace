@@ -8,7 +8,7 @@ use std::{
 
 use digraph::RustGraph;
 use dioxus::prelude::*;
-use speki_core::{CardType, Card};
+use speki_core::Card;
 use speki_dto::CardId;
 use speki_web::{Node, NodeMetadata};
 use tracing::info;

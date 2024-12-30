@@ -492,9 +492,7 @@ impl Card {
     pub async fn persist(&mut self) {
         info!("persisting card: {}", self.id);
         self.card_provider.save_card(self.clone()).await;
-        self.card_provider
-            .save_reviews(self.id, self.history.clone())
-            .await;
+        self.card_provider.save_reviews(self.history.clone()).await;
 
         let id = self.id;
 
