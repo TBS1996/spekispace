@@ -498,7 +498,7 @@ pub async fn sync<T: Item>(
     }
 
     left.save_records(
-        Cty::Card,
+        T::identifier(),
         left_update
             .into_iter()
             .map(|card| card.into_record())
@@ -508,7 +508,7 @@ pub async fn sync<T: Item>(
 
     right
         .save_records(
-            Cty::Card,
+            T::identifier(),
             right_update
                 .into_iter()
                 .map(|card| card.into_record())
