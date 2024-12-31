@@ -1,9 +1,9 @@
 use std::collections::HashMap;
 
 use gloo_utils::format::JsValueSerdeExt;
-use js_sys::{Object, Promise};
+use js_sys::Promise;
 use serde_json::Value;
-use speki_dto::{Config, Cty, Record, SpekiProvider};
+use speki_dto::{Cty, Item, Record, SpekiProvider};
 use tracing::info;
 use uuid::Uuid;
 use wasm_bindgen::prelude::*;
@@ -55,7 +55,7 @@ fn duration_to_firestore_jsvalue(duration: Duration) -> JsValue {
 use async_trait::async_trait;
 
 #[async_trait(?Send)]
-impl SpekiProvider for FirestoreProvider {
+impl<T: Item + 'static + Clone> SpekiProvider<T> for FirestoreProvider {
     async fn load_record(&self, id: Uuid, ty: Cty) -> Option<Record> {
         let id = JsValue::from_str(&id.to_string());
         let promise = loadRecord(&self.user_id(), &as_js_value(ty), &id);
@@ -127,18 +127,6 @@ impl SpekiProvider for FirestoreProvider {
             &content,
             &last_modified,
         );
-    }
-    async fn delete_content(&self, id: Uuid, ty: Cty) {
-        let content_id = JsValue::from_str(&id.to_string());
-        deleteContent(&self.user_id(), &as_js_value(ty), &content_id);
-    }
-
-    async fn load_config(&self) -> Config {
-        Config
-    }
-
-    async fn save_config(&self, _config: Config) {
-        todo!()
     }
 }
 

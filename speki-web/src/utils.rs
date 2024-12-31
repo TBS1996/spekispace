@@ -2,7 +2,7 @@ use std::{fmt::Debug, sync::Arc, time::Duration};
 
 use dioxus::prelude::*;
 use speki_core::{Card, TimeProvider};
-use speki_dto::{CardId, RawCard};
+use speki_dto::{AttributeDTO, CardId, RawCard};
 use speki_provider::DexieProvider;
 use speki_web::{Node, NodeMetadata};
 use tracing::info;
@@ -115,23 +115,24 @@ impl TimeProvider for WasmTime {
 impl App {
     pub fn new() -> Self {
         Self(Arc::new(speki_core::App::new(
-            DexieProvider,
             speki_core::SimpleRecall,
             WasmTime,
+            DexieProvider,
+            DexieProvider,
+            DexieProvider,
         )))
     }
 }
 
 pub async fn sync() {
-    use speki_dto::SpekiProvider;
-
     let agent = sign_in().await;
     info!("starting sync!");
 
-    let fsp: Box<dyn SpekiProvider> = Box::new(FirestoreProvider::new(agent));
-
     *SYNCING.write() = true;
-    DexieProvider.sync(&fsp).await;
+    speki_dto::sync::<RawCard>(FirestoreProvider::new(agent.clone()), DexieProvider).await;
+    speki_dto::sync::<speki_dto::History>(FirestoreProvider::new(agent.clone()), DexieProvider)
+        .await;
+    speki_dto::sync::<AttributeDTO>(FirestoreProvider::new(agent.clone()), DexieProvider).await;
     *SYNCING.write() = false;
 
     info!("done syncing maybe!");

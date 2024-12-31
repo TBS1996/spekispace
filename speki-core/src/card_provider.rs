@@ -1,6 +1,6 @@
-use crate::{card::RecallRate, Attribute, Card, Provider, Recaller, TimeGetter};
+use crate::{card::RecallRate, Card, Provider, Recaller, TimeGetter};
 use dioxus_logger::tracing::{info, trace};
-use speki_dto::{AttributeId, CardId, History, RawCard, Review};
+use speki_dto::{CardId, History, Item, RawCard};
 use std::future::Future;
 use std::pin::Pin;
 use std::{
@@ -13,7 +13,7 @@ use std::{
 #[derive(Clone)]
 pub struct CardProvider {
     inner: Arc<RwLock<Inner>>,
-    provider: Provider,
+    pub provider: Provider,
     time_provider: TimeGetter,
     recaller: Recaller,
     check_modified: bool,
@@ -48,7 +48,7 @@ impl CardProvider {
         };
 
         raw_card.deleted = true;
-        self.provider.save_card(raw_card).await;
+        self.provider.cards.save_item(raw_card).await;
 
         // Other cards may depend on this now-deleted card, so we loop through them all to remove their dependency on it (if any).
         for card in self.load_all().await {
@@ -117,20 +117,18 @@ impl CardProvider {
     }
 
     pub async fn load_all_card_ids(&self) -> Vec<CardId> {
-        self.provider.load_card_ids().await
+        self.provider.cards.load_ids().await
     }
 
     pub async fn fill_cache(&self) {
         let mut cards: HashMap<CardId, CardCache> = Default::default();
         let mut rev_caches: HashMap<CardId, RevCache> = Default::default();
-        let raw_cards = self.provider.load_all_cards().await;
-        let mut reviews = self.provider.load_all_reviews().await;
+        let raw_cards = self.provider.cards.load_all().await;
+        let mut reviews = self.provider.reviews.load_all().await;
         let fetched = self.time_provider.current_time();
 
-        for card in raw_cards {
-            let rev = reviews
-                .remove(&card.id)
-                .unwrap_or_else(|| History::new(card.id));
+        for (id, card) in raw_cards {
+            let rev = reviews.remove(&id).unwrap_or_else(|| History::new(id));
             let card =
                 Card::from_raw_with_reviews(card, self.clone(), self.recaller.clone(), rev.clone());
             let card = Arc::new(card);
@@ -225,33 +223,22 @@ impl CardProvider {
         }
     }
 
-    pub async fn load_attribute(&self, id: AttributeId) -> Option<Attribute> {
-        let modified = self.provider.last_modified_attribute(id).await;
-        self.provider
-            .load_attribute(id)
-            .await
-            .map(|dto| Attribute::from_dto(dto, self.clone(), modified))
-    }
     pub async fn load_reviews(&self, id: CardId) -> History {
-        self.provider.load_reviews(id).await
+        self.provider
+            .reviews
+            .load_item(id)
+            .await
+            .unwrap_or_else(|| History::new(id))
     }
 
     pub async fn save_reviews(&self, reviews: History) {
-        self.provider.save_reviews(reviews).await;
-    }
-
-    pub async fn add_review(&self, id: CardId, review: Review) {
-        self.provider.add_review(id, review).await;
-    }
-
-    pub async fn delete_card(&self, id: CardId) {
-        self.provider.delete_card(id).await;
+        self.provider.reviews.save_item(reviews).await;
     }
 
     pub async fn save_card(&self, card: Card) {
         self.update_cache(Arc::new(card.clone()));
         let raw: RawCard = card.into();
-        self.provider.save_card(raw).await;
+        self.provider.cards.save_item(raw).await;
     }
 
     pub fn time_provider(&self) -> TimeGetter {
@@ -274,9 +261,14 @@ impl CardProvider {
 
     async fn load_uncached(&self, id: CardId) -> Option<Card> {
         trace!("load uncached");
-        let raw_card = self.provider.load_card(id).await?;
+        let raw_card = self.provider.cards.load_item(id).await?;
 
-        let reviews = self.provider.load_reviews(id).await;
+        let reviews = self
+            .provider
+            .reviews
+            .load_item(id)
+            .await
+            .unwrap_or_else(|| History::new(id));
 
         let card =
             Card::from_raw_with_reviews(raw_card, self.clone(), self.recaller.clone(), reviews);
@@ -296,7 +288,7 @@ impl CardProvider {
         };
 
         if self.check_modified {
-            let last_modified = self.provider.last_modified_card(id).await;
+            let last_modified = cached.review.last_modified();
             if last_modified > cached.fetched {
                 trace!("review cache outdated for card: {}", id);
                 None
@@ -334,7 +326,7 @@ impl CardProvider {
         let cached = self.load_cached_entry(id).await?;
 
         if self.check_modified {
-            let last_modified = self.provider.last_modified_card(id).await;
+            let last_modified = cached.card.last_modified();
             if last_modified > cached.fetched {
                 info!("cache outdated for card: {}", id);
                 None

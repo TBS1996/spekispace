@@ -9,7 +9,7 @@ use std::{
 };
 
 use rayon::prelude::*;
-use speki_dto::{Config, Cty};
+use speki_dto::Cty;
 use speki_dto::{Record, SpekiProvider};
 use uuid::Uuid;
 
@@ -74,8 +74,10 @@ fn last_modified_path(path: &Path) -> Option<Duration> {
     )
 }
 
+use speki_dto::Item;
+
 #[async_trait(?Send)]
-impl SpekiProvider for FileProvider {
+impl<T: Clone + 'static + Item> SpekiProvider<T> for FileProvider {
     async fn load_record(&self, id: Uuid, ty: Cty) -> Option<Record> {
         let p = file_path(ty, id);
         load_record_from_path(&p)
@@ -101,19 +103,6 @@ impl SpekiProvider for FileProvider {
         let path = file_path(ty, id.parse().unwrap());
         let mut file = fs::File::create(path).unwrap();
         file.write_all(&mut content.as_bytes()).unwrap();
-    }
-
-    async fn delete_content(&self, id: Uuid, ty: Cty) {
-        let path = file_path(ty, id);
-        fs::remove_file(&path).unwrap();
-    }
-
-    async fn load_config(&self) -> Config {
-        Config
-    }
-
-    async fn save_config(&self, _config: Config) {
-        todo!()
     }
 }
 

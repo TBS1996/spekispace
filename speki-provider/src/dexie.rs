@@ -7,14 +7,15 @@ use speki_dto::{CardId, Record, SpekiProvider};
 use uuid::Uuid;
 use wasm_bindgen::prelude::*;
 
-use speki_dto::{Config, Cty};
+use speki_dto::Cty;
 
 pub struct DexieProvider;
 
 use async_trait::async_trait;
+use speki_dto::Item;
 
 #[async_trait(?Send)]
-impl SpekiProvider for DexieProvider {
+impl<T: Item + Clone + 'static> SpekiProvider<T> for DexieProvider {
     async fn load_record(&self, id: Uuid, ty: Cty) -> Option<Record> {
         let id = JsValue::from_str(&id.to_string());
         let promise = loadRecord(&cty_as_jsvalue(ty), &id);
@@ -30,11 +31,6 @@ impl SpekiProvider for DexieProvider {
         serde_wasm_bindgen::from_value(jsvalue).unwrap()
     }
 
-    async fn delete_content(&self, id: Uuid, ty: Cty) {
-        let id = JsValue::from_str(&id.to_string());
-        deleteContent(&cty_as_jsvalue(ty), &id);
-    }
-
     async fn save_content(&self, ty: Cty, record: Record) {
         let id = JsValue::from_str(&record.id.to_string());
         let content = JsValue::from_str(&record.content);
@@ -42,16 +38,8 @@ impl SpekiProvider for DexieProvider {
         saveContent(&cty_as_jsvalue(ty), &id, &content, &last_modified);
     }
 
-    async fn load_card_ids(&self) -> Vec<CardId> {
+    async fn load_ids(&self) -> Vec<CardId> {
         load_ids(Cty::Card).await.into_iter().collect()
-    }
-
-    async fn load_config(&self) -> Config {
-        Config
-    }
-
-    async fn save_config(&self, _config: Config) {
-        todo!()
     }
 }
 

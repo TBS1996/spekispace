@@ -1,4 +1,4 @@
-use crate::{card_provider::CardProvider, App};
+use crate::{card_provider::CardProvider, App, Attribute};
 use omtrent::TimeStamp;
 use speki_dto::{AttributeId, BackSide};
 
@@ -41,8 +41,11 @@ impl CardTrait for AttributeCard {
 
     async fn display_front(&self) -> String {
         self.card_provider
-            .load_attribute(self.attribute)
+            .provider
+            .attrs
+            .load_item(self.attribute)
             .await
+            .map(|dto| Attribute::from_dto(dto, self.card_provider.clone()))
             .unwrap()
             .name(self.instance)
             .await

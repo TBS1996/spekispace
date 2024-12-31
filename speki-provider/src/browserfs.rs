@@ -2,7 +2,7 @@ use std::time::Duration;
 use std::{collections::HashMap, path::PathBuf};
 
 use async_trait::async_trait;
-use speki_dto::{CardId, Config, Cty, Record, SpekiProvider};
+use speki_dto::{CardId, Cty, Record, SpekiProvider};
 use uuid::Uuid;
 
 mod js {
@@ -48,12 +48,6 @@ mod js {
             .collect()
     }
 
-    pub fn delete_file(path: PathBuf) {
-        let path = path.to_str().unwrap();
-        let path = JsValue::from_str(path);
-        deleteFile(&path);
-    }
-
     pub fn save_file(path: PathBuf, content: &str) {
         let path = path.to_str().unwrap();
         let path = JsValue::from_str(path);
@@ -82,19 +76,6 @@ mod js {
         let duration_since_epoch = datetime - unix_epoch;
         let seconds = duration_since_epoch.whole_seconds();
         Some(Duration::from_secs(seconds as u64))
-    }
-
-    pub async fn load_all_files(path: PathBuf) -> Vec<String> {
-        let path = path.to_str().unwrap();
-        let path = JsValue::from_str(path);
-        let val = promise_to_val(loadAllFiles(&path)).await;
-        let arr = val.as_array().unwrap();
-        arr.into_iter()
-            .map(|elm| match elm {
-                Value::String(s) => s.clone(),
-                other => panic!("file isnt textfile damn: {}", other),
-            })
-            .collect()
     }
 
     pub async fn load_file(path: PathBuf) -> Option<String> {
@@ -146,22 +127,16 @@ impl BrowserFsProvider {
     }
 }
 
+use speki_dto::Item;
+
 #[async_trait(?Send)]
-impl SpekiProvider for BrowserFsProvider {
+impl<T: Clone + Item + 'static> SpekiProvider<T> for BrowserFsProvider {
     async fn load_record(&self, _id: Uuid, _ty: Cty) -> Option<Record> {
         todo!()
     }
 
     async fn load_all_records(&self, _ty: Cty) -> HashMap<Uuid, Record> {
         todo!()
-    }
-
-    async fn delete_content(&self, id: Uuid, ty: Cty) {
-        js::delete_file(self.content_path(ty, id));
-    }
-
-    async fn load_all_content(&self, ty: Cty) -> Vec<String> {
-        js::load_all_files(self.folder_path(ty)).await
     }
 
     async fn save_content(&self, ty: Cty, record: Record) {
@@ -179,19 +154,11 @@ impl SpekiProvider for BrowserFsProvider {
         js::last_modified(self.content_path(ty, id)).await
     }
 
-    async fn load_card_ids(&self) -> Vec<CardId> {
+    async fn load_ids(&self) -> Vec<CardId> {
         js::load_filenames(self.folder_path(Cty::Card).to_str().unwrap())
             .await
             .into_iter()
             .map(|id| id.parse().unwrap())
             .collect()
-    }
-
-    async fn load_config(&self) -> Config {
-        Config
-    }
-
-    async fn save_config(&self, _config: Config) {
-        todo!()
     }
 }

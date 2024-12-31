@@ -315,6 +315,10 @@ impl Card {
         self.ty.clone()
     }
 
+    pub fn last_modified(&self) -> Duration {
+        self.last_modified
+    }
+
     /// Loads all the ancestor ancestor classes
     /// for example, king, human male, human
     pub async fn load_ancestor_classes(&self) -> Vec<CardId> {
@@ -722,9 +726,7 @@ mod tests {
         card_provider::CardProvider, Provider, Recaller, SimpleRecall, TimeGetter, TimeProvider,
     };
     use async_trait::async_trait;
-    use speki_dto::{
-        BackSide, CType, Config, Cty, RawCard, RawType, Recall, Record, SpekiProvider,
-    };
+    use speki_dto::{BackSide, CType, Cty, Item, RawCard, RawType, Recall, Record, SpekiProvider};
     use std::{
         collections::HashMap,
         sync::{Arc, Mutex},
@@ -747,16 +749,6 @@ mod tests {
                     _attrs: Default::default(),
                 })),
             }
-        }
-
-        fn remove(&self, ty: Cty, id: Uuid) {
-            let mut lock = self.inner.lock().unwrap();
-            match ty {
-                Cty::Attribute => &mut lock._attrs,
-                Cty::Review => &mut lock.cards,
-                Cty::Card => &mut lock.reviews,
-            }
-            .remove(&id);
         }
 
         fn save(&self, ty: Cty, id: Uuid, s: String) {
@@ -804,7 +796,7 @@ mod tests {
     }
 
     #[async_trait(?Send)]
-    impl SpekiProvider for Storage {
+    impl<T: Item + Clone + 'static> SpekiProvider<T> for Storage {
         async fn load_record(&self, id: Uuid, ty: Cty) -> Option<Record> {
             self.get(ty, id)
         }
@@ -815,17 +807,6 @@ mod tests {
 
         async fn save_content(&self, ty: Cty, record: Record) {
             self.save(ty, record.id.parse().unwrap(), record.content);
-        }
-
-        async fn delete_content(&self, id: Uuid, ty: Cty) {
-            self.remove(ty, id);
-        }
-
-        async fn load_config(&self) -> Config {
-            todo!()
-        }
-        async fn save_config(&self, _config: Config) {
-            todo!()
         }
     }
 
@@ -857,7 +838,13 @@ mod tests {
             let timed = ControlledTime::default();
             let time_provider: TimeGetter = Arc::new(Box::new(timed.clone()));
             let recaller: Recaller = Arc::new(Box::new(SimpleRecall));
-            let provider: Provider = Arc::new(Box::new(Storage::new(timed.clone())));
+            let provider = Provider {
+                cards: Arc::new(Box::new(Storage::new(timed.clone()))),
+                reviews: Arc::new(Box::new(Storage::new(timed.clone()))),
+                attrs: Arc::new(Box::new(Storage::new(timed.clone()))),
+            };
+
+            // let provider: Provider = Arc::new(Box::new(Storage::new(timed.clone())));
             let card_provider = CardProvider::new(provider, time_provider, recaller.clone());
 
             Self {

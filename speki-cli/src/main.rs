@@ -68,7 +68,7 @@ async fn new_attribute(app: &App) -> Option<AttributeCard> {
 
     let instance = select_from_all_instance_cards(app).await?;
     let attribute = {
-        let attributes = Attribute::load_relevant_attributes(app, instance).await;
+        let attributes: Vec<Attribute> = todo!(); //Attribute::load_relevant_attributes(app, instance).await;
         if attributes.is_empty() {
             notify("no relevant attributes found for instance");
             return None;
@@ -76,6 +76,7 @@ async fn new_attribute(app: &App) -> Option<AttributeCard> {
         select_from_attributes(attributes)?
     };
 
+    /*
     let back: BackSide = {
         let prompt = app
             .load_attribute(attribute)
@@ -85,6 +86,9 @@ async fn new_attribute(app: &App) -> Option<AttributeCard> {
             .await;
         opt_input(&prompt)?.into()
     };
+    */
+
+    let back: BackSide = todo!();
 
     Some(AttributeCard {
         attribute,
@@ -306,7 +310,7 @@ impl TimeProvider for TimeGetter {
 #[tokio::main]
 async fn main() {
     let cli = Cli::parse();
-    let app = App::new(FileProvider, SimpleRecall, TimeGetter);
+    let app: App = todo!(); //App::new(FileProvider, SimpleRecall, TimeGetter);
 
     if cli.add.is_some() {
         let s = cli.add.unwrap();

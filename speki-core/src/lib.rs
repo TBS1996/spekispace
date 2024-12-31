@@ -2,14 +2,13 @@ use std::fmt::Debug;
 use std::sync::Arc;
 use std::time::Duration;
 
-use attribute::AttrProvider;
 use card::RecallRate;
 use card_provider::CardProvider;
 use dioxus_logger::tracing::info;
 use eyre::Result;
 use samsvar::Matcher;
 use samsvar::Schema;
-use speki_dto::AttributeId;
+use speki_dto::AttributeDTO;
 use speki_dto::History;
 use speki_dto::RawCard;
 use speki_dto::SpekiProvider;
@@ -44,15 +43,21 @@ pub trait TimeProvider {
     fn current_time(&self) -> Duration;
 }
 
-pub type Provider = Arc<Box<dyn SpekiProvider + Send>>;
+#[derive(Clone)]
+pub struct Provider {
+    pub cards: Arc<Box<dyn SpekiProvider<RawCard>>>,
+    pub reviews: Arc<Box<dyn SpekiProvider<History>>>,
+    pub attrs: Arc<Box<dyn SpekiProvider<AttributeDTO>>>,
+}
+
 pub type Recaller = Arc<Box<dyn RecallCalc + Send>>;
 pub type TimeGetter = Arc<Box<dyn TimeProvider + Send>>;
 
 pub struct App {
+    provider: Provider,
     pub card_provider: CardProvider,
     pub time_provider: TimeGetter,
     pub recaller: Recaller,
-    pub attr_provider: AttrProvider,
 }
 
 impl Debug for App {
@@ -62,28 +67,39 @@ impl Debug for App {
 }
 
 impl App {
-    pub fn new<A, B, C>(provider: A, recall_calc: B, time_provider: C) -> Self
+    pub fn new<A, B, C, D, E>(
+        recall_calc: A,
+        time_provider: B,
+        card_provider: C,
+        history_provider: D,
+        attr_provider: E,
+    ) -> Self
     where
-        A: SpekiProvider + 'static + Send,
-        B: RecallCalc + 'static + Send,
-        C: TimeProvider + 'static + Send,
+        A: RecallCalc + 'static + Send,
+        B: TimeProvider + 'static + Send,
+        C: SpekiProvider<RawCard> + 'static + Send,
+        D: SpekiProvider<History> + 'static + Send,
+        E: SpekiProvider<AttributeDTO> + 'static + Send,
     {
         info!("initialtize app");
 
         let time_provider: TimeGetter = Arc::new(Box::new(time_provider));
         let recaller: Recaller = Arc::new(Box::new(recall_calc));
-        let provider: Provider = Arc::new(Box::new(provider));
+
+        let provider = Provider {
+            cards: Arc::new(Box::new(card_provider)),
+            reviews: Arc::new(Box::new(history_provider)),
+            attrs: Arc::new(Box::new(attr_provider)),
+        };
 
         let card_provider =
             CardProvider::new(provider.clone(), time_provider.clone(), recaller.clone());
 
-        let attr_provider = AttrProvider::new(provider.clone(), card_provider.clone());
-
         Self {
+            provider,
             card_provider,
             time_provider,
             recaller,
-            attr_provider,
         }
     }
 
@@ -116,27 +132,6 @@ impl App {
         let card = self.card_provider.load(id).await;
         trace!("card loaded i guess: {card:?}");
         Some(Arc::unwrap_or_clone(card?))
-    }
-
-    pub async fn delete_card(&self, id: CardId) {
-        self.card_provider.delete_card(id).await;
-    }
-
-    pub async fn load_all_attributes(&self) -> Vec<Attribute> {
-        self.attr_provider.load_all().await
-    }
-
-    pub async fn save_attribute(&self, attribute: Attribute) {
-        info!("saving attribute!!: {}", attribute.id);
-        self.attr_provider.save(attribute).await;
-    }
-
-    pub async fn load_attribute(&self, id: AttributeId) -> Option<Attribute> {
-        self.attr_provider.load(id).await
-    }
-
-    pub async fn delete_attribute(&self, id: AttributeId) {
-        self.attr_provider.delete(id).await
     }
 
     pub async fn load_cards(&self) -> Vec<CardId> {
