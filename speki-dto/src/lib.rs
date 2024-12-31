@@ -399,8 +399,13 @@ pub trait SpekiProvider<T: Item>: Sync {
 
     async fn load_item(&self, id: Uuid) -> Option<T> {
         let record = self.load_record(id, T::identifier()).await?;
-        let val: T = toml::from_str(&record.content).unwrap();
-        Some(val)
+        match toml::from_str::<T>(&record.content) {
+            Ok(item) => Some(item),
+            Err(e) => {
+                tracing::error!("error deserializing item: {e:?}");
+                None
+            }
+        }
     }
 
     async fn load_all(&self) -> HashMap<Uuid, T> {
@@ -416,7 +421,6 @@ pub trait SpekiProvider<T: Item>: Sync {
                 Err(e) => warn!("failed to deserialize: {:?}", e),
             }
         }
-
         outmap
     }
 
