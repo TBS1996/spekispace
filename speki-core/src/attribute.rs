@@ -2,7 +2,7 @@ use std::time::Duration;
 
 use crate::card_provider::CardProvider;
 use crate::App;
-use speki_dto::{AttributeDTO, AttributeId, CardId};
+use speki_dto::{AttributeDTO, AttributeId, CardId, ModifiedSource};
 
 /// An attribute of a sub-class or an instance
 /// predefined questions that are valid for all in its class.
@@ -17,6 +17,7 @@ pub struct Attribute {
     pub back_type: Option<CardId>,
     pub card_provider: CardProvider,
     pub last_modified: Duration,
+    pub source: ModifiedSource,
 }
 
 impl Attribute {
@@ -45,6 +46,7 @@ impl Attribute {
             back_type: dto.back_type,
             card_provider,
             last_modified: dto.last_modified,
+            source: dto.source,
         }
     }
 
@@ -56,6 +58,7 @@ impl Attribute {
             back_type: self.back_type,
             last_modified: self.last_modified,
             deleted: false,
+            source: self.source,
         }
     }
 

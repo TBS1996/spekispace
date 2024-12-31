@@ -195,6 +195,7 @@ impl From<Card> for RawCard {
             suspended: card.suspended.is_suspended(),
             deleted: false,
             last_modified: card.last_modified,
+            source: card.source,
         }
     }
 }

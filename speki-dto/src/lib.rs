@@ -25,6 +25,14 @@ impl Item for History {
             .unwrap_or_default()
     }
 
+    fn source(&self) -> ModifiedSource {
+        self.source
+    }
+
+    fn set_source(&mut self, source: ModifiedSource) {
+        self.source = source;
+    }
+
     fn id(&self) -> Uuid {
         self.id
     }
@@ -82,6 +90,14 @@ impl Item for AttributeDTO {
         self.last_modified
     }
 
+    fn set_source(&mut self, source: ModifiedSource) {
+        self.source = source;
+    }
+
+    fn source(&self) -> ModifiedSource {
+        self.source
+    }
+
     fn id(&self) -> Uuid {
         self.id
     }
@@ -110,6 +126,14 @@ impl Item for AttributeDTO {
 impl Item for RawCard {
     fn last_modified(&self) -> Duration {
         self.last_modified
+    }
+
+    fn set_source(&mut self, source: ModifiedSource) {
+        self.source = source;
+    }
+
+    fn source(&self) -> ModifiedSource {
+        self.source
     }
 
     fn deserialize(_id: Uuid, s: String) -> Self {
@@ -163,6 +187,20 @@ impl<T: Item> From<T> for Record {
     }
 }
 
+/// Whether the item was modified in the current provider or elsewhere
+/// and if elsewhere, when was it inserted into this provider?
+#[derive(
+    Hash, Copy, Default, Clone, Debug, Serialize, Deserialize, Ord, Eq, PartialEq, PartialOrd,
+)]
+pub enum ModifiedSource {
+    #[default]
+    Local,
+    External {
+        from: ProviderId,
+        inserted: Duration,
+    },
+}
+
 pub trait Item: DeserializeOwned + Sized + Send + Clone + 'static {
     fn deleted(&self) -> bool;
     fn set_delete(&mut self);
@@ -172,6 +210,9 @@ pub trait Item: DeserializeOwned + Sized + Send + Clone + 'static {
     fn serialize(&self) -> String;
     fn deserialize(id: Uuid, s: String) -> Self;
     fn identifier() -> Cty;
+    fn source(&self) -> ModifiedSource;
+    fn set_source(&mut self, source: ModifiedSource);
+
     /// Returns whehter hte returned value should be saved to self, other, enither, or both.
     fn merge(self, other: Self) -> MergeRes<Self>
     where
@@ -217,6 +258,8 @@ pub enum MergeRes<T> {
 pub struct History {
     id: Uuid,
     reviews: Vec<Review>,
+    #[serde(default)]
+    source: ModifiedSource,
 }
 
 impl History {
@@ -269,7 +312,8 @@ impl History {
     pub fn new(id: CardId) -> Self {
         Self {
             id,
-            reviews: vec![],
+            reviews: Default::default(),
+            source: Default::default(),
         }
     }
 
@@ -394,36 +438,55 @@ pub async fn sync<T: Item>(
     current_time: Duration,
 ) {
     info!("starting sync of: {:?}", T::identifier());
+    let left_id = left.provider_id().await;
+    let right_id = right.provider_id().await;
+
+    let left_source = ModifiedSource::External {
+        from: left_id,
+        inserted: current_time,
+    };
+
+    let right_source = ModifiedSource::External {
+        from: right_id,
+        inserted: current_time,
+    };
+
     let mut left_update = vec![];
     let mut right_update = vec![];
 
-    let mut map1 = left.load_all().await;
-    let mut map2 = right.load_all().await;
+    let mut left_map = left.load_all().await;
+    let mut right_map = right.load_all().await;
 
-    let mut ids: HashSet<Uuid> = map1.keys().map(|key| *key).collect();
-    ids.extend(map2.keys());
+    let mut ids: HashSet<Uuid> = left_map.keys().map(|key| *key).collect();
+    ids.extend(right_map.keys());
 
     for id in &ids {
         info!("syncing card");
         let id = *id;
-        match (map1.remove(&id), map2.remove(&id)) {
+        match (left_map.remove(&id), right_map.remove(&id)) {
             (None, None) => panic!(),
-            (None, Some(card)) => {
+            (None, Some(mut card)) => {
+                card.set_source(right_source);
                 left_update.push(card);
             }
-            (Some(card), None) => {
-                right_update.push(card);
+            (Some(mut item), None) => {
+                item.set_source(left_source);
+                right_update.push(item);
             }
-            (Some(card1), Some(card2)) => match card1.merge(card2) {
-                MergeRes::Both(card) => {
-                    left_update.push(card.clone());
-                    right_update.push(card);
+            (Some(left_item), Some(right_item)) => match left_item.merge(right_item) {
+                MergeRes::Both(mut item) => {
+                    item.set_source(right_source);
+                    left_update.push(item.clone());
+                    item.set_source(left_source);
+                    right_update.push(item);
                 }
-                MergeRes::Left(card) => {
-                    left_update.push(card);
+                MergeRes::Left(mut item) => {
+                    item.set_source(right_source);
+                    left_update.push(item);
                 }
-                MergeRes::Right(card) => {
-                    right_update.push(card);
+                MergeRes::Right(mut item) => {
+                    item.set_source(left_source);
+                    right_update.push(item);
                 }
                 MergeRes::Neither => {}
             },
@@ -466,6 +529,7 @@ fn parse_history(s: String, id: Uuid) -> History {
         History {
             id,
             reviews: legacy_parse_history(s),
+            source: Default::default(),
         }
     }
 }
@@ -690,6 +754,8 @@ pub struct RawCard {
     pub deleted: bool,
     #[serde(default)]
     pub last_modified: Duration,
+    #[serde(default)]
+    pub source: ModifiedSource,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -702,6 +768,8 @@ pub struct AttributeDTO {
     pub last_modified: Duration,
     #[serde(default)]
     pub deleted: bool,
+    #[serde(default)]
+    pub source: ModifiedSource,
 }
 
 pub type AttributeId = Uuid;

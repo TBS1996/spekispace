@@ -17,6 +17,7 @@ use speki_dto::BackSide;
 use speki_dto::CType;
 use speki_dto::CardId;
 use speki_dto::History;
+use speki_dto::ModifiedSource;
 use speki_dto::RawCard;
 use speki_dto::Recall;
 use speki_dto::Review;
@@ -264,6 +265,7 @@ pub struct Card {
     card_provider: CardProvider,
     recaller: Recaller,
     last_modified: Duration,
+    source: ModifiedSource,
 }
 
 impl PartialEq for Card {
@@ -394,6 +396,7 @@ impl Card {
             card_provider,
             recaller,
             last_modified: Duration::default(),
+            source: raw_card.source,
         }
     }
 
@@ -495,6 +498,9 @@ impl Card {
     // Call this function every time SavedCard is mutated.
     pub async fn persist(&mut self) {
         info!("persisting card: {}", self.id);
+        self.last_modified = self.current_time();
+        self.source = ModifiedSource::Local;
+
         self.card_provider.save_card(self.clone()).await;
         self.card_provider.save_reviews(self.history.clone()).await;
 
