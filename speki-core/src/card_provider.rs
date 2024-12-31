@@ -121,9 +121,12 @@ impl CardProvider {
     }
 
     pub async fn fill_cache(&self) {
+        info!("1");
         let mut cards: HashMap<CardId, CardCache> = Default::default();
         let mut rev_caches: HashMap<CardId, RevCache> = Default::default();
+        info!("loading cards");
         let raw_cards = self.provider.cards.load_all().await;
+        info!("loading reviews");
         let mut reviews = self.provider.reviews.load_all().await;
         let fetched = self.time_provider.current_time();
 

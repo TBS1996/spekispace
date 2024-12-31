@@ -6,7 +6,7 @@ use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::fmt::Debug;
 use std::str::FromStr;
 use std::time::Duration;
-use tracing::info;
+use tracing::{info, warn};
 use uuid::Uuid;
 
 #[derive(Clone, Copy, Debug)]
@@ -325,11 +325,17 @@ pub trait SpekiProvider<T: Item>: Sync {
     }
 
     async fn load_all(&self) -> HashMap<Uuid, T> {
+        info!("loading all for: {:?}", T::identifier());
         let map = self.load_all_records(T::identifier()).await;
         let mut outmap = HashMap::new();
 
         for (key, val) in map {
-            outmap.insert(key, toml::from_str(&val.content).unwrap());
+            match toml::from_str(&val.content) {
+                Ok(val) => {
+                    let _ = outmap.insert(key, val);
+                }
+                Err(e) => warn!("failed to deserialize: {:?}", e),
+            }
         }
 
         outmap
@@ -411,12 +417,12 @@ fn parse_history(s: String, id: Uuid) -> History {
     } else {
         History {
             id,
-            reviews: parse_review(s),
+            reviews: legacy_parse_history(s),
         }
     }
 }
 
-fn parse_review(s: String) -> Vec<Review> {
+fn legacy_parse_history(s: String) -> Vec<Review> {
     let mut reviews = vec![];
     for line in s.lines() {
         let (timestamp, grade) = line.split_once(' ').unwrap();
