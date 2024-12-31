@@ -96,7 +96,7 @@ impl<T: Clone + 'static + Item> SpekiProvider<T> for FileProvider {
         out
     }
 
-    async fn save_content(&self, ty: Cty, record: Record) {
+    async fn save_record(&self, ty: Cty, record: Record) {
         let id = record.id;
         let content = record.content;
 

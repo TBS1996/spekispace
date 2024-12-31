@@ -163,7 +163,7 @@ impl<T: Item> From<T> for Record {
     }
 }
 
-pub trait Item: DeserializeOwned + Sized + Send {
+pub trait Item: DeserializeOwned + Sized + Send + Clone + 'static {
     fn deleted(&self) -> bool;
     fn set_delete(&mut self);
 
@@ -306,12 +306,10 @@ pub struct Record {
 }
 
 #[async_trait::async_trait(?Send)]
-pub trait SpekiProvider<T>: Sync
-where
-    T: Item + Send + 'static + Clone,
-{
+pub trait SpekiProvider<T: Item>: Sync {
     async fn load_record(&self, id: Uuid, ty: Cty) -> Option<Record>;
     async fn load_all_records(&self, ty: Cty) -> HashMap<Uuid, Record>;
+    async fn save_record(&self, ty: Cty, record: Record);
 
     async fn load_ids(&self) -> Vec<Uuid> {
         self.load_all_records(T::identifier())
@@ -337,47 +335,19 @@ where
         outmap
     }
 
-    async fn load_content(&self, id: Uuid, ty: Cty) -> Option<String> {
-        self.load_record(id, ty).await.map(|rec| rec.content)
-    }
-
-    async fn last_modified(&self, id: Uuid, ty: Cty) -> Option<Duration> {
-        self.load_record(id, ty)
-            .await
-            .map(|rec| Duration::from_secs(rec.last_modified))
-    }
-
     async fn save_item(&self, item: T) {
         let record: Record = item.into();
-        self.save_content(T::identifier(), record).await;
+        self.save_record(T::identifier(), record).await;
     }
 
-    async fn save_items(&self, items: Vec<T>) {
-        let records: Vec<Record> = items.into_iter().map(Record::from).collect();
-        self.save_contents(T::identifier(), records).await;
-    }
-
-    async fn save_content(&self, ty: Cty, record: Record);
-
-    async fn save_contents(&self, ty: Cty, records: Vec<Record>) {
+    async fn save_records(&self, ty: Cty, records: Vec<Record>) {
         for record in records {
-            self.save_content(ty, record).await;
+            self.save_record(ty, record).await;
         }
     }
-
-    /*
-
-    async fn delete_content(&self, id: Uuid, ty: Cty);
-
-    async fn load_config(&self) -> Config;
-    async fn save_config(&self, config: Config);
-    */
 }
 
-pub async fn sync<T: Item + Clone + 'static>(
-    left: impl SpekiProvider<T>,
-    right: impl SpekiProvider<T>,
-) {
+pub async fn sync<T: Item>(left: impl SpekiProvider<T>, right: impl SpekiProvider<T>) {
     info!("starting sync of: {:?}", T::identifier());
     let mut left_update = vec![];
     let mut right_update = vec![];
@@ -415,7 +385,7 @@ pub async fn sync<T: Item + Clone + 'static>(
         }
     }
 
-    left.save_contents(
+    left.save_records(
         Cty::Card,
         left_update
             .into_iter()
@@ -425,7 +395,7 @@ pub async fn sync<T: Item + Clone + 'static>(
     .await;
 
     right
-        .save_contents(
+        .save_records(
             Cty::Card,
             right_update
                 .into_iter()

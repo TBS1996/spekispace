@@ -796,7 +796,7 @@ mod tests {
     }
 
     #[async_trait(?Send)]
-    impl<T: Item + Clone + 'static> SpekiProvider<T> for Storage {
+    impl<T: Item> SpekiProvider<T> for Storage {
         async fn load_record(&self, id: Uuid, ty: Cty) -> Option<Record> {
             self.get(ty, id)
         }
@@ -805,7 +805,7 @@ mod tests {
             self.get_all(ty)
         }
 
-        async fn save_content(&self, ty: Cty, record: Record) {
+        async fn save_record(&self, ty: Cty, record: Record) {
             self.save(ty, record.id.parse().unwrap(), record.content);
         }
     }

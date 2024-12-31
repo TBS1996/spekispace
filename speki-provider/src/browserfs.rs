@@ -1,4 +1,3 @@
-use std::time::Duration;
 use std::{collections::HashMap, path::PathBuf};
 
 use async_trait::async_trait;
@@ -60,35 +59,6 @@ mod js {
         let jsvalue = future.await.unwrap();
         jsvalue.into_serde().unwrap()
     }
-
-    pub async fn last_modified(path: PathBuf) -> Option<Duration> {
-        let path = path.to_str().unwrap();
-        let path = JsValue::from_str(path);
-        let val = promise_to_val(lastModified(&path)).await;
-        let serde_json::Value::String(s) = val else {
-            return None;
-        };
-
-        let datetime =
-            time::OffsetDateTime::parse(&s, &time::format_description::well_known::Rfc3339)
-                .unwrap();
-        let unix_epoch = time::OffsetDateTime::UNIX_EPOCH;
-        let duration_since_epoch = datetime - unix_epoch;
-        let seconds = duration_since_epoch.whole_seconds();
-        Some(Duration::from_secs(seconds as u64))
-    }
-
-    pub async fn load_file(path: PathBuf) -> Option<String> {
-        let path = path.to_str().unwrap();
-        let path = JsValue::from_str(path);
-        let val = promise_to_val(loadFile(&path)).await;
-
-        match val {
-            Value::Null => None,
-            Value::String(s) => Some(s.clone()),
-            other => panic!("invalid type: {}", other),
-        }
-    }
 }
 
 pub struct BrowserFsProvider {
@@ -139,19 +109,11 @@ impl<T: Clone + Item + 'static> SpekiProvider<T> for BrowserFsProvider {
         todo!()
     }
 
-    async fn save_content(&self, ty: Cty, record: Record) {
+    async fn save_record(&self, ty: Cty, record: Record) {
         js::save_file(
             self.content_path(ty, record.id.parse().unwrap()),
             &record.content,
         );
-    }
-
-    async fn load_content(&self, id: Uuid, ty: Cty) -> Option<String> {
-        js::load_file(self.content_path(ty, id)).await
-    }
-
-    async fn last_modified(&self, id: Uuid, ty: Cty) -> Option<Duration> {
-        js::last_modified(self.content_path(ty, id)).await
     }
 
     async fn load_ids(&self) -> Vec<CardId> {

@@ -15,7 +15,7 @@ use async_trait::async_trait;
 use speki_dto::Item;
 
 #[async_trait(?Send)]
-impl<T: Item + Clone + 'static> SpekiProvider<T> for DexieProvider {
+impl<T: Item> SpekiProvider<T> for DexieProvider {
     async fn load_record(&self, id: Uuid, ty: Cty) -> Option<Record> {
         let id = JsValue::from_str(&id.to_string());
         let promise = loadRecord(&cty_as_jsvalue(ty), &id);
@@ -31,7 +31,7 @@ impl<T: Item + Clone + 'static> SpekiProvider<T> for DexieProvider {
         serde_wasm_bindgen::from_value(jsvalue).unwrap()
     }
 
-    async fn save_content(&self, ty: Cty, record: Record) {
+    async fn save_record(&self, ty: Cty, record: Record) {
         let id = JsValue::from_str(&record.id.to_string());
         let content = JsValue::from_str(&record.content);
         let last_modified = JsValue::from_str(&record.last_modified.to_string());

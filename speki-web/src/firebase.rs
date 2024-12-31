@@ -55,7 +55,7 @@ fn duration_to_firestore_jsvalue(duration: Duration) -> JsValue {
 use async_trait::async_trait;
 
 #[async_trait(?Send)]
-impl<T: Item + 'static + Clone> SpekiProvider<T> for FirestoreProvider {
+impl<T: Item> SpekiProvider<T> for FirestoreProvider {
     async fn load_record(&self, id: Uuid, ty: Cty) -> Option<Record> {
         let id = JsValue::from_str(&id.to_string());
         let promise = loadRecord(&self.user_id(), &as_js_value(ty), &id);
@@ -74,7 +74,7 @@ impl<T: Item + 'static + Clone> SpekiProvider<T> for FirestoreProvider {
         records
     }
 
-    async fn save_contents(&self, ty: Cty, records: Vec<Record>) {
+    async fn save_records(&self, ty: Cty, records: Vec<Record>) {
         info!("from rust starting save-conents");
         use js_sys::{Array, Object};
 
@@ -113,7 +113,7 @@ impl<T: Item + 'static + Clone> SpekiProvider<T> for FirestoreProvider {
         saveContents(&user_id, &table, &js_records_value);
     }
 
-    async fn save_content(&self, ty: Cty, record: Record) {
+    async fn save_record(&self, ty: Cty, record: Record) {
         let table = JsValue::from_str(as_str(ty));
         let content_id = JsValue::from_str(&record.id.to_string());
         let content = JsValue::from_str(&record.content);
