@@ -1,7 +1,7 @@
-use std::{collections::HashMap, path::PathBuf};
+use std::{collections::HashMap, path::PathBuf, time::Duration};
 
 use async_trait::async_trait;
-use speki_dto::{CardId, Cty, Record, SpekiProvider};
+use speki_dto::{CardId, Cty, ProviderId, ProviderMeta, Record, SpekiProvider};
 use uuid::Uuid;
 
 mod js {
@@ -102,6 +102,18 @@ use speki_dto::Item;
 #[async_trait(?Send)]
 impl<T: Clone + Item + 'static> SpekiProvider<T> for BrowserFsProvider {
     async fn load_record(&self, _id: Uuid, _ty: Cty) -> Option<Record> {
+        todo!()
+    }
+
+    async fn provider_id(&self) -> ProviderId {
+        todo!()
+    }
+
+    async fn update_sync(&self, other: ProviderId, ty: Cty, current_time: Duration) {
+        todo!()
+    }
+
+    async fn last_sync(&self, other: ProviderId, ty: Cty) -> Duration {
         todo!()
     }
 

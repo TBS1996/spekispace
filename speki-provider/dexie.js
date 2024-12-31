@@ -1,16 +1,52 @@
 const db = new Dexie("dexiedb4");
 
-db.version(1).stores({
+db.version(5).stores({
     cards: "id,content,lastModified",
     reviews: "id,content,lastModified",
-    attrs: "id,content,lastModified" 
+    attrs: "id,content,lastModified" ,
+    db_id: "key, id",
+    sync_data: "key, lastSync",
+
 });
 
 function getTable(tableName) {
     return db[tableName];
 }
 
+
+export async function saveDbId(id) {
+    console.log("Saving DB ID:", id);
+    await db.db_id.put({ key: "db_id", id });
+}
+
+export async function loadDbId() {
+    const dbId = await db.db_id.get("db_id");
+    if (!dbId) {
+        console.log("No DB ID found, returning empty string.");
+        return "";
+    }
+    console.log("Loaded DB ID:", dbId.id);
+    return dbId.id; 
+}
+
+export async function saveSyncTime(key, lastSync) {
+    console.log(`Saving sync time for key '${key}':`, lastSync);
+    await db.sync_data.put({ key, lastSync });
+}
+
+export async function loadSyncTime(key) {
+    const syncData = await db.sync_data.get(key);
+    if (!syncData) {
+        console.log(`No sync time found for key '${key}', returning 0.`);
+        return 0; 
+    }
+    console.log(`Loaded sync time for key '${key}':`, syncData.lastSync);
+    return syncData.lastSync;
+}
+
+
 const TooBig = 173426346900;
+
 
 function ensureUnixSeconds(timestamp) {
     if (timestamp == null) {

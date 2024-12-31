@@ -9,7 +9,7 @@ use std::{
 };
 
 use rayon::prelude::*;
-use speki_dto::Cty;
+use speki_dto::{Cty, ProviderId, ProviderMeta};
 use speki_dto::{Record, SpekiProvider};
 use uuid::Uuid;
 
@@ -77,10 +77,22 @@ fn last_modified_path(path: &Path) -> Option<Duration> {
 use speki_dto::Item;
 
 #[async_trait(?Send)]
-impl<T: Clone + 'static + Item> SpekiProvider<T> for FileProvider {
+impl<T: Item> SpekiProvider<T> for FileProvider {
     async fn load_record(&self, id: Uuid, ty: Cty) -> Option<Record> {
         let p = file_path(ty, id);
         load_record_from_path(&p)
+    }
+
+    async fn provider_id(&self) -> ProviderId {
+        todo!()
+    }
+
+    async fn update_sync(&self, other: ProviderId, ty: Cty, current_time: Duration) {
+        todo!()
+    }
+
+    async fn last_sync(&self, other: ProviderId, ty: Cty) -> Duration {
+        todo!()
     }
 
     async fn load_all_records(&self, ty: Cty) -> HashMap<Uuid, Record> {

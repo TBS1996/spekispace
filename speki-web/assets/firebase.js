@@ -54,6 +54,56 @@ export async function loadRecord(userId, tableName, contentId) {
 }
 
 
+function getDbIdRef(userId) {
+  return doc(db, `users/${userId}/meta/db_id`);
+}
+
+export async function loadDbId(userId) {
+  const dbIdRef = getDbIdRef(userId);
+  const dbIdSnap = await getDoc(dbIdRef);
+
+  if (!dbIdSnap.exists()) {
+      console.log(`No DB ID found for user: ${userId}`);
+      return null; 
+  }
+
+  console.log(`Loaded DB ID for user: ${userId}`, dbIdSnap.data().id);
+  return dbIdSnap.data().id; 
+}
+
+export async function saveDbId(userId, id) {
+  const dbIdRef = getDbIdRef(userId);
+  await setDoc(dbIdRef, { id }); // Set the `id` field
+  console.log(`Saved DB ID for user: ${userId}`, id);
+}
+
+
+function getSyncTimeRef(userId, key) {
+  return doc(db, `users/${userId}/meta/sync_data/sync/${key}`);
+}
+
+export async function saveSyncTime(userId, key, lastSync) {
+  const syncTimeRef = getSyncTimeRef(userId, key);
+  await setDoc(syncTimeRef, { lastSync });
+  console.log(`Saved sync time for key '${key}' for user: ${userId}`, lastSync);
+}
+
+export async function loadSyncTime(userId, key) {
+  const syncTimeRef = getSyncTimeRef(userId, key);
+  const syncTimeSnap = await getDoc(syncTimeRef);
+
+  if (!syncTimeSnap.exists()) {
+      console.log(`No sync time found for key '${key}' for user: ${userId}`);
+      return 0; 
+  }
+
+  console.log(`Loaded sync time for key '${key}' for user: ${userId}`, syncTimeSnap.data().lastSync);
+  return syncTimeSnap.data().lastSync; 
+}
+
+
+
+
 export async function loadAllRecords(userId, tableName) {
   console.log(`Loading all content with metadata from table ${tableName}`);
   const colRef = getTable(userId, tableName);

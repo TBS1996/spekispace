@@ -125,14 +125,20 @@ impl App {
 }
 
 pub async fn sync() {
+    let now = APP.read().0.time_provider.current_time();
     let agent = sign_in().await;
     info!("starting sync!");
 
     *SYNCING.write() = true;
-    speki_dto::sync::<RawCard>(FirestoreProvider::new(agent.clone()), DexieProvider).await;
-    speki_dto::sync::<speki_dto::History>(FirestoreProvider::new(agent.clone()), DexieProvider)
+    speki_dto::sync::<RawCard>(FirestoreProvider::new(agent.clone()), DexieProvider, now).await;
+    speki_dto::sync::<speki_dto::History>(
+        FirestoreProvider::new(agent.clone()),
+        DexieProvider,
+        now,
+    )
+    .await;
+    speki_dto::sync::<AttributeDTO>(FirestoreProvider::new(agent.clone()), DexieProvider, now)
         .await;
-    speki_dto::sync::<AttributeDTO>(FirestoreProvider::new(agent.clone()), DexieProvider).await;
     *SYNCING.write() = false;
 
     info!("done syncing maybe!");

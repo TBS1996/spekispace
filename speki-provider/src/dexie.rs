@@ -3,7 +3,8 @@ use std::{collections::HashMap, time::Duration};
 use gloo_utils::format::JsValueSerdeExt;
 use js_sys::Promise;
 use serde_json::Value;
-use speki_dto::{CardId, Record, SpekiProvider};
+use speki_dto::{CardId, ProviderId, ProviderMeta, Record, SpekiProvider};
+use tracing::info;
 use uuid::Uuid;
 use wasm_bindgen::prelude::*;
 
@@ -19,6 +20,46 @@ impl<T: Item> SpekiProvider<T> for DexieProvider {
     async fn load_record(&self, id: Uuid, ty: Cty) -> Option<Record> {
         let id = JsValue::from_str(&id.to_string());
         let promise = loadRecord(&cty_as_jsvalue(ty), &id);
+        let future = wasm_bindgen_futures::JsFuture::from(promise);
+        let jsvalue = future.await.unwrap();
+        serde_wasm_bindgen::from_value(jsvalue).unwrap()
+    }
+
+    async fn provider_id(&self) -> ProviderId {
+        info!("getting provider id from dexie");
+        async fn try_load_id() -> Option<ProviderId> {
+            let promise = loadDbId();
+            let future = wasm_bindgen_futures::JsFuture::from(promise);
+            let jsvalue = future.await.unwrap();
+            serde_wasm_bindgen::from_value::<ProviderId>(jsvalue).ok()
+        }
+
+        match try_load_id().await {
+            Some(id) => {
+                info!("found dexie id: {:?}", id);
+                id
+            }
+            None => {
+                info!("creating new dexie db id");
+                let new = ProviderId::new_v4();
+                let s = JsValue::from_str(&new.to_string());
+                saveDbId(&s);
+                new
+            }
+        }
+    }
+
+    async fn update_sync(&self, other: ProviderId, ty: Cty, current_time: Duration) {
+        let key = format!("{}-{:?}", other, ty);
+        let key = JsValue::from_str(&key);
+        let val = JsValue::from_f64(current_time.as_secs() as f64);
+        saveSyncTime(&key, &val);
+    }
+
+    async fn last_sync(&self, other: ProviderId, ty: Cty) -> Duration {
+        let key = format!("{}-{:?}", other, ty);
+        let key = JsValue::from_str(&key);
+        let promise = loadSyncTime(&key);
         let future = wasm_bindgen_futures::JsFuture::from(promise);
         let jsvalue = future.await.unwrap();
         serde_wasm_bindgen::from_value(jsvalue).unwrap()
@@ -45,9 +86,14 @@ impl<T: Item> SpekiProvider<T> for DexieProvider {
 
 #[wasm_bindgen(module = "/dexie.js")]
 extern "C" {
+    fn loadDbId() -> Promise;
+    fn saveDbId(id: &JsValue);
+
+    fn saveSyncTime(key: &JsValue, lastSync: &JsValue);
+    fn loadSyncTime(key: &JsValue) -> Promise;
+
     fn loadRecord(table: &JsValue, id: &JsValue) -> Promise;
     fn loadAllRecords(table: &JsValue) -> Promise;
-
     fn saveContent(table: &JsValue, id: &JsValue, content: &JsValue, last_modified: &JsValue);
     fn deleteContent(table: &JsValue, id: &JsValue);
     fn loadAllIds(table: &JsValue) -> Promise;

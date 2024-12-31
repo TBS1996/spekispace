@@ -726,7 +726,10 @@ mod tests {
         card_provider::CardProvider, Provider, Recaller, SimpleRecall, TimeGetter, TimeProvider,
     };
     use async_trait::async_trait;
-    use speki_dto::{BackSide, CType, Cty, Item, RawCard, RawType, Recall, Record, SpekiProvider};
+    use speki_dto::{
+        BackSide, CType, Cty, Item, ProviderId, ProviderMeta, RawCard, RawType, Recall, Record,
+        SpekiProvider,
+    };
     use std::{
         collections::HashMap,
         sync::{Arc, Mutex},
@@ -799,6 +802,18 @@ mod tests {
     impl<T: Item> SpekiProvider<T> for Storage {
         async fn load_record(&self, id: Uuid, ty: Cty) -> Option<Record> {
             self.get(ty, id)
+        }
+
+        async fn update_sync(&self, other: ProviderId, ty: Cty, current_time: Duration) {
+            todo!()
+        }
+
+        async fn last_sync(&self, other: ProviderId, ty: Cty) -> Duration {
+            todo!()
+        }
+
+        async fn provider_id(&self) -> ProviderId {
+            todo!()
         }
 
         async fn load_all_records(&self, ty: Cty) -> HashMap<Uuid, Record> {

@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use gloo_utils::format::JsValueSerdeExt;
 use js_sys::Promise;
 use serde_json::Value;
-use speki_dto::{Cty, Item, Record, SpekiProvider};
+use speki_dto::{Cty, Item, ProviderId, Record, SpekiProvider};
 use tracing::info;
 use uuid::Uuid;
 use wasm_bindgen::prelude::*;
@@ -63,6 +63,41 @@ impl<T: Item> SpekiProvider<T> for FirestoreProvider {
         let jsvalue = future.await.unwrap();
         let record: Option<Record> = serde_wasm_bindgen::from_value(jsvalue).unwrap();
         record
+    }
+
+    async fn provider_id(&self) -> ProviderId {
+        async fn try_load_id(user_id: &JsValue) -> Option<ProviderId> {
+            let promise = loadDbId(user_id);
+            let future = wasm_bindgen_futures::JsFuture::from(promise);
+            let jsvalue = future.await.unwrap();
+            serde_wasm_bindgen::from_value::<ProviderId>(jsvalue).ok()
+        }
+
+        match try_load_id(&self.user_id()).await {
+            Some(id) => id,
+            None => {
+                let new = ProviderId::new_v4();
+                let s = JsValue::from_str(&new.to_string());
+                saveDbId(&self.user_id(), &s);
+                new
+            }
+        }
+    }
+
+    async fn update_sync(&self, other: ProviderId, ty: Cty, current_time: Duration) {
+        let key = format!("{}-{:?}", other, ty);
+        let key = JsValue::from_str(&key);
+        let val = JsValue::from_f64(current_time.as_secs() as f64);
+        saveSyncTime(&self.user_id(), &key, &val);
+    }
+
+    async fn last_sync(&self, other: ProviderId, ty: Cty) -> Duration {
+        let key = format!("{}-{:?}", other, ty);
+        let key = JsValue::from_str(&key);
+        let promise = loadSyncTime(&self.user_id(), &key);
+        let future = wasm_bindgen_futures::JsFuture::from(promise);
+        let jsvalue = future.await.unwrap();
+        serde_wasm_bindgen::from_value(jsvalue).unwrap()
     }
 
     async fn load_all_records(&self, ty: Cty) -> HashMap<Uuid, Record> {
@@ -146,6 +181,12 @@ extern "C" {
     fn loadAllRecords(user_id: &JsValue, table: &JsValue) -> Promise;
     fn loadAllIds(user_id: &JsValue, table: &JsValue) -> Promise;
     fn lastModified(user_id: &JsValue, table: &JsValue, id: &JsValue) -> Promise;
+
+    fn loadDbId(user_id: &JsValue) -> Promise;
+    fn saveDbId(user_id: &JsValue, id: &JsValue); // todo: generate it server side
+
+    fn saveSyncTime(user_id: &JsValue, key: &JsValue, lastSync: &JsValue);
+    fn loadSyncTime(user_id: &JsValue, key: &JsValue) -> Promise;
 
     fn signInWithGoogle() -> Promise;
     fn signOutUser() -> Promise;

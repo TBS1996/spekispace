@@ -9,7 +9,7 @@ use std::time::Duration;
 use tracing::{info, warn};
 use uuid::Uuid;
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, Eq, PartialEq, Ord, Hash, PartialOrd)]
 pub enum Cty {
     Attribute,
     Review,
@@ -305,8 +305,43 @@ pub struct Record {
     pub last_modified: u64,
 }
 
+pub type ProviderId = Uuid;
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ProviderMeta {
+    pub id: ProviderId,
+    pub last_synced: HashMap<String, Duration>,
+}
+
+impl ProviderMeta {
+    pub fn init() -> Self {
+        Self {
+            id: ProviderId::new_v4(),
+            last_synced: Default::default(),
+        }
+    }
+
+    fn key_as_str(id: ProviderId, ty: Cty) -> String {
+        format!("{}-{:?}", id, ty)
+    }
+
+    pub fn update(&mut self, other: ProviderId, ty: Cty, now: Duration) {
+        let key = Self::key_as_str(other, ty);
+        self.last_synced.insert(key, now);
+    }
+
+    pub fn get_synced(&self, other: ProviderId, ty: Cty) -> Duration {
+        let key = Self::key_as_str(other, ty);
+        self.last_synced.get(&key).cloned().unwrap_or_default()
+    }
+}
+
 #[async_trait::async_trait(?Send)]
 pub trait SpekiProvider<T: Item>: Sync {
+    async fn provider_id(&self) -> ProviderId;
+    async fn update_sync(&self, other: ProviderId, ty: Cty, now: Duration);
+    async fn last_sync(&self, other: ProviderId, ty: Cty) -> Duration;
+
     async fn load_record(&self, id: Uuid, ty: Cty) -> Option<Record>;
     async fn load_all_records(&self, ty: Cty) -> HashMap<Uuid, Record>;
     async fn save_record(&self, ty: Cty, record: Record);
@@ -353,7 +388,11 @@ pub trait SpekiProvider<T: Item>: Sync {
     }
 }
 
-pub async fn sync<T: Item>(left: impl SpekiProvider<T>, right: impl SpekiProvider<T>) {
+pub async fn sync<T: Item>(
+    left: impl SpekiProvider<T>,
+    right: impl SpekiProvider<T>,
+    current_time: Duration,
+) {
     info!("starting sync of: {:?}", T::identifier());
     let mut left_update = vec![];
     let mut right_update = vec![];
@@ -409,6 +448,15 @@ pub async fn sync<T: Item>(left: impl SpekiProvider<T>, right: impl SpekiProvide
                 .collect(),
         )
         .await;
+
+    right
+        .update_sync(left.provider_id().await, T::identifier(), current_time)
+        .await;
+
+    left.update_sync(right.provider_id().await, T::identifier(), current_time)
+        .await;
+
+    info!("done syncing of: {:?}!", T::identifier());
 }
 
 fn parse_history(s: String, id: Uuid) -> History {
