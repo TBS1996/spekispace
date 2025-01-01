@@ -97,7 +97,8 @@ impl<T: Item> SpekiProvider<T> for FirestoreProvider {
         let promise = loadSyncTime(&self.user_id(), &key);
         let future = wasm_bindgen_futures::JsFuture::from(promise);
         let jsvalue = future.await.unwrap();
-        serde_wasm_bindgen::from_value(jsvalue).unwrap()
+        let timestamp: f32 = serde_wasm_bindgen::from_value(jsvalue).unwrap();
+        Duration::from_secs_f32(timestamp)
     }
 
     async fn load_all_records(&self, ty: Cty) -> HashMap<Uuid, Record> {

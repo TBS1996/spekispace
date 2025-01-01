@@ -209,22 +209,4 @@ impl Route {
             Route::Browse {} => "browse",
         }
     }
-
-    fn left(&self) -> Option<Self> {
-        match self {
-            Route::Home {} => None,
-            Route::Review {} => None,
-            Route::Add {} => Some(Self::Review {}),
-            Route::Browse {} => Some(Self::Add {}),
-        }
-    }
-
-    fn right(&self) -> Option<Self> {
-        match self {
-            Route::Home {} => None,
-            Route::Review {} => Some(Self::Add {}),
-            Route::Add {} => Some(Self::Browse {}),
-            Route::Browse {} => None,
-        }
-    }
 }

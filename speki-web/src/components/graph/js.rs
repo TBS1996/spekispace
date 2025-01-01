@@ -14,7 +14,7 @@ extern "C" {
     fn updateShape(cyto_id: &str, node_id: &str, shape: &str);
 }
 
-pub fn update_shape(cyto_id: &str, node: Node, shape: &str) {
+pub fn _update_shape(cyto_id: &str, node: Node, shape: &str) {
     info!("new shape!: {shape}");
     let node_id = node.id().to_string();
     updateShape(cyto_id, &node_id, shape);

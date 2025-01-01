@@ -37,7 +37,7 @@ time.workspace = true
 uuid.workspace = true
 petgraph.workspace = true
 once_cell.workspace = true
-speki-provider = { workspace = true, features = ["dexie", "browserfs"] }
+speki-provider = { workspace = true, features = ["dexie"] }
 strum.workspace = true
 fancy-regex.workspace = true
 

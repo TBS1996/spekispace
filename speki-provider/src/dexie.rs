@@ -3,7 +3,7 @@ use std::{collections::HashMap, time::Duration};
 use gloo_utils::format::JsValueSerdeExt;
 use js_sys::Promise;
 use serde_json::Value;
-use speki_dto::{CardId, ProviderId, ProviderMeta, Record, SpekiProvider};
+use speki_dto::{CardId, ProviderId, Record, SpekiProvider};
 use tracing::info;
 use uuid::Uuid;
 use wasm_bindgen::prelude::*;
@@ -62,7 +62,8 @@ impl<T: Item> SpekiProvider<T> for DexieProvider {
         let promise = loadSyncTime(&key);
         let future = wasm_bindgen_futures::JsFuture::from(promise);
         let jsvalue = future.await.unwrap();
-        serde_wasm_bindgen::from_value(jsvalue).unwrap()
+        let timestamp: f32 = serde_wasm_bindgen::from_value(jsvalue).unwrap();
+        Duration::from_secs_f32(timestamp)
     }
 
     async fn load_all_records(&self, ty: Cty) -> HashMap<Uuid, Record> {

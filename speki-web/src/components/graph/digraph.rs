@@ -271,17 +271,6 @@ pub enum Shape {
 }
 
 impl Shape {
-    pub fn from_card_ty(ty: CardTy) -> Self {
-        let ty = match ty {
-            CardTy::Normal => CType::Normal,
-            CardTy::Instance => CType::Instance,
-            CardTy::Class => CType::Class,
-            CardTy::Unfinished => CType::Unfinished,
-        };
-
-        Self::from_ctype(ty)
-    }
-
     pub fn as_str(&self) -> &'static str {
         match self {
             Shape::RoundedRectangle => "roundrectangle",
