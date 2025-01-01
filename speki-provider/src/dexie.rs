@@ -17,7 +17,8 @@ use speki_dto::Item;
 
 #[async_trait(?Send)]
 impl<T: Item> SpekiProvider<T> for DexieProvider {
-    async fn load_record(&self, id: Uuid, ty: Cty) -> Option<Record> {
+    async fn load_record(&self, id: Uuid) -> Option<Record> {
+        let ty = T::identifier();
         let id = JsValue::from_str(&id.to_string());
         let promise = loadRecord(&cty_as_jsvalue(ty), &id);
         let future = wasm_bindgen_futures::JsFuture::from(promise);
@@ -49,14 +50,16 @@ impl<T: Item> SpekiProvider<T> for DexieProvider {
         }
     }
 
-    async fn update_sync_info(&self, other: ProviderId, ty: Cty, current_time: Duration) {
+    async fn update_sync_info(&self, other: ProviderId, current_time: Duration) {
+        let ty = T::identifier();
         let key = format!("{}-{:?}", other, ty);
         let key = JsValue::from_str(&key);
         let val = JsValue::from_f64(current_time.as_secs() as f64);
         saveSyncTime(&key, &val);
     }
 
-    async fn last_sync(&self, other: ProviderId, ty: Cty) -> Duration {
+    async fn last_sync(&self, other: ProviderId) -> Duration {
+        let ty = T::identifier();
         let key = format!("{}-{:?}", other, ty);
         let key = JsValue::from_str(&key);
         let promise = loadSyncTime(&key);
@@ -66,14 +69,16 @@ impl<T: Item> SpekiProvider<T> for DexieProvider {
         Duration::from_secs_f32(timestamp)
     }
 
-    async fn load_all_records(&self, ty: Cty) -> HashMap<Uuid, Record> {
+    async fn load_all_records(&self) -> HashMap<Uuid, Record> {
+        let ty = T::identifier();
         let promise = loadAllRecords(&cty_as_jsvalue(ty));
         let future = wasm_bindgen_futures::JsFuture::from(promise);
         let jsvalue = future.await.unwrap();
         serde_wasm_bindgen::from_value(jsvalue).unwrap()
     }
 
-    async fn save_record(&self, ty: Cty, record: Record) {
+    async fn save_record(&self, record: Record) {
+        let ty = T::identifier();
         let id = JsValue::from_str(&record.id.to_string());
         let content = JsValue::from_str(&record.content);
         let last_modified = JsValue::from_str(&record.last_modified.to_string());

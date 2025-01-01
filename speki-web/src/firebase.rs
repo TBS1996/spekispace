@@ -56,7 +56,8 @@ use async_trait::async_trait;
 
 #[async_trait(?Send)]
 impl<T: Item> SpekiProvider<T> for FirestoreProvider {
-    async fn load_record(&self, id: Uuid, ty: Cty) -> Option<Record> {
+    async fn load_record(&self, id: Uuid) -> Option<Record> {
+        let ty = T::identifier();
         let id = JsValue::from_str(&id.to_string());
         let promise = loadRecord(&self.user_id(), &as_js_value(ty), &id);
         let future = wasm_bindgen_futures::JsFuture::from(promise);
@@ -84,14 +85,16 @@ impl<T: Item> SpekiProvider<T> for FirestoreProvider {
         }
     }
 
-    async fn update_sync_info(&self, other: ProviderId, ty: Cty, current_time: Duration) {
+    async fn update_sync_info(&self, other: ProviderId, current_time: Duration) {
+        let ty = T::identifier();
         let key = format!("{}-{:?}", other, ty);
         let key = JsValue::from_str(&key);
         let val = JsValue::from_f64(current_time.as_secs() as f64);
         saveSyncTime(&self.user_id(), &key, &val);
     }
 
-    async fn last_sync(&self, other: ProviderId, ty: Cty) -> Duration {
+    async fn last_sync(&self, other: ProviderId) -> Duration {
+        let ty = T::identifier();
         let key = format!("{}-{:?}", other, ty);
         let key = JsValue::from_str(&key);
         let promise = loadSyncTime(&self.user_id(), &key);
@@ -101,18 +104,38 @@ impl<T: Item> SpekiProvider<T> for FirestoreProvider {
         Duration::from_secs_f32(timestamp)
     }
 
-    async fn load_all_records(&self, ty: Cty) -> HashMap<Uuid, Record> {
-        let promise = loadAllRecords(&self.user_id(), &as_js_value(ty));
+    async fn load_all_after(&self, not_before: Duration) -> HashMap<Uuid, T> {
+        let ty = T::identifier();
+        let not_before = JsValue::from_f64(not_before.as_secs_f64());
+        let promise = loadAllRecords(&self.user_id(), &as_js_value(ty), &not_before);
         let future = wasm_bindgen_futures::JsFuture::from(promise);
         let jsvalue = future.await.unwrap();
-        let records: HashMap<Uuid, Record> = serde_wasm_bindgen::from_value(jsvalue)
-            .expect("Failed to deserialize Firestore response");
+        let records: HashMap<Uuid, Record> = serde_wasm_bindgen::from_value(jsvalue).unwrap();
+
+        let mut outmap = HashMap::default();
+
+        for (key, val) in records.into_iter() {
+            let item: T = <T as Item>::deserialize(key, val.content);
+            outmap.insert(key, item);
+        }
+
+        outmap
+    }
+
+    async fn load_all_records(&self) -> HashMap<Uuid, Record> {
+        let ty = T::identifier();
+        let not_before = JsValue::from_f64(Duration::default().as_secs_f64());
+        let promise = loadAllRecords(&self.user_id(), &as_js_value(ty), &not_before);
+        let future = wasm_bindgen_futures::JsFuture::from(promise);
+        let jsvalue = future.await.unwrap();
+        let records: HashMap<Uuid, Record> = serde_wasm_bindgen::from_value(jsvalue).unwrap();
         records
     }
 
-    async fn save_records(&self, ty: Cty, records: Vec<Record>) {
-        info!("from rust starting save-conents");
+    async fn save_records(&self, records: Vec<Record>) {
+        info!("from rust starting save-records");
         use js_sys::{Array, Object};
+        let ty = T::identifier();
 
         let table = JsValue::from_str(as_str(ty));
         let user_id = self.user_id();
@@ -149,7 +172,8 @@ impl<T: Item> SpekiProvider<T> for FirestoreProvider {
         saveContents(&user_id, &table, &js_records_value);
     }
 
-    async fn save_record(&self, ty: Cty, record: Record) {
+    async fn save_record(&self, record: Record) {
+        let ty = T::identifier();
         let table = JsValue::from_str(as_str(ty));
         let content_id = JsValue::from_str(&record.id.to_string());
         let content = JsValue::from_str(&record.content);
@@ -179,7 +203,7 @@ extern "C" {
     fn saveContents(user_id: &JsValue, table: &JsValue, contents: &JsValue);
     fn deleteContent(user_id: &JsValue, table: &JsValue, id: &JsValue);
     fn loadRecord(user_id: &JsValue, table: &JsValue, id: &JsValue) -> Promise;
-    fn loadAllRecords(user_id: &JsValue, table: &JsValue) -> Promise;
+    fn loadAllRecords(user_id: &JsValue, table: &JsValue, not_before: &JsValue) -> Promise;
     fn loadAllIds(user_id: &JsValue, table: &JsValue) -> Promise;
     fn lastModified(user_id: &JsValue, table: &JsValue, id: &JsValue) -> Promise;
 

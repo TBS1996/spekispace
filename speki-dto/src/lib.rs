@@ -379,22 +379,19 @@ impl ProviderMeta {
 #[async_trait::async_trait(?Send)]
 pub trait SpekiProvider<T: Item>: Sync {
     async fn provider_id(&self) -> ProviderId;
-    async fn update_sync_info(&self, other: ProviderId, ty: Cty, now: Duration);
-    async fn last_sync(&self, other: ProviderId, ty: Cty) -> Duration;
+    async fn update_sync_info(&self, other: ProviderId, now: Duration);
+    async fn last_sync(&self, other: ProviderId) -> Duration;
 
-    async fn load_record(&self, id: Uuid, ty: Cty) -> Option<Record>;
-    async fn load_all_records(&self, ty: Cty) -> HashMap<Uuid, Record>;
-    async fn save_record(&self, ty: Cty, record: Record);
+    async fn load_record(&self, id: Uuid) -> Option<Record>;
+    async fn load_all_records(&self) -> HashMap<Uuid, Record>;
+    async fn save_record(&self, record: Record);
 
     async fn load_ids(&self) -> Vec<Uuid> {
-        self.load_all_records(T::identifier())
-            .await
-            .into_keys()
-            .collect()
+        self.load_all_records().await.into_keys().collect()
     }
 
     async fn load_item(&self, id: Uuid) -> Option<T> {
-        let record = self.load_record(id, T::identifier()).await?;
+        let record = self.load_record(id).await?;
         match toml::from_str::<T>(&record.content) {
             Ok(item) => Some(item),
             Err(e) => {
@@ -404,13 +401,14 @@ pub trait SpekiProvider<T: Item>: Sync {
         }
     }
 
-    async fn load_new(&self, other_id: ProviderId, ty: Cty) -> HashMap<Uuid, T> {
-        let last_sync = self.last_sync(other_id, ty).await;
+    async fn load_new(&self, other_id: ProviderId) -> HashMap<Uuid, T> {
+        let last_sync = self.last_sync(other_id).await;
         let new_items = self.load_all_after(last_sync).await;
         info!(
-            "new items from {other_id} of type {ty} since {}: {}",
-            last_sync.as_secs(),
-            new_items.len()
+            "new items from {other_id} of type {ty} since {last_sync}: {qty}",
+            last_sync = last_sync.as_secs(),
+            qty = new_items.len(),
+            ty = T::identifier(),
         );
         new_items
     }
@@ -428,7 +426,7 @@ pub trait SpekiProvider<T: Item>: Sync {
 
     async fn load_all(&self) -> HashMap<Uuid, T> {
         info!("loading all for: {:?}", T::identifier());
-        let map = self.load_all_records(T::identifier()).await;
+        let map = self.load_all_records().await;
         let mut outmap = HashMap::new();
 
         for (key, val) in map {
@@ -444,19 +442,20 @@ pub trait SpekiProvider<T: Item>: Sync {
 
     async fn save_item(&self, item: T) {
         let record: Record = item.into();
-        self.save_record(T::identifier(), record).await;
+        self.save_record(record).await;
     }
 
-    async fn save_records(&self, ty: Cty, records: Vec<Record>) {
+    async fn save_records(&self, records: Vec<Record>) {
         for record in records {
-            self.save_record(ty, record).await;
+            self.save_record(record).await;
         }
     }
 
-    async fn save_from_sync(&self, from: ProviderId, ty: Cty, records: Vec<Record>, now: Duration) {
+    async fn save_from_sync(&self, from: ProviderId, records: Vec<Record>, now: Duration) {
+        let ty = T::identifier();
         info!("updating {qty} {ty} in {from}", qty = records.len());
-        self.save_records(ty, records).await;
-        self.update_sync_info(from, ty, now).await;
+        self.save_records(records).await;
+        self.update_sync_info(from, now).await;
     }
 }
 
@@ -472,8 +471,8 @@ pub async fn sync<T: Item>(
     info!("starting sync of: {ty} between {left_id} and {right_id}");
 
     let mergeres: Vec<MergeRes<T>> = {
-        let mut left_map = right.load_new(left_id, ty).await;
-        let mut right_map = left.load_new(right_id, ty).await;
+        let mut left_map = right.load_new(left_id).await;
+        let mut right_map = left.load_new(right_id).await;
 
         let ids: HashSet<Uuid> = left_map.keys().chain(right_map.keys()).cloned().collect();
         ids.into_iter()
@@ -513,8 +512,8 @@ pub async fn sync<T: Item>(
         (left_update, right_update)
     };
 
-    left.save_from_sync(right_id, ty, left_update, now).await;
-    right.save_from_sync(left_id, ty, right_update, now).await;
+    left.save_from_sync(right_id, left_update, now).await;
+    right.save_from_sync(left_id, right_update, now).await;
 
     info!("finished sync of: {ty} between {left_id} and {right_id}");
 }

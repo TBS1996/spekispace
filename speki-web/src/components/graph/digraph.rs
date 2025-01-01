@@ -13,7 +13,7 @@ use speki_dto::CType;
 use speki_web::{Node, NodeId, NodeMetadata};
 use tracing::info;
 
-use crate::{components::CardTy, utils::get_meta, App, APP};
+use crate::{utils::get_meta, App, APP};
 
 #[derive(Clone, Default)]
 pub struct RustGraph {

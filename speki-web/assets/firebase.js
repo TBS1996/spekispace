@@ -1,5 +1,5 @@
 import { 
-  getFirestore, collection, doc, setDoc, getDocs, getDoc, deleteDoc, writeBatch
+  getFirestore, collection, doc, setDoc, getDocs, getDoc, deleteDoc, writeBatch, serverTimestamp, updateDoc
 } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-app.js';
 import { 
@@ -101,31 +101,42 @@ export async function loadSyncTime(userId, key) {
   return syncTimeSnap.data().lastSync; 
 }
 
-
-
-
-export async function loadAllRecords(userId, tableName) {
-  console.log(`Loading all content with metadata from table ${tableName}`);
+export async function loadAllRecords(userId, tableName, notBefore) {
+  console.log(typeof notBefore);
+  console.log(`Loading all content with metadata from table ${tableName} after ${notBefore}`);
   const colRef = getTable(userId, tableName);
 
   console.log(`Fetching table...`);
   const querySnapshot = await getDocs(colRef);
 
-  console.log(`Processing documents...`);
   const resultMap = {};
+  const updates = []; 
+
   querySnapshot.forEach(doc => {
     const data = doc.data();
-    resultMap[doc.id] = {
-      id: doc.id,
-      content: data.content,
-      last_modified: data.lastModified.seconds
-    };
+    const inserted = data.inserted?.seconds || 0; 
+
+    if (inserted >= notBefore) {
+      resultMap[doc.id] = {
+        id: doc.id,
+        content: data.content,
+        last_modified: data.lastModified.seconds
+      };
+    } 
+
+    if (data.inserted == undefined) {
+      console.log(`Adding serverTimestamp to document ${doc.id}`);
+      updates.push(
+        updateDoc(doc.ref, { inserted: serverTimestamp() })
+      );
+    }
   });
+
+  await Promise.all(updates);
 
   console.log(`Done loading all content with metadata`);
   return resultMap;
 }
-
 
 export async function loadAllIds(userId, tableName) {
   console.log(`loading all id from table ${tableName}`)
@@ -145,7 +156,8 @@ export async function saveContents(userId, tableName, contents) {
         batch.set(docRef, {
             id,
             content,
-            lastModified
+            lastModified,
+            inserted: serverTimestamp()
         }, { merge: true });
     });
 
@@ -157,7 +169,8 @@ export async function saveContent(userId, tableName, contentId, content, lastMod
     await setDoc(docRef, {
         id: contentId,
         content,
-        lastModified
+        lastModified,
+        inserted: serverTimestamp()
     }, { merge: true });
 }
 
