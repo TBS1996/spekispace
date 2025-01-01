@@ -84,7 +84,7 @@ impl<T: Item> SpekiProvider<T> for FirestoreProvider {
         }
     }
 
-    async fn update_sync(&self, other: ProviderId, ty: Cty, current_time: Duration) {
+    async fn update_sync_info(&self, other: ProviderId, ty: Cty, current_time: Duration) {
         let key = format!("{}-{:?}", other, ty);
         let key = JsValue::from_str(&key);
         let val = JsValue::from_f64(current_time.as_secs() as f64);

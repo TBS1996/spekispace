@@ -87,7 +87,7 @@ impl<T: Item> SpekiProvider<T> for FileProvider {
         todo!()
     }
 
-    async fn update_sync(&self, other: ProviderId, ty: Cty, current_time: Duration) {
+    async fn update_sync_info(&self, other: ProviderId, ty: Cty, current_time: Duration) {
         todo!()
     }
 

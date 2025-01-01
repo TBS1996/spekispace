@@ -45,7 +45,7 @@ impl Item for History {
         Cty::Review
     }
 
-    fn merge(mut self, other: Self) -> MergeRes<Self>
+    fn merge(mut self, other: Self) -> Option<MergeRes<Self>>
     where
         Self: Sized,
     {
@@ -55,7 +55,7 @@ impl Item for History {
         let otherlen = other.reviews.len();
 
         if selflen == otherlen {
-            return MergeRes::Neither;
+            return None;
         }
 
         let merged = {
@@ -65,13 +65,13 @@ impl Item for History {
 
         let mergedlen = merged.len();
 
-        if mergedlen == selflen {
+        Some(if mergedlen == selflen {
             MergeRes::Right(merged)
         } else if mergedlen == otherlen {
             MergeRes::Left(merged)
         } else {
             MergeRes::Both(merged)
-        }
+        })
     }
 
     fn deleted(&self) -> bool {
@@ -152,26 +152,6 @@ impl Item for RawCard {
         Cty::Card
     }
 
-    fn merge(self, other: Self) -> MergeRes<Self>
-    where
-        Self: Sized,
-    {
-        let selfmod = self.last_modified();
-        let othermod = other.last_modified();
-
-        if self.deleted && !other.deleted {
-            MergeRes::Right(self)
-        } else if !self.deleted && other.deleted {
-            MergeRes::Left(other)
-        } else if selfmod > othermod {
-            MergeRes::Right(self)
-        } else if selfmod < othermod {
-            MergeRes::Left(other)
-        } else {
-            MergeRes::Neither
-        }
-    }
-
     fn deleted(&self) -> bool {
         self.deleted
     }
@@ -214,11 +194,11 @@ pub trait Item: DeserializeOwned + Sized + Send + Clone + 'static {
     fn set_source(&mut self, source: ModifiedSource);
 
     /// Returns whehter hte returned value should be saved to self, other, enither, or both.
-    fn merge(self, other: Self) -> MergeRes<Self>
+    fn merge(self, other: Self) -> Option<MergeRes<Self>>
     where
         Self: Sized,
     {
-        if self.deleted() && !other.deleted() {
+        let res = if self.deleted() && !other.deleted() {
             MergeRes::Both(self)
         } else if !self.deleted() && other.deleted() {
             MergeRes::Both(other)
@@ -227,8 +207,10 @@ pub trait Item: DeserializeOwned + Sized + Send + Clone + 'static {
         } else if self.last_modified() < other.last_modified() {
             MergeRes::Left(other)
         } else {
-            MergeRes::Neither
-        }
+            return None;
+        };
+
+        Some(res)
     }
 
     fn into_record(self) -> Record
@@ -251,7 +233,6 @@ pub enum MergeRes<T> {
     Left(T),
     Right(T),
     Both(T),
-    Neither,
 }
 
 #[derive(Ord, PartialOrd, Eq, PartialEq, Hash, Clone, Debug, Deserialize, Serialize)]
@@ -383,7 +364,7 @@ impl ProviderMeta {
 #[async_trait::async_trait(?Send)]
 pub trait SpekiProvider<T: Item>: Sync {
     async fn provider_id(&self) -> ProviderId;
-    async fn update_sync(&self, other: ProviderId, ty: Cty, now: Duration);
+    async fn update_sync_info(&self, other: ProviderId, ty: Cty, now: Duration);
     async fn last_sync(&self, other: ProviderId, ty: Cty) -> Duration;
 
     async fn load_record(&self, id: Uuid, ty: Cty) -> Option<Record>;
@@ -441,7 +422,9 @@ pub async fn sync<T: Item>(
     right: impl SpekiProvider<T>,
     current_time: Duration,
 ) {
-    info!("starting sync of: {:?}", T::identifier());
+    let item_type = T::identifier();
+
+    info!("starting sync of: {:?}", item_type);
     let left_id = left.provider_id().await;
     let right_id = right.provider_id().await;
 
@@ -461,44 +444,44 @@ pub async fn sync<T: Item>(
     let mut left_map = left.load_all().await;
     let mut right_map = right.load_all().await;
 
-    let mut ids: HashSet<Uuid> = left_map.keys().map(|key| *key).collect();
-    ids.extend(right_map.keys());
+    let ids: HashSet<Uuid> = left_map.keys().chain(right_map.keys()).cloned().collect();
+
+    let mut mergeres = vec![];
 
     for id in &ids {
-        info!("syncing card");
-        let id = *id;
-        match (left_map.remove(&id), right_map.remove(&id)) {
+        let res = match (left_map.remove(id), right_map.remove(id)) {
             (None, None) => panic!(),
-            (None, Some(mut card)) => {
-                card.set_source(right_source);
-                left_update.push(card);
+            (None, Some(item)) => Some(MergeRes::Left(item)),
+            (Some(item), None) => Some(MergeRes::Right(item)),
+            (Some(left_item), Some(right_item)) => left_item.merge(right_item),
+        };
+
+        if let Some(res) = res {
+            mergeres.push(res);
+        }
+    }
+
+    for res in mergeres {
+        match res {
+            MergeRes::Left(mut item) => {
+                item.set_source(right_source);
+                left_update.push(item);
             }
-            (Some(mut item), None) => {
+            MergeRes::Right(mut item) => {
                 item.set_source(left_source);
                 right_update.push(item);
             }
-            (Some(left_item), Some(right_item)) => match left_item.merge(right_item) {
-                MergeRes::Both(mut item) => {
-                    item.set_source(right_source);
-                    left_update.push(item.clone());
-                    item.set_source(left_source);
-                    right_update.push(item);
-                }
-                MergeRes::Left(mut item) => {
-                    item.set_source(right_source);
-                    left_update.push(item);
-                }
-                MergeRes::Right(mut item) => {
-                    item.set_source(left_source);
-                    right_update.push(item);
-                }
-                MergeRes::Neither => {}
-            },
+            MergeRes::Both(mut item) => {
+                item.set_source(left_source);
+                right_update.push(item.clone());
+                item.set_source(right_source);
+                left_update.push(item);
+            }
         }
     }
 
     left.save_records(
-        T::identifier(),
+        item_type,
         left_update
             .into_iter()
             .map(|card| card.into_record())
@@ -508,7 +491,7 @@ pub async fn sync<T: Item>(
 
     right
         .save_records(
-            T::identifier(),
+            item_type,
             right_update
                 .into_iter()
                 .map(|card| card.into_record())
@@ -516,14 +499,14 @@ pub async fn sync<T: Item>(
         )
         .await;
 
+    left.update_sync_info(right.provider_id().await, item_type, current_time)
+        .await;
+
     right
-        .update_sync(left.provider_id().await, T::identifier(), current_time)
+        .update_sync_info(left.provider_id().await, item_type, current_time)
         .await;
 
-    left.update_sync(right.provider_id().await, T::identifier(), current_time)
-        .await;
-
-    info!("done syncing of: {:?}!", T::identifier());
+    info!("done syncing of: {:?}!", item_type);
 }
 
 fn parse_history(s: String, id: Uuid) -> History {
