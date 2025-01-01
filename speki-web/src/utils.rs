@@ -125,11 +125,12 @@ impl App {
 }
 
 pub async fn sync() {
-    let now = APP.read().0.time_provider.current_time();
+    let time_provider = APP.read().0.time_provider.clone();
     let agent = sign_in().await;
     info!("starting sync!");
 
     *SYNCING.write() = true;
+    let now = time_provider.current_time();
     speki_dto::sync::<RawCard>(FirestoreProvider::new(agent.clone()), DexieProvider, now).await;
     speki_dto::sync::<speki_dto::History>(
         FirestoreProvider::new(agent.clone()),
@@ -140,8 +141,9 @@ pub async fn sync() {
     speki_dto::sync::<AttributeDTO>(FirestoreProvider::new(agent.clone()), DexieProvider, now)
         .await;
     *SYNCING.write() = false;
+    let elapsed = time_provider.current_time() - now;
 
-    info!("done syncing maybe!");
+    info!("done syncing in {} seconds!", elapsed.as_secs_f32());
 }
 
 pub async fn get_meta(node: &Node) -> NodeMetadata {
