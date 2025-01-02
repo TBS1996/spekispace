@@ -70,7 +70,8 @@ export async function loadRecord(tableName, id) {
     return {
         id,
         content: record.content,
-        last_modified: ensureUnixSeconds(record.lastModified) ?? null 
+        last_modified: ensureUnixSeconds(record.lastModified) ?? null,
+        inserted: null
     };
 }
 
@@ -82,7 +83,8 @@ export async function loadAllRecords(tableName) {
         map[record.id] = {
             id: record.id,
             content: record.content,
-            last_modified: ensureUnixSeconds(record.lastModified)
+            last_modified: ensureUnixSeconds(record.lastModified),
+            inserted: null,
         };
         return map;
     }, {});
@@ -96,6 +98,7 @@ export async function loadAllIds(tableName) {
 }
 
 export async function saveContent(tableName, id, content, lastModified) {
+    console.log(`dexie saving content to: ${tableName}`);
     const table = getTable(tableName);
     await table.put({
         id,

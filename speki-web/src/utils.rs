@@ -132,16 +132,15 @@ pub async fn sync() {
     *SYNCING.write() = true;
     let now = time_provider.current_time();
 
-    // Run sync operations in parallel
-    futures::join!(
-        speki_dto::sync::<RawCard>(FirestoreProvider::new(agent.clone()), DexieProvider, now),
-        speki_dto::sync::<speki_dto::History>(
-            FirestoreProvider::new(agent.clone()),
-            DexieProvider,
-            now
-        ),
-        speki_dto::sync::<AttributeDTO>(FirestoreProvider::new(agent.clone()), DexieProvider, now)
-    );
+    speki_dto::sync::<RawCard>(FirestoreProvider::new(agent.clone()), DexieProvider, now).await;
+    speki_dto::sync::<speki_dto::History>(
+        FirestoreProvider::new(agent.clone()),
+        DexieProvider,
+        now,
+    )
+    .await;
+    speki_dto::sync::<AttributeDTO>(FirestoreProvider::new(agent.clone()), DexieProvider, now)
+        .await;
 
     *SYNCING.write() = false;
     let elapsed = time_provider.current_time() - now;

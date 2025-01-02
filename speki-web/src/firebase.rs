@@ -163,6 +163,12 @@ impl<T: Item> SpekiProvider<T> for FirestoreProvider {
                 &duration_to_firestore_jsvalue(Duration::from_secs(record.last_modified)),
             )
             .unwrap();
+            js_sys::Reflect::set(
+                &js_record,
+                &JsValue::from("inserted"),
+                &duration_to_firestore_jsvalue(record.inserted.unwrap()),
+            )
+            .unwrap();
 
             js_records.push(&js_record);
         }
@@ -173,33 +179,12 @@ impl<T: Item> SpekiProvider<T> for FirestoreProvider {
     }
 
     async fn save_record(&self, record: Record) {
-        let ty = T::identifier();
-        let table = JsValue::from_str(as_str(ty));
-        let content_id = JsValue::from_str(&record.id.to_string());
-        let content = JsValue::from_str(&record.content);
-        let last_modified =
-            duration_to_firestore_jsvalue(Duration::from_secs(record.last_modified));
-
-        saveContent(
-            &self.user_id(),
-            &table,
-            &content_id,
-            &content,
-            &last_modified,
-        );
+        SpekiProvider::<T>::save_records(self, vec![record]).await;
     }
 }
 
 #[wasm_bindgen(module = "/assets/firebase.js")]
 extern "C" {
-    fn saveContent(
-        user_id: &JsValue,
-        table: &JsValue,
-        content_id: &JsValue,
-        content: &JsValue,
-        last_modified: &JsValue,
-    );
-
     fn saveContents(user_id: &JsValue, table: &JsValue, contents: &JsValue);
     fn deleteContent(user_id: &JsValue, table: &JsValue, id: &JsValue);
     fn loadRecord(user_id: &JsValue, table: &JsValue, id: &JsValue) -> Promise;

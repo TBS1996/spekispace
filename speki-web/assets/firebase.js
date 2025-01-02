@@ -1,5 +1,5 @@
 import { 
-  getFirestore, collection, doc, setDoc, getDocs, getDoc, deleteDoc, writeBatch, serverTimestamp, updateDoc
+  getFirestore, collection, doc, setDoc, getDocs, getDoc, deleteDoc, writeBatch, serverTimestamp, Timestamp, updateDoc
 } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-app.js';
 import { 
@@ -97,8 +97,11 @@ export async function loadSyncTime(userId, key) {
       return 0; 
   }
 
-  console.log(`Loaded sync time for key '${key}' for user: ${userId}`, syncTimeSnap.data().lastSync);
-  return syncTimeSnap.data().lastSync; 
+  let last_sync = syncTimeSnap.data().lastSync;
+
+  console.log(`Loaded sync time for key '${key}' for user: ${userId}`, last_sync);
+
+  return last_sync;
 }
 
 export async function loadAllRecords(userId, tableName, notBefore) {
@@ -116,15 +119,16 @@ export async function loadAllRecords(userId, tableName, notBefore) {
     const data = doc.data();
     const inserted = data.inserted?.seconds || 0; 
 
-    if (inserted >= notBefore) {
+    if (inserted > (notBefore + 1)) {
       resultMap[doc.id] = {
         id: doc.id,
         content: data.content,
-        last_modified: data.lastModified.seconds
+        last_modified: data.lastModified.seconds,
+        inserted: data.inserted
       };
     } 
 
-    if (data.inserted == undefined) {
+    if (inserted == 0) {
       console.log(`Adding serverTimestamp to document ${doc.id}`);
       updates.push(
         updateDoc(doc.ref, { inserted: serverTimestamp() })
@@ -151,27 +155,17 @@ export async function saveContents(userId, tableName, contents) {
     console.log(`staring batch save conents`);
     const batch = writeBatch(db);
 
-    contents.forEach(({ id, content, lastModified }) => {
+    contents.forEach(({ id, content, lastModified, inserted}) => {
         const docRef = doc(db, `users/${userId}/${tableName}`, id);
         batch.set(docRef, {
             id,
             content,
             lastModified,
-            inserted: serverTimestamp()
+            inserted
         }, { merge: true });
     });
 
     await batch.commit();
-}
-
-export async function saveContent(userId, tableName, contentId, content, lastModified) {
-    const docRef = doc(db, `users/${userId}/${tableName}`, contentId);
-    await setDoc(docRef, {
-        id: contentId,
-        content,
-        lastModified,
-        inserted: serverTimestamp()
-    }, { merge: true });
 }
 
 export async function deleteContent(userId, tableName, contentId) {

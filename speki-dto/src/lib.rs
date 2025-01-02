@@ -52,7 +52,7 @@ impl Item for History {
         Cty::Review
     }
 
-    fn merge(mut self, other: Self) -> Option<MergeRes<Self>>
+    fn merge(mut self, other: Self) -> Option<MergeInto<Self>>
     where
         Self: Sized,
     {
@@ -73,11 +73,11 @@ impl Item for History {
         let mergedlen = merged.len();
 
         Some(if mergedlen == selflen {
-            MergeRes::Right(merged)
+            MergeInto::Right(merged)
         } else if mergedlen == otherlen {
-            MergeRes::Left(merged)
+            MergeInto::Left(merged)
         } else {
-            MergeRes::Both(merged)
+            MergeInto::Both(merged)
         })
     }
 
@@ -209,18 +209,20 @@ pub trait Item: DeserializeOwned + Sized + Send + Clone + 'static {
     }
 
     /// Returns whether the returned value should be saved to self, other, both, or none.
-    fn merge(self, other: Self) -> Option<MergeRes<Self>>
+    fn merge(self, right_item: Self) -> Option<MergeInto<Self>>
     where
         Self: Sized,
     {
-        let res = if self.deleted() && !other.deleted() {
-            MergeRes::Both(self)
-        } else if !self.deleted() && other.deleted() {
-            MergeRes::Both(other)
-        } else if self.last_modified() > other.last_modified() {
-            MergeRes::Right(self)
-        } else if self.last_modified() < other.last_modified() {
-            MergeRes::Left(other)
+        let left_item = self;
+
+        let res = if left_item.deleted() && !right_item.deleted() {
+            MergeInto::Both(left_item)
+        } else if !left_item.deleted() && right_item.deleted() {
+            MergeInto::Both(right_item)
+        } else if left_item.last_modified() > right_item.last_modified() {
+            MergeInto::Right(left_item)
+        } else if left_item.last_modified() < right_item.last_modified() {
+            MergeInto::Left(right_item)
         } else {
             return None;
         };
@@ -235,16 +237,21 @@ pub trait Item: DeserializeOwned + Sized + Send + Clone + 'static {
         let id = self.id().to_string();
         let last_modified = self.last_modified().as_secs();
         let content = self.serialize();
+        let inserted = match self.source() {
+            ModifiedSource::Local => None,
+            ModifiedSource::External { inserted, .. } => Some(inserted),
+        };
 
         Record {
             id,
             content,
             last_modified,
+            inserted,
         }
     }
 }
 
-pub enum MergeRes<T> {
+pub enum MergeInto<T> {
     Left(T),
     Right(T),
     Both(T),
@@ -343,38 +350,30 @@ pub struct Record {
     pub id: String,
     pub content: String,
     pub last_modified: u64,
+    #[serde(deserialize_with = "firestore_timestamp_to_duration")]
+    pub inserted: Option<Duration>,
+}
+
+fn firestore_timestamp_to_duration<'de, D>(deserializer: D) -> Result<Option<Duration>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    #[derive(Deserialize)]
+    struct FirestoreTimestamp {
+        seconds: i64,
+        nanos: i32,
+    }
+
+    let opt = Option::<FirestoreTimestamp>::deserialize(deserializer)?;
+    if let Some(ts) = opt {
+        let duration = Duration::new(ts.seconds as u64, ts.nanos as u32);
+        Ok(Some(duration))
+    } else {
+        Ok(None)
+    }
 }
 
 pub type ProviderId = Uuid;
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct ProviderMeta {
-    pub id: ProviderId,
-    pub last_synced: HashMap<String, Duration>,
-}
-
-impl ProviderMeta {
-    pub fn init() -> Self {
-        Self {
-            id: ProviderId::new_v4(),
-            last_synced: Default::default(),
-        }
-    }
-
-    fn key_as_str(id: ProviderId, ty: Cty) -> String {
-        format!("{}-{:?}", id, ty)
-    }
-
-    pub fn update(&mut self, other: ProviderId, ty: Cty, now: Duration) {
-        let key = Self::key_as_str(other, ty);
-        self.last_synced.insert(key, now);
-    }
-
-    pub fn get_synced(&self, other: ProviderId, ty: Cty) -> Duration {
-        let key = Self::key_as_str(other, ty);
-        self.last_synced.get(&key).cloned().unwrap_or_default()
-    }
-}
 
 #[async_trait::async_trait(?Send)]
 pub trait SpekiProvider<T: Item>: Sync {
@@ -405,7 +404,8 @@ pub trait SpekiProvider<T: Item>: Sync {
         let last_sync = self.last_sync(other_id).await;
         let new_items = self.load_all_after(last_sync).await;
         info!(
-            "new items from {other_id} of type {ty} since {last_sync}: {qty}",
+            "new items from {self_id} that are new for {other_id} of type {ty} since {last_sync}: {qty}",
+            self_id = self.provider_id().await,
             last_sync = last_sync.as_secs(),
             qty = new_items.len(),
             ty = T::identifier(),
@@ -418,7 +418,9 @@ pub trait SpekiProvider<T: Item>: Sync {
 
         map.retain(|_, val| match val.source() {
             ModifiedSource::Local => val.last_modified() > not_before,
-            ModifiedSource::External { inserted, .. } => inserted > not_before,
+            ModifiedSource::External { inserted, .. } => {
+                inserted > (not_before + Duration::from_secs(1))
+            }
         });
 
         map
@@ -453,7 +455,11 @@ pub trait SpekiProvider<T: Item>: Sync {
 
     async fn save_from_sync(&self, from: ProviderId, records: Vec<Record>, now: Duration) {
         let ty = T::identifier();
-        info!("updating {qty} {ty} in {from}", qty = records.len());
+        info!(
+            "updating {qty} {ty} in {self_id} from {from}",
+            qty = records.len(),
+            self_id = self.provider_id().await,
+        );
         self.save_records(records).await;
         self.update_sync_info(from, now).await;
     }
@@ -470,17 +476,27 @@ pub async fn sync<T: Item>(
 
     info!("starting sync of: {ty} between {left_id} and {right_id}");
 
-    let mergeres: Vec<MergeRes<T>> = {
-        let mut left_map = right.load_new(left_id).await;
-        let mut right_map = left.load_new(right_id).await;
+    let mergeres: Vec<MergeInto<T>> = {
+        let mut new_from_right = right.load_new(left_id).await;
+        let mut new_from_left = left.load_new(right_id).await;
 
-        let ids: HashSet<Uuid> = left_map.keys().chain(right_map.keys()).cloned().collect();
+        let ids: HashSet<Uuid> = new_from_right
+            .keys()
+            .chain(new_from_left.keys())
+            .cloned()
+            .collect();
+
         ids.into_iter()
-            .filter_map(|id| match (left_map.remove(&id), right_map.remove(&id)) {
-                (None, None) => unreachable!("ID should exist in at least one map"),
-                (None, Some(right_item)) => Some(MergeRes::Left(right_item)),
-                (Some(left_item), None) => Some(MergeRes::Right(left_item)),
-                (Some(left_item), Some(right_item)) => left_item.merge(right_item),
+            .filter_map(|id| {
+                let right_item = new_from_right.remove(&id);
+                let left_item = new_from_left.remove(&id);
+
+                match (left_item, right_item) {
+                    (None, None) => unreachable!("ID should exist in at least one map"),
+                    (None, Some(right_item)) => Some(MergeInto::Left(right_item)),
+                    (Some(left_item), None) => Some(MergeInto::Right(left_item)),
+                    (Some(left_item), Some(right_item)) => left_item.merge(right_item),
+                }
             })
             .collect()
     };
@@ -491,15 +507,15 @@ pub async fn sync<T: Item>(
 
         for res in mergeres {
             match res {
-                MergeRes::Left(mut item) => {
+                MergeInto::Left(mut item) => {
                     item.set_external_source(right_id, now);
                     left_update.push(item.into_record());
                 }
-                MergeRes::Right(mut item) => {
+                MergeInto::Right(mut item) => {
                     item.set_external_source(left_id, now);
                     right_update.push(item.into_record());
                 }
-                MergeRes::Both(mut item) => {
+                MergeInto::Both(mut item) => {
                     item.set_external_source(left_id, now);
                     right_update.push(item.clone().into_record());
 

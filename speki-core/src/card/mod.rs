@@ -733,8 +733,7 @@ mod tests {
     };
     use async_trait::async_trait;
     use speki_dto::{
-        BackSide, CType, Cty, Item, ProviderId, ProviderMeta, RawCard, RawType, Recall, Record,
-        SpekiProvider,
+        BackSide, CType, Cty, Item, ProviderId, RawCard, RawType, Recall, Record, SpekiProvider,
     };
     use std::{
         collections::HashMap,
@@ -772,6 +771,7 @@ mod tests {
                 id: id.to_string(),
                 content: s,
                 last_modified: self.time.current_time().as_secs(),
+                inserted: None,
             };
 
             map.insert(id, record);
@@ -806,15 +806,15 @@ mod tests {
 
     #[async_trait(?Send)]
     impl<T: Item> SpekiProvider<T> for Storage {
-        async fn load_record(&self, id: Uuid, ty: Cty) -> Option<Record> {
-            self.get(ty, id)
+        async fn load_record(&self, id: Uuid) -> Option<Record> {
+            self.get(T::identifier(), id)
         }
 
-        async fn update_sync_info(&self, other: ProviderId, ty: Cty, current_time: Duration) {
+        async fn update_sync_info(&self, _other: ProviderId, _current_time: Duration) {
             todo!()
         }
 
-        async fn last_sync(&self, other: ProviderId, ty: Cty) -> Duration {
+        async fn last_sync(&self, _other: ProviderId) -> Duration {
             todo!()
         }
 
@@ -822,12 +822,12 @@ mod tests {
             todo!()
         }
 
-        async fn load_all_records(&self, ty: Cty) -> HashMap<Uuid, Record> {
-            self.get_all(ty)
+        async fn load_all_records(&self) -> HashMap<Uuid, Record> {
+            self.get_all(T::identifier())
         }
 
-        async fn save_record(&self, ty: Cty, record: Record) {
-            self.save(ty, record.id.parse().unwrap(), record.content);
+        async fn save_record(&self, record: Record) {
+            self.save(T::identifier(), record.id.parse().unwrap(), record.content);
         }
     }
 
