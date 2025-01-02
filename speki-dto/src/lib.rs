@@ -239,7 +239,7 @@ pub trait Item: DeserializeOwned + Sized + Send + Clone + 'static {
         let content = self.serialize();
         let inserted = match self.source() {
             ModifiedSource::Local => None,
-            ModifiedSource::External { inserted, .. } => Some(inserted),
+            ModifiedSource::External { inserted, .. } => Some(inserted.as_secs()),
         };
 
         Record {
@@ -349,31 +349,12 @@ pub struct Review {
 pub struct Record {
     pub id: String,
     pub content: String,
-    pub last_modified: u64,
-    #[serde(deserialize_with = "firestore_timestamp_to_duration")]
-    pub inserted: Option<Duration>,
-}
-
-fn firestore_timestamp_to_duration<'de, D>(deserializer: D) -> Result<Option<Duration>, D::Error>
-where
-    D: Deserializer<'de>,
-{
-    #[derive(Deserialize)]
-    struct FirestoreTimestamp {
-        seconds: i64,
-        nanos: i32,
-    }
-
-    let opt = Option::<FirestoreTimestamp>::deserialize(deserializer)?;
-    if let Some(ts) = opt {
-        let duration = Duration::new(ts.seconds as u64, ts.nanos as u32);
-        Ok(Some(duration))
-    } else {
-        Ok(None)
-    }
+    pub last_modified: UnixSeconds,
+    pub inserted: Option<UnixSeconds>,
 }
 
 pub type ProviderId = Uuid;
+pub type UnixSeconds = u64;
 
 #[async_trait::async_trait(?Send)]
 pub trait SpekiProvider<T: Item>: Sync {
@@ -419,7 +400,7 @@ pub trait SpekiProvider<T: Item>: Sync {
         map.retain(|_, val| match val.source() {
             ModifiedSource::Local => val.last_modified() > not_before,
             ModifiedSource::External { inserted, .. } => {
-                inserted > (not_before + Duration::from_secs(1))
+                inserted.as_secs() > (not_before.as_secs() + 1)
             }
         });
 

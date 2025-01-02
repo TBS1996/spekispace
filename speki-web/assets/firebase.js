@@ -3,8 +3,12 @@ import {
   getFirestore, collection, doc, setDoc, getDocs, getDoc, deleteDoc, writeBatch, serverTimestamp, Timestamp, updateDoc
 =======
   getFirestore, collection, doc, setDoc, getDocs, getDoc, deleteDoc, writeBatch, updateDoc
+<<<<<<< HEAD
 >>>>>>> 985cd56 (fix sync maybe)
 } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
+=======
+} from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore-lite.js';
+>>>>>>> cea1e89 (use firestore lite)
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-app.js';
 import { 
   getAuth, signInWithPopup, GoogleAuthProvider, signOut 
