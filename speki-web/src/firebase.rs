@@ -164,11 +164,7 @@ impl<T: Item> SpekiProvider<T> for FirestoreProvider {
             js_sys::Reflect::set(
                 &js_record,
                 &JsValue::from("inserted"),
-<<<<<<< HEAD
-                &duration_to_firestore_jsvalue(record.inserted.unwrap()),
-=======
                 &JsValue::from_f64(record.inserted.unwrap() as f64),
->>>>>>> 985cd56 (fix sync maybe)
             )
             .unwrap();
 

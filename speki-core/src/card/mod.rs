@@ -17,6 +17,7 @@ use speki_dto::BackSide;
 use speki_dto::CType;
 use speki_dto::CardId;
 use speki_dto::History;
+use speki_dto::Item;
 use speki_dto::ModifiedSource;
 use speki_dto::RawCard;
 use speki_dto::Recall;
@@ -351,7 +352,8 @@ impl Card {
         };
 
         self.history.push(review);
-        self.persist().await;
+        self.history.set_local_source();
+        self.card_provider.save_reviews(self.history.clone()).await;
     }
 
     pub fn time_provider(&self) -> TimeGetter {
@@ -502,7 +504,6 @@ impl Card {
         self.source = ModifiedSource::Local;
 
         self.card_provider.save_card(self.clone()).await;
-        self.card_provider.save_reviews(self.history.clone()).await;
 
         let id = self.id;
 

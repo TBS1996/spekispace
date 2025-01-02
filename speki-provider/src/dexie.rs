@@ -71,10 +71,13 @@ impl<T: Item> SpekiProvider<T> for DexieProvider {
 
     async fn load_all_records(&self) -> HashMap<Uuid, Record> {
         let ty = T::identifier();
+        info!("from dexie loading all {ty:?}");
         let promise = loadAllRecords(&cty_as_jsvalue(ty));
         let future = wasm_bindgen_futures::JsFuture::from(promise);
         let jsvalue = future.await.unwrap();
-        serde_wasm_bindgen::from_value(jsvalue).unwrap()
+        let map: HashMap<Uuid, Record> = serde_wasm_bindgen::from_value(jsvalue).unwrap();
+        info!("from dexie loaded {:?} {:?}", map.len(), ty);
+        map
     }
 
     async fn save_record(&self, record: Record) {

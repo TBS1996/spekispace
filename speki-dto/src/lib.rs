@@ -200,6 +200,10 @@ pub trait Item: DeserializeOwned + Sized + Send + Clone + 'static {
     fn source(&self) -> ModifiedSource;
     fn set_source(&mut self, source: ModifiedSource);
 
+    fn set_local_source(&mut self) {
+        self.set_source(ModifiedSource::Local);
+    }
+
     fn set_external_source(&mut self, id: ProviderId, now: Duration) {
         let source = ModifiedSource::External {
             from: id,
@@ -397,8 +401,15 @@ pub trait SpekiProvider<T: Item>: Sync {
     async fn load_all_after(&self, not_before: Duration) -> HashMap<Uuid, T> {
         let mut map = self.load_all().await;
 
+        info!(
+            "loaded {} {}, retaining those last modified after {:?}",
+            map.len(),
+            T::identifier(),
+            not_before
+        );
+
         map.retain(|_, val| match val.source() {
-            ModifiedSource::Local => val.last_modified() > not_before,
+            ModifiedSource::Local => val.last_modified().as_secs() > (not_before.as_secs() + 1),
             ModifiedSource::External { inserted, .. } => {
                 inserted.as_secs() > (not_before.as_secs() + 1)
             }
