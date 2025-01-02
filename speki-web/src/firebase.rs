@@ -1,9 +1,11 @@
 use std::collections::HashMap;
 
+use async_trait::async_trait;
 use gloo_utils::format::JsValueSerdeExt;
 use js_sys::Promise;
 use serde_json::Value;
 use speki_dto::{Cty, Item, ProviderId, Record, SpekiProvider};
+use std::time::Duration;
 use tracing::info;
 use uuid::Uuid;
 use wasm_bindgen::prelude::*;
@@ -33,8 +35,6 @@ impl FirestoreProvider {
     }
 }
 
-use std::time::Duration;
-
 fn duration_to_firestore_jsvalue(duration: Duration) -> JsValue {
     let obj = js_sys::Object::new();
     js_sys::Reflect::set(
@@ -51,8 +51,6 @@ fn duration_to_firestore_jsvalue(duration: Duration) -> JsValue {
     .unwrap();
     obj.into()
 }
-
-use async_trait::async_trait;
 
 #[async_trait(?Send)]
 impl<T: Item> SpekiProvider<T> for FirestoreProvider {
@@ -166,7 +164,11 @@ impl<T: Item> SpekiProvider<T> for FirestoreProvider {
             js_sys::Reflect::set(
                 &js_record,
                 &JsValue::from("inserted"),
+<<<<<<< HEAD
                 &duration_to_firestore_jsvalue(record.inserted.unwrap()),
+=======
+                &JsValue::from_f64(record.inserted.unwrap() as f64),
+>>>>>>> 985cd56 (fix sync maybe)
             )
             .unwrap();
 

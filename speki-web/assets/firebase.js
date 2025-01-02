@@ -1,9 +1,13 @@
 import { 
+<<<<<<< HEAD
   getFirestore, collection, doc, setDoc, getDocs, getDoc, deleteDoc, writeBatch, serverTimestamp, Timestamp, updateDoc
+=======
+  getFirestore, collection, doc, setDoc, getDocs, getDoc, deleteDoc, writeBatch, updateDoc
+>>>>>>> 985cd56 (fix sync maybe)
 } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-app.js';
 import { 
-  getAuth, signInWithPopup, GoogleAuthProvider, signOut, onAuthStateChanged 
+  getAuth, signInWithPopup, GoogleAuthProvider, signOut 
 } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-auth.js';
 
 
@@ -104,7 +108,18 @@ export async function loadSyncTime(userId, key) {
   return last_sync;
 }
 
-export async function loadAllRecords(userId, tableName, notBefore) {
+function extractSeconds(inserted) {
+  if (typeof inserted === "number") {
+    return Math.floor(inserted); 
+  } else if (typeof inserted === "object" && inserted !== null && typeof inserted.seconds === "number") {
+    return Math.floor(inserted.seconds); 
+  } else {
+    return null; 
+  }
+}
+
+export async function loadAllRecords(userId, tableName, notBefore_) {
+  let notBefore = Math.floor(notBefore_);
   console.log(typeof notBefore);
   console.log(`Loading all content with metadata from table ${tableName} after ${notBefore}`);
   const colRef = getTable(userId, tableName);
@@ -117,21 +132,25 @@ export async function loadAllRecords(userId, tableName, notBefore) {
 
   querySnapshot.forEach(doc => {
     const data = doc.data();
-    const inserted = data.inserted?.seconds || 0; 
+    const inserted = extractSeconds(data.inserted) || 0; 
 
     if (inserted > (notBefore + 1)) {
       resultMap[doc.id] = {
         id: doc.id,
         content: data.content,
         last_modified: data.lastModified.seconds,
+<<<<<<< HEAD
         inserted: data.inserted
+=======
+        inserted: extractSeconds(data.inserted)
+>>>>>>> 985cd56 (fix sync maybe)
       };
     } 
 
     if (inserted == 0) {
       console.log(`Adding serverTimestamp to document ${doc.id}`);
       updates.push(
-        updateDoc(doc.ref, { inserted: serverTimestamp() })
+        updateDoc(doc.ref, { inserted })
       );
     }
   });
@@ -156,12 +175,20 @@ export async function saveContents(userId, tableName, contents) {
     const batch = writeBatch(db);
 
     contents.forEach(({ id, content, lastModified, inserted}) => {
+<<<<<<< HEAD
+=======
+        let intserted = Math.floor(inserted);
+>>>>>>> 985cd56 (fix sync maybe)
         const docRef = doc(db, `users/${userId}/${tableName}`, id);
         batch.set(docRef, {
             id,
             content,
             lastModified,
+<<<<<<< HEAD
             inserted
+=======
+            inserted: intserted
+>>>>>>> 985cd56 (fix sync maybe)
         }, { merge: true });
     });
 
