@@ -4,7 +4,7 @@ use async_trait::async_trait;
 use gloo_utils::format::JsValueSerdeExt;
 use js_sys::Promise;
 use serde_json::Value;
-use speki_dto::{Cty, Item, ProviderId, Record, SpekiProvider};
+use speki_dto::{Cty, Item, ProviderId, Record, SpekiProvider, Syncable};
 use std::time::Duration;
 use tracing::info;
 use uuid::Uuid;
@@ -53,17 +53,7 @@ fn duration_to_firestore_jsvalue(duration: Duration) -> JsValue {
 }
 
 #[async_trait(?Send)]
-impl<T: Item> SpekiProvider<T> for FirestoreProvider {
-    async fn load_record(&self, id: Uuid) -> Option<Record> {
-        let ty = T::identifier();
-        let id = JsValue::from_str(&id.to_string());
-        let promise = loadRecord(&self.user_id(), &as_js_value(ty), &id);
-        let future = wasm_bindgen_futures::JsFuture::from(promise);
-        let jsvalue = future.await.unwrap();
-        let record: Option<Record> = serde_wasm_bindgen::from_value(jsvalue).unwrap();
-        record
-    }
-
+impl<T: Item> Syncable<T> for FirestoreProvider {
     async fn provider_id(&self) -> ProviderId {
         async fn try_load_id(user_id: &JsValue) -> Option<ProviderId> {
             let promise = loadDbId(user_id);
@@ -118,6 +108,19 @@ impl<T: Item> SpekiProvider<T> for FirestoreProvider {
         }
 
         outmap
+    }
+}
+
+#[async_trait(?Send)]
+impl<T: Item> SpekiProvider<T> for FirestoreProvider {
+    async fn load_record(&self, id: Uuid) -> Option<Record> {
+        let ty = T::identifier();
+        let id = JsValue::from_str(&id.to_string());
+        let promise = loadRecord(&self.user_id(), &as_js_value(ty), &id);
+        let future = wasm_bindgen_futures::JsFuture::from(promise);
+        let jsvalue = future.await.unwrap();
+        let record: Option<Record> = serde_wasm_bindgen::from_value(jsvalue).unwrap();
+        record
     }
 
     async fn load_all_records(&self) -> HashMap<Uuid, Record> {

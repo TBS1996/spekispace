@@ -361,29 +361,10 @@ pub type ProviderId = Uuid;
 pub type UnixSeconds = u64;
 
 #[async_trait::async_trait(?Send)]
-pub trait SpekiProvider<T: Item>: Sync {
+pub trait Syncable<T: Item>: Sync + SpekiProvider<T> {
     async fn provider_id(&self) -> ProviderId;
     async fn update_sync_info(&self, other: ProviderId, now: Duration);
     async fn last_sync(&self, other: ProviderId) -> Duration;
-
-    async fn load_record(&self, id: Uuid) -> Option<Record>;
-    async fn load_all_records(&self) -> HashMap<Uuid, Record>;
-    async fn save_record(&self, record: Record);
-
-    async fn load_ids(&self) -> Vec<Uuid> {
-        self.load_all_records().await.into_keys().collect()
-    }
-
-    async fn load_item(&self, id: Uuid) -> Option<T> {
-        let record = self.load_record(id).await?;
-        match toml::from_str::<T>(&record.content) {
-            Ok(item) => Some(item),
-            Err(e) => {
-                tracing::error!("error deserializing item: {e:?}");
-                None
-            }
-        }
-    }
 
     async fn load_new(&self, other_id: ProviderId) -> HashMap<Uuid, T> {
         let last_sync = self.last_sync(other_id).await;
@@ -418,6 +399,39 @@ pub trait SpekiProvider<T: Item>: Sync {
         map
     }
 
+    async fn save_from_sync(&self, from: ProviderId, records: Vec<Record>, now: Duration) {
+        let ty = T::identifier();
+        info!(
+            "updating {qty} {ty} in {self_id} from {from}",
+            qty = records.len(),
+            self_id = self.provider_id().await,
+        );
+        self.save_records(records).await;
+        self.update_sync_info(from, now).await;
+    }
+}
+
+#[async_trait::async_trait(?Send)]
+pub trait SpekiProvider<T: Item>: Sync {
+    async fn load_record(&self, id: Uuid) -> Option<Record>;
+    async fn load_all_records(&self) -> HashMap<Uuid, Record>;
+    async fn save_record(&self, record: Record);
+
+    async fn load_ids(&self) -> Vec<Uuid> {
+        self.load_all_records().await.into_keys().collect()
+    }
+
+    async fn load_item(&self, id: Uuid) -> Option<T> {
+        let record = self.load_record(id).await?;
+        match toml::from_str::<T>(&record.content) {
+            Ok(item) => Some(item),
+            Err(e) => {
+                tracing::error!("error deserializing item: {e:?}");
+                None
+            }
+        }
+    }
+
     async fn load_all(&self) -> HashMap<Uuid, T> {
         info!("loading all for: {:?}", T::identifier());
         let map = self.load_all_records().await;
@@ -444,24 +458,9 @@ pub trait SpekiProvider<T: Item>: Sync {
             self.save_record(record).await;
         }
     }
-
-    async fn save_from_sync(&self, from: ProviderId, records: Vec<Record>, now: Duration) {
-        let ty = T::identifier();
-        info!(
-            "updating {qty} {ty} in {self_id} from {from}",
-            qty = records.len(),
-            self_id = self.provider_id().await,
-        );
-        self.save_records(records).await;
-        self.update_sync_info(from, now).await;
-    }
 }
 
-pub async fn sync<T: Item>(
-    left: impl SpekiProvider<T>,
-    right: impl SpekiProvider<T>,
-    now: Duration,
-) {
+pub async fn sync<T: Item>(left: impl Syncable<T>, right: impl Syncable<T>, now: Duration) {
     let ty = T::identifier();
     let left_id = left.provider_id().await;
     let right_id = right.provider_id().await;

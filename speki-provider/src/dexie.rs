@@ -3,7 +3,7 @@ use std::{collections::HashMap, time::Duration};
 use gloo_utils::format::JsValueSerdeExt;
 use js_sys::Promise;
 use serde_json::Value;
-use speki_dto::{CardId, ProviderId, Record, SpekiProvider};
+use speki_dto::{CardId, ProviderId, Record, SpekiProvider, Syncable};
 use tracing::info;
 use uuid::Uuid;
 use wasm_bindgen::prelude::*;
@@ -16,16 +16,7 @@ use async_trait::async_trait;
 use speki_dto::Item;
 
 #[async_trait(?Send)]
-impl<T: Item> SpekiProvider<T> for DexieProvider {
-    async fn load_record(&self, id: Uuid) -> Option<Record> {
-        let ty = T::identifier();
-        let id = JsValue::from_str(&id.to_string());
-        let promise = loadRecord(&cty_as_jsvalue(ty), &id);
-        let future = wasm_bindgen_futures::JsFuture::from(promise);
-        let jsvalue = future.await.unwrap();
-        serde_wasm_bindgen::from_value(jsvalue).unwrap()
-    }
-
+impl<T: Item> Syncable<T> for DexieProvider {
     async fn provider_id(&self) -> ProviderId {
         info!("getting provider id from dexie");
         async fn try_load_id() -> Option<ProviderId> {
@@ -67,6 +58,18 @@ impl<T: Item> SpekiProvider<T> for DexieProvider {
         let jsvalue = future.await.unwrap();
         let timestamp: f32 = serde_wasm_bindgen::from_value(jsvalue).unwrap();
         Duration::from_secs_f32(timestamp)
+    }
+}
+
+#[async_trait(?Send)]
+impl<T: Item> SpekiProvider<T> for DexieProvider {
+    async fn load_record(&self, id: Uuid) -> Option<Record> {
+        let ty = T::identifier();
+        let id = JsValue::from_str(&id.to_string());
+        let promise = loadRecord(&cty_as_jsvalue(ty), &id);
+        let future = wasm_bindgen_futures::JsFuture::from(promise);
+        let jsvalue = future.await.unwrap();
+        serde_wasm_bindgen::from_value(jsvalue).unwrap()
     }
 
     async fn load_all_records(&self) -> HashMap<Uuid, Record> {
