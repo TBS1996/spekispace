@@ -2,10 +2,9 @@
 mod fs;
 
 #[cfg(feature = "fs")]
-pub use fs::FileProvider;
-
-#[cfg(feature = "fs")]
 pub use fs::paths;
+#[cfg(feature = "fs")]
+pub use fs::FileProvider;
 
 #[cfg(feature = "browserfs")]
 mod browserfs;
@@ -17,4 +16,4 @@ pub use browserfs::BrowserFsProvider;
 mod dexie;
 
 #[cfg(feature = "dexie")]
-pub use dexie::DexieProvider;
+pub use dexie::{DexieProvider, WasmTime};

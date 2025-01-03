@@ -1,17 +1,11 @@
-use std::fmt::Debug;
-use std::sync::Arc;
-use std::time::Duration;
+use std::{fmt::Debug, sync::Arc, time::Duration};
 
 use card::RecallRate;
 use card_provider::CardProvider;
 use dioxus_logger::tracing::info;
 use eyre::Result;
-use samsvar::Matcher;
-use samsvar::Schema;
-use speki_dto::AttributeDTO;
-use speki_dto::History;
-use speki_dto::RawCard;
-use speki_dto::SpekiProvider;
+use samsvar::{Matcher, Schema};
+use speki_dto::{AttributeDTO, History, RawCard, SpekiProvider, TimeProvider};
 use tracing::trace;
 
 use crate::card::serializing::new_raw_card;
@@ -23,24 +17,17 @@ mod common;
 mod recall_rate;
 
 pub use attribute::Attribute;
-pub use card::Card;
 pub use card::{
-    AttributeCard, CardTrait, CardType, ClassCard, EventCard, InstanceCard, NormalCard,
+    AttributeCard, Card, CardTrait, CardType, ClassCard, EventCard, InstanceCard, NormalCard,
     StatementCard, UnfinishedCard,
 };
 pub use common::current_time;
 pub use omtrent::TimeStamp;
 pub use recall_rate::SimpleRecall;
-pub use speki_dto::BackSide;
-pub use speki_dto::CType;
-pub use speki_dto::CardId;
+pub use speki_dto::{BackSide, CType, CardId};
 
 pub trait RecallCalc {
     fn recall_rate(&self, reviews: &History, current_unix: Duration) -> Option<RecallRate>;
-}
-
-pub trait TimeProvider {
-    fn current_time(&self) -> Duration;
 }
 
 #[derive(Clone)]

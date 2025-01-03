@@ -1,16 +1,13 @@
-use std::collections::HashMap;
-use std::path::PathBuf;
-use std::time::SystemTime;
 use std::{
+    collections::HashMap,
     fs::{self},
     io::Write,
-    path::Path,
-    time::Duration,
+    path::{Path, PathBuf},
+    time::{Duration, SystemTime},
 };
 
 use rayon::prelude::*;
-use speki_dto::{Cty, ProviderId, ProviderMeta};
-use speki_dto::{Record, SpekiProvider};
+use speki_dto::{Cty, ProviderId, Record, SpekiProvider};
 use uuid::Uuid;
 
 fn load_dir_paths<P: AsRef<Path>>(folder_path: P) -> std::io::Result<Vec<PathBuf>> {

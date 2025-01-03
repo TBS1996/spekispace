@@ -1,17 +1,19 @@
-use std::collections::HashSet;
-use std::rc::Rc;
-use std::sync::{Arc, Mutex};
+use std::{
+    collections::HashSet,
+    rc::Rc,
+    sync::{Arc, Mutex},
+};
 
 use dioxus::prelude::*;
 use speki_core::Card;
-use speki_dto::CardId;
-use speki_dto::Recall;
+use speki_dto::{CardId, Recall};
 use tracing::info;
 
-use crate::components::{CardRef, Komponent};
-use crate::overlays::cardviewer::CardViewer;
-use crate::{components::GraphRep, APP, DEFAULT_FILTER};
-use crate::{IS_SHORT, OVERLAY};
+use crate::{
+    components::{CardRef, GraphRep, Komponent},
+    overlays::cardviewer::CardViewer,
+    APP, DEFAULT_FILTER, IS_SHORT, OVERLAY,
+};
 
 static REVIEW_STATE: GlobalSignal<ReviewState> = Signal::global(ReviewState::new);
 

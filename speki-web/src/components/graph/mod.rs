@@ -14,8 +14,7 @@ use speki_web::{Node, NodeMetadata};
 use tracing::info;
 
 use super::Komponent;
-use crate::utils;
-use crate::{TouchRec, APP, NONCLICKABLE, ROUTE_CHANGE};
+use crate::{utils, TouchRec, APP, NONCLICKABLE, ROUTE_CHANGE};
 
 mod digraph;
 mod js;

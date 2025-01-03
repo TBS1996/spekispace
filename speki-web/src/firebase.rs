@@ -1,11 +1,11 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, time::Duration};
 
 use async_trait::async_trait;
 use gloo_utils::format::JsValueSerdeExt;
 use js_sys::Promise;
 use serde_json::Value;
-use speki_dto::{Cty, Item, ProviderId, Record, SpekiProvider, Syncable};
-use std::time::Duration;
+use speki_dto::{Cty, Item, ProviderId, Record, SpekiProvider, Syncable, TimeProvider};
+use speki_provider::WasmTime;
 use tracing::info;
 use uuid::Uuid;
 use wasm_bindgen::prelude::*;
@@ -24,11 +24,15 @@ fn as_js_value(ty: Cty) -> JsValue {
 
 pub struct FirestoreProvider {
     user_id: String,
+    time: WasmTime,
 }
 
 impl FirestoreProvider {
     pub fn new(user: AuthUser) -> Self {
-        Self { user_id: user.uid }
+        Self {
+            user_id: user.uid,
+            time: WasmTime,
+        }
     }
     fn user_id(&self) -> JsValue {
         JsValue::from_str(&self.user_id)
@@ -113,6 +117,10 @@ impl<T: Item> Syncable<T> for FirestoreProvider {
 
 #[async_trait(?Send)]
 impl<T: Item> SpekiProvider<T> for FirestoreProvider {
+    async fn current_time(&self) -> Duration {
+        self.time.current_time()
+    }
+
     async fn load_record(&self, id: Uuid) -> Option<Record> {
         let ty = T::identifier();
         let id = JsValue::from_str(&id.to_string());

@@ -1,11 +1,13 @@
+use std::{
+    collections::{BTreeMap, BTreeSet, HashMap, HashSet},
+    fmt::{Debug, Display},
+    str::FromStr,
+    time::Duration,
+};
+
 use omtrent::TimeStamp;
-use serde::de::DeserializeOwned;
-use serde::{ser::SerializeSeq, Deserialize, Deserializer, Serialize};
+use serde::{de::DeserializeOwned, ser::SerializeSeq, Deserialize, Deserializer, Serialize};
 use serde_json::Value;
-use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
-use std::fmt::{Debug, Display};
-use std::str::FromStr;
-use std::time::Duration;
 use tracing::{info, warn};
 use uuid::Uuid;
 
@@ -14,6 +16,10 @@ pub enum Cty {
     Attribute,
     Review,
     Card,
+}
+
+pub trait TimeProvider {
+    fn current_time(&self) -> std::time::Duration;
 }
 
 impl Display for Cty {
@@ -31,6 +37,8 @@ impl Item for History {
             .map(|rev| rev.timestamp)
             .unwrap_or_default()
     }
+
+    fn set_last_modified(&mut self, _time: Duration) {}
 
     fn source(&self) -> ModifiedSource {
         self.source
@@ -97,6 +105,10 @@ impl Item for AttributeDTO {
         self.last_modified
     }
 
+    fn set_last_modified(&mut self, time: Duration) {
+        self.last_modified = time;
+    }
+
     fn set_source(&mut self, source: ModifiedSource) {
         self.source = source;
     }
@@ -133,6 +145,10 @@ impl Item for AttributeDTO {
 impl Item for RawCard {
     fn last_modified(&self) -> Duration {
         self.last_modified
+    }
+
+    fn set_last_modified(&mut self, time: Duration) {
+        self.last_modified = time;
     }
 
     fn set_source(&mut self, source: ModifiedSource) {
@@ -181,9 +197,13 @@ impl<T: Item> From<T> for Record {
 )]
 pub enum ModifiedSource {
     #[default]
+    /// This item was created in the current provider.
     Local,
+    /// This item was not created with current provider but from another one.
     External {
+        /// The provider where this is saved as local
         from: ProviderId,
+        /// The time this item was inserted into the current provider
         inserted: Duration,
     },
 }
@@ -192,6 +212,7 @@ pub trait Item: DeserializeOwned + Sized + Send + Clone + 'static {
     fn deleted(&self) -> bool;
     fn set_delete(&mut self);
 
+    fn set_last_modified(&mut self, time: Duration);
     fn last_modified(&self) -> Duration;
     fn id(&self) -> Uuid;
     fn serialize(&self) -> String;
@@ -417,6 +438,14 @@ pub trait SpekiProvider<T: Item>: Sync {
     async fn load_all_records(&self) -> HashMap<Uuid, Record>;
     async fn save_record(&self, record: Record);
 
+    async fn current_time(&self) -> Duration;
+
+    async fn save_records(&self, records: Vec<Record>) {
+        for record in records {
+            self.save_record(record).await;
+        }
+    }
+
     async fn load_ids(&self) -> Vec<Uuid> {
         self.load_all_records().await.into_keys().collect()
     }
@@ -448,15 +477,11 @@ pub trait SpekiProvider<T: Item>: Sync {
         outmap
     }
 
-    async fn save_item(&self, item: T) {
+    async fn save_item(&self, mut item: T) {
+        item.set_last_modified(self.current_time().await);
+        item.set_local_source();
         let record: Record = item.into();
         self.save_record(record).await;
-    }
-
-    async fn save_records(&self, records: Vec<Record>) {
-        for record in records {
-            self.save_record(record).await;
-        }
     }
 }
 

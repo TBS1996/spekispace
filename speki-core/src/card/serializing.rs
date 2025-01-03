@@ -1,10 +1,11 @@
 use std::time::Duration;
 
 use omtrent::TimeStamp;
-use serde::de::{self, Deserializer};
-use serde::{Deserialize, Serialize};
-use speki_dto::RawCard;
-use speki_dto::{CType, RawType};
+use serde::{
+    de::{self, Deserializer},
+    Deserialize, Serialize,
+};
+use speki_dto::{CType, RawCard, RawType};
 use toml::Value;
 use uuid::Uuid;
 

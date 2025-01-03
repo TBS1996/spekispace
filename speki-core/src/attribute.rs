@@ -1,8 +1,8 @@
 use std::time::Duration;
 
-use crate::card_provider::CardProvider;
-use crate::App;
 use speki_dto::{AttributeDTO, AttributeId, CardId, ModifiedSource};
+
+use crate::{card_provider::CardProvider, App};
 
 /// An attribute of a sub-class or an instance
 /// predefined questions that are valid for all in its class.

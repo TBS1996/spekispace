@@ -1,3 +1,14 @@
+use std::{ops::ControlFlow, str::FromStr};
+
+use dialoguer::{theme::ColorfulTheme, Input, Select};
+use rand::prelude::*;
+use speki_core::{
+    Attribute, AttributeCard, BackSide, Card, CardId, CardType, ClassCard, EventCard, InstanceCard,
+    StatementCard,
+};
+use speki_dto::Recall;
+use speki_provider::paths;
+
 use crate::{
     add_any_card, get_timestamp, new_attribute, new_class, opt_input, print_card_info,
     utils::{
@@ -6,15 +17,6 @@ use crate::{
         select_from_class_attributes, select_from_subclass_cards,
     },
 };
-use dialoguer::{theme::ColorfulTheme, Input, Select};
-use rand::prelude::*;
-use speki_core::{
-    CardType, Attribute, AttributeCard, BackSide, Card, CardId, ClassCard, EventCard, InstanceCard,
-    StatementCard,
-};
-use speki_dto::Recall;
-use speki_provider::paths;
-use std::{ops::ControlFlow, str::FromStr};
 
 fn review_help() -> &'static str {
     r#"

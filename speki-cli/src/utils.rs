@@ -1,9 +1,9 @@
+use std::{path::Path, process::Command};
+
 use dialoguer::{theme::ColorfulTheme, Input, Select};
 use speki_core::{App, Attribute, Card, CardId};
 use speki_dto::AttributeId;
 use speki_provider::paths;
-use std::path::Path;
-use std::process::Command;
 
 #[allow(dead_code)]
 pub fn notify(msg: impl Into<String>) {
@@ -41,8 +41,9 @@ pub async fn select_from_all_instance_cards(app: &App) -> Option<CardId> {
         .into()
 }
 
-use futures::executor::block_on;
 use std::sync::Arc;
+
+use futures::executor::block_on;
 
 pub async fn select_from_all_class_cards(app: &App) -> Option<CardId> {
     let cards = app.load_all_cards().await;

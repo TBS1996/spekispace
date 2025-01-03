@@ -4,9 +4,8 @@ use dioxus::prelude::*;
 use serde::{Deserialize, Serialize};
 use tracing::info;
 
-use crate::CURRENT_ROUTE;
-
 use super::Komponent;
+use crate::CURRENT_ROUTE;
 
 #[derive(Clone)]
 pub struct DropDownMenu<T>

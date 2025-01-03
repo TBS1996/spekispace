@@ -1,3 +1,5 @@
+use std::net::SocketAddr;
+
 use axum::{
     body::Body,
     http::{HeaderValue, Request, Response, StatusCode},
@@ -6,7 +8,6 @@ use axum::{
 };
 use hyper::{client::HttpConnector, header::HOST, HeaderMap, Method};
 use hyper_tls::HttpsConnector;
-use std::net::SocketAddr;
 
 #[tokio::main]
 async fn main() {

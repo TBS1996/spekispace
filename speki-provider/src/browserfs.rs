@@ -5,10 +5,11 @@ use speki_dto::{CardId, Cty, ProviderId, ProviderMeta, Record, SpekiProvider};
 use uuid::Uuid;
 
 mod js {
+    use std::{path::PathBuf, time::Duration};
+
     use gloo_utils::format::JsValueSerdeExt;
     use js_sys::Promise;
     use serde_json::Value;
-    use std::{path::PathBuf, time::Duration};
     use wasm_bindgen::prelude::*;
 
     #[wasm_bindgen(module = "/browserfs.js")]

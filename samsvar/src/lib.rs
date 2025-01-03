@@ -1,7 +1,6 @@
 pub use serde_json::{json, Value};
 
 mod parser {
-    use super::{Expr, Schema};
     use nom::{
         branch::alt,
         character::complete::{char, multispace0},
@@ -9,6 +8,8 @@ mod parser {
         sequence::{delimited, pair, preceded},
         IResult,
     };
+
+    use super::{Expr, Schema};
 
     // Top-level parser for logical expressions (AND/OR combined)
     pub fn evaluate(input: &str) -> IResult<&str, Schema> {

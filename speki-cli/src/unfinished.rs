@@ -1,7 +1,8 @@
-use crate::utils::{clear_terminal, notify};
 use dialoguer::{theme::ColorfulTheme, Input, Select};
 use rand::seq::SliceRandom;
 use speki_core::{App, NormalCard};
+
+use crate::utils::{clear_terminal, notify};
 
 pub async fn unfinished(app: &App) {
     let filter = "finished == false & suspended == false".to_string();

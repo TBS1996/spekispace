@@ -4,19 +4,18 @@ use console::style;
 use dialoguer::{theme::ColorfulTheme, Input, Select};
 use incread::inc_path;
 use review::{review_menu, view_card};
-use speki_core::{current_time, App, TimeProvider};
 use speki_core::{
-    Attribute, AttributeCard, BackSide, CType, Card, CardId, CardType, ClassCard, EventCard,
-    InstanceCard, NormalCard, SimpleRecall, StatementCard, TimeStamp, UnfinishedCard,
+    current_time, App, Attribute, AttributeCard, BackSide, CType, Card, CardId, CardType,
+    ClassCard, EventCard, InstanceCard, NormalCard, SimpleRecall, StatementCard, TimeProvider,
+    TimeStamp, UnfinishedCard,
+};
+use speki_provider::{
+    paths::{config_dir, get_cards_path, get_review_path},
+    FileProvider,
 };
 use utils::{
     notify, select_from_all_cards, select_from_all_class_cards, select_from_all_instance_cards,
     select_from_attributes,
-};
-
-use speki_provider::{
-    paths::{config_dir, get_cards_path, get_review_path},
-    FileProvider,
 };
 
 //mod collections;

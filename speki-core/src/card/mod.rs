@@ -1,34 +1,23 @@
-use std::cmp::Ord;
-use std::cmp::PartialEq;
-use std::collections::{BTreeMap, BTreeSet};
-use std::fmt::Debug;
-use std::sync::Arc;
-use std::time::Duration;
+use core::f32;
+use std::{
+    cmp::{Ord, PartialEq},
+    collections::{BTreeMap, BTreeSet},
+    fmt::Debug,
+    sync::Arc,
+    time::Duration,
+};
 
 use async_trait::async_trait;
-use core::f32;
 use dioxus_logger::tracing::instrument;
 use futures::executor::block_on;
-use samsvar::json;
-use samsvar::Matcher;
-use serializing::from_any;
-use serializing::into_any;
-use speki_dto::BackSide;
-use speki_dto::CType;
-use speki_dto::CardId;
-use speki_dto::History;
-use speki_dto::Item;
-use speki_dto::ModifiedSource;
-use speki_dto::RawCard;
-use speki_dto::Recall;
-use speki_dto::Review;
+use samsvar::{json, Matcher};
+use serializing::{from_any, into_any};
+use speki_dto::{BackSide, CType, CardId, History, Item, ModifiedSource, RawCard, Recall, Review};
 use tracing::info;
 
-use crate::card_provider::CardProvider;
-use crate::recall_rate::SimpleRecall;
-use crate::RecallCalc;
-use crate::Recaller;
-use crate::TimeGetter;
+use crate::{
+    card_provider::CardProvider, recall_rate::SimpleRecall, RecallCalc, Recaller, TimeGetter,
+};
 
 pub type RecallRate = f32;
 
@@ -352,8 +341,15 @@ impl Card {
         };
 
         self.history.push(review);
-        self.history.set_local_source();
         self.card_provider.save_reviews(self.history.clone()).await;
+
+        self.history = self
+            .card_provider
+            .provider
+            .reviews
+            .load_item(self.id)
+            .await
+            .unwrap();
     }
 
     pub fn time_provider(&self) -> TimeGetter {
@@ -500,16 +496,14 @@ impl Card {
     // Call this function every time SavedCard is mutated.
     pub async fn persist(&mut self) {
         info!("persisting card: {}", self.id);
-        self.last_modified = self.current_time();
-        self.source = ModifiedSource::Local;
-
-        self.card_provider.save_card(self.clone()).await;
 
         let id = self.id;
-
         for dependency in self.dependency_ids().await {
             self.card_provider.set_dependent(dependency, id);
         }
+
+        self.card_provider.save_card(self.clone()).await;
+        *self = Arc::unwrap_or_clone(self.card_provider.load(id).await.unwrap())
     }
 
     async fn is_resolved(&self) -> bool {
@@ -728,18 +722,20 @@ impl Matcher for Card {
 #[cfg(test)]
 mod tests {
 
-    use super::Card;
-    use crate::{
-        card_provider::CardProvider, Provider, Recaller, SimpleRecall, TimeGetter, TimeProvider,
-    };
-    use async_trait::async_trait;
-    use speki_dto::{BackSide, CType, Cty, Item, RawCard, RawType, Recall, Record, SpekiProvider};
     use std::{
         collections::HashMap,
         sync::{Arc, Mutex},
         time::Duration,
     };
+
+    use async_trait::async_trait;
+    use speki_dto::{BackSide, CType, Cty, Item, RawCard, RawType, Recall, Record, SpekiProvider};
     use uuid::Uuid;
+
+    use super::Card;
+    use crate::{
+        card_provider::CardProvider, Provider, Recaller, SimpleRecall, TimeGetter, TimeProvider,
+    };
 
     struct Storage {
         inner: Arc<Mutex<Inner>>,
@@ -805,6 +801,10 @@ mod tests {
 
     #[async_trait(?Send)]
     impl<T: Item> SpekiProvider<T> for Storage {
+        async fn current_time(&self) -> Duration {
+            todo!()
+        }
+
         async fn load_record(&self, id: Uuid) -> Option<Record> {
             self.get(T::identifier(), id)
         }

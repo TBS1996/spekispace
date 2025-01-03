@@ -1,21 +1,22 @@
-use cli_epub_to_text::epub_to_text;
-use dialoguer::theme::ColorfulTheme;
-use dialoguer::Select;
-use serde::{Deserialize, Serialize};
-use speki_core::current_time;
-use speki_core::App;
-use speki_core::CardId;
-use speki_provider::paths;
-use std::collections::HashMap;
-use std::fs::{self, read_to_string};
-use std::io::{self, Write};
-use std::path::{Path, PathBuf};
-use std::time::Duration;
+use std::{
+    collections::HashMap,
+    fs::{self, read_to_string},
+    io::{self, Write},
+    path::{Path, PathBuf},
+    time::Duration,
+};
 
-use crate::add_any_card;
-use crate::review::view_card;
-use crate::utils::get_lines;
-use crate::utils::{clear_terminal, notify};
+use cli_epub_to_text::epub_to_text;
+use dialoguer::{theme::ColorfulTheme, Select};
+use serde::{Deserialize, Serialize};
+use speki_core::{current_time, App, CardId};
+use speki_provider::paths;
+
+use crate::{
+    add_any_card,
+    review::view_card,
+    utils::{clear_terminal, get_lines, notify},
+};
 
 pub fn inc_path() -> PathBuf {
     let path = paths::get_share_path().join("texts");

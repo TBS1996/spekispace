@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use dioxus::prelude::*;
-use speki_core::{CardType, Card};
+use speki_core::{Card, CardType};
 use speki_web::Node;
 use tracing::info;
 

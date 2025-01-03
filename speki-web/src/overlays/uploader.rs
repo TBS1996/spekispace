@@ -1,8 +1,9 @@
+use std::sync::Arc;
+
 use dioxus::prelude::*;
 use dioxus_elements::FileEngine;
 use fancy_regex::Regex;
 use serde::{Deserialize, Serialize};
-use std::sync::Arc;
 use strum::{EnumIter, IntoEnumIterator};
 
 use crate::{

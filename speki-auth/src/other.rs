@@ -1,12 +1,10 @@
-use axum::http::StatusCode;
-use axum::response::IntoResponse;
-use axum::Extension;
+use std::{collections::HashMap, sync::Arc};
+
+use axum::{http::StatusCode, response::IntoResponse, Extension};
 use chrono::Utc;
 use jsonwebtoken::{encode, Algorithm, EncodingKey, Header};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
-use std::sync::Arc;
 
 use super::*;
 

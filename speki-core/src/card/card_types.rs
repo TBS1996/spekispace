@@ -1,8 +1,8 @@
-use crate::{card_provider::CardProvider, App, Attribute};
 use omtrent::TimeStamp;
 use speki_dto::{AttributeId, BackSide};
 
 use super::*;
+use crate::{card_provider::CardProvider, App, Attribute};
 
 #[async_trait::async_trait(?Send)]
 impl CardTrait for NormalCard {

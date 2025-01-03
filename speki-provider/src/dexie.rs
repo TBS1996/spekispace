@@ -3,14 +3,28 @@ use std::{collections::HashMap, time::Duration};
 use gloo_utils::format::JsValueSerdeExt;
 use js_sys::Promise;
 use serde_json::Value;
-use speki_dto::{CardId, ProviderId, Record, SpekiProvider, Syncable};
+use speki_dto::{CardId, Cty, ProviderId, Record, SpekiProvider, Syncable, TimeProvider};
 use tracing::info;
 use uuid::Uuid;
 use wasm_bindgen::prelude::*;
 
-use speki_dto::Cty;
+pub struct WasmTime;
 
-pub struct DexieProvider;
+impl TimeProvider for WasmTime {
+    fn current_time(&self) -> Duration {
+        Duration::from_millis(now() as u64)
+    }
+}
+
+pub struct DexieProvider {
+    time: WasmTime,
+}
+
+impl DexieProvider {
+    pub fn new() -> Self {
+        Self { time: WasmTime }
+    }
+}
 
 use async_trait::async_trait;
 use speki_dto::Item;
@@ -63,6 +77,10 @@ impl<T: Item> Syncable<T> for DexieProvider {
 
 #[async_trait(?Send)]
 impl<T: Item> SpekiProvider<T> for DexieProvider {
+    async fn current_time(&self) -> Duration {
+        self.time.current_time()
+    }
+
     async fn load_record(&self, id: Uuid) -> Option<Record> {
         let ty = T::identifier();
         let id = JsValue::from_str(&id.to_string());

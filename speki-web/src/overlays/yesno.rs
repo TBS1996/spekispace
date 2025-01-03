@@ -2,9 +2,8 @@ use std::sync::Arc;
 
 use dioxus::prelude::*;
 
-use crate::components::Komponent;
-
 use super::Overlay;
+use crate::components::Komponent;
 
 #[derive(Clone)]
 pub struct Yesno {

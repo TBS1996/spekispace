@@ -1,12 +1,13 @@
+use std::io::Write;
+
+use dialoguer::{theme::ColorfulTheme, Select};
+use speki_core::{App, CType};
+
 use crate::{
     create_card,
     incread::{inc_path, textstuff},
     utils::{clear_terminal, get_input_opt, notify},
 };
-use dialoguer::{theme::ColorfulTheme, Select};
-use speki_core::App;
-use speki_core::CType;
-use std::io::Write;
 
 pub async fn add_cards(app: &App) {
     loop {
@@ -43,10 +44,9 @@ pub async fn add_cards_menu(app: &App) {
 }
 
 fn add_wikipedia() {
-    use std::fs::File;
-    use std::thread;
-    use wikipedia::http::default::Client;
-    use wikipedia::Wikipedia;
+    use std::{fs::File, thread};
+
+    use wikipedia::{http::default::Client, Wikipedia};
 
     let Some(input) = get_input_opt("wikipedia article") else {
         return;

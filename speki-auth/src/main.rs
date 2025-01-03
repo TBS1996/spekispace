@@ -1,18 +1,22 @@
-use axum::http::HeaderValue;
-use axum::http::Response;
-use axum::http::StatusCode;
-use axum::Extension;
-use axum::{extract::Query, response::IntoResponse, routing::get, Router};
-use oauth2::reqwest::async_http_client;
-use oauth2::ClientSecret;
-use oauth2::{basic::BasicClient, AuthUrl, AuthorizationCode, ClientId, RedirectUrl, TokenUrl};
-use oauth2::{CsrfToken, TokenResponse};
+use std::{
+    collections::{HashMap, HashSet},
+    net::SocketAddr,
+    sync::{Arc, Mutex},
+};
+
+use axum::{
+    extract::Query,
+    http::{HeaderValue, Response, StatusCode},
+    response::IntoResponse,
+    routing::get,
+    Extension, Router,
+};
+use oauth2::{
+    basic::BasicClient, reqwest::async_http_client, AuthUrl, AuthorizationCode, ClientId,
+    ClientSecret, CsrfToken, RedirectUrl, TokenResponse, TokenUrl,
+};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
-use std::collections::HashSet;
-use std::net::SocketAddr;
-use std::sync::{Arc, Mutex};
 
 const CLIENT_ID: &'static str = "Iv23lipnBB1I2i58tzVT";
 const REDIRECT_URI: &'static str = "http://localhost:3000/auth/github/callback";
@@ -49,8 +53,9 @@ async fn get_installation_token() -> String {
 }
 
 async fn generate_jwt() -> String {
-    use jsonwebtoken::{encode, Algorithm, EncodingKey, Header};
     use std::time::{SystemTime, UNIX_EPOCH};
+
+    use jsonwebtoken::{encode, Algorithm, EncodingKey, Header};
 
     #[derive(Debug, Serialize)]
     struct Claims {
