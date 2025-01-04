@@ -577,12 +577,8 @@ pub trait SpekiProvider<T: Item>: Sync {
         let mut outmap = HashMap::new();
 
         for (key, val) in map {
-            match toml::from_str(&val.content) {
-                Ok(val) => {
-                    let _ = outmap.insert(key, val);
-                }
-                Err(e) => warn!("failed to deserialize {} {}: {:?}", T::identifier(), key, e),
-            }
+            let val = <T as Item>::deserialize(key, val.content);
+            outmap.insert(key, val);
         }
         outmap
     }
