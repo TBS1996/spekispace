@@ -431,16 +431,27 @@ pub trait Syncable<T: Item>: Sync + SpekiProvider<T> {
         self.update_sync_info(from, now).await;
     }
 
-    async fn sync(self, other: impl Syncable<T>, now: Duration)
+    async fn sync(self, other: impl Syncable<T>)
     where
         Self: Sized,
     {
-        let left = self;
-        let right = other;
+        let (left, right) = (self, other);
 
         let ty = T::identifier();
         let left_id = left.provider_id().await;
         let right_id = right.provider_id().await;
+
+        let now = {
+            let left_time = left.current_time().await;
+            let right_time = right.current_time().await;
+
+            if left_time.abs_diff(right_time) > Duration::from_secs(60) {
+                let msg = format!("time between providers too great. time from {left_id}: {leftsec}, time from {right_id}: {rightsec}", leftsec = left_time.as_secs(), rightsec = right_time.as_secs());
+                panic!("{msg}");
+            } else {
+                left_time.max(right_time)
+            }
+        };
 
         info!("starting sync of: {ty} between {left_id} and {right_id}");
 

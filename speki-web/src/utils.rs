@@ -124,26 +124,16 @@ pub async fn sync() {
     *SYNCING.write() = true;
     let now = time_provider.current_time();
 
-    Syncable::<RawCard>::sync(
-        FirestoreProvider::new(agent.clone()),
-        DexieProvider::new(),
-        now,
-    )
-    .await;
+    Syncable::<RawCard>::sync(FirestoreProvider::new(agent.clone()), DexieProvider::new()).await;
 
     Syncable::<speki_dto::History>::sync(
         FirestoreProvider::new(agent.clone()),
         DexieProvider::new(),
-        now,
     )
     .await;
 
-    Syncable::<AttributeDTO>::sync(
-        FirestoreProvider::new(agent.clone()),
-        DexieProvider::new(),
-        now,
-    )
-    .await;
+    Syncable::<AttributeDTO>::sync(FirestoreProvider::new(agent.clone()), DexieProvider::new())
+        .await;
 
     *SYNCING.write() = false;
     let elapsed = time_provider.current_time() - now;
