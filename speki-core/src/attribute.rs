@@ -22,20 +22,14 @@ pub struct Attribute {
 
 impl Attribute {
     /// Fills the pattern with the instance
-    pub async fn name(&self, instance: CardId) -> String {
-        let card_text = self
-            .card_provider
-            .load(instance)
-            .await
-            .unwrap()
-            .print()
-            .await;
+    pub async fn name(&self, instance: CardId) -> Option<String> {
+        let card_text = self.card_provider.load(instance).await?.print().await;
 
-        if self.pattern.contains("{}") {
+        Some(if self.pattern.contains("{}") {
             self.pattern.replace("{}", &card_text)
         } else {
             format!("{}: {}", &self.pattern, card_text)
-        }
+        })
     }
 
     pub fn from_dto(dto: AttributeDTO, card_provider: CardProvider) -> Self {

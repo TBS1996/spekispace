@@ -49,6 +49,7 @@ impl CardTrait for AttributeCard {
             .unwrap()
             .name(self.instance)
             .await
+            .unwrap_or_else(|| "oops, instance is deleted".to_string())
     }
 }
 
