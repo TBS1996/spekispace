@@ -228,6 +228,13 @@ async fn promise_to_val(promise: Promise) -> Value {
 }
 
 pub async fn sign_in() -> Option<AuthUser> {
+    if let Some(val) = try_promise_to_val(getCurrentUser()).await {
+        info!("curr user {val:?}");
+        if val.is_object() {
+            return Some(serde_json::from_value(val).unwrap());
+        }
+    }
+
     let val = promise_to_val(signInWithGoogle()).await;
     Some(serde_json::from_value(val).unwrap())
 }

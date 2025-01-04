@@ -21,7 +21,7 @@ const firebaseConfig = {
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
-const auth = getAuth();
+const auth = getAuth(app);
 const provider = new GoogleAuthProvider();
 
 function getTable(userId, tableName) {
@@ -207,8 +207,20 @@ export async function signOutUser() {
   }
 }
 
-export function getCurrentUser() {
-  return auth.currentUser;
+export async function getCurrentUser() {
+  if (typeof auth === 'undefined' || auth === null) {
+    console.log("Auth is not initialized or unavailable");
+    return null;
+  }
+
+  const currentUser = auth.currentUser;
+
+  if (!currentUser) {
+    console.log("No user authenticated");
+    return null;
+  }
+
+  return currentUser;
 }
 
 export async function isUserAuthenticated() {
