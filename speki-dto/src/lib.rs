@@ -453,18 +453,19 @@ pub trait Syncable<T: Item>: Sync + SpekiProvider<T> {
     where
         Self: Sized,
     {
+        use futures::future::join;
+
         let (left, right) = (self, other);
 
         let ty = T::identifier();
-        let left_id = left.provider_id().await;
-        let right_id = right.provider_id().await;
 
-        let now = {
-            let left_time = left.current_time().await;
-            let right_time = right.current_time().await;
+        let (left_id, right_id) = join(left.provider_id(), right.provider_id()).await;
+
+        let now = async {
+            let (left_time, right_time) = join(left.current_time(), right.current_time()).await;
 
             if left_time.abs_diff(right_time) > Duration::from_secs(60) {
-                let msg = format!("time between providers too great. time from {left_id}: {leftsec}, time from {right_id}: {rightsec}", leftsec = left_time.as_secs(), rightsec = right_time.as_secs());
+                let msg = format!("time between {ty:?} providers too great. time from {left_id}: {leftsec}, time from {right_id}: {rightsec}", leftsec = left_time.as_secs(), rightsec = right_time.as_secs());
                 panic!("{msg}");
             } else {
                 left_time.max(right_time)
@@ -473,20 +474,20 @@ pub trait Syncable<T: Item>: Sync + SpekiProvider<T> {
 
         info!("starting sync of: {ty} between {left_id} and {right_id}");
 
-        let mergeres: Vec<MergeInto<T>> = {
-            let mut new_from_right = right.load_new(left_id).await;
-            let mut new_from_left = left.load_new(right_id).await;
+        let mergeres = async {
+            let (mut new_from_left, mut new_from_right) =
+                join(left.load_new(right_id), right.load_new(left_id)).await;
 
-            let ids: HashSet<Uuid> = new_from_right
+            let ids: HashSet<Uuid> = new_from_left
                 .keys()
-                .chain(new_from_left.keys())
+                .chain(new_from_right.keys())
                 .cloned()
                 .collect();
 
             ids.into_iter()
                 .filter_map(|id| {
-                    let right_item = new_from_right.remove(&id);
                     let left_item = new_from_left.remove(&id);
+                    let right_item = new_from_right.remove(&id);
 
                     match (left_item, right_item) {
                         (None, None) => unreachable!("ID should exist in at least one map"),
@@ -495,8 +496,10 @@ pub trait Syncable<T: Item>: Sync + SpekiProvider<T> {
                         (Some(left_item), Some(right_item)) => left_item.merge(right_item),
                     }
                 })
-                .collect()
+                .collect::<Vec<MergeInto<T>>>()
         };
+
+        let (mergeres, now) = join(mergeres, now).await;
 
         let (left_update, right_update) = {
             let mut left_update = vec![];
@@ -525,8 +528,11 @@ pub trait Syncable<T: Item>: Sync + SpekiProvider<T> {
             (left_update, right_update)
         };
 
-        left.save_from_sync(right_id, left_update, now).await;
-        right.save_from_sync(left_id, right_update, now).await;
+        join(
+            left.save_from_sync(right_id, left_update, now),
+            right.save_from_sync(left_id, right_update, now),
+        )
+        .await;
 
         info!("finished sync of: {ty} between {left_id} and {right_id}");
     }
