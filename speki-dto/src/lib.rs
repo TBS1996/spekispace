@@ -581,7 +581,7 @@ pub trait SpekiProvider<T: Item>: Sync {
                 Ok(val) => {
                     let _ = outmap.insert(key, val);
                 }
-                Err(e) => warn!("failed to deserialize: {:?}", e),
+                Err(e) => warn!("failed to deserialize {} {}: {:?}", T::identifier(), key, e),
             }
         }
         outmap
