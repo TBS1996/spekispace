@@ -2,7 +2,7 @@ use std::{fmt::Debug, sync::Arc, time::Duration};
 
 use dioxus::prelude::*;
 use speki_core::Card;
-use speki_dto::{AttributeDTO, CardId, RawCard, TimeProvider};
+use speki_dto::{AttributeDTO, CardId, RawCard, Syncable, TimeProvider};
 use speki_provider::{DexieProvider, WasmTime};
 use speki_web::{Node, NodeMetadata};
 use tracing::info;
@@ -124,19 +124,21 @@ pub async fn sync() {
     *SYNCING.write() = true;
     let now = time_provider.current_time();
 
-    speki_dto::sync::<RawCard>(
+    Syncable::<RawCard>::sync(
         FirestoreProvider::new(agent.clone()),
         DexieProvider::new(),
         now,
     )
     .await;
-    speki_dto::sync::<speki_dto::History>(
+
+    Syncable::<speki_dto::History>::sync(
         FirestoreProvider::new(agent.clone()),
         DexieProvider::new(),
         now,
     )
     .await;
-    speki_dto::sync::<AttributeDTO>(
+
+    Syncable::<AttributeDTO>::sync(
         FirestoreProvider::new(agent.clone()),
         DexieProvider::new(),
         now,

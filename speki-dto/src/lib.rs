@@ -430,6 +430,77 @@ pub trait Syncable<T: Item>: Sync + SpekiProvider<T> {
         self.save_records(records).await;
         self.update_sync_info(from, now).await;
     }
+
+    async fn sync(self, other: impl Syncable<T>, now: Duration)
+    where
+        Self: Sized,
+    {
+        let left = self;
+        let right = other;
+
+        let ty = T::identifier();
+        let left_id = left.provider_id().await;
+        let right_id = right.provider_id().await;
+
+        info!("starting sync of: {ty} between {left_id} and {right_id}");
+
+        let mergeres: Vec<MergeInto<T>> = {
+            let mut new_from_right = right.load_new(left_id).await;
+            let mut new_from_left = left.load_new(right_id).await;
+
+            let ids: HashSet<Uuid> = new_from_right
+                .keys()
+                .chain(new_from_left.keys())
+                .cloned()
+                .collect();
+
+            ids.into_iter()
+                .filter_map(|id| {
+                    let right_item = new_from_right.remove(&id);
+                    let left_item = new_from_left.remove(&id);
+
+                    match (left_item, right_item) {
+                        (None, None) => unreachable!("ID should exist in at least one map"),
+                        (None, Some(right_item)) => Some(MergeInto::Left(right_item)),
+                        (Some(left_item), None) => Some(MergeInto::Right(left_item)),
+                        (Some(left_item), Some(right_item)) => left_item.merge(right_item),
+                    }
+                })
+                .collect()
+        };
+
+        let (left_update, right_update) = {
+            let mut left_update = vec![];
+            let mut right_update = vec![];
+
+            for res in mergeres {
+                match res {
+                    MergeInto::Left(mut item) => {
+                        item.set_external_source(right_id, now);
+                        left_update.push(item.into_record());
+                    }
+                    MergeInto::Right(mut item) => {
+                        item.set_external_source(left_id, now);
+                        right_update.push(item.into_record());
+                    }
+                    MergeInto::Both(mut item) => {
+                        item.set_external_source(left_id, now);
+                        right_update.push(item.clone().into_record());
+
+                        item.set_external_source(right_id, now);
+                        left_update.push(item.into_record());
+                    }
+                }
+            }
+
+            (left_update, right_update)
+        };
+
+        left.save_from_sync(right_id, left_update, now).await;
+        right.save_from_sync(left_id, right_update, now).await;
+
+        info!("finished sync of: {ty} between {left_id} and {right_id}");
+    }
 }
 
 #[async_trait::async_trait(?Send)]
@@ -487,71 +558,6 @@ pub trait SpekiProvider<T: Item>: Sync {
         let record: Record = item.into();
         self.save_record(record).await;
     }
-}
-
-pub async fn sync<T: Item>(left: impl Syncable<T>, right: impl Syncable<T>, now: Duration) {
-    let ty = T::identifier();
-    let left_id = left.provider_id().await;
-    let right_id = right.provider_id().await;
-
-    info!("starting sync of: {ty} between {left_id} and {right_id}");
-
-    let mergeres: Vec<MergeInto<T>> = {
-        let mut new_from_right = right.load_new(left_id).await;
-        let mut new_from_left = left.load_new(right_id).await;
-
-        let ids: HashSet<Uuid> = new_from_right
-            .keys()
-            .chain(new_from_left.keys())
-            .cloned()
-            .collect();
-
-        ids.into_iter()
-            .filter_map(|id| {
-                let right_item = new_from_right.remove(&id);
-                let left_item = new_from_left.remove(&id);
-
-                match (left_item, right_item) {
-                    (None, None) => unreachable!("ID should exist in at least one map"),
-                    (None, Some(right_item)) => Some(MergeInto::Left(right_item)),
-                    (Some(left_item), None) => Some(MergeInto::Right(left_item)),
-                    (Some(left_item), Some(right_item)) => left_item.merge(right_item),
-                }
-            })
-            .collect()
-    };
-
-    let (left_update, right_update) = {
-        let mut left_update = vec![];
-        let mut right_update = vec![];
-
-        for res in mergeres {
-            match res {
-                MergeInto::Left(mut item) => {
-                    item.set_external_source(right_id, now);
-                    left_update.push(item.into_record());
-                }
-                MergeInto::Right(mut item) => {
-                    item.set_external_source(left_id, now);
-                    right_update.push(item.into_record());
-                }
-                MergeInto::Both(mut item) => {
-                    item.set_external_source(left_id, now);
-                    right_update.push(item.clone().into_record());
-
-                    item.set_external_source(right_id, now);
-                    left_update.push(item.into_record());
-                }
-            }
-        }
-
-        (left_update, right_update)
-    };
-
-    left.save_from_sync(right_id, left_update, now).await;
-    right.save_from_sync(left_id, right_update, now).await;
-
-    info!("finished sync of: {ty} between {left_id} and {right_id}");
 }
 
 fn parse_history(s: String, id: Uuid) -> History {
