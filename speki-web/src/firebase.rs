@@ -23,9 +23,11 @@ fn as_js_value(ty: Cty) -> JsValue {
     JsValue::from_str(as_str(ty))
 }
 
+#[derive(Clone)]
 pub struct FirestoreProvider {
     user_id: String,
     time: WasmTime,
+    id: Option<ProviderId>,
 }
 
 impl FirestoreProvider {
@@ -33,8 +35,14 @@ impl FirestoreProvider {
         Self {
             user_id: user.uid,
             time: WasmTime,
+            id: None,
         }
     }
+
+    pub fn set_id(&mut self, id: ProviderId) {
+        self.id = Some(id);
+    }
+
     fn user_id(&self) -> JsValue {
         JsValue::from_str(&self.user_id)
     }
@@ -65,6 +73,10 @@ impl<T: Item> Syncable<T> for FirestoreProvider {
     }
 
     async fn load_id_opt(&self) -> Option<ProviderId> {
+        if self.id.is_some() {
+            return self.id;
+        }
+
         let promise = loadDbId(&self.user_id());
         let future = wasm_bindgen_futures::JsFuture::from(promise);
         let jsvalue = future.await.unwrap();

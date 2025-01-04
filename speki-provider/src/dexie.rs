@@ -1,13 +1,16 @@
 use std::{collections::HashMap, time::Duration};
 
+use async_trait::async_trait;
 use gloo_utils::format::JsValueSerdeExt;
 use js_sys::Promise;
 use serde_json::Value;
+use speki_dto::Item;
 use speki_dto::{CardId, Cty, ProviderId, Record, SpekiProvider, Syncable, TimeProvider};
 use tracing::info;
 use uuid::Uuid;
 use wasm_bindgen::prelude::*;
 
+#[derive(Copy, Clone)]
 pub struct WasmTime;
 
 impl TimeProvider for WasmTime {
@@ -16,18 +19,24 @@ impl TimeProvider for WasmTime {
     }
 }
 
+#[derive(Clone)]
 pub struct DexieProvider {
     time: WasmTime,
+    id: Option<ProviderId>,
 }
 
 impl DexieProvider {
     pub fn new() -> Self {
-        Self { time: WasmTime }
+        Self {
+            time: WasmTime,
+            id: None,
+        }
+    }
+
+    pub fn set_id(&mut self, id: ProviderId) {
+        self.id = Some(id);
     }
 }
-
-use async_trait::async_trait;
-use speki_dto::Item;
 
 #[async_trait(?Send)]
 impl<T: Item> Syncable<T> for DexieProvider {
@@ -37,6 +46,10 @@ impl<T: Item> Syncable<T> for DexieProvider {
     }
 
     async fn load_id_opt(&self) -> Option<ProviderId> {
+        if self.id.is_some() {
+            return self.id;
+        }
+
         let promise = loadDbId();
         let future = wasm_bindgen_futures::JsFuture::from(promise);
         let jsvalue = future.await.unwrap();

@@ -1,6 +1,7 @@
 use std::{fmt::Debug, sync::Arc, time::Duration};
 
 use dioxus::prelude::*;
+use futures::future::{self, join};
 use speki_core::Card;
 use speki_dto::{AttributeDTO, CardId, RawCard, Syncable, TimeProvider};
 use speki_provider::{DexieProvider, WasmTime};
@@ -17,6 +18,16 @@ use crate::{
 pub struct App(Arc<speki_core::App>);
 
 impl App {
+    pub fn new() -> Self {
+        Self(Arc::new(speki_core::App::new(
+            speki_core::SimpleRecall,
+            WasmTime,
+            DexieProvider::new(),
+            DexieProvider::new(),
+            DexieProvider::new(),
+        )))
+    }
+
     pub fn inner(&self) -> Arc<speki_core::App> {
         self.0.clone()
     }
@@ -104,18 +115,6 @@ extern "C" {
     fn now() -> f64;
 }
 
-impl App {
-    pub fn new() -> Self {
-        Self(Arc::new(speki_core::App::new(
-            speki_core::SimpleRecall,
-            WasmTime,
-            DexieProvider::new(),
-            DexieProvider::new(),
-            DexieProvider::new(),
-        )))
-    }
-}
-
 pub async fn sync() {
     let time_provider = APP.read().0.time_provider.clone();
     let agent = sign_in().await.unwrap();
@@ -124,16 +123,27 @@ pub async fn sync() {
     *SYNCING.write() = true;
     let now = time_provider.current_time();
 
-    Syncable::<RawCard>::sync(FirestoreProvider::new(agent.clone()), DexieProvider::new()).await;
+    let fire = async {
+        let mut fire = FirestoreProvider::new(agent);
+        let id = Syncable::<RawCard>::provider_id(&fire).await;
+        fire.set_id(id);
+        fire
+    };
 
-    Syncable::<speki_dto::History>::sync(
-        FirestoreProvider::new(agent.clone()),
-        DexieProvider::new(),
-    )
-    .await;
+    let dex = async {
+        let mut dex = DexieProvider::new();
+        let id = Syncable::<RawCard>::provider_id(&dex).await;
+        dex.set_id(id);
+        dex
+    };
 
-    Syncable::<AttributeDTO>::sync(FirestoreProvider::new(agent.clone()), DexieProvider::new())
-        .await;
+    let (fire, dex) = join(fire, dex).await;
+
+    let cardsync = Syncable::<RawCard>::sync(fire.clone(), dex.clone());
+    let revsync = Syncable::<speki_dto::History>::sync(fire.clone(), dex.clone());
+    let attrsync = Syncable::<AttributeDTO>::sync(fire.clone(), dex.clone());
+
+    futures::future::join3(cardsync, revsync, attrsync).await;
 
     *SYNCING.write() = false;
     let elapsed = time_provider.current_time() - now;
