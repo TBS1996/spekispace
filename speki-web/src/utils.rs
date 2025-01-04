@@ -118,7 +118,7 @@ impl App {
 
 pub async fn sync() {
     let time_provider = APP.read().0.time_provider.clone();
-    let agent = sign_in().await;
+    let agent = sign_in().await.unwrap();
     info!("starting sync!");
 
     *SYNCING.write() = true;

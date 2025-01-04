@@ -455,7 +455,11 @@ pub trait SpekiProvider<T: Item>: Sync {
         match toml::from_str::<T>(&record.content) {
             Ok(item) => Some(item),
             Err(e) => {
-                tracing::error!("error deserializing item: {e:?}");
+                tracing::error!(
+                    "error deserializing {:?} with id {}: {e:?}",
+                    T::identifier(),
+                    id
+                );
                 None
             }
         }

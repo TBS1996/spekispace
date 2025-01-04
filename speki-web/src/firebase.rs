@@ -1,11 +1,12 @@
-use std::{collections::HashMap, time::Duration};
-
 use async_trait::async_trait;
 use gloo_utils::format::JsValueSerdeExt;
 use js_sys::Promise;
+use serde::Deserialize;
+use serde::Serialize;
 use serde_json::Value;
 use speki_dto::{Cty, Item, ProviderId, Record, SpekiProvider, Syncable, TimeProvider};
 use speki_provider::WasmTime;
+use std::{collections::HashMap, time::Duration};
 use tracing::info;
 use uuid::Uuid;
 use wasm_bindgen::prelude::*;
@@ -213,29 +214,37 @@ extern "C" {
     fn isUserAuthenticated() -> Promise;
 }
 
-async fn promise_to_val(promise: Promise) -> Value {
+async fn try_promise_to_val(promise: Promise) -> Option<Value> {
+    info!("lets goo");
     let future = wasm_bindgen_futures::JsFuture::from(promise);
-    let jsvalue = future.await.unwrap();
-    jsvalue.into_serde().unwrap()
+    info!("future!");
+    let jsvalue = future.await.ok()?;
+    info!("whoa!");
+    jsvalue.into_serde().ok()
 }
 
-pub async fn sign_in() -> AuthUser {
+async fn promise_to_val(promise: Promise) -> Value {
+    try_promise_to_val(promise).await.unwrap()
+}
+
+pub async fn sign_in() -> Option<AuthUser> {
     let val = promise_to_val(signInWithGoogle()).await;
-    AuthUser::try_from(val).unwrap()
+    Some(serde_json::from_value(val).unwrap())
 }
 
-impl TryFrom<Value> for AuthUser {
-    type Error = ();
-
-    fn try_from(value: Value) -> Result<Self, Self::Error> {
-        let obj = value.as_object().unwrap();
-        let uid = obj.get("uid").unwrap().as_str().unwrap().to_owned();
-
-        Ok(Self { uid })
-    }
-}
-
-#[derive(Default, Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct AuthUser {
+    pub api_key: String,
+    pub app_name: String,
+    pub created_at: String,
+    pub email_verified: bool,
+    pub is_anonymous: bool,
+    pub last_login_at: String,
     pub uid: String,
+    pub display_name: Option<String>,
+    pub email: Option<String>,
+    pub photo_url: Option<String>,
+    pub provider_data: Vec<serde_json::Value>,
+    pub sts_token_manager: Option<serde_json::Value>,
 }

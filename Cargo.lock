@@ -3637,6 +3637,7 @@ dependencies = [
  "async-trait",
  "dioxus",
  "dioxus-logger",
+ "eyre",
  "fancy-regex",
  "futures",
  "futures-util",
