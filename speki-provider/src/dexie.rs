@@ -31,28 +31,16 @@ use speki_dto::Item;
 
 #[async_trait(?Send)]
 impl<T: Item> Syncable<T> for DexieProvider {
-    async fn provider_id(&self) -> ProviderId {
-        info!("getting provider id from dexie");
-        async fn try_load_id() -> Option<ProviderId> {
-            let promise = loadDbId();
-            let future = wasm_bindgen_futures::JsFuture::from(promise);
-            let jsvalue = future.await.unwrap();
-            serde_wasm_bindgen::from_value::<ProviderId>(jsvalue).ok()
-        }
+    async fn save_id(&self, id: ProviderId) {
+        let s = JsValue::from_str(&id.to_string());
+        saveDbId(&s);
+    }
 
-        match try_load_id().await {
-            Some(id) => {
-                info!("found dexie id: {:?}", id);
-                id
-            }
-            None => {
-                info!("creating new dexie db id");
-                let new = ProviderId::new_v4();
-                let s = JsValue::from_str(&new.to_string());
-                saveDbId(&s);
-                new
-            }
-        }
+    async fn load_id_opt(&self) -> Option<ProviderId> {
+        let promise = loadDbId();
+        let future = wasm_bindgen_futures::JsFuture::from(promise);
+        let jsvalue = future.await.unwrap();
+        serde_wasm_bindgen::from_value::<ProviderId>(jsvalue).ok()
     }
 
     async fn update_sync_info(&self, other: ProviderId, current_time: Duration) {

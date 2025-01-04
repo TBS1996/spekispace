@@ -383,7 +383,20 @@ pub type UnixSeconds = u64;
 
 #[async_trait::async_trait(?Send)]
 pub trait Syncable<T: Item>: Sync + SpekiProvider<T> {
-    async fn provider_id(&self) -> ProviderId;
+    async fn save_id(&self, id: ProviderId);
+    async fn load_id_opt(&self) -> Option<ProviderId>;
+
+    async fn provider_id(&self) -> ProviderId {
+        if let Some(id) = self.load_id_opt().await {
+            return id;
+        }
+
+        let new_id = ProviderId::new_v4();
+        self.save_id(new_id).await;
+
+        self.load_id_opt().await.unwrap()
+    }
+
     async fn update_sync_info(&self, other: ProviderId, now: Duration);
     async fn last_sync(&self, other: ProviderId) -> Duration;
 
@@ -431,6 +444,11 @@ pub trait Syncable<T: Item>: Sync + SpekiProvider<T> {
         self.update_sync_info(from, now).await;
     }
 
+    /// Syncs the state between two providers.
+    ///
+    /// Must not be called in parallel if the save_id function overwrites previous id.
+    /// If it only saves if empty then you can call in parallel.
+    /// Otherwise it might generate different Ids for different types.
     async fn sync(self, other: impl Syncable<T>)
     where
         Self: Sized,

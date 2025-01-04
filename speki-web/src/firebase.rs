@@ -59,23 +59,16 @@ fn duration_to_firestore_jsvalue(duration: Duration) -> JsValue {
 
 #[async_trait(?Send)]
 impl<T: Item> Syncable<T> for FirestoreProvider {
-    async fn provider_id(&self) -> ProviderId {
-        async fn try_load_id(user_id: &JsValue) -> Option<ProviderId> {
-            let promise = loadDbId(user_id);
-            let future = wasm_bindgen_futures::JsFuture::from(promise);
-            let jsvalue = future.await.unwrap();
-            serde_wasm_bindgen::from_value::<ProviderId>(jsvalue).ok()
-        }
+    async fn save_id(&self, id: ProviderId) {
+        let s = JsValue::from_str(&id.to_string());
+        saveDbId(&self.user_id(), &s);
+    }
 
-        match try_load_id(&self.user_id()).await {
-            Some(id) => id,
-            None => {
-                let new = ProviderId::new_v4();
-                let s = JsValue::from_str(&new.to_string());
-                saveDbId(&self.user_id(), &s);
-                new
-            }
-        }
+    async fn load_id_opt(&self) -> Option<ProviderId> {
+        let promise = loadDbId(&self.user_id());
+        let future = wasm_bindgen_futures::JsFuture::from(promise);
+        let jsvalue = future.await.unwrap();
+        serde_wasm_bindgen::from_value::<ProviderId>(jsvalue).ok()
     }
 
     async fn update_sync_info(&self, other: ProviderId, current_time: Duration) {
