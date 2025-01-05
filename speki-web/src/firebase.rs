@@ -256,7 +256,10 @@ pub async fn sign_in() -> Option<AuthUser> {
     }
 
     let val = promise_to_val(signInWithGoogle()).await;
-    Some(serde_json::from_value(val).unwrap())
+    let user: AuthUser = serde_json::from_value(val).unwrap();
+
+    *LOGIN_STATE.write() = Some(user.clone());
+    Some(user)
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -274,4 +277,16 @@ pub struct AuthUser {
     pub photo_url: Option<String>,
     pub provider_data: Vec<serde_json::Value>,
     pub sts_token_manager: Option<serde_json::Value>,
+}
+
+impl AuthUser {
+    pub fn display(&self) -> String {
+        if let Some(name) = self.display_name.clone() {
+            name
+        } else if let Some(email) = self.email.clone() {
+            email
+        } else {
+            self.uid.clone()
+        }
+    }
 }
