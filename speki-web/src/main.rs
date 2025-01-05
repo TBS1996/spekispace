@@ -11,6 +11,7 @@ use std::{
 
 use dioxus::prelude::*;
 use dioxus_logger::tracing::{info, Level};
+use firebase::AuthUser;
 use overlays::OverlayManager;
 use pages::ImportState;
 
@@ -105,6 +106,7 @@ static OVERLAY: GlobalSignal<OverlayManager> = Signal::global(Default::default);
 static NONCLICKABLE: GlobalSignal<NonClickable> = Signal::global(Default::default);
 static IS_SHORT: GlobalSignal<bool> = Signal::global(|| screen_height_in_inches().unwrap() < 4.);
 static CURRENT_ROUTE: GlobalSignal<Route> = Signal::global(|| Route::Menu {});
+static LOGIN_STATE: GlobalSignal<Option<AuthUser>> = Signal::global(|| None);
 
 #[component]
 pub fn TheApp() -> Element {
@@ -113,7 +115,13 @@ pub fn TheApp() -> Element {
     use_context_provider(ImportState::new);
 
     spawn(async move {
-        APP.read().fill_cache().await;
+        let auth = APP.read().fill_cache().await;
+        if let Some(currauth) = firebase::current_sign_in().await {
+            *LOGIN_STATE.write() = Some(currauth);
+            info!("user logged in!");
+        } else {
+            info!("no user logged in!");
+        }
     });
 
     rsx! {

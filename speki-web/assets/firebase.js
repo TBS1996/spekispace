@@ -220,7 +220,11 @@ export async function getCurrentUser() {
     return null;
   }
 
-  return currentUser;
+  if (await isUserAuthenticated()) {
+    return currentUser;
+  } else {
+    return null;
+  }
 }
 
 export async function isUserAuthenticated() {
@@ -228,12 +232,14 @@ export async function isUserAuthenticated() {
   if (user) {
       try {
           await user.getIdToken(true);
+          console.log(`user authenticated!`);
           return true;
       } catch (error) {
           console.error('Error refreshing token:', error);
           return false;
       }
   } else {
+      console.log(`user yok`);
       return false;
   }
 }

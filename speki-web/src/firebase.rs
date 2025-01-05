@@ -11,6 +11,8 @@ use tracing::info;
 use uuid::Uuid;
 use wasm_bindgen::prelude::*;
 
+use crate::LOGIN_STATE;
+
 fn as_str(ty: Cty) -> &'static str {
     match ty {
         Cty::Card => "cards",
@@ -232,12 +234,25 @@ async fn promise_to_val(promise: Promise) -> Value {
     try_promise_to_val(promise).await.unwrap()
 }
 
+pub async fn current_sign_in() -> Option<AuthUser> {
+    let val = try_promise_to_val(getCurrentUser()).await?;
+    info!("curr user {val:?}");
+
+    if val.is_object() {
+        Some(serde_json::from_value(val).unwrap())
+    } else {
+        None
+    }
+}
+
+pub async fn sign_out() {
+    let val = promise_to_val(signOutUser()).await;
+    LOGIN_STATE.write().take();
+}
+
 pub async fn sign_in() -> Option<AuthUser> {
-    if let Some(val) = try_promise_to_val(getCurrentUser()).await {
-        info!("curr user {val:?}");
-        if val.is_object() {
-            return Some(serde_json::from_value(val).unwrap());
-        }
+    if let Some(user) = current_sign_in().await {
+        return Some(user);
     }
 
     let val = promise_to_val(signInWithGoogle()).await;
