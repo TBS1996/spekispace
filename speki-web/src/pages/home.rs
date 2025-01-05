@@ -1,9 +1,23 @@
 use dioxus::prelude::*;
-use tracing::info;
+
+use crate::Route;
 
 #[component]
-pub fn Home() -> Element {
-    info!("home nice");
+pub fn Menu() -> Element {
+    let buttonclass = "text-center py-4 px-6 bg-blue-500 text-white font-bold rounded-lg shadow hover:bg-blue-600 transition";
+    rsx! {
+        div {
+            class: "flex flex-col items-center justify-center min-h-screen bg-gray-50 p-6 space-y-4",
 
-    rsx! {}
+            div {
+                class: "flex flex-col space-y-4 w-full max-w-md",
+
+                Link {
+                    to: Route::About {  } ,
+                    class: "{buttonclass}",
+                    "about"
+                }
+            }
+        }
+    }
 }

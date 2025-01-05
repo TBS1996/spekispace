@@ -14,7 +14,7 @@ use dioxus_logger::tracing::{info, Level};
 use overlays::OverlayManager;
 
 use crate::{
-    pages::{add_card::Add, Browse, Home, Review},
+    pages::{add_card::Add, About, Browse, Menu, Review},
     utils::App,
 };
 
@@ -103,7 +103,7 @@ static APP: GlobalSignal<App> = Signal::global(App::new);
 static OVERLAY: GlobalSignal<OverlayManager> = Signal::global(Default::default);
 static NONCLICKABLE: GlobalSignal<NonClickable> = Signal::global(Default::default);
 static IS_SHORT: GlobalSignal<bool> = Signal::global(|| screen_height_in_inches().unwrap() < 4.);
-static CURRENT_ROUTE: GlobalSignal<Route> = Signal::global(|| Route::Home {});
+static CURRENT_ROUTE: GlobalSignal<Route> = Signal::global(|| Route::Menu {});
 
 #[component]
 pub fn TheApp() -> Element {
@@ -191,22 +191,25 @@ fn Wrapper() -> Element {
 pub enum Route {
     #[layout(Wrapper)]
     #[route("/")]
-    Home {},
+    Menu {},
     #[route("/review")]
     Review {},
     #[route("/add")]
     Add {},
     #[route("/browse")]
     Browse {},
+    #[route("/about")]
+    About {},
 }
 
 impl Route {
     pub fn label(&self) -> &'static str {
         match self {
-            Route::Home {} => "home",
+            Route::Menu {} => "menu",
             Route::Review {} => "review",
             Route::Add {} => "add cards",
             Route::Browse {} => "browse",
+            Route::About {} => "about",
         }
     }
 }

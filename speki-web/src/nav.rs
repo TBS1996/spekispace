@@ -54,6 +54,12 @@ pub fn nav() -> Element {
                     class: "flex w-full items-center lg:pl-12 lg:py-8 pl-4 py-4 flex-nowrap",
                     ul {
                         class: "flex flex-row font-semibold font-heading space-x-6",
+
+                        Link {
+                            to: Route::Menu {  },
+                            { image("burger.svg", 28, false ) }
+                        }
+
                         button {
                             onclick: move |_| {
                                 spawn(async move {
