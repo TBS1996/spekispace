@@ -1,12 +1,13 @@
-use std::{fmt::Debug, sync::Arc, time::Duration};
+use std::{fmt::Debug, sync::Arc};
 
 use dioxus::prelude::*;
-use futures::future::{self, join};
+use futures::future::join;
 use speki_core::Card;
-use speki_dto::{AttributeDTO, CardId, RawCard, Syncable, TimeProvider};
+use speki_dto::{AttributeDTO, CardId, RawCard, Syncable};
 use speki_provider::{DexieProvider, WasmTime};
 use speki_web::{Node, NodeMetadata};
 use tracing::info;
+use wasm_bindgen::prelude::*;
 
 use crate::{
     firebase::{sign_in, FirestoreProvider},
@@ -106,8 +107,6 @@ pub fn is_element_present(id: &str) -> bool {
         .get_element_by_id(id)
         .is_some()
 }
-
-use wasm_bindgen::prelude::*;
 
 #[wasm_bindgen]
 extern "C" {

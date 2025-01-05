@@ -12,7 +12,7 @@ use dioxus_logger::tracing::instrument;
 use futures::executor::block_on;
 use samsvar::{json, Matcher};
 use serializing::{from_any, into_any};
-use speki_dto::{BackSide, CType, CardId, History, Item, ModifiedSource, RawCard, Recall, Review};
+use speki_dto::{BackSide, CType, CardId, History, ModifiedSource, RawCard, Recall, Review};
 use tracing::info;
 
 use crate::{

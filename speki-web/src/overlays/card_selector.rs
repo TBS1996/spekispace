@@ -110,11 +110,6 @@ impl CardSelector {
         self
     }
 
-    pub fn with_filter(mut self, filter: Arc<Box<dyn Fn(CardType) -> bool>>) -> Self {
-        self.filter = Some(filter);
-        self
-    }
-
     pub async fn init_lol(&self) {
         info!("render hook in cardselector :)");
         let sig = self.cards.clone();

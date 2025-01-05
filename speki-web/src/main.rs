@@ -14,7 +14,7 @@ use dioxus_logger::tracing::{info, Level};
 use overlays::OverlayManager;
 
 use crate::{
-    pages::{add_card::Add, About, Browse, Menu, Review},
+    pages::{About, Add, Browse, Menu, Review},
     utils::App,
 };
 

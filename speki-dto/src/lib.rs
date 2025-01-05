@@ -8,7 +8,7 @@ use std::{
 use omtrent::TimeStamp;
 use serde::{de::DeserializeOwned, ser::SerializeSeq, Deserialize, Deserializer, Serialize};
 use serde_json::Value;
-use tracing::{info, warn};
+use tracing::info;
 use uuid::Uuid;
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, Eq, PartialEq, Ord, Hash, PartialOrd)]
