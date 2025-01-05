@@ -12,9 +12,10 @@ use std::{
 use dioxus::prelude::*;
 use dioxus_logger::tracing::{info, Level};
 use overlays::OverlayManager;
+use pages::ImportState;
 
 use crate::{
-    pages::{About, Add, Browse, Menu, Review},
+    pages::{About, Add, Browse, Import, Menu, Review},
     utils::App,
 };
 
@@ -109,6 +110,7 @@ static CURRENT_ROUTE: GlobalSignal<Route> = Signal::global(|| Route::Menu {});
 pub fn TheApp() -> Element {
     let id = current_scope_id();
     info!("omg?? scope id: {id:?}");
+    use_context_provider(ImportState::new);
 
     spawn(async move {
         APP.read().fill_cache().await;
@@ -200,6 +202,8 @@ pub enum Route {
     Browse {},
     #[route("/about")]
     About {},
+    #[route("/import")]
+    Import {},
 }
 
 impl Route {
@@ -210,6 +214,7 @@ impl Route {
             Route::Add {} => "add cards",
             Route::Browse {} => "browse",
             Route::About {} => "about",
+            Route::Import {} => "import",
         }
     }
 }

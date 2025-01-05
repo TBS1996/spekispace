@@ -17,6 +17,11 @@ pub fn Menu() -> Element {
                     class: "{buttonclass}",
                     "about"
                 }
+                Link {
+                    to: Route::Import {  } ,
+                    class: "{buttonclass}",
+                    "import cards"
+                }
             }
         }
     }
