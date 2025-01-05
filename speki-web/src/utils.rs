@@ -10,7 +10,7 @@ use tracing::info;
 use wasm_bindgen::prelude::*;
 
 use crate::{
-    firebase::{sign_in, FirestoreProvider},
+    firebase::{AuthUser, FirestoreProvider},
     nav::SYNCING,
     TouchRec, APP,
 };
@@ -114,9 +114,8 @@ extern "C" {
     fn now() -> f64;
 }
 
-pub async fn sync() {
+pub async fn sync(agent: AuthUser) {
     let time_provider = APP.read().0.time_provider.clone();
-    let agent = sign_in().await.unwrap();
     info!("starting sync!");
 
     *SYNCING.write() = true;

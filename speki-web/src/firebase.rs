@@ -246,7 +246,7 @@ pub async fn current_sign_in() -> Option<AuthUser> {
 }
 
 pub async fn sign_out() {
-    let val = promise_to_val(signOutUser()).await;
+    let _ = promise_to_val(signOutUser()).await;
     LOGIN_STATE.write().take();
 }
 

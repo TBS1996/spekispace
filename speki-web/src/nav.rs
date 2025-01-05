@@ -1,5 +1,7 @@
 use dioxus::prelude::*;
 
+use crate::utils::sync;
+use crate::{firebase, LOGIN_STATE};
 use crate::{Route, CURRENT_ROUTE};
 
 pub fn image(src: &str, img_size: usize, spin: bool) -> Element {
@@ -60,17 +62,38 @@ pub fn nav() -> Element {
                             { image("burger.svg", 28, false ) }
                         }
 
-                        button {
-                            onclick: move |_| {
-                                spawn(async move {
-                                    crate::utils::sync().await;
-                                });
-                            },
-                            { image("sync.svg", 34, SYNCING.cloned()) }
-                        }
                         { route_elm(Route::Review {}) }
                         { route_elm(Route::Add {}) }
                         { route_elm(Route::Browse {}) }
+                        match LOGIN_STATE.cloned() {
+                            Some(user) => {
+                                    rsx!{
+                                        button {
+                                            onclick: move|_| {
+                                                let user = user.clone();
+                                                spawn(async move {
+                                                    sync(user).await;
+                                                });
+                                            },
+                                            { image("sync.svg", 34, SYNCING.cloned()) }
+                                    }
+                                }
+                            },
+                            None => {
+                                    rsx!{
+                                        button {
+                                            onclick: move|_| {
+                                                spawn(async move {
+                                                if let Some(user) = firebase::sign_in().await {
+                                                    *LOGIN_STATE.write() = Some(user);
+                                                }
+                                                });
+                                            },
+                                            { image("sign_in.svg", 34, false) }
+                                    }
+                                }
+                            },
+                        }
                     }
                 }
             }

@@ -1,6 +1,6 @@
 use dioxus::prelude::*;
 
-use crate::Route;
+use crate::{firebase, Route};
 
 #[component]
 pub fn Menu() -> Element {
@@ -21,6 +21,16 @@ pub fn Menu() -> Element {
                     to: Route::Import {  } ,
                     class: "{buttonclass}",
                     "import cards"
+                }
+                button {
+                    class: "{buttonclass}",
+                    onclick: move |_| {
+                        spawn(async move {
+                            firebase::sign_out().await;
+                        });
+
+                    },
+                    "sign out"
                 }
             }
         }

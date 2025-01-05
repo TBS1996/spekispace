@@ -115,7 +115,7 @@ pub fn TheApp() -> Element {
     use_context_provider(ImportState::new);
 
     spawn(async move {
-        let auth = APP.read().fill_cache().await;
+        APP.read().fill_cache().await;
         if let Some(currauth) = firebase::current_sign_in().await {
             *LOGIN_STATE.write() = Some(currauth);
             info!("user logged in!");
