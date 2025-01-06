@@ -180,7 +180,6 @@ pub struct ReviewState {
     pub show_backside: Signal<bool>,
     pub filter: Signal<String>,
     pub graph: GraphRep,
-    pub show_graph: Signal<bool>,
     pub dependencies: Signal<Vec<(String, Arc<Card>, Self)>>,
     pub dependents: CardRef,
 }
@@ -194,8 +193,6 @@ impl ReviewState {
         let currcard = self.card.clone();
         let overlay = OVERLAY.cloned();
         let card = self.card.clone();
-        let show_graph = self.show_graph.clone();
-        let selv = self.clone();
 
         rsx! {
             div {
@@ -250,24 +247,6 @@ impl ReviewState {
                     },
                     "✏️"
                 }
-
-
-                button {
-                    class: "cursor-pointer text-gray-500 hover:text-gray-700",
-                    onclick: move |_| {
-                        let to_show = !show_graph.cloned();
-                        show_graph.clone().set(to_show);
-
-                        if to_show {
-                            if let Some(card) = selv.card.cloned(){
-                                selv.graph.new_set_card(card.into());
-                            }
-
-                        }
-
-                    },
-                    "toggle graph"
-                }
             }
         }
     }
@@ -314,17 +293,71 @@ impl ReviewState {
         }
     }
 
-    pub fn render_queue(&self) -> Element {
-        let selv = self.clone();
-        let graph = self.graph.clone();
-        let graph_toggle = self.show_graph.clone();
-        let deps = self.dependencies.clone();
-
+    fn render_dependencies(&self) -> Element {
         let show_graph = if self.show_backside.cloned() {
             "opacity-100 visible"
         } else {
             "opacity-0 invisible"
         };
+
+        let deps = self.dependencies.clone();
+        let card = self.card.cloned().unwrap();
+        let selv = self.clone();
+        rsx! {
+                div {
+                class: "flex flex-col {show_graph} absolute top-0 left-0 w-1/2 h-auto bg-white p-2 shadow-md rounded-md overflow-y-auto",
+                h4 {
+                    class: "font-bold mb-2",
+                    "Dependencies"
+                }
+                for (name, card, selv) in deps() {
+                    button {
+                        class: "mb-1 p-1 bg-gray-100 rounded-md text-left",
+                        onclick: move|_|{
+                            let selv = selv.clone();
+                            let card = card.clone();
+                            spawn(async move{
+                                let fun: Box<dyn Fn(Arc<Card>)> = Box::new(move |_: Arc<Card>| {
+                                    let selv = selv.clone();
+                                    spawn(async move{
+                                        selv.refresh().await;
+                                    });
+                                });
+
+                                let viewer = CardViewer::new_from_card(card, Default::default()).await.with_hook(Arc::new(fun));
+                                OVERLAY.write().set(Box::new(viewer));
+
+                            });
+                        },
+                        "{name}"
+                    }
+                }
+                button {
+                    class: "mb-1 p-1 bg-gray-100 rounded-md text-left",
+                    onclick: move|_|{
+                        let selv = selv.clone();
+                        let card = card.clone();
+                        spawn(async move{
+                            let fun: Box<dyn Fn(Arc<Card>)> = Box::new(move |_: Arc<Card>| {
+                                let selv = selv.clone();
+                                spawn(async move{
+                                    selv.refresh().await;
+                                });
+                            });
+
+                            let viewer = CardViewer::new_from_card(Arc::new(card), Default::default()).await.with_hook(Arc::new(fun));
+                            OVERLAY.write().set(Box::new(viewer));
+
+                        });
+                    },
+                    "add dependency"
+                }
+            }
+        }
+    }
+
+    pub fn render_queue(&self) -> Element {
+        let selv = self.clone();
 
         rsx! {
             div {
@@ -341,43 +374,7 @@ impl ReviewState {
                     div {
                         class: "flex-1 w-full md:w-1/2 box-border order-1 md:order-2 relative",
                         style: "min-height: 0; flex-grow: 1;",
-
-                        if graph_toggle() {
-                            div {
-                                class: "{show_graph} absolute top-0 left-0 w-full h-full",
-                                { graph.render() }
-                            }
-                        } else {
-                            div {
-                                class: "flex flex-col {show_graph} absolute top-0 left-0 w-1/2 h-auto bg-white p-2 shadow-md rounded-md overflow-y-auto",
-                                h4 {
-                                    class: "font-bold mb-2",
-                                    "Dependencies"
-                                }
-                                for (name, card, selv) in deps() {
-                                    button {
-                                        class: "mb-1 p-1 bg-gray-100 rounded-md text-left",
-                                        onclick: move|_|{
-                                            let selv = selv.clone();
-                                            let card = card.clone();
-                                            spawn(async move{
-                                                let fun: Box<dyn Fn(Arc<Card>)> = Box::new(move |_: Arc<Card>| {
-                                                    let selv = selv.clone();
-                                                    spawn(async move{
-                                                        selv.refresh().await;
-                                                    });
-                                                });
-
-                                                let viewer = CardViewer::new_from_card(card, Default::default()).await.with_hook(Arc::new(fun));
-                                                OVERLAY.write().set(Box::new(viewer));
-
-                                            });
-                                        },
-                                        "{name}"
-                                    }
-                                }
-                            }
-                        }
+                        { selv.render_dependencies() }
                     }
 
                     div {
@@ -401,7 +398,6 @@ impl ReviewState {
             show_backside: Default::default(),
             filter: Signal::new(DEFAULT_FILTER.to_string()),
             graph: Default::default(),
-            show_graph: Default::default(),
             dependencies: Default::default(),
             dependents: CardRef::new(),
         }

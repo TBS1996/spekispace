@@ -79,7 +79,6 @@ impl CardSelector {
     }
 
     pub async fn dependency_picker(f: Box<dyn Fn(Arc<Card>)>) -> Self {
-        info!("3 scope is ! {:?}", current_scope_id().unwrap());
         let selv = Self {
             title: "set dependency".to_string(),
             on_card_selected: Arc::new(f),
