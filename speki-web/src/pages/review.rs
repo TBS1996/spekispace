@@ -424,13 +424,24 @@ impl ReviewState {
                 .map(|card| card.id()),
         );
 
+        // When dependent-reviewing is chosen, we only review cards that are a dependent of that card, or a dependency of
+        // any such dependents (as they are required to get to the dependent)
         if let Some(dep) = self.dependents.selected_card().cloned() {
             info!("loading deps..");
-            for dep in APP.read().load_card(dep).await.all_dependents().await {
-                info!("deps loaded");
-                if set.contains(&dep) {
+
+            let dependents = APP.read().load_card(dep).await.all_dependents().await;
+            let mut dependencies = HashSet::new();
+
+            for dep in dependents {
+                dependencies.insert(dep);
+                let deps = APP.read().load_card(dep).await.all_dependencies().await;
+                dependencies.extend(deps);
+            }
+
+            for card in dependencies {
+                if set.contains(&card) {
                     info!("set contains");
-                    cards.push(dep);
+                    cards.push(card);
                 }
             }
         } else {
