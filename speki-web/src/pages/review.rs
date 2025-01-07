@@ -11,7 +11,7 @@ use tracing::info;
 
 use crate::{
     components::{CardRef, GraphRep, Komponent},
-    overlays::cardviewer::CardViewer,
+    overlays::{card_selector::CardSelector, cardviewer::CardViewer},
     APP, DEFAULT_FILTER, IS_SHORT, OVERLAY,
 };
 
@@ -301,15 +301,44 @@ impl ReviewState {
         };
 
         let deps = self.dependencies.clone();
-        let card = self.card.cloned().unwrap();
+        let card = Arc::new(self.card.cloned().unwrap());
         let selv = self.clone();
         rsx! {
-                div {
+            div {
                 class: "flex flex-col {show_graph} absolute top-0 left-0 w-1/2 h-auto bg-white p-2 shadow-md rounded-md overflow-y-auto",
-                h4 {
-                    class: "font-bold mb-2",
-                    "Dependencies"
-                }
+
+                div {
+                    class: "flex items-center justify-between mb-2",
+
+                    h4 {
+                        class: "font-bold",
+                        "Dependencies"
+                    }
+
+                        button {
+                            class: "p-1 hover:bg-gray-200 hover:border-gray-400 border border-transparent rounded-md transition-colors",
+                            onclick: move |_| {
+                                let currcard = card.clone();
+
+                                let selv = selv.clone();
+                                let fun = move |card: Arc<Card>| {
+                                    let selv = selv.clone();
+                                    let old_card = currcard.clone();
+                                    spawn(async move {
+                                        Arc::unwrap_or_clone(old_card).add_dependency(card.id()).await;
+                                        selv.refresh().await;
+                                    });
+                                };
+
+                                spawn(async move {
+                                    let props = CardSelector::dependency_picker(Box::new(fun)).await;
+                                    OVERLAY.cloned().set(Box::new(props));
+                                });
+                            },
+                            "➕"
+                        }
+                    }
+
                 for (name, card, selv) in deps() {
                     button {
                         class: "mb-1 p-1 bg-gray-100 rounded-md text-left",
@@ -326,31 +355,10 @@ impl ReviewState {
 
                                 let viewer = CardViewer::new_from_card(card, Default::default()).await.with_hook(Arc::new(fun));
                                 OVERLAY.write().set(Box::new(viewer));
-
                             });
                         },
                         "{name}"
                     }
-                }
-                button {
-                    class: "mb-1 p-1 bg-gray-100 rounded-md text-left",
-                    onclick: move|_|{
-                        let selv = selv.clone();
-                        let card = card.clone();
-                        spawn(async move{
-                            let fun: Box<dyn Fn(Arc<Card>)> = Box::new(move |_: Arc<Card>| {
-                                let selv = selv.clone();
-                                spawn(async move{
-                                    selv.refresh().await;
-                                });
-                            });
-
-                            let viewer = CardViewer::new_from_card(Arc::new(card), Default::default()).await.with_hook(Arc::new(fun));
-                            OVERLAY.write().set(Box::new(viewer));
-
-                        });
-                    },
-                    "add dependency"
                 }
             }
         }
