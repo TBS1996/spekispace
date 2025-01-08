@@ -44,7 +44,7 @@ pub type Recaller = Arc<Box<dyn RecallCalc + Send>>;
 pub type TimeGetter = Arc<Box<dyn TimeProvider + Send>>;
 
 pub struct App {
-    provider: Provider,
+    pub provider: Provider,
     pub card_provider: CardProvider,
     pub time_provider: TimeGetter,
     pub recaller: Recaller,

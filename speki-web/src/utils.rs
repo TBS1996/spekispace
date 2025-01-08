@@ -4,7 +4,7 @@ use dioxus::prelude::*;
 use futures::future::join;
 use speki_core::{
     card::{CardId, RawCard},
-    collection::Collection,
+    collection::{Collection, CollectionId},
     AttributeDTO, Card,
 };
 use speki_dto::Syncable;
@@ -55,6 +55,23 @@ impl App {
 
     pub async fn load_card(&self, id: CardId) -> Arc<Card> {
         Arc::new(self.0.load_card(id).await.unwrap())
+    }
+
+    pub async fn load_collection(&self, id: CollectionId) -> Collection {
+        self.0.provider.collections.load_item(id).await.unwrap()
+    }
+    pub async fn load_collections(&self) -> Vec<Collection> {
+        self.0
+            .provider
+            .collections
+            .load_all()
+            .await
+            .into_values()
+            .collect()
+    }
+
+    pub async fn save_collection(&self, collection: Collection) {
+        self.0.provider.collections.save_item(collection).await;
     }
 
     pub async fn new_from_raw(&self, raw: RawCard) -> Arc<Card> {

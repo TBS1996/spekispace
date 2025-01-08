@@ -6,6 +6,8 @@ use uuid::Uuid;
 
 use crate::{card::CardId, card_provider::CardProvider, Card};
 
+pub type CollectionId = Uuid;
+
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Collection {
     pub id: Uuid,
@@ -18,6 +20,18 @@ pub struct Collection {
 }
 
 impl Collection {
+    pub fn new(name: String) -> Self {
+        Self {
+            id: CollectionId::new_v4(),
+            name,
+            cards: Default::default(),
+            dyncards: Default::default(),
+            last_modified: Default::default(),
+            deleted: Default::default(),
+            source: Default::default(),
+        }
+    }
+
     pub async fn expand(&self, provider: CardProvider) -> BTreeSet<Arc<Card>> {
         let mut out = BTreeSet::new();
 
