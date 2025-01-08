@@ -54,7 +54,12 @@ impl App {
     }
 
     pub async fn load_card(&self, id: CardId) -> Arc<Card> {
-        Arc::new(self.0.load_card(id).await.unwrap())
+        Arc::new(
+            self.0
+                .load_card(id)
+                .await
+                .expect(&format!("unable to load card with id: {id}")),
+        )
     }
 
     pub async fn load_collection(&self, id: CollectionId) -> Collection {
