@@ -5,8 +5,7 @@ use std::{
 };
 
 use dioxus::prelude::*;
-use speki_core::Card;
-use speki_dto::{CardId, Recall};
+use speki_core::{card::CardId, recall_rate::Recall, Card};
 use tracing::info;
 
 use crate::{

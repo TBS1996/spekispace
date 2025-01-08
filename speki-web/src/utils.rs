@@ -2,8 +2,11 @@ use std::{fmt::Debug, sync::Arc};
 
 use dioxus::prelude::*;
 use futures::future::join;
-use speki_core::Card;
-use speki_dto::{AttributeDTO, CardId, RawCard, Syncable};
+use speki_core::{
+    card::{CardId, RawCard},
+    AttributeDTO, Card,
+};
+use speki_dto::Syncable;
 use speki_provider::{DexieProvider, WasmTime};
 use speki_web::{Node, NodeMetadata};
 use tracing::info;
@@ -138,7 +141,7 @@ pub async fn sync(agent: AuthUser) {
     let (fire, dex) = join(fire, dex).await;
 
     let cardsync = Syncable::<RawCard>::sync(fire.clone(), dex.clone());
-    let revsync = Syncable::<speki_dto::History>::sync(fire.clone(), dex.clone());
+    let revsync = Syncable::<speki_core::recall_rate::History>::sync(fire.clone(), dex.clone());
     let attrsync = Syncable::<AttributeDTO>::sync(fire.clone(), dex.clone());
 
     futures::future::join3(cardsync, revsync, attrsync).await;

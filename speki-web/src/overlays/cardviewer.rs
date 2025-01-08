@@ -1,8 +1,9 @@
 use std::sync::Arc;
 
 use dioxus::prelude::*;
-use speki_core::{Card, CardType, ClassCard, InstanceCard, NormalCard, UnfinishedCard};
-use speki_dto::CardId;
+use speki_core::{
+    card::CardId, Card, CardType, ClassCard, InstanceCard, NormalCard, UnfinishedCard,
+};
 use speki_web::{Node, NodeId, NodeMetadata};
 use tracing::info;
 

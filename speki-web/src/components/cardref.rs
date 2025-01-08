@@ -1,8 +1,7 @@
 use std::{fmt::Debug, sync::Arc};
 
 use dioxus::prelude::*;
-use speki_core::{Card, CardType};
-use speki_dto::CardId;
+use speki_core::{card::CardId, Card, CardType};
 use tracing::info;
 
 use super::{CardTy, Komponent};

@@ -1,8 +1,9 @@
 use std::{cell::RefCell, collections::HashMap, sync::Arc};
 
 use dioxus::prelude::*;
+use speki_core::card::CType;
+use speki_core::card::CardId;
 use speki_core::{App, Card};
-use speki_dto::{CType, CardId};
 use tracing::info;
 use uuid::Uuid;
 use wasm_bindgen::prelude::*;

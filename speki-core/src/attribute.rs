@@ -1,8 +1,10 @@
 use std::time::Duration;
 
-use speki_dto::{AttributeDTO, AttributeId, CardId, ModifiedSource};
+use serde::{Deserialize, Serialize};
+use speki_dto::{Item, ModifiedSource};
+use uuid::Uuid;
 
-use crate::{card_provider::CardProvider, App};
+use crate::{card::CardId, card_provider::CardProvider, App};
 
 /// An attribute of a sub-class or an instance
 /// predefined questions that are valid for all in its class.
@@ -94,4 +96,62 @@ impl Attribute {
     }
 
     */
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AttributeDTO {
+    pub pattern: String,
+    pub id: AttributeId,
+    pub class: CardId,
+    pub back_type: Option<CardId>,
+    #[serde(default)]
+    pub last_modified: Duration,
+    #[serde(default)]
+    pub deleted: bool,
+    #[serde(default)]
+    pub source: ModifiedSource,
+}
+
+pub type AttributeId = Uuid;
+
+impl Item for AttributeDTO {
+    fn last_modified(&self) -> Duration {
+        self.last_modified
+    }
+
+    fn set_last_modified(&mut self, time: Duration) {
+        self.last_modified = time;
+    }
+
+    fn set_source(&mut self, source: ModifiedSource) {
+        self.source = source;
+    }
+
+    fn source(&self) -> ModifiedSource {
+        self.source
+    }
+
+    fn id(&self) -> Uuid {
+        self.id
+    }
+
+    fn serialize(&self) -> String {
+        toml::to_string(self).unwrap()
+    }
+
+    fn identifier() -> &'static str {
+        "attributes"
+    }
+
+    fn deleted(&self) -> bool {
+        self.deleted
+    }
+
+    fn set_delete(&mut self) {
+        self.deleted = true;
+    }
+
+    fn deserialize(_id: Uuid, s: String) -> Self {
+        toml::from_str(&s).unwrap()
+    }
 }

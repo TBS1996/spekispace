@@ -1,8 +1,13 @@
-use std::time::Duration;
+use std::{str::FromStr, time::Duration};
 
-use speki_dto::{History, Recall};
+use serde::{Deserialize, Serialize};
+use speki_dto::{Item, MergeInto, ModifiedSource};
+use uuid::Uuid;
 
-use crate::{card::RecallRate, RecallCalc};
+use crate::{
+    card::{CardId, RecallRate},
+    RecallCalc,
+};
 
 pub struct SimpleRecall;
 
@@ -80,4 +85,234 @@ fn calculate_recall_rate(days_passed: &Duration, stability: &Duration) -> Recall
     let base: f32 = 0.9;
     let ratio = days_passed.as_secs_f32() / stability.as_secs_f32();
     (base.ln() * ratio).exp()
+}
+
+#[derive(Ord, PartialOrd, Eq, PartialEq, Hash, Clone, Debug, Deserialize, Serialize)]
+pub struct History {
+    id: Uuid,
+    reviews: Vec<Review>,
+    #[serde(default)]
+    source: ModifiedSource,
+}
+
+impl History {
+    pub fn inner(&self) -> &Vec<Review> {
+        &self.reviews
+    }
+
+    pub fn last(&self) -> Option<Review> {
+        self.reviews.last().cloned()
+    }
+
+    pub fn lapses_since(&self, dur: Duration, current_time: Duration) -> u32 {
+        let since = current_time - dur;
+        self.reviews
+            .iter()
+            .fold(0, |lapses, review| match review.grade {
+                Recall::None | Recall::Late => {
+                    if review.timestamp < since {
+                        0
+                    } else {
+                        lapses + 1
+                    }
+                }
+                Recall::Some | Recall::Perfect => 0,
+            })
+    }
+
+    pub fn lapses(&self) -> u32 {
+        self.reviews
+            .iter()
+            .fold(0, |lapses, review| match review.grade {
+                Recall::None | Recall::Late => lapses + 1,
+                Recall::Some | Recall::Perfect => 0,
+            })
+    }
+
+    pub fn time_since_last_review(&self, current_unix: Duration) -> Option<Duration> {
+        let last = self.reviews.last()?;
+        Some(current_unix - last.timestamp)
+    }
+
+    pub fn len(&self) -> usize {
+        self.reviews.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
+    pub fn new(id: CardId) -> Self {
+        Self {
+            id,
+            reviews: Default::default(),
+            source: Default::default(),
+        }
+    }
+
+    pub fn push(&mut self, review: Review) {
+        self.reviews.push(review);
+    }
+
+    pub fn insert_many(&mut self, reviews: impl IntoIterator<Item = Review>) {
+        self.reviews.extend(reviews);
+        self.reviews.sort_by_key(|r| r.timestamp);
+        self.reviews.dedup();
+    }
+
+    pub fn merge_into(&mut self, other: Self) {
+        self.insert_many(other.reviews);
+    }
+}
+
+#[derive(Ord, PartialOrd, Eq, PartialEq, Hash, Clone, Debug, Default, Deserialize, Serialize)]
+pub struct Review {
+    // When (unix time) did the review take place?
+    pub timestamp: Duration,
+    // Recall grade.
+    pub grade: Recall,
+    // How long you spent before attempting recall.
+    pub time_spent: Duration,
+}
+
+impl Item for History {
+    fn last_modified(&self) -> Duration {
+        self.reviews
+            .iter()
+            .max()
+            .map(|rev| rev.timestamp)
+            .unwrap_or_default()
+    }
+
+    fn set_last_modified(&mut self, _time: Duration) {}
+
+    fn source(&self) -> ModifiedSource {
+        self.source
+    }
+
+    fn set_source(&mut self, source: ModifiedSource) {
+        self.source = source;
+    }
+
+    fn id(&self) -> Uuid {
+        self.id
+    }
+
+    fn serialize(&self) -> String {
+        toml::to_string(self).unwrap()
+    }
+
+    fn identifier() -> &'static str {
+        "reviews"
+    }
+
+    fn merge(mut self, other: Self) -> Option<MergeInto<Self>>
+    where
+        Self: Sized,
+    {
+        debug_assert!(self.id == other.id);
+
+        let selflen = self.reviews.len();
+        let otherlen = other.reviews.len();
+
+        if selflen == otherlen {
+            return None;
+        }
+
+        let merged = {
+            self.merge_into(other);
+            self
+        };
+
+        let mergedlen = merged.len();
+
+        Some(if mergedlen == selflen {
+            MergeInto::Right(merged)
+        } else if mergedlen == otherlen {
+            MergeInto::Left(merged)
+        } else {
+            MergeInto::Both(merged)
+        })
+    }
+
+    fn deleted(&self) -> bool {
+        false
+    }
+
+    fn set_delete(&mut self) {}
+
+    fn deserialize(id: Uuid, s: String) -> Self {
+        parse_history(s, id)
+    }
+}
+
+#[derive(
+    Ord, PartialOrd, Eq, PartialEq, Hash, Deserialize, Serialize, Debug, Default, Clone, Copy,
+)]
+#[serde(rename_all = "lowercase")]
+pub enum Recall {
+    // No recall, not even when you saw the answer.
+    #[default]
+    None,
+    // No recall, but you remember the answer when you read it.
+    Late,
+    // Struggled but you got the answer right or somewhat right.
+    Some,
+    // No hesitation, perfect recall.
+    Perfect,
+}
+
+impl Recall {
+    pub fn get_factor(&self) -> f32 {
+        match self {
+            Recall::None => 0.1,
+            Recall::Late => 0.25,
+            Recall::Some => 2.,
+            Recall::Perfect => 3.,
+        }
+    }
+}
+
+impl std::str::FromStr for Recall {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "1" => Ok(Self::None),
+            "2" => Ok(Self::Late),
+            "3" => Ok(Self::Some),
+            "4" => Ok(Self::Perfect),
+            _ => Err(()),
+        }
+    }
+}
+
+fn parse_history(s: String, id: Uuid) -> History {
+    if let Ok(history) = toml::from_str(&s) {
+        history
+    } else {
+        History {
+            id,
+            reviews: legacy_parse_history(s),
+            source: Default::default(),
+        }
+    }
+}
+
+fn legacy_parse_history(s: String) -> Vec<Review> {
+    let mut reviews = vec![];
+    for line in s.lines() {
+        let (timestamp, grade) = line.split_once(' ').unwrap();
+        let timestamp = Duration::from_secs(timestamp.parse().unwrap());
+        let grade = Recall::from_str(grade).unwrap();
+        let review = Review {
+            timestamp,
+            grade,
+            time_spent: Duration::default(),
+        };
+        reviews.push(review);
+    }
+
+    reviews.sort_by_key(|r| r.timestamp);
+    reviews
 }

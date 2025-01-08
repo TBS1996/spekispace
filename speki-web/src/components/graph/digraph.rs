@@ -9,7 +9,7 @@ use petgraph::{
     graph::{DiGraph, NodeIndex},
     visit::EdgeRef,
 };
-use speki_dto::CType;
+use speki_core::card::CType;
 use speki_web::{Node, NodeId, NodeMetadata};
 use tracing::info;
 

@@ -1,11 +1,12 @@
 use std::{fmt::Debug, sync::Arc, time::Duration};
 
-use card::RecallRate;
+use card::{BackSide, CardId, RawCard, RecallRate};
 use card_provider::CardProvider;
 use dioxus_logger::tracing::info;
 use eyre::Result;
+use recall_rate::History;
 use samsvar::{Matcher, Schema};
-use speki_dto::{AttributeDTO, History, RawCard, SpekiProvider, TimeProvider};
+use speki_dto::{SpekiProvider, TimeProvider};
 use tracing::trace;
 
 use crate::card::serializing::new_raw_card;
@@ -13,10 +14,11 @@ use crate::card::serializing::new_raw_card;
 mod attribute;
 pub mod card;
 mod card_provider;
+pub mod collection;
 mod common;
-mod recall_rate;
+pub mod recall_rate;
 
-pub use attribute::Attribute;
+pub use attribute::{Attribute, AttributeDTO, AttributeId};
 pub use card::{
     AttributeCard, Card, CardTrait, CardType, ClassCard, EventCard, InstanceCard, NormalCard,
     StatementCard, UnfinishedCard,
@@ -24,7 +26,6 @@ pub use card::{
 pub use common::current_time;
 pub use omtrent::TimeStamp;
 pub use recall_rate::SimpleRecall;
-pub use speki_dto::{BackSide, CType, CardId};
 
 pub trait RecallCalc {
     fn recall_rate(&self, reviews: &History, current_unix: Duration) -> Option<RecallRate>;

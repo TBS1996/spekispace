@@ -10,13 +10,19 @@ use std::{
 use async_trait::async_trait;
 use dioxus_logger::tracing::instrument;
 use futures::executor::block_on;
+use omtrent::TimeStamp;
 use samsvar::{json, Matcher};
+use serde::{ser::SerializeSeq, Deserialize, Deserializer, Serialize};
+use serde_json::Value;
 use serializing::{from_any, into_any};
-use speki_dto::{BackSide, CType, CardId, History, ModifiedSource, RawCard, Recall, Review};
+use speki_dto::{Item, ModifiedSource};
 use tracing::info;
+use uuid::Uuid;
 
 use crate::{
-    card_provider::CardProvider, recall_rate::SimpleRecall, RecallCalc, Recaller, TimeGetter,
+    card_provider::CardProvider,
+    recall_rate::{History, Recall, Review, SimpleRecall},
+    RecallCalc, Recaller, TimeGetter,
 };
 
 pub type RecallRate = f32;
@@ -717,6 +723,254 @@ impl Matcher for Card {
         }
         .into()
     }
+}
+
+#[derive(Serialize, Deserialize, Default, Debug, Clone)]
+pub struct RawType {
+    pub ty: CType,
+    pub front: Option<String>,
+    pub back: Option<BackSide>,
+    pub class: Option<Uuid>,
+    pub instance: Option<Uuid>,
+    pub attribute: Option<Uuid>,
+    pub start_time: Option<String>,
+    pub end_time: Option<String>,
+    pub parent_event: Option<Uuid>,
+}
+
+impl RawType {
+    pub fn class(&self) -> Option<Uuid> {
+        self.class.clone()
+    }
+}
+
+#[derive(Serialize, Deserialize, Default, Debug, Clone)]
+pub struct RawCard {
+    pub id: Uuid,
+    #[serde(flatten)]
+    pub data: RawType,
+    #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
+    pub dependencies: BTreeSet<Uuid>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub tags: BTreeMap<String, String>,
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub suspended: bool,
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub deleted: bool,
+    #[serde(default)]
+    pub last_modified: Duration,
+    #[serde(default)]
+    pub source: ModifiedSource,
+}
+
+impl Item for RawCard {
+    fn last_modified(&self) -> Duration {
+        self.last_modified
+    }
+
+    fn set_last_modified(&mut self, time: Duration) {
+        self.last_modified = time;
+    }
+
+    fn set_source(&mut self, source: ModifiedSource) {
+        self.source = source;
+    }
+
+    fn source(&self) -> ModifiedSource {
+        self.source
+    }
+
+    fn deserialize(_id: Uuid, s: String) -> Self {
+        toml::from_str(&s).unwrap()
+    }
+
+    fn id(&self) -> Uuid {
+        self.id
+    }
+
+    fn serialize(&self) -> String {
+        toml::to_string(self).unwrap()
+    }
+
+    fn identifier() -> &'static str {
+        "cards"
+    }
+
+    fn deleted(&self) -> bool {
+        self.deleted
+    }
+
+    fn set_delete(&mut self) {
+        self.deleted = true;
+    }
+}
+
+pub type CardId = Uuid;
+
+#[derive(Ord, PartialOrd, Eq, Hash, PartialEq, Debug, Clone)]
+pub enum BackSide {
+    Text(String),
+    Card(CardId),
+    List(Vec<CardId>),
+    Time(TimeStamp),
+    Trivial, // Answer is obvious, used when card is more of a dependency anchor
+    Invalid, // A reference card was deleted
+}
+
+impl Default for BackSide {
+    fn default() -> Self {
+        Self::Text(Default::default())
+    }
+}
+
+impl From<String> for BackSide {
+    fn from(s: String) -> Self {
+        if let Ok(uuid) = Uuid::parse_str(&s) {
+            Self::Card(uuid)
+        } else if let Some(timestamp) = TimeStamp::from_string(s.clone()) {
+            Self::Time(timestamp)
+        } else if s.as_str() == Self::INVALID_STR {
+            Self::Invalid
+        } else {
+            Self::Text(s)
+        }
+    }
+}
+
+impl BackSide {
+    pub const INVALID_STR: &'static str = "__INVALID__";
+
+    pub fn is_empty_text(&self) -> bool {
+        if let Self::Text(s) = self {
+            s.is_empty()
+        } else {
+            false
+        }
+    }
+
+    pub fn invalidate_if_has_ref(&mut self, dep: CardId) {
+        let has_ref = match self {
+            BackSide::Card(card_id) => card_id == &dep,
+            BackSide::List(vec) => vec.contains(&dep),
+            BackSide::Text(_) => false,
+            BackSide::Time(_) => false,
+            BackSide::Trivial => false,
+            BackSide::Invalid => false,
+        };
+
+        if has_ref {
+            *self = Self::Invalid;
+        }
+    }
+
+    pub fn is_ref(&self) -> bool {
+        matches!(self, Self::Card(_))
+    }
+
+    pub fn as_card(&self) -> Option<CardId> {
+        if let Self::Card(card) = self {
+            Some(*card)
+        } else {
+            None
+        }
+    }
+
+    pub fn to_string(&self) -> String {
+        let mut s = serde_json::to_string(self).unwrap();
+        s.remove(0);
+        s.pop();
+        s
+    }
+
+    pub fn dependencies(&self) -> BTreeSet<CardId> {
+        let mut set = BTreeSet::default();
+        match self {
+            BackSide::Text(_) => {}
+            BackSide::Card(card_id) => {
+                let _ = set.insert(*card_id);
+            }
+            BackSide::List(vec) => {
+                set.extend(vec.iter());
+            }
+            BackSide::Time(_) => {}
+            BackSide::Trivial => {}
+            BackSide::Invalid => {}
+        }
+
+        set
+    }
+}
+
+impl<'de> Deserialize<'de> for BackSide {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let value = Value::deserialize(deserializer)?;
+
+        match value {
+            Value::Array(arr) => {
+                let mut ids = Vec::new();
+                for item in arr {
+                    if let Value::String(ref s) = item {
+                        if let Ok(uuid) = Uuid::parse_str(s) {
+                            ids.push(uuid);
+                        } else {
+                            return Err(serde::de::Error::custom("Invalid UUID in array"));
+                        }
+                    } else {
+                        return Err(serde::de::Error::custom("Expected string in array"));
+                    }
+                }
+                Ok(BackSide::List(ids))
+            }
+            Value::Bool(_) => Ok(BackSide::Trivial),
+            Value::String(s) => Ok(s.into()),
+            _ => Err(serde::de::Error::custom("Expected a string or an array")),
+        }
+    }
+}
+
+impl Serialize for BackSide {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        match *self {
+            BackSide::Trivial => serializer.serialize_bool(false),
+            BackSide::Invalid => serializer.serialize_str(Self::INVALID_STR),
+            BackSide::Time(ref t) => serializer.serialize_str(&t.serialize()),
+            BackSide::Text(ref s) => serializer.serialize_str(s),
+            BackSide::Card(ref id) => serializer.serialize_str(&id.to_string()),
+            BackSide::List(ref ids) => {
+                let mut seq = serializer.serialize_seq(Some(ids.len()))?;
+                for id in ids {
+                    seq.serialize_element(&id.to_string())?;
+                }
+                seq.end()
+            }
+        }
+    }
+}
+
+fn is_false(flag: &bool) -> bool {
+    !flag
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, Default)]
+pub struct Config;
+
+#[derive(Serialize, Deserialize, Debug, Clone, Default, Copy, Eq, PartialEq)]
+#[serde(rename_all = "lowercase")]
+pub enum CType {
+    Instance,
+    #[default]
+    Normal,
+    Unfinished,
+    Attribute,
+    Class,
+    Statement,
+    Event,
 }
 
 /*

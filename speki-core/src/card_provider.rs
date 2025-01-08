@@ -8,9 +8,13 @@ use std::{
 };
 
 use dioxus_logger::tracing::{info, trace};
-use speki_dto::{CardId, History, Item, RawCard};
+use speki_dto::Item;
 
-use crate::{card::RecallRate, Card, Provider, Recaller, TimeGetter};
+use crate::{
+    card::{CardId, RawCard, RecallRate},
+    recall_rate::History,
+    Card, Provider, Recaller, TimeGetter,
+};
 
 #[derive(Clone)]
 pub struct CardProvider {

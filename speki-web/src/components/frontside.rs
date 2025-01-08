@@ -2,7 +2,7 @@ use std::fmt::Display;
 
 use dioxus::prelude::*;
 use serde::{Deserialize, Serialize};
-use speki_dto::CType;
+use speki_core::card::CType;
 use strum::{EnumIter, IntoEnumIterator};
 use tracing::info;
 

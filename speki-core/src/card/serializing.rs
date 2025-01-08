@@ -5,13 +5,12 @@ use serde::{
     de::{self, Deserializer},
     Deserialize, Serialize,
 };
-use speki_dto::{CType, RawCard, RawType};
 use toml::Value;
 use uuid::Uuid;
 
 use super::{
-    AttributeCard, Card, CardType, ClassCard, EventCard, InstanceCard, IsSuspended, NormalCard,
-    StatementCard, UnfinishedCard,
+    AttributeCard, CType, Card, CardType, ClassCard, EventCard, InstanceCard, IsSuspended,
+    NormalCard, RawCard, RawType, StatementCard, UnfinishedCard,
 };
 use crate::card_provider::CardProvider;
 

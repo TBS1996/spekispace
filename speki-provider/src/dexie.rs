@@ -4,7 +4,7 @@ use async_trait::async_trait;
 use gloo_utils::format::JsValueSerdeExt;
 use js_sys::Promise;
 use serde_json::Value;
-use speki_dto::{CardId, Item, ProviderId, Record, SpekiProvider, Syncable, TimeProvider};
+use speki_dto::{Item, ProviderId, Record, SpekiProvider, Syncable, TimeProvider};
 use tracing::info;
 use uuid::Uuid;
 use wasm_bindgen::prelude::*;
@@ -109,7 +109,7 @@ impl<T: Item> SpekiProvider<T> for DexieProvider {
         saveContent(&JsValue::from_str(ty), &id, &content, &last_modified);
     }
 
-    async fn load_ids(&self) -> Vec<CardId> {
+    async fn load_ids(&self) -> Vec<Uuid> {
         load_ids(T::identifier()).await.into_iter().collect()
     }
 }
