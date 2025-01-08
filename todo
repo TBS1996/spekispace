@@ -1,0 +1,79 @@
+-- this is just me rambling to myself about possible future features so i dont forget it
+
+
+# collections
+
+a collection is a set of card references. cards may be chosen dynamically (e.g. dependencies of a card), and cards added manually.
+for dynamically added cards, they may only use properties of cards that are not specific to a user when cards later can be shared. So nothing about the recall/review state of the card, or if it's suspended or not.
+
+multiple collections may reference the same card.
+
+a collection may reference another collection as long as there's no cycles. 
+
+# review sort
+
+like the algorithm use to determine the review priority. so for example recall rate, min recall etc..
+it should return something like an Option<f32>, meaning, whether it should be reviewed at all, and if it should, its priority
+
+
+# review 
+
+reviewing will be done by choosing two items
+
+one is the collection of cards that will be reviewed.
+
+the other is the predicate which may contain things like recall rate, stability, suspended status etc..
+
+for simplicity sake there should be a collection which contains all cards.
+
+hmm maybe we should allow metadata stuff like suspended since we can tie it to the user, i guess we'll have both user-level metadata and global one for cards?
+
+
+# shared cards
+
+users should be able to share cards so that others can download it and use it and share references
+
+would make sense they submit an entire collection at a time. it'll also push all the dependencies of the collection.
+
+maybe have a github repo that has all the shared cards, and when user press share it creates a PR there that me or others will approve or make suggestions for?
+at least for the "global map". 
+
+or maybe no global map and instea deverybody just share collections and can search for each other's collections and reference each other and hopefully organically 
+people will converge to one big map since they can reference each other
+
+a challenge here though is how to deal with referencing other collections if the original card is updated or something?
+hmm.. i think easiest just let people handle these dependencies themselves, so if you're not happy with how the original guy remade it then you just gotta change your reference
+
+maybe i'll also have a global map that's like more static or smth ? like when people converge on certain collections and they have a high standard i can move them into a global map that's more static
+and then i'll have the responsibility for them and the original creator cannot change it so it's more "safe" to use it by others?
+
+
+# recall rate calculation
+
+should move into using ML for determining recall rate, can just feed a lot of the reviews into a model lol
+
+# expected gain 
+
+lets say current stability is 50
+
+if at a given point you succeed in recall it'll become 130
+if at that point you fail, the new stability is 20
+
+let's say the recall rate at that point is 0.8
+
+expected gain = (0.8 * 120) + ((1 - 0.8) * 20) - 50 = 58
+
+we can sort cards based on their expected gain so you know which reviews give you most benefit
+maybe also multiply with the priority of the card
+
+limitations:
+- it's greedy, so, maybe the optimum long term strategy is not to just take the one with highest expected gain 
+- maybe it'll be biased to long or short term ? could be fixed by having a time horizon variable where you can bias certain information to near or long term stability
+
+for example if you're learning two languages, maybe one you need to use 6 months from now and another you have no specific plans it'll bias more to near-term stability for first one and long term for 2nd one
+
+
+# smart watch integration?
+
+maybe can integrate smart watch data into the app so users can see how well their memory affected by things like sleep recovery exercise
+
