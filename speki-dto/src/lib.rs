@@ -1,6 +1,6 @@
 use std::{
     collections::{BTreeMap, BTreeSet, HashMap, HashSet},
-    fmt::{Debug, Display},
+    fmt::Debug,
     str::FromStr,
     time::Duration,
 };
@@ -11,22 +11,8 @@ use serde_json::Value;
 use tracing::info;
 use uuid::Uuid;
 
-#[derive(Clone, Copy, Debug, Serialize, Deserialize, Eq, PartialEq, Ord, Hash, PartialOrd)]
-pub enum Cty {
-    Attribute,
-    Review,
-    Card,
-}
-
 pub trait TimeProvider {
     fn current_time(&self) -> std::time::Duration;
-}
-
-impl Display for Cty {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let s = format!("{:?}", self);
-        write!(f, "{s}")
-    }
 }
 
 impl Item for History {
@@ -56,8 +42,8 @@ impl Item for History {
         toml::to_string(self).unwrap()
     }
 
-    fn identifier() -> Cty {
-        Cty::Review
+    fn identifier() -> &'static str {
+        "reviews"
     }
 
     fn merge(mut self, other: Self) -> Option<MergeInto<Self>>
@@ -125,8 +111,8 @@ impl Item for AttributeDTO {
         toml::to_string(self).unwrap()
     }
 
-    fn identifier() -> Cty {
-        Cty::Attribute
+    fn identifier() -> &'static str {
+        "attributes"
     }
 
     fn deleted(&self) -> bool {
@@ -171,8 +157,8 @@ impl Item for RawCard {
         toml::to_string(self).unwrap()
     }
 
-    fn identifier() -> Cty {
-        Cty::Card
+    fn identifier() -> &'static str {
+        "cards"
     }
 
     fn deleted(&self) -> bool {
@@ -217,7 +203,7 @@ pub trait Item: DeserializeOwned + Sized + Send + Clone + 'static {
     fn id(&self) -> Uuid;
     fn serialize(&self) -> String;
     fn deserialize(id: Uuid, s: String) -> Self;
-    fn identifier() -> Cty;
+    fn identifier() -> &'static str;
     fn source(&self) -> ModifiedSource;
     fn set_source(&mut self, source: ModifiedSource);
 

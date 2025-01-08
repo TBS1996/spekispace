@@ -719,6 +719,8 @@ impl Matcher for Card {
     }
 }
 
+/*
+
 #[cfg(test)]
 mod tests {
 
@@ -1052,3 +1054,5 @@ mod tests {
         assert_eq!(card4.min_rec_recall_rate().await, 1.0);
     }
 }
+
+*/

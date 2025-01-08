@@ -7,7 +7,7 @@ use std::{
 };
 
 use rayon::prelude::*;
-use speki_dto::{Cty, ProviderId, Record, SpekiProvider};
+use speki_dto::{ProviderId, Record, SpekiProvider};
 use uuid::Uuid;
 
 fn load_dir_paths<P: AsRef<Path>>(folder_path: P) -> std::io::Result<Vec<PathBuf>> {
