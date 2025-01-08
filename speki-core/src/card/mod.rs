@@ -440,6 +440,14 @@ impl Card {
         self.ty.is_class()
     }
 
+    pub fn is_instance_of(&self, _class: CardId) -> bool {
+        if let CardType::Instance(InstanceCard { class, .. }) = self.ty {
+            class == _class
+        } else {
+            false
+        }
+    }
+
     pub fn is_instance(&self) -> bool {
         self.ty.is_instance()
     }
