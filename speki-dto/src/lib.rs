@@ -15,6 +15,50 @@ pub trait TimeProvider {
     fn current_time(&self) -> std::time::Duration;
 }
 
+#[derive(Serialize, Deserialize, Default, Debug, Clone)]
+pub struct Collection {
+    pub id: Uuid,
+    pub name: String,
+    pub cards: Vec<CardId>,
+    pub last_modified: Duration,
+    pub deleted: bool,
+    pub source: ModifiedSource,
+}
+
+impl Item for Collection {
+    fn deleted(&self) -> bool {
+        self.deleted
+    }
+
+    fn set_delete(&mut self) {
+        self.deleted = true;
+    }
+
+    fn set_last_modified(&mut self, time: Duration) {
+        self.last_modified = time;
+    }
+
+    fn last_modified(&self) -> Duration {
+        self.last_modified
+    }
+
+    fn id(&self) -> Uuid {
+        self.id
+    }
+
+    fn identifier() -> &'static str {
+        "collections"
+    }
+
+    fn source(&self) -> ModifiedSource {
+        self.source
+    }
+
+    fn set_source(&mut self, source: ModifiedSource) {
+        self.source = source;
+    }
+}
+
 impl Item for History {
     fn last_modified(&self) -> Duration {
         self.reviews
@@ -194,15 +238,22 @@ pub enum ModifiedSource {
     },
 }
 
-pub trait Item: DeserializeOwned + Sized + Send + Clone + 'static {
+pub trait Item: Serialize + DeserializeOwned + Sized + Send + Clone + 'static {
     fn deleted(&self) -> bool;
     fn set_delete(&mut self);
 
     fn set_last_modified(&mut self, time: Duration);
     fn last_modified(&self) -> Duration;
     fn id(&self) -> Uuid;
-    fn serialize(&self) -> String;
-    fn deserialize(id: Uuid, s: String) -> Self;
+
+    fn serialize(&self) -> String {
+        toml::to_string(self).unwrap()
+    }
+
+    fn deserialize(_id: Uuid, s: String) -> Self {
+        toml::from_str(&s).unwrap()
+    }
+
     fn identifier() -> &'static str;
     fn source(&self) -> ModifiedSource;
     fn set_source(&mut self, source: ModifiedSource);
@@ -247,7 +298,7 @@ pub trait Item: DeserializeOwned + Sized + Send + Clone + 'static {
     {
         let id = self.id().to_string();
         let last_modified = self.last_modified().as_secs();
-        let content = self.serialize();
+        let content = Item::serialize(&self);
         let inserted = match self.source() {
             ModifiedSource::Local => None,
             ModifiedSource::External { inserted, .. } => Some(inserted.as_secs()),
