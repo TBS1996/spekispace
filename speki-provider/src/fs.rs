@@ -6,8 +6,9 @@ use std::{
     time::{Duration, SystemTime},
 };
 
+use async_trait::async_trait;
 use rayon::prelude::*;
-use speki_dto::{ProviderId, Record, SpekiProvider};
+use speki_dto::{Item, Record, SpekiProvider};
 use uuid::Uuid;
 
 fn load_dir_paths<P: AsRef<Path>>(folder_path: P) -> std::io::Result<Vec<PathBuf>> {
@@ -28,20 +29,20 @@ fn load_dir_paths<P: AsRef<Path>>(folder_path: P) -> std::io::Result<Vec<PathBuf
     Ok(paths)
 }
 
-pub struct FileProvider;
-
-use async_trait::async_trait;
-
-fn path_from_ty(ty: Cty) -> PathBuf {
-    match ty {
-        Cty::Attribute => paths::get_attributes_path(),
-        Cty::Review => paths::get_review_path(),
-        Cty::Card => paths::get_cards_path(),
-    }
+pub struct FileProvider {
+    base: PathBuf,
 }
 
-fn file_path(ty: Cty, id: Uuid) -> PathBuf {
-    path_from_ty(ty).join(id.to_string())
+impl FileProvider {
+    pub fn new(base: PathBuf) -> Self {
+        Self { base }
+    }
+
+    fn item_path(&self, item: &str) -> PathBuf {
+        let p = self.base.join(item);
+        std::fs::create_dir_all(&p).unwrap();
+        p
+    }
 }
 
 fn load_record_from_path(path: &Path) -> Option<Record> {
@@ -55,6 +56,7 @@ fn load_record_from_path(path: &Path) -> Option<Record> {
         id,
         content,
         last_modified,
+        inserted: None,
     })
 }
 
@@ -71,31 +73,17 @@ fn last_modified_path(path: &Path) -> Option<Duration> {
     )
 }
 
-use speki_dto::Item;
-
 #[async_trait(?Send)]
 impl<T: Item> SpekiProvider<T> for FileProvider {
-    async fn load_record(&self, id: Uuid, ty: Cty) -> Option<Record> {
-        let p = file_path(ty, id);
+    async fn load_record(&self, id: Uuid) -> Option<Record> {
+        let p = self.item_path(T::identifier()).join(id.to_string());
         load_record_from_path(&p)
     }
 
-    async fn provider_id(&self) -> ProviderId {
-        todo!()
-    }
-
-    async fn update_sync_info(&self, other: ProviderId, ty: Cty, current_time: Duration) {
-        todo!()
-    }
-
-    async fn last_sync(&self, other: ProviderId, ty: Cty) -> Duration {
-        todo!()
-    }
-
-    async fn load_all_records(&self, ty: Cty) -> HashMap<Uuid, Record> {
+    async fn load_all_records(&self) -> HashMap<Uuid, Record> {
         let mut out = HashMap::default();
 
-        let path = path_from_ty(ty);
+        let path = self.item_path(T::identifier());
         for file in load_dir_paths(&path).unwrap() {
             let id: Uuid = file.file_name().unwrap().to_str().unwrap().parse().unwrap();
             let rec = load_record_from_path(&file).unwrap();
@@ -105,75 +93,20 @@ impl<T: Item> SpekiProvider<T> for FileProvider {
         out
     }
 
-    async fn save_record(&self, ty: Cty, record: Record) {
+    async fn save_record(&self, record: Record) {
         let id = record.id;
         let content = record.content;
 
-        let path = file_path(ty, id.parse().unwrap());
+        let path = self.item_path(T::identifier()).join(id);
         let mut file = fs::File::create(path).unwrap();
         file.write_all(&mut content.as_bytes()).unwrap();
     }
-}
 
-pub mod paths {
+    async fn current_time(&self) -> Duration {
+        use std::time::{SystemTime, UNIX_EPOCH};
 
-    #![allow(dead_code)]
-
-    use std::{
-        fs::{self, create_dir_all},
-        path::PathBuf,
-    };
-
-    pub fn get_cache_path() -> PathBuf {
-        let path = dirs::home_dir().unwrap().join(".cache").join("speki");
-        create_dir_all(&path).unwrap();
-        path
-    }
-
-    pub fn config_dir() -> PathBuf {
-        let path = dirs::home_dir().unwrap().join(".config").join("speki");
-        fs::create_dir_all(&path).unwrap();
-        path
-    }
-
-    pub fn get_review_path() -> PathBuf {
-        let path = get_share_path().join("reviews");
-        create_dir_all(&path).unwrap();
-        path
-    }
-
-    pub fn get_collections_path() -> PathBuf {
-        let path = get_share_path().join("collections");
-        create_dir_all(&path).unwrap();
-        path
-    }
-
-    pub fn get_concepts_path() -> PathBuf {
-        let path = get_share_path().join("concepts");
-        create_dir_all(&path).unwrap();
-        path
-    }
-
-    pub fn get_attributes_path() -> PathBuf {
-        let path = get_share_path().join("attributes");
-        create_dir_all(&path).unwrap();
-        path
-    }
-
-    pub fn get_cards_path() -> PathBuf {
-        let path = get_share_path().join("cards");
-        create_dir_all(&path).unwrap();
-        path
-    }
-
-    #[cfg(not(test))]
-    pub fn get_share_path() -> PathBuf {
-        let home = dirs::home_dir().unwrap();
-        home.join(".local/share/speki/")
-    }
-
-    #[cfg(test)]
-    pub fn get_share_path() -> PathBuf {
-        PathBuf::from("./test_dir/")
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("Time went backwards")
     }
 }

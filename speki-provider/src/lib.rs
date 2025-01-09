@@ -2,8 +2,6 @@
 mod fs;
 
 #[cfg(feature = "fs")]
-pub use fs::paths;
-#[cfg(feature = "fs")]
 pub use fs::FileProvider;
 
 #[cfg(feature = "browserfs")]
