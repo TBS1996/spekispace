@@ -449,12 +449,22 @@ impl ReviewState {
             }
         }
 
-        info!("review cards loaded, so many cards: {}", cards.len());
-        self.tot_len.clone().set(cards.len());
+        let mut thecards = vec![];
+
+        for card in cards {
+            if APP.read().load_card(card).await.is_pending() {
+                thecards.insert(0, card);
+            } else {
+                thecards.push(card);
+            }
+        }
+
+        info!("review cards loaded!: so many cards: {}", thecards.len());
+        self.tot_len.clone().set(thecards.len());
         {
             info!("setting queue");
             let mut lock = self.queue.lock().unwrap();
-            *lock = cards;
+            *lock = thecards;
             info!("queue was set");
         }
         self.next_card().await;
