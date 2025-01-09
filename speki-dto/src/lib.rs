@@ -49,7 +49,13 @@ pub trait Item: Serialize + DeserializeOwned + Sized + Send + Clone + 'static {
     }
 
     fn deserialize(_id: Uuid, s: String) -> Self {
-        toml::from_str(&s).unwrap()
+        if let Ok(item) = toml::from_str(&s) {
+            item
+        } else if let Ok(item) = serde_json::from_str(&s) {
+            item
+        } else {
+            panic!("{}", format!("unable to deserialize item: {s}"));
+        }
     }
 
     fn identifier() -> &'static str;
