@@ -8,6 +8,7 @@ use std::{
 };
 
 use dioxus_logger::tracing::{info, trace};
+use eyre::{eyre, Result};
 use speki_dto::Item;
 
 use crate::{
@@ -74,16 +75,19 @@ impl CardProvider {
     pub fn min_rec_recall_rate(
         &self,
         id: CardId,
-    ) -> Pin<Box<dyn Future<Output = RecallRate> + '_>> {
+    ) -> Pin<Box<dyn Future<Output = Result<RecallRate>> + '_>> {
         Box::pin(async move {
             trace!("card: {id} starting min rec recall calculation");
-            let card = self.load(id).await.unwrap();
+            let Some(card) = self.load(id).await else {
+                eyre::bail!("couldnt find card: {id}");
+            };
+
             let entry = self.load_cached_entry(id).await.unwrap();
             let recall_rate = card.recall_rate().unwrap_or_default();
 
             if let Some(recall) = entry.min_rec_recall {
                 trace!("card: {id}: cached min rec recall: {recall}");
-                return recall;
+                return Ok(recall);
             }
 
             let dependencies = card.dependency_ids().await;
@@ -91,19 +95,17 @@ impl CardProvider {
             if dependencies.is_empty() {
                 trace!("card: {id}: no dependencies!");
                 self.update_min_rec_recall(id, 1.0);
-                recall_rate
+                Ok(recall_rate)
             } else {
                 trace!("card: {id} traversing dependencies first: {dependencies:?}");
                 let mut min_recall: RecallRate = 1.0;
 
                 for dep in dependencies {
-                    let rec = self.min_rec_recall_rate(dep).await;
-                    let dep_rec = self
-                        .load(dep)
-                        .await
-                        .unwrap()
-                        .recall_rate()
-                        .unwrap_or_default();
+                    let rec = self.min_rec_recall_rate(dep).await?;
+                    let Some(dep_rec) = self.load(dep).await else {
+                        continue;
+                    };
+                    let dep_rec = dep_rec.recall_rate().unwrap_or_default();
                     min_recall = min_recall.min(rec);
                     min_recall = min_recall.min(dep_rec);
                     trace!("card: {id}: min recall updated: {min_recall}");
@@ -111,7 +113,7 @@ impl CardProvider {
 
                 self.update_min_rec_recall(id, min_recall);
                 trace!("card: {id}: new min rec recall: {min_recall}");
-                min_recall
+                Ok(min_recall)
             }
         })
     }

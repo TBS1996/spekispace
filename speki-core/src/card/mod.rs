@@ -558,7 +558,9 @@ impl Card {
         let mut stack = vec![self.id()];
 
         while let Some(id) = stack.pop() {
-            let card = self.card_provider.load(id).await.unwrap();
+            let Some(card) = self.card_provider.load(id).await else {
+                continue;
+            };
 
             if self.id() != id {
                 deps.push(id);
@@ -574,7 +576,10 @@ impl Card {
 
     pub async fn min_rec_recall_rate(&self) -> RecallRate {
         tracing::trace!("min rec recall of {}", self.id);
-        self.card_provider.min_rec_recall_rate(self.id).await
+        self.card_provider
+            .min_rec_recall_rate(self.id)
+            .await
+            .unwrap()
     }
 
     pub async fn display_backside(&self) -> Option<String> {
