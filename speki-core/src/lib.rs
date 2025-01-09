@@ -180,6 +180,14 @@ impl App {
         self.new_any(data).await.id()
     }
 
+    pub async fn add_card_with_id(&self, front: String, back: impl Into<BackSide>, id: CardId) {
+        let back = back.into();
+        let data = NormalCard { front, back };
+        let mut raw_card = new_raw_card(data);
+        raw_card.id = id;
+        self.provider.cards.save_item(raw_card).await;
+    }
+
     pub async fn add_card(&self, front: String, back: impl Into<BackSide>) -> CardId {
         let back = back.into();
         let data = NormalCard { front, back };
