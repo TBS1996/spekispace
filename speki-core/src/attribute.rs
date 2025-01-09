@@ -135,10 +135,6 @@ impl Item for AttributeDTO {
         self.id
     }
 
-    fn serialize(&self) -> String {
-        toml::to_string(self).unwrap()
-    }
-
     fn identifier() -> &'static str {
         "attributes"
     }
@@ -149,9 +145,5 @@ impl Item for AttributeDTO {
 
     fn set_delete(&mut self) {
         self.deleted = true;
-    }
-
-    fn deserialize(_id: Uuid, s: String) -> Self {
-        toml::from_str(&s).unwrap()
     }
 }

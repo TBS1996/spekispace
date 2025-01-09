@@ -198,10 +198,6 @@ impl Item for History {
         self.id
     }
 
-    fn serialize(&self) -> String {
-        toml::to_string(self).unwrap()
-    }
-
     fn identifier() -> &'static str {
         "reviews"
     }
@@ -242,7 +238,17 @@ impl Item for History {
     fn set_delete(&mut self) {}
 
     fn deserialize(id: Uuid, s: String) -> Self {
-        parse_history(s, id)
+        if let Ok(history) = toml::from_str(&s) {
+            history
+        } else if let Ok(history) = serde_json::from_str(&s) {
+            history
+        } else {
+            History {
+                id,
+                reviews: legacy_parse_history(s),
+                source: Default::default(),
+            }
+        }
     }
 }
 
@@ -283,18 +289,6 @@ impl std::str::FromStr for Recall {
             "3" => Ok(Self::Some),
             "4" => Ok(Self::Perfect),
             _ => Err(()),
-        }
-    }
-}
-
-fn parse_history(s: String, id: Uuid) -> History {
-    if let Ok(history) = toml::from_str(&s) {
-        history
-    } else {
-        History {
-            id,
-            reviews: legacy_parse_history(s),
-            source: Default::default(),
         }
     }
 }

@@ -788,16 +788,8 @@ impl Item for RawCard {
         self.source
     }
 
-    fn deserialize(_id: Uuid, s: String) -> Self {
-        toml::from_str(&s).unwrap()
-    }
-
     fn id(&self) -> Uuid {
         self.id
-    }
-
-    fn serialize(&self) -> String {
-        toml::to_string(self).unwrap()
     }
 
     fn identifier() -> &'static str {
