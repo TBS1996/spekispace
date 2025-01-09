@@ -130,7 +130,7 @@ export async function loadAllRecords(userId, tableName, notBefore_) {
     const data = doc.data();
     const inserted = extractSeconds(data.inserted) || 0; 
 
-    if (inserted > (notBefore + 1)) {
+    if (inserted > (notBefore + 1) || inserted == 0) {
       resultMap[doc.id] = {
         id: doc.id,
         content: data.content,
@@ -142,7 +142,7 @@ export async function loadAllRecords(userId, tableName, notBefore_) {
     if (inserted == 0) {
       console.log(`Adding serverTimestamp to document ${doc.id}`);
       updates.push(
-        updateDoc(doc.ref, { inserted })
+        updateDoc(doc.ref, { notBefore })
       );
     }
   });
