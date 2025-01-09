@@ -8,7 +8,7 @@ use std::{
 };
 
 use dioxus_logger::tracing::{info, trace};
-use eyre::{eyre, Result};
+use eyre::Result;
 use speki_dto::Item;
 
 use crate::{
