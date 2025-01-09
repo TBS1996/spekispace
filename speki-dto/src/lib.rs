@@ -36,7 +36,7 @@ pub enum ModifiedSource {
     },
 }
 
-pub trait Item: Serialize + DeserializeOwned + Sized + Send + Clone + 'static {
+pub trait Item: Serialize + DeserializeOwned + Sized + Send + Clone + Debug + 'static {
     fn deleted(&self) -> bool;
     fn set_delete(&mut self);
 
@@ -54,7 +54,8 @@ pub trait Item: Serialize + DeserializeOwned + Sized + Send + Clone + 'static {
         } else if let Ok(item) = serde_json::from_str(&s) {
             item
         } else {
-            panic!("{}", format!("unable to deserialize item: {s}"));
+            let x = serde_json::from_str::<Self>(&s);
+            panic!("{}", format!("unable to deserialize item: {x:?}"));
         }
     }
 
