@@ -21,6 +21,7 @@ use uuid::Uuid;
 
 use crate::{
     card_provider::CardProvider,
+    metadata::Metadata,
     recall_rate::{History, Recall, Review, SimpleRecall},
     RecallCalc, Recaller, TimeGetter,
 };
@@ -37,44 +38,6 @@ pub use serializing::new_raw_card;
 pub trait CardTrait: Debug + Clone {
     async fn get_dependencies(&self) -> BTreeSet<CardId>;
     async fn display_front(&self) -> String;
-}
-
-#[derive(Ord, PartialOrd, Eq, PartialEq, Hash, Debug, Clone)]
-pub enum IsSuspended {
-    False,
-    True,
-    // Card is temporarily suspended, until contained unix time has passed.
-    TrueUntil(Duration),
-}
-
-impl From<bool> for IsSuspended {
-    fn from(value: bool) -> Self {
-        match value {
-            true => Self::True,
-            false => Self::False,
-        }
-    }
-}
-
-impl Default for IsSuspended {
-    fn default() -> Self {
-        Self::False
-    }
-}
-
-impl IsSuspended {
-    fn verify_time(self, current_time: Duration) -> Self {
-        if let Self::TrueUntil(dur) = self {
-            if dur < current_time {
-                return Self::False;
-            }
-        }
-        self
-    }
-
-    pub fn is_suspended(&self) -> bool {
-        !matches!(self, IsSuspended::False)
-    }
 }
 
 #[derive(Debug, Clone)]
@@ -255,9 +218,9 @@ pub struct Card {
     id: CardId,
     ty: CardType,
     dependencies: BTreeSet<CardId>,
+    metadata: Metadata,
     tags: BTreeMap<String, String>,
     history: History,
-    suspended: IsSuspended,
     card_provider: CardProvider,
     recaller: Recaller,
     last_modified: Duration,
@@ -395,8 +358,8 @@ impl Card {
             ty: into_any(raw_card.data, &card_provider),
             dependencies: raw_card.dependencies,
             tags: raw_card.tags,
+            metadata: Metadata::default(),
             history,
-            suspended: IsSuspended::from(raw_card.suspended),
             card_provider,
             recaller,
             last_modified: Duration::default(),
@@ -670,7 +633,7 @@ impl Card {
     }
 
     pub fn is_suspended(&self) -> bool {
-        self.suspended.is_suspended()
+        self.metadata.suspended.is_suspended()
     }
 
     pub fn time_since_last_review(&self) -> Option<Duration> {
@@ -766,8 +729,6 @@ pub struct RawCard {
     pub dependencies: BTreeSet<Uuid>,
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub tags: BTreeMap<String, String>,
-    #[serde(default, skip_serializing_if = "is_false")]
-    pub suspended: bool,
     #[serde(default, skip_serializing_if = "is_false")]
     pub deleted: bool,
     #[serde(default)]

@@ -1,16 +1,9 @@
-use std::time::Duration;
-
 use omtrent::TimeStamp;
-use serde::{
-    de::{self, Deserializer},
-    Deserialize, Serialize,
-};
-use toml::Value;
 use uuid::Uuid;
 
 use super::{
-    AttributeCard, CType, Card, CardType, ClassCard, EventCard, InstanceCard, IsSuspended,
-    NormalCard, RawCard, RawType, StatementCard, UnfinishedCard,
+    AttributeCard, CType, Card, CardType, ClassCard, EventCard, InstanceCard, NormalCard, RawCard,
+    RawType, StatementCard, UnfinishedCard,
 };
 use crate::card_provider::CardProvider;
 
@@ -192,46 +185,9 @@ impl From<Card> for RawCard {
             data: from_any(card.ty),
             dependencies: card.dependencies,
             tags: card.tags,
-            suspended: card.suspended.is_suspended(),
             deleted: false,
             last_modified: card.last_modified,
             source: card.source,
-        }
-    }
-}
-
-impl Serialize for IsSuspended {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::ser::Serializer,
-    {
-        match self.clone().verify_time(Duration::default()) {
-            IsSuspended::False => serializer.serialize_bool(false),
-            IsSuspended::True => serializer.serialize_bool(true),
-            IsSuspended::TrueUntil(duration) => serializer.serialize_u64(duration.as_secs()),
-        }
-    }
-}
-
-impl<'de> Deserialize<'de> for IsSuspended {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        let value: Value = Deserialize::deserialize(deserializer)?;
-
-        match value {
-            Value::Boolean(b) => Ok(b.into()),
-            Value::Integer(i) => {
-                if let Ok(secs) = std::convert::TryInto::<u64>::try_into(i) {
-                    Ok(IsSuspended::TrueUntil(Duration::from_secs(secs))
-                        .verify_time(Duration::default()))
-                } else {
-                    Err(de::Error::custom("Invalid duration format"))
-                }
-            }
-
-            _ => Err(serde::de::Error::custom("Invalid value for IsDisabled")),
         }
     }
 }

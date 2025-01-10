@@ -17,6 +17,7 @@ pub mod card;
 mod card_provider;
 pub mod collection;
 mod common;
+pub mod metadata;
 pub mod recall_rate;
 
 pub use attribute::{Attribute, AttributeDTO, AttributeId};

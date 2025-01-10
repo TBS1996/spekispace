@@ -72,8 +72,31 @@ limitations:
 
 for example if you're learning two languages, maybe one you need to use 6 months from now and another you have no specific plans it'll bias more to near-term stability for first one and long term for 2nd one
 
-
 # smart watch integration?
 
 maybe can integrate smart watch data into the app so users can see how well their memory affected by things like sleep recovery exercise
 
+
+
+# release goals
+
+- fix deleted bugs?
+- make certain cards trivial, like instances of certain classes
+- suspend cards
+- custom question format for instances
+- add filter cards thing to browsepage
+- sort on browsepage
+- move x to left
+- firebaseprovider use online timestamp for current_time
+- collections 
+
+
+# post-release goals
+
+- see previous reviews on card
+- attributes
+- links embedded in text
+- desktop version
+- priorities
+- audio
+- firestore backups
