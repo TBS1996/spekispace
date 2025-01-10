@@ -18,6 +18,7 @@ pub mod card;
 mod card_provider;
 pub mod collection;
 mod common;
+pub mod healthcheck;
 pub mod metadata;
 pub mod recall_rate;
 
@@ -124,6 +125,10 @@ impl App {
             .await;
 
         self.card_provider.save_card(card).await;
+    }
+
+    pub async fn health_check(&self) {
+        healthcheck::healthcheck(self.card_provider.clone()).await;
     }
 
     pub async fn load_card(&self, id: CardId) -> Option<Card> {
