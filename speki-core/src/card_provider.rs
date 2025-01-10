@@ -13,6 +13,7 @@ use speki_dto::Item;
 
 use crate::{
     card::{CardId, RawCard, RecallRate},
+    metadata::Metadata,
     recall_rate::History,
     Card, Provider, Recaller, TimeGetter,
 };
@@ -136,12 +137,14 @@ impl CardProvider {
         let raw_cards = self.provider.cards.load_all().await;
         info!("loading reviews");
         let mut reviews = self.provider.reviews.load_all().await;
+        let mut metas = self.provider.metadata.load_all().await;
         let fetched = self.time_provider.current_time();
 
         for (id, card) in raw_cards {
             let rev = reviews.remove(&id).unwrap_or_else(|| History::new(id));
+            let meta = metas.remove(&id).unwrap_or_else(|| Metadata::new(id));
             let card =
-                Card::from_raw_with_reviews(card, self.clone(), self.recaller.clone(), rev.clone());
+                Card::from_parts(card, self.clone(), self.recaller.clone(), rev.clone(), meta);
             let card = Arc::new(card);
             self.update_dependents(card.clone()).await;
 
@@ -222,9 +225,10 @@ impl CardProvider {
 
     pub async fn load(&self, id: CardId) -> Option<Arc<Card>> {
         trace!("loading card for id: {}", id);
-        if let (Some(card), Some(_)) = (
+        if let (Some(card), Some(_), Some(_)) = (
             self.load_cached_card(id).await,
             self.load_cached_reviews(id).await,
+            self.load_cached_meta(id).await,
         ) {
             trace!("cache hit for id: {}", id);
             Some(card)
@@ -248,6 +252,7 @@ impl CardProvider {
 
     pub async fn save_card(&self, card: Card) {
         self.update_cache(Arc::new(card.clone()));
+        self.provider.metadata.save_item(card.meta()).await;
         let raw: RawCard = card.into();
         self.provider.cards.save_item(raw).await;
     }
@@ -262,6 +267,7 @@ impl CardProvider {
                 cards: Default::default(),
                 reviews: Default::default(),
                 dependents: Default::default(),
+                metadata: Default::default(),
             })),
             time_provider,
             provider,
@@ -281,10 +287,20 @@ impl CardProvider {
             .await
             .unwrap_or_else(|| History::new(id));
 
-        let card =
-            Card::from_raw_with_reviews(raw_card, self.clone(), self.recaller.clone(), reviews);
+        let meta = self
+            .provider
+            .metadata
+            .load_item(id)
+            .await
+            .unwrap_or_else(|| Metadata::new(id));
+
+        let card = Card::from_parts(raw_card, self.clone(), self.recaller.clone(), reviews, meta);
 
         Some(card)
+    }
+
+    async fn load_cached_meta(&self, id: CardId) -> Option<Metadata> {
+        self.inner.read().unwrap().metadata.get(&id).cloned()
     }
 
     async fn load_cached_reviews(&self, id: CardId) -> Option<History> {
@@ -356,6 +372,8 @@ impl CardProvider {
         let mut guard = self.inner.write().unwrap();
         let id = card.id();
 
+        let cached_meta = card.meta();
+
         let cached_reviews = RevCache {
             fetched: now,
             review: card.history().clone(),
@@ -368,6 +386,7 @@ impl CardProvider {
 
         guard.cards.insert(id, cached_card);
         guard.reviews.insert(id, cached_reviews);
+        guard.metadata.insert(id, cached_meta);
     }
 
     async fn fresh_load(&self, id: CardId) -> Option<Arc<Card>> {
@@ -383,6 +402,7 @@ struct Inner {
     cards: HashMap<CardId, CardCache>,
     reviews: HashMap<CardId, RevCache>,
     dependents: HashMap<CardId, HashSet<CardId>>,
+    metadata: HashMap<CardId, Metadata>,
 }
 
 #[derive(Clone, Debug)]

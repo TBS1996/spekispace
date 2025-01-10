@@ -7,12 +7,25 @@ use serde::{
 use speki_dto::{Item, ModifiedSource};
 use uuid::Uuid;
 
+use crate::card::CardId;
+
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct Metadata {
     pub suspended: IsSuspended,
     last_modified: Duration,
     id: Uuid,
     source: ModifiedSource,
+}
+
+impl Metadata {
+    pub fn new(id: CardId) -> Self {
+        Self {
+            id,
+            suspended: Default::default(),
+            last_modified: Default::default(),
+            source: Default::default(),
+        }
+    }
 }
 
 impl Item for Metadata {

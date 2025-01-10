@@ -302,6 +302,10 @@ impl Card {
         self.clone().into()
     }
 
+    pub fn meta(&self) -> Metadata {
+        self.metadata.clone()
+    }
+
     pub async fn add_review(&mut self, recall: Recall) {
         let review = Review {
             timestamp: self.time_provider().current_time(),
@@ -345,11 +349,12 @@ impl Card {
         self.history.lapses_since(day, current_time)
     }
 
-    pub fn from_raw_with_reviews(
+    pub fn from_parts(
         raw_card: RawCard,
         card_provider: CardProvider,
         recaller: Recaller,
         history: History,
+        metadata: Metadata,
     ) -> Card {
         let id = raw_card.id;
 
@@ -358,7 +363,7 @@ impl Card {
             ty: into_any(raw_card.data, &card_provider),
             dependencies: raw_card.dependencies,
             tags: raw_card.tags,
-            metadata: Metadata::default(),
+            metadata,
             history,
             card_provider,
             recaller,
@@ -374,8 +379,14 @@ impl Card {
     ) -> Card {
         let id = raw_card.id;
         let reviews = card_provider.load_reviews(id).await;
+        let meta = card_provider
+            .provider
+            .metadata
+            .load_item(id)
+            .await
+            .unwrap_or_default();
 
-        Self::from_raw_with_reviews(raw_card, card_provider, recaller, reviews)
+        Self::from_parts(raw_card, card_provider, recaller, reviews, meta)
     }
 
     pub fn card_type(&self) -> &CardType {
