@@ -369,7 +369,33 @@ impl CardViewer {
                     let yesno = Yesno::new("Really delete card?".to_string(), Arc::new(fun));
                     OVERLAY.read().set(Box::new(yesno));
                 },
-                "delete card"
+                "delete"
+            }
+        }
+    }
+
+    fn suspend(&self) -> Element {
+        let Some(card) = self.old_card.cloned() else {
+            return rsx! {};
+        };
+
+        let is_suspended = card.is_suspended();
+        let txt = if is_suspended { "unsuspend" } else { "suspend" };
+        let selv = self.clone();
+
+        rsx! {
+            button {
+                class: "mt-2 inline-flex items-center text-white bg-gray-800 border-0 py-1 px-3 focus:outline-none hover:bg-gray-700 rounded text-base md:mt-0",
+                onclick: move |_| {
+                    let card = card.clone();
+                    let selv = selv.clone();
+                    spawn(async move {
+                        let mut card = Arc::unwrap_or_clone(card);
+                        card.set_suspend(!is_suspended).await;
+                        selv.old_card.clone().set(Some(Arc::new(card)));
+                    });
+                },
+                "{txt}"
             }
         }
     }
@@ -525,7 +551,7 @@ impl CardViewer {
             div {
                 if let Some(card) = self.old_card.cloned() {
                     {self.delete(card.id())}
-
+                    {self.suspend()}
                 }
                 { self.add_dep() }
                 { self.save_button() }

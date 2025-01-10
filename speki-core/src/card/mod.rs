@@ -21,7 +21,7 @@ use uuid::Uuid;
 
 use crate::{
     card_provider::CardProvider,
-    metadata::Metadata,
+    metadata::{IsSuspended, Metadata},
     recall_rate::{History, Recall, Review, SimpleRecall},
     RecallCalc, Recaller, TimeGetter,
 };
@@ -645,6 +645,11 @@ impl Card {
 
     pub fn is_suspended(&self) -> bool {
         self.metadata.suspended.is_suspended()
+    }
+
+    pub async fn set_suspend(&mut self, suspend: bool) {
+        self.metadata.suspended = IsSuspended::from(suspend);
+        self.persist().await;
     }
 
     pub fn time_since_last_review(&self) -> Option<Duration> {
