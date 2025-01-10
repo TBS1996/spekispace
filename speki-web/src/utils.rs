@@ -5,6 +5,7 @@ use futures::future::join;
 use speki_core::{
     card::{CardId, RawCard},
     collection::{Collection, CollectionId},
+    metadata::Metadata,
     AttributeDTO, Card,
 };
 use speki_dto::Syncable;
@@ -27,6 +28,7 @@ impl App {
         Self(Arc::new(speki_core::App::new(
             speki_core::SimpleRecall,
             WasmTime,
+            DexieProvider::new(),
             DexieProvider::new(),
             DexieProvider::new(),
             DexieProvider::new(),
@@ -168,8 +170,9 @@ pub async fn sync(agent: AuthUser) {
     let revsync = Syncable::<speki_core::recall_rate::History>::sync(fire.clone(), dex.clone());
     let attrsync = Syncable::<AttributeDTO>::sync(fire.clone(), dex.clone());
     let colsync = Syncable::<Collection>::sync(fire.clone(), dex.clone());
+    let metasync = Syncable::<Metadata>::sync(fire.clone(), dex.clone());
 
-    futures::future::join4(cardsync, revsync, attrsync, colsync).await;
+    futures::future::join5(cardsync, revsync, attrsync, colsync, metasync).await;
 
     *SYNCING.write() = false;
     let elapsed = time_provider.current_time() - now;

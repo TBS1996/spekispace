@@ -5,6 +5,7 @@ use card_provider::CardProvider;
 use collection::Collection;
 use dioxus_logger::tracing::info;
 use eyre::Result;
+use metadata::Metadata;
 use recall_rate::History;
 use samsvar::{Matcher, Schema};
 use speki_dto::{SpekiProvider, TimeProvider};
@@ -39,6 +40,7 @@ pub struct Provider {
     pub reviews: Arc<Box<dyn SpekiProvider<History>>>,
     pub attrs: Arc<Box<dyn SpekiProvider<AttributeDTO>>>,
     pub collections: Arc<Box<dyn SpekiProvider<Collection>>>,
+    pub metadata: Arc<Box<dyn SpekiProvider<Metadata>>>,
 }
 
 pub type Recaller = Arc<Box<dyn RecallCalc + Send>>;
@@ -58,13 +60,14 @@ impl Debug for App {
 }
 
 impl App {
-    pub fn new<A, B, C, D, E, F>(
+    pub fn new<A, B, C, D, E, F, G>(
         recall_calc: A,
         time_provider: B,
         card_provider: C,
         history_provider: D,
         attr_provider: E,
         collections_provider: F,
+        meta_provider: G,
     ) -> Self
     where
         A: RecallCalc + 'static + Send,
@@ -73,6 +76,7 @@ impl App {
         D: SpekiProvider<History> + 'static + Send,
         E: SpekiProvider<AttributeDTO> + 'static + Send,
         F: SpekiProvider<Collection> + 'static + Send,
+        G: SpekiProvider<Metadata> + 'static + Send,
     {
         info!("initialtize app");
 
@@ -84,6 +88,7 @@ impl App {
             reviews: Arc::new(Box::new(history_provider)),
             attrs: Arc::new(Box::new(attr_provider)),
             collections: Arc::new(Box::new(collections_provider)),
+            metadata: Arc::new(Box::new(meta_provider)),
         };
 
         let card_provider =

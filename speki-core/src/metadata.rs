@@ -4,10 +4,49 @@ use serde::{
     de::{self, Deserializer},
     Deserialize, Serialize,
 };
+use speki_dto::{Item, ModifiedSource};
+use uuid::Uuid;
 
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct Metadata {
     pub suspended: IsSuspended,
+    last_modified: Duration,
+    id: Uuid,
+    source: ModifiedSource,
+}
+
+impl Item for Metadata {
+    fn deleted(&self) -> bool {
+        false
+    }
+
+    fn set_delete(&mut self) {
+        unreachable!("metadata shouldn't get deleted")
+    }
+
+    fn set_last_modified(&mut self, time: Duration) {
+        self.last_modified = time;
+    }
+
+    fn last_modified(&self) -> Duration {
+        self.last_modified
+    }
+
+    fn id(&self) -> uuid::Uuid {
+        self.id
+    }
+
+    fn identifier() -> &'static str {
+        "metadata"
+    }
+
+    fn source(&self) -> speki_dto::ModifiedSource {
+        self.source
+    }
+
+    fn set_source(&mut self, source: speki_dto::ModifiedSource) {
+        self.source = source;
+    }
 }
 
 #[derive(Ord, PartialOrd, Eq, PartialEq, Hash, Debug, Clone)]
