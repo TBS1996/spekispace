@@ -39,15 +39,15 @@ impl Attribute {
         })
     }
 
-    pub fn from_dto(dto: AttributeDTO, card_provider: CardProvider) -> Self {
+    pub fn from_dto(dto: AttributeDTO, provider: CardProvider) -> Self {
         Self {
             pattern: dto.pattern,
             id: dto.id,
             class: dto.class,
             back_type: dto.back_type,
-            card_provider,
             last_modified: dto.last_modified,
             source: dto.source,
+            card_provider: provider,
         }
     }
 

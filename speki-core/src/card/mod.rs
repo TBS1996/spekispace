@@ -75,7 +75,7 @@ impl Debug for Card {
 
 impl std::fmt::Display for Card {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", block_on(self.base.ty.display_front()))
+        write!(f, "{}", block_on(self.print()))
     }
 }
 
@@ -176,7 +176,7 @@ impl Card {
 
         Self {
             id,
-            base: BaseCard::from_raw(raw_card, card_provider.clone()),
+            base: BaseCard::from(raw_card),
             metadata,
             history,
             card_provider,
@@ -240,7 +240,7 @@ impl Card {
 
     pub async fn set_ref(mut self, reff: CardId) -> Card {
         let backside = BackSide::Card(reff);
-        self.base.ty = self.base.ty.set_backside(backside, &self.card_provider);
+        self.base.ty = self.base.ty.set_backside(backside);
         self.persist().await;
         self
     }
@@ -449,7 +449,7 @@ impl Card {
     }
 
     pub async fn print(&self) -> String {
-        self.base.ty.display_front().await
+        self.base.ty.display_front(&self.card_provider).await
     }
 
     pub fn is_pending(&self) -> bool {
@@ -489,7 +489,7 @@ impl Matcher for Card {
     #[instrument]
     async fn get_val(&self, key: &str) -> Option<samsvar::Value> {
         match key {
-            "front" => json!(self.base.ty.display_front().await),
+            "front" => json!(self.print().await),
             "pending" => json!(self.is_pending()),
             "back" => json!(self.display_backside().await.unwrap_or_default()),
             "suspended" => json!(&self.is_suspended()),

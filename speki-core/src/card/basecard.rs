@@ -13,11 +13,11 @@ pub struct BaseCard {
     pub source: ModifiedSource,
 }
 
-impl BaseCard {
-    pub fn from_raw(raw: RawCard, provider: CardProvider) -> Self {
+impl From<RawCard> for BaseCard {
+    fn from(raw: RawCard) -> Self {
         Self {
             id: raw.id,
-            ty: into_any(raw.data, &provider),
+            ty: into_any(raw.data),
             dependencies: raw.dependencies,
             last_modified: raw.last_modified,
             source: raw.source,
@@ -147,17 +147,16 @@ pub struct AttributeCard {
     pub attribute: AttributeId,
     pub back: BackSide,
     pub instance: CardId,
-    pub card_provider: CardProvider,
 }
 
 impl AttributeCard {
-    pub async fn display_front(&self) -> String {
-        self.card_provider
+    pub async fn display_front(&self, provider: &CardProvider) -> String {
+        provider
             .provider
             .attrs
             .load_item(self.attribute)
             .await
-            .map(|dto| Attribute::from_dto(dto, self.card_provider.clone()))
+            .map(|dto| Attribute::from_dto(dto, provider.clone()))
             .unwrap()
             .name(self.instance)
             .await
@@ -290,12 +289,12 @@ impl CardType {
         }
     }
 
-    pub async fn display_front(&self) -> String {
+    pub async fn display_front(&self, provider: &CardProvider) -> String {
         match self {
             CardType::Instance(card) => card.name.clone(),
             CardType::Normal(card) => card.front.clone(),
             CardType::Unfinished(card) => card.front.clone(),
-            CardType::Attribute(card) => card.display_front().await,
+            CardType::Attribute(card) => card.display_front(provider).await,
             CardType::Class(card) => card.name.clone(),
             CardType::Statement(card) => card.front.clone(),
             CardType::Event(card) => card.front.clone(),
@@ -398,7 +397,7 @@ impl CardType {
         !matches!(self, Self::Unfinished(_))
     }
 
-    pub fn set_backside(self, new_back: BackSide, card_provider: &CardProvider) -> Self {
+    pub fn set_backside(self, new_back: BackSide) -> Self {
         match self {
             x @ CardType::Event(_) => x,
             x @ CardType::Instance(_) => x,
@@ -421,7 +420,6 @@ impl CardType {
                 attribute,
                 back: new_back,
                 instance: concept_card,
-                card_provider: card_provider.clone(),
             }
             .into(),
             Self::Class(class) => ClassCard {

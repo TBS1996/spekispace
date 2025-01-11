@@ -214,7 +214,7 @@ impl App {
         let card = self.card_provider.load(card_id).await.unwrap();
 
         let instance = InstanceCard {
-            name: card.card_type().display_front().await,
+            name: card.print().await,
             back: card.back_side().map(ToOwned::to_owned),
             class,
         };

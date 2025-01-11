@@ -5,9 +5,8 @@ use super::{
     AttributeCard, CType, CardType, ClassCard, EventCard, InstanceCard, NormalCard, RawCard,
     RawType, StatementCard, UnfinishedCard,
 };
-use crate::card_provider::CardProvider;
 
-pub fn into_any(raw: RawType, card_provider: &CardProvider) -> CardType {
+pub fn into_any(raw: RawType) -> CardType {
     match raw.ty {
         CType::Instance => InstanceCard {
             name: raw.front.unwrap(),
@@ -28,7 +27,6 @@ pub fn into_any(raw: RawType, card_provider: &CardProvider) -> CardType {
             attribute: raw.attribute.unwrap(),
             back: raw.back.unwrap(),
             instance: raw.instance.unwrap(),
-            card_provider: card_provider.clone(),
         }
         .into(),
         CType::Class => ClassCard {
@@ -78,7 +76,6 @@ pub fn from_any(ty: CardType) -> RawType {
             attribute,
             back,
             instance,
-            card_provider: _,
         }) => {
             raw.attribute = Some(attribute);
             raw.back = Some(back);
