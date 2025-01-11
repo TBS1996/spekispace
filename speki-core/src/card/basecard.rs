@@ -46,10 +46,6 @@ impl CardTrait for NormalCard {
         set.extend(self.back.dependencies().iter());
         set
     }
-
-    async fn display_front(&self) -> String {
-        self.front.clone()
-    }
 }
 
 #[async_trait::async_trait(?Send)]
@@ -58,10 +54,6 @@ impl CardTrait for InstanceCard {
         let mut set = BTreeSet::default();
         set.insert(self.class);
         set
-    }
-
-    async fn display_front(&self) -> String {
-        self.name.clone()
     }
 }
 
@@ -73,29 +65,12 @@ impl CardTrait for AttributeCard {
         dependencies.extend(self.back.dependencies().iter());
         dependencies
     }
-
-    async fn display_front(&self) -> String {
-        self.card_provider
-            .provider
-            .attrs
-            .load_item(self.attribute)
-            .await
-            .map(|dto| Attribute::from_dto(dto, self.card_provider.clone()))
-            .unwrap()
-            .name(self.instance)
-            .await
-            .unwrap_or_else(|| "oops, instance is deleted".to_string())
-    }
 }
 
 #[async_trait::async_trait(?Send)]
 impl CardTrait for UnfinishedCard {
     async fn get_dependencies(&self) -> BTreeSet<CardId> {
         Default::default()
-    }
-
-    async fn display_front(&self) -> String {
-        self.front.clone()
     }
 }
 
@@ -141,10 +116,6 @@ impl CardTrait for ClassCard {
         }
         dependencies
     }
-
-    async fn display_front(&self) -> String {
-        self.name.clone()
-    }
 }
 
 /// An unfinished card
@@ -177,6 +148,21 @@ pub struct AttributeCard {
     pub back: BackSide,
     pub instance: CardId,
     pub card_provider: CardProvider,
+}
+
+impl AttributeCard {
+    pub async fn display_front(&self) -> String {
+        self.card_provider
+            .provider
+            .attrs
+            .load_item(self.attribute)
+            .await
+            .map(|dto| Attribute::from_dto(dto, self.card_provider.clone()))
+            .unwrap()
+            .name(self.instance)
+            .await
+            .unwrap_or_else(|| "oops, instance is deleted".to_string())
+    }
 }
 
 /// A specific instance of a class
@@ -213,10 +199,6 @@ pub struct StatementCard {
 impl CardTrait for StatementCard {
     async fn get_dependencies(&self) -> BTreeSet<CardId> {
         Default::default()
-    }
-
-    async fn display_front(&self) -> String {
-        self.front.clone()
     }
 }
 
@@ -277,16 +259,11 @@ impl CardTrait for EventCard {
 
         set
     }
-
-    async fn display_front(&self) -> String {
-        self.front.clone()
-    }
 }
 
 #[async_trait::async_trait(?Send)]
 pub trait CardTrait: Debug + Clone {
     async fn get_dependencies(&self) -> BTreeSet<CardId>;
-    async fn display_front(&self) -> String;
 }
 
 #[derive(Debug, Clone)]
@@ -315,13 +292,13 @@ impl CardType {
 
     pub async fn display_front(&self) -> String {
         match self {
-            CardType::Instance(card) => card.display_front().await,
-            CardType::Normal(card) => card.display_front().await,
-            CardType::Unfinished(card) => card.display_front().await,
+            CardType::Instance(card) => card.name.clone(),
+            CardType::Normal(card) => card.front.clone(),
+            CardType::Unfinished(card) => card.front.clone(),
             CardType::Attribute(card) => card.display_front().await,
-            CardType::Class(card) => card.display_front().await,
-            CardType::Statement(card) => card.display_front().await,
-            CardType::Event(card) => card.display_front().await,
+            CardType::Class(card) => card.name.clone(),
+            CardType::Statement(card) => card.front.clone(),
+            CardType::Event(card) => card.front.clone(),
         }
     }
 

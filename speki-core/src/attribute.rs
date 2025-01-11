@@ -1,4 +1,4 @@
-use std::time::Duration;
+use std::{pin::Pin, time::Duration};
 
 use serde::{Deserialize, Serialize};
 use speki_dto::{Item, ModifiedSource};
@@ -24,13 +24,18 @@ pub struct Attribute {
 
 impl Attribute {
     /// Fills the pattern with the instance
-    pub async fn name(&self, instance: CardId) -> Option<String> {
-        let card_text = self.card_provider.load(instance).await?.print().await;
+    pub fn name(
+        &self,
+        instance: CardId,
+    ) -> Pin<Box<dyn std::future::Future<Output = Option<String>> + '_>> {
+        Box::pin(async move {
+            let card_text = self.card_provider.load(instance).await?.print().await;
 
-        Some(if self.pattern.contains("{}") {
-            self.pattern.replace("{}", &card_text)
-        } else {
-            format!("{}: {}", &self.pattern, card_text)
+            Some(if self.pattern.contains("{}") {
+                self.pattern.replace("{}", &card_text)
+            } else {
+                format!("{}: {}", &self.pattern, card_text)
+            })
         })
     }
 
