@@ -33,10 +33,6 @@ impl BaseCard {
             source: Default::default(),
         }
     }
-
-    pub fn to_raw_ty(&self) -> RawType {
-        from_any(self.ty.clone())
-    }
 }
 
 impl From<RawCard> for BaseCard {
@@ -304,6 +300,21 @@ pub enum CardType {
 }
 
 impl CardType {
+    pub fn class(&self) -> Option<CardId> {
+        from_any(self.clone()).class()
+    }
+
+    pub fn raw_front(&self) -> String {
+        from_any(self.clone()).front.unwrap_or_default()
+    }
+
+    pub fn raw_back(&self) -> String {
+        from_any(self.clone())
+            .back
+            .map(|b| b.to_string())
+            .unwrap_or_default()
+    }
+
     pub async fn get_dependencies(&self) -> BTreeSet<CardId> {
         match self {
             CardType::Instance(card) => card.get_dependencies().await,
@@ -325,6 +336,17 @@ impl CardType {
             CardType::Class(card) => card.name.clone(),
             CardType::Statement(card) => card.front.clone(),
             CardType::Event(card) => card.front.clone(),
+        }
+    }
+    pub fn backside(&self) -> Option<BackSide> {
+        match self.clone() {
+            CardType::Instance(InstanceCard { back, .. }) => back,
+            CardType::Normal(NormalCard { back, .. }) => Some(back),
+            CardType::Unfinished(_) => None,
+            CardType::Attribute(AttributeCard { back, .. }) => Some(back),
+            CardType::Class(ClassCard { back, .. }) => Some(back),
+            CardType::Statement(_) => None,
+            CardType::Event(_) => None,
         }
     }
 
@@ -460,16 +482,16 @@ impl CardType {
 }
 
 #[derive(Serialize, Deserialize, Default, Debug, Clone)]
-pub struct RawType {
-    pub ty: CType,
-    pub front: Option<String>,
-    pub back: Option<BackSide>,
-    pub class: Option<Uuid>,
-    pub instance: Option<Uuid>,
-    pub attribute: Option<Uuid>,
-    pub start_time: Option<String>,
-    pub end_time: Option<String>,
-    pub parent_event: Option<Uuid>,
+struct RawType {
+    ty: CType,
+    front: Option<String>,
+    back: Option<BackSide>,
+    class: Option<Uuid>,
+    instance: Option<Uuid>,
+    attribute: Option<Uuid>,
+    start_time: Option<String>,
+    end_time: Option<String>,
+    parent_event: Option<Uuid>,
 }
 
 impl RawType {
@@ -695,4 +717,107 @@ pub enum CType {
     Class,
     Statement,
     Event,
+}
+
+fn into_any(raw: RawType) -> CardType {
+    match raw.ty {
+        CType::Instance => InstanceCard {
+            name: raw.front.unwrap(),
+            class: raw.class.unwrap(),
+            back: raw.back,
+        }
+        .into(),
+        CType::Normal => NormalCard {
+            front: raw.front.unwrap(),
+            back: raw.back.unwrap(),
+        }
+        .into(),
+        CType::Unfinished => UnfinishedCard {
+            front: raw.front.unwrap(),
+        }
+        .into(),
+        CType::Attribute => AttributeCard {
+            attribute: raw.attribute.unwrap(),
+            back: raw.back.unwrap(),
+            instance: raw.instance.unwrap(),
+        }
+        .into(),
+        CType::Class => ClassCard {
+            name: raw.front.unwrap(),
+            back: raw.back.unwrap(),
+            parent_class: raw.class,
+        }
+        .into(),
+        CType::Statement => StatementCard {
+            front: raw.front.unwrap(),
+        }
+        .into(),
+        CType::Event => EventCard {
+            front: raw.front.unwrap(),
+            start_time: raw
+                .start_time
+                .clone()
+                .map(TimeStamp::from_string)
+                .flatten()
+                .unwrap_or_default(),
+            end_time: raw.end_time.clone().map(TimeStamp::from_string).flatten(),
+            parent_event: raw.parent_event,
+        }
+        .into(),
+    }
+}
+
+fn from_any(ty: CardType) -> RawType {
+    let mut raw = RawType::default();
+    let fieldless = ty.fieldless();
+    raw.ty = fieldless;
+
+    match ty {
+        CardType::Instance(InstanceCard { name, class, back }) => {
+            raw.class = Some(class);
+            raw.front = Some(name);
+            raw.back = back;
+        }
+        CardType::Normal(NormalCard { front, back }) => {
+            raw.front = Some(front);
+            raw.back = Some(back);
+        }
+        CardType::Unfinished(UnfinishedCard { front }) => {
+            raw.front = Some(front);
+        }
+        CardType::Attribute(AttributeCard {
+            attribute,
+            back,
+            instance,
+        }) => {
+            raw.attribute = Some(attribute);
+            raw.back = Some(back);
+            raw.instance = Some(instance);
+        }
+        CardType::Class(ClassCard {
+            name,
+            back,
+            parent_class,
+        }) => {
+            raw.front = Some(name);
+            raw.back = Some(back);
+            raw.class = parent_class;
+        }
+        CardType::Statement(StatementCard { front }) => {
+            raw.front = Some(front);
+        }
+        CardType::Event(EventCard {
+            front,
+            start_time,
+            end_time,
+            parent_event,
+        }) => {
+            raw.front = Some(front);
+            raw.start_time = Some(start_time.serialize());
+            raw.end_time = end_time.map(|t| t.serialize());
+            raw.parent_event = parent_event;
+        }
+    };
+
+    raw
 }

@@ -13,7 +13,6 @@ use futures::executor::block_on;
 use samsvar::{json, Matcher};
 use serde::{ser::SerializeSeq, Deserialize, Deserializer, Serialize};
 use serde_json::Value;
-use serializing::{from_any, into_any};
 use speki_dto::{Item, ModifiedSource};
 use tracing::info;
 use uuid::Uuid;
@@ -28,7 +27,6 @@ use crate::{
 pub type RecallRate = f32;
 
 mod basecard;
-pub(crate) mod serializing;
 
 pub use basecard::*;
 

@@ -142,7 +142,7 @@ impl CardViewer {
         let tempnode = TempNode::Old(card.id());
         let filter = move |ty: CardType| ty.is_class();
 
-        let raw_ty = card.base.to_raw_ty();
+        let raw_ty = card.base.ty.clone();
         let concept = CardRef::new()
             .with_filter(Arc::new(Box::new(filter)))
             .with_dependents(tempnode.clone())
@@ -154,9 +154,9 @@ impl CardViewer {
 
         graph.new_set_card(card.clone());
         let dependencies = card.dependency_ids().await;
-        let bck = BackPut::new(raw_ty.back.clone()).with_dependents(tempnode.clone());
-        let front = raw_ty.front.unwrap_or_default();
-        let back = raw_ty.back.unwrap_or_default().to_string();
+        let bck = BackPut::new(raw_ty.backside()).with_dependents(tempnode.clone());
+        let front = raw_ty.raw_front();
+        let back = raw_ty.raw_back();
         let frnt = FrontPut::new(CardTy::from_ctype(card.get_ty().fieldless()));
         frnt.text.clone().set(front);
 
