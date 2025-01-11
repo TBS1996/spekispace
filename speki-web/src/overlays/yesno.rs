@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use dioxus::prelude::*;
+use tracing::info;
 
 use super::Overlay;
 use crate::components::Komponent;
@@ -39,6 +40,7 @@ impl Komponent for Yesno {
                 button {
                     class: "bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600 focus:outline-none focus:ring-2 focus:ring-green-300",
                     onclick: move |_| {
+                        info!("yes!");
                         on_yes();
                         done.set(true);
                     },
@@ -48,6 +50,7 @@ impl Komponent for Yesno {
                 button {
                     class: "bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600 focus:outline-none focus:ring-2 focus:ring-red-300",
                     onclick: move |_| {
+                        info!("no!");
                         done.set(true);
                     },
                     "No"

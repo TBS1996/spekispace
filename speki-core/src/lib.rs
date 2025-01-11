@@ -236,7 +236,7 @@ impl App {
     }
 
     pub async fn load_non_pending(&self, filter: Option<String>) -> Vec<CardId> {
-        info!("loading card ids");
+        info!("loading non pending card ids");
 
         let schema = filter.map(|filter| Schema::new(filter).unwrap());
         let schema = Arc::new(schema);

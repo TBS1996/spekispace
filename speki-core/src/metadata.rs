@@ -34,7 +34,7 @@ impl Item for Metadata {
     }
 
     fn set_delete(&mut self) {
-        unreachable!("metadata shouldn't get deleted")
+        panic!("metadata shouldn't get deleted")
     }
 
     fn set_last_modified(&mut self, time: Duration) {

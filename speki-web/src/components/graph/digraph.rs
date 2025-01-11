@@ -103,9 +103,9 @@ impl RustGraph {
     }
 
     pub fn create_cyto_graph(&self, cyto_id: &str) {
-        info!("creating cyto isntance");
+        info!("creating cyto instance");
         super::js::create_cyto_instance(cyto_id);
-        info!("adding nodes");
+        tracing::trace!("adding nodes");
         let guard = self.inner.lock().unwrap();
 
         let mut nodes = vec![];
@@ -129,7 +129,7 @@ impl RustGraph {
             );
         }
 
-        info!("adding edges");
+        tracing::trace!("adding edges");
         for edge in guard.edge_references() {
             let source = &guard[edge.source()];
             let target = &guard[edge.target()];

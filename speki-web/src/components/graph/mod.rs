@@ -158,10 +158,10 @@ impl GraphRep {
 impl Komponent for GraphRep {
     fn render(&self) -> Element {
         if let Some(dom) = self.coordinates() {
-            info!("nice, a dom! {dom:?}");
+            tracing::trace!("nice, a dom! {dom:?}");
             NONCLICKABLE.write().insert(self.cyto_id.to_string(), dom);
         } else {
-            info!("oh no theres no dom");
+            tracing::trace!("oh no theres no dom");
         }
 
         let scope = current_scope_id().unwrap();
@@ -252,7 +252,7 @@ impl Komponent for GraphRep {
         let cyto_id = self.cyto_id.clone();
 
         let rendered = self.is_dom_rendered();
-        info!("rendered status: {rendered}");
+        tracing::trace!("rendered status: {rendered}");
 
         // We can't create the cyto instance until this function has been run at least once cause
         // cytoscape needs to connecto a valid DOM element, so it's a bit weird logic.

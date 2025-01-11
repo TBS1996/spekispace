@@ -59,10 +59,9 @@ impl OverlayManager {
     }
 
     pub fn render(&self) -> Option<Element> {
-        info!("render popup!?");
+        tracing::trace!("render popup!?");
 
         if let Ok(scope) = current_scope_id() {
-            info!("overlay scope id: {scope:?}");
             self.set_scope(scope);
         }
 

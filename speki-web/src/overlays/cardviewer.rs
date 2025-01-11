@@ -356,14 +356,16 @@ impl CardViewer {
     }
 
     fn delete(&self, card: CardId) -> Element {
+        let isdone = self.is_done.clone();
         rsx! {
             button {
                 class: "mt-2 inline-flex items-center text-white bg-gray-800 border-0 py-1 px-3 focus:outline-none hover:bg-gray-700 rounded text-base md:mt-0",
                 onclick: move |_| {
                     let fun: Box<dyn Fn()> = Box::new(move || {
                         spawn(async move {
+                            info!("cardviewer delete card! {card}");
                             APP.read().delete_card(card).await;
-                            OVERLAY.read().pop();
+                            isdone.clone().set(true);
                         });
                     });
 

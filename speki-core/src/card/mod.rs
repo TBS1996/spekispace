@@ -224,11 +224,23 @@ impl Card {
     }
 
     pub async fn rm_dependency(&mut self, dependency: CardId) -> bool {
+        info!(
+            "for removal, dependent: {}, -- dependency: {}",
+            self.id(),
+            dependency
+        );
         let res = self.base.dependencies.remove(&dependency);
+
+        if !res {
+            info!("no dep to remove");
+            return false;
+        }
+
+        info!("dep was there: {res}");
         self.base.ty.remove_dep(dependency);
         self.card_provider.rm_dependent(dependency, self.id());
         self.persist().await;
-        res
+        true
     }
 
     pub async fn add_dependency(&mut self, dependency: CardId) {
@@ -269,7 +281,7 @@ impl Card {
         self
     }
 
-    // Call this function every time SavedCard is mutated.
+    // Call this function every time card is mutated.
     pub async fn persist(&mut self) {
         info!("persisting card: {}", self.id);
 
@@ -279,7 +291,9 @@ impl Card {
         }
 
         self.card_provider.invalidate_card(self.id()).await;
-        *self = Arc::unwrap_or_clone(self.card_provider.load(id).await.unwrap())
+        self.card_provider.save_card(self.clone()).await;
+        *self = Arc::unwrap_or_clone(self.card_provider.load(id).await.unwrap());
+        info!("done persisting card: {}", self.id);
     }
 
     async fn is_resolved(&self) -> bool {

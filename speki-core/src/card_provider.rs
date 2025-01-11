@@ -41,29 +41,36 @@ impl Debug for CardProvider {
 
 impl CardProvider {
     pub async fn invalidate_card(&self, id: CardId) {
+        info!("invalidating card: {id}");
         let mut guard = self.inner.write().unwrap();
 
         let Some(card) = guard.cards.remove(&id) else {
+            info!("oops no card");
             return;
         };
 
         guard.metadata.remove(&id);
         guard.reviews.remove(&id);
 
+        drop(guard);
+
         for dependency in card.card.dependency_ids().await {
             let dependent = card.card.id();
             self.rm_dependent(dependency, dependent);
         }
+        info!("done invalidating");
     }
 
     pub fn rm_dependent(&self, dependency: CardId, dependent: CardId) -> bool {
-        self.inner
-            .write()
-            .unwrap()
+        info!("rm dependent!!");
+        let mut guard = self.inner.write().unwrap();
+        let res = guard
             .dependents
             .entry(dependency)
             .or_default()
-            .remove(&dependent)
+            .remove(&dependent);
+        info!("dependent rmed");
+        res
     }
 
     pub fn set_dependent(&self, dependency: CardId, dependent: CardId) -> bool {
@@ -77,20 +84,24 @@ impl CardProvider {
     }
 
     pub async fn remove_card(&self, card_id: CardId) {
+        info!("cardprovider removing card: {card_id}");
         let _ = self.load(card_id).await; // ensure card is in cache first.
-        let (card, _revs, _deps) = self.remove_entry(card_id);
-
-        let card = Arc::unwrap_or_clone(card.unwrap().card);
-        self.provider.cards.delete_item(card.base).await;
 
         // Other cards may depend on this now-deleted card, so we loop through them all to remove their dependency on it (if any).
         for card in self.load_all().await {
+            info!("removing dependency for {}", card.id());
             let mut card = Arc::unwrap_or_clone(card);
             card.rm_dependency(card_id).await;
         }
+
+        let (card, _revs, _deps) = self.remove_entry(card_id);
+        let card = Arc::unwrap_or_clone(card.unwrap().card);
+        self.provider.cards.delete_item(card.base).await;
+        info!("done removing i guess");
     }
 
     fn remove_entry(&self, id: CardId) -> (Option<CardCache>, Option<RevCache>, Option<DepCache>) {
+        info!("removing entry");
         let mut guard = self.inner.write().unwrap();
         let card = guard.cards.remove(&id);
         let rev = guard.reviews.remove(&id);
@@ -223,6 +234,7 @@ impl CardProvider {
     }
 
     pub async fn load_all(&self) -> Vec<Arc<Card>> {
+        info!("load all");
         let filter = |_: Arc<Card>| async move { true };
         self.filtered_load(filter).await
     }

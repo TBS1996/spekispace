@@ -3,6 +3,8 @@ use omtrent::TimeStamp;
 use super::*;
 use crate::{attribute::AttributeId, card_provider::CardProvider, App, Attribute};
 
+pub type CardId = Uuid;
+
 /// Represents the card without userdata, the part that can be freely shared among different users.
 #[derive(Clone, Serialize, Deserialize, Debug)]
 #[serde(from = "RawCard", into = "RawCard")]
@@ -550,8 +552,6 @@ impl Item for BaseCard {
         self.deleted = true;
     }
 }
-
-pub type CardId = Uuid;
 
 #[derive(Ord, PartialOrd, Eq, Hash, PartialEq, Debug, Clone)]
 pub enum BackSide {

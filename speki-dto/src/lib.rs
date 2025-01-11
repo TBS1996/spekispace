@@ -185,7 +185,7 @@ pub trait Syncable<T: Item>: Sync + SpekiProvider<T> {
     }
 
     async fn load_all_after(&self, not_before: Duration) -> HashMap<Uuid, T> {
-        let mut map = self.load_all().await;
+        let mut map = self.load_all_with_deleted().await;
 
         info!(
             "loaded {} {}, retaining those last modified after {:?}",
@@ -330,7 +330,7 @@ pub trait SpekiProvider<T: Item>: Sync {
     async fn load_item(&self, id: Uuid) -> Option<T> {
         let record = self.load_record(id).await?;
         match toml::from_str::<T>(&record.content) {
-            Ok(item) => Some(item),
+            Ok(item) => (!item.deleted()).then_some(item),
             Err(e) => {
                 tracing::error!(
                     "error deserializing {:?} with id {}: {e:?}",
@@ -342,7 +342,22 @@ pub trait SpekiProvider<T: Item>: Sync {
         }
     }
 
+    /// Must not include deleted items.
     async fn load_all(&self) -> HashMap<Uuid, T> {
+        info!("loading all for: {:?}", T::identifier());
+        let map = self.load_all_records().await;
+        let mut outmap = HashMap::new();
+
+        for (key, val) in map {
+            let val = <T as Item>::deserialize(key, val.content);
+            if !val.deleted() {
+                outmap.insert(key, val);
+            }
+        }
+        outmap
+    }
+
+    async fn load_all_with_deleted(&self) -> HashMap<Uuid, T> {
         info!("loading all for: {:?}", T::identifier());
         let map = self.load_all_records().await;
         let mut outmap = HashMap::new();
