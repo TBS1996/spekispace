@@ -168,13 +168,8 @@ impl CardProvider {
         for (id, card) in raw_cards {
             let rev = reviews.remove(&id).unwrap_or_else(|| History::new(id));
             let meta = metas.remove(&id).unwrap_or_else(|| Metadata::new(id));
-            let card = Card::from_parts(
-                card.into(),
-                self.clone(),
-                self.recaller.clone(),
-                rev.clone(),
-                meta,
-            );
+            let card =
+                Card::from_parts(card, rev.clone(), meta, self.clone(), self.recaller.clone());
             let card = Arc::new(card);
             self.update_dependents(card.clone()).await;
 
@@ -324,13 +319,7 @@ impl CardProvider {
             .await
             .unwrap_or_else(|| Metadata::new(id));
 
-        let card = Card::from_parts(
-            raw_card.into(),
-            self.clone(),
-            self.recaller.clone(),
-            reviews,
-            meta,
-        );
+        let card = Card::from_parts(raw_card, reviews, meta, self.clone(), self.recaller.clone());
 
         Some(card)
     }

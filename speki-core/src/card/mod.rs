@@ -166,17 +166,19 @@ impl Card {
     }
 
     pub fn from_parts(
-        raw_card: RawCard,
-        card_provider: CardProvider,
-        recaller: Recaller,
+        base: BaseCard,
         history: History,
         metadata: Metadata,
+        card_provider: CardProvider,
+        recaller: Recaller,
     ) -> Card {
-        let id = raw_card.id;
+        let id = base.id;
+
+        debug_assert!(id == history.id() && id == metadata.id());
 
         Self {
             id,
-            base: BaseCard::from(raw_card),
+            base,
             metadata,
             history,
             card_provider,
@@ -198,7 +200,7 @@ impl Card {
             .await
             .unwrap_or_default();
 
-        Self::from_parts(raw_card, card_provider, recaller, reviews, meta)
+        Self::from_parts(raw_card.into(), reviews, meta, card_provider, recaller)
     }
 
     pub fn card_type(&self) -> &CardType {
