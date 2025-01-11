@@ -354,6 +354,11 @@ pub trait SpekiProvider<T: Item>: Sync {
         outmap
     }
 
+    async fn delete_item(&self, mut item: T) {
+        item.set_delete();
+        self.save_item(item).await;
+    }
+
     async fn save_item(&self, mut item: T) {
         item.set_last_modified(self.current_time().await);
         item.set_local_source();

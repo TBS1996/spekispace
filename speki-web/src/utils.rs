@@ -3,7 +3,7 @@ use std::{fmt::Debug, sync::Arc};
 use dioxus::prelude::*;
 use futures::future::join;
 use speki_core::{
-    card::{CardId, RawCard},
+    card::{BaseCard, CardId, RawCard},
     collection::{Collection, CollectionId},
     metadata::Metadata,
     AttributeDTO, Card,
@@ -152,21 +152,21 @@ pub async fn sync(agent: AuthUser) {
 
     let fire = async {
         let mut fire = FirestoreProvider::new(agent);
-        let id = Syncable::<RawCard>::provider_id(&fire).await;
+        let id = Syncable::<BaseCard>::provider_id(&fire).await;
         fire.set_id(id);
         fire
     };
 
     let dex = async {
         let mut dex = DexieProvider::new();
-        let id = Syncable::<RawCard>::provider_id(&dex).await;
+        let id = Syncable::<BaseCard>::provider_id(&dex).await;
         dex.set_id(id);
         dex
     };
 
     let (fire, dex) = join(fire, dex).await;
 
-    let cardsync = Syncable::<RawCard>::sync(fire.clone(), dex.clone());
+    let cardsync = Syncable::<BaseCard>::sync(fire.clone(), dex.clone());
     let revsync = Syncable::<speki_core::recall_rate::History>::sync(fire.clone(), dex.clone());
     let attrsync = Syncable::<AttributeDTO>::sync(fire.clone(), dex.clone());
     let colsync = Syncable::<Collection>::sync(fire.clone(), dex.clone());

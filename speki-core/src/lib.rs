@@ -1,6 +1,6 @@
 use std::{fmt::Debug, sync::Arc, time::Duration};
 
-use card::{BackSide, CardId, RawCard, RecallRate};
+use card::{BackSide, BaseCard, CardId, RawCard, RecallRate};
 use card_provider::CardProvider;
 use collection::Collection;
 use dioxus_logger::tracing::info;
@@ -37,7 +37,7 @@ pub trait RecallCalc {
 
 #[derive(Clone)]
 pub struct Provider {
-    pub cards: Arc<Box<dyn SpekiProvider<RawCard>>>,
+    pub cards: Arc<Box<dyn SpekiProvider<BaseCard>>>,
     pub reviews: Arc<Box<dyn SpekiProvider<History>>>,
     pub attrs: Arc<Box<dyn SpekiProvider<AttributeDTO>>>,
     pub collections: Arc<Box<dyn SpekiProvider<Collection>>>,
@@ -73,7 +73,7 @@ impl App {
     where
         A: RecallCalc + 'static + Send,
         B: TimeProvider + 'static + Send,
-        C: SpekiProvider<RawCard> + 'static + Send,
+        C: SpekiProvider<BaseCard> + 'static + Send,
         D: SpekiProvider<History> + 'static + Send,
         E: SpekiProvider<AttributeDTO> + 'static + Send,
         F: SpekiProvider<Collection> + 'static + Send,
@@ -196,7 +196,8 @@ impl App {
         let data = NormalCard { front, back };
         let mut raw_card = new_raw_card(data);
         raw_card.id = id;
-        self.provider.cards.save_item(raw_card).await;
+        let card = BaseCard::from(raw_card);
+        self.provider.cards.save_item(card).await;
     }
 
     pub async fn add_card(&self, front: String, back: impl Into<BackSide>) -> CardId {

@@ -4,10 +4,12 @@ use super::*;
 use crate::{attribute::AttributeId, card_provider::CardProvider, App, Attribute};
 
 /// Represents the card without userdata, the part that can be freely shared among different users.
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize, Debug)]
+#[serde(from = "RawCard", into = "RawCard")]
 pub struct BaseCard {
     pub id: CardId,
     pub ty: CardType,
+    pub deleted: bool,
     pub dependencies: BTreeSet<CardId>,
     pub last_modified: Duration,
     pub source: ModifiedSource,
@@ -20,6 +22,7 @@ impl From<RawCard> for BaseCard {
             ty: into_any(raw.data),
             dependencies: raw.dependencies,
             last_modified: raw.last_modified,
+            deleted: raw.deleted,
             source: raw.source,
         }
     }
@@ -31,7 +34,7 @@ impl From<BaseCard> for RawCard {
             id: card.id,
             data: from_any(card.ty),
             dependencies: card.dependencies,
-            deleted: false,
+            deleted: card.deleted,
             last_modified: card.last_modified,
             source: card.source,
             tags: Default::default(),
@@ -468,7 +471,7 @@ pub struct RawCard {
     pub source: ModifiedSource,
 }
 
-impl Item for RawCard {
+impl Item for BaseCard {
     fn last_modified(&self) -> Duration {
         self.last_modified
     }

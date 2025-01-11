@@ -80,13 +80,8 @@ impl CardProvider {
         let _ = self.load(card_id).await; // ensure card is in cache first.
         let (card, _revs, _deps) = self.remove_entry(card_id);
 
-        let mut raw_card: RawCard = {
-            let card = Arc::unwrap_or_clone(card.unwrap().card);
-            card.base.into()
-        };
-
-        raw_card.deleted = true;
-        self.provider.cards.save_item(raw_card).await;
+        let card = Arc::unwrap_or_clone(card.unwrap().card);
+        self.provider.cards.delete_item(card.base).await;
 
         // Other cards may depend on this now-deleted card, so we loop through them all to remove their dependency on it (if any).
         for card in self.load_all().await {
@@ -173,8 +168,13 @@ impl CardProvider {
         for (id, card) in raw_cards {
             let rev = reviews.remove(&id).unwrap_or_else(|| History::new(id));
             let meta = metas.remove(&id).unwrap_or_else(|| Metadata::new(id));
-            let card =
-                Card::from_parts(card, self.clone(), self.recaller.clone(), rev.clone(), meta);
+            let card = Card::from_parts(
+                card.into(),
+                self.clone(),
+                self.recaller.clone(),
+                rev.clone(),
+                meta,
+            );
             let card = Arc::new(card);
             self.update_dependents(card.clone()).await;
 
@@ -284,7 +284,7 @@ impl CardProvider {
         self.update_cache(Arc::new(card.clone()));
         self.provider.metadata.save_item(card.meta()).await;
         let raw: RawCard = card.base.into();
-        self.provider.cards.save_item(raw).await;
+        self.provider.cards.save_item(raw.into()).await;
     }
 
     pub fn time_provider(&self) -> TimeGetter {
@@ -324,7 +324,13 @@ impl CardProvider {
             .await
             .unwrap_or_else(|| Metadata::new(id));
 
-        let card = Card::from_parts(raw_card, self.clone(), self.recaller.clone(), reviews, meta);
+        let card = Card::from_parts(
+            raw_card.into(),
+            self.clone(),
+            self.recaller.clone(),
+            reviews,
+            meta,
+        );
 
         Some(card)
     }
