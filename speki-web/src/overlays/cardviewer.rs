@@ -2,7 +2,8 @@ use std::sync::Arc;
 
 use dioxus::prelude::*;
 use speki_core::{
-    card::CardId, Card, CardType, ClassCard, InstanceCard, NormalCard, UnfinishedCard,
+    card::{BaseCard, CardId},
+    Card, CardType, ClassCard, InstanceCard, NormalCard, UnfinishedCard,
 };
 use speki_web::{Node, NodeId, NodeMetadata};
 use tracing::info;
@@ -141,21 +142,21 @@ impl CardViewer {
         let tempnode = TempNode::Old(card.id());
         let filter = move |ty: CardType| ty.is_class();
 
-        let raw = card.to_raw();
+        let raw_ty = card.base.to_raw_ty();
         let concept = CardRef::new()
             .with_filter(Arc::new(Box::new(filter)))
             .with_dependents(tempnode.clone())
             .with_allowed(vec![CardTy::Class]);
-        if let Some(class) = raw.data.class() {
+        if let Some(class) = raw_ty.class() {
             let class = APP.read().load_card(class).await;
             concept.set_ref(class).await;
         }
 
         graph.new_set_card(card.clone());
         let dependencies = card.dependency_ids().await;
-        let bck = BackPut::new(raw.data.back.clone()).with_dependents(tempnode.clone());
-        let front = raw.data.front.unwrap_or_default();
-        let back = raw.data.back.unwrap_or_default().to_string();
+        let bck = BackPut::new(raw_ty.back.clone()).with_dependents(tempnode.clone());
+        let front = raw_ty.front.unwrap_or_default();
+        let back = raw_ty.back.unwrap_or_default().to_string();
         let frnt = FrontPut::new(CardTy::from_ctype(card.get_ty().fieldless()));
         frnt.text.clone().set(front);
 
@@ -460,19 +461,17 @@ impl CardViewer {
                     if let Some(card) = selv.to_card() {
                         let selveste = selv.clone();
                         spawn(async move {
-                            let mut new_raw = speki_core::card::new_raw_card(card.ty);
 
-                            if let Some(card) = selveste.old_card.cloned() {
-                                new_raw.id = card.id();
-                            }
+                            let id = selveste.old_card.cloned().map(|card|card.id());
+                            let mut basecard = BaseCard::new_with_id(id, card.ty);
 
                             selv.is_done.clone().set(true);
 
                             for dep in card.deps {
-                                new_raw.dependencies.insert(dep);
+                                basecard.dependencies.insert(dep);
                             }
 
-                            let card = APP.read().new_from_raw(new_raw).await;
+                            let card = APP.read().inner().card_provider().save_basecard(basecard).await;
                             if let Some(hook) = selveste.save_hook.clone() {
                                 (hook)(card);
                             }

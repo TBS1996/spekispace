@@ -15,6 +15,30 @@ pub struct BaseCard {
     pub source: ModifiedSource,
 }
 
+impl BaseCard {
+    pub fn new(ty: impl Into<CardType>) -> Self {
+        Self::new_with_id(CardId::new_v4(), ty)
+    }
+
+    pub fn new_with_id(id: impl Into<Option<CardId>>, ty: impl Into<CardType>) -> Self {
+        let id: Option<CardId> = id.into();
+        let id = id.unwrap_or_else(|| CardId::new_v4());
+
+        Self {
+            id,
+            ty: ty.into(),
+            deleted: false,
+            dependencies: Default::default(),
+            last_modified: Default::default(),
+            source: Default::default(),
+        }
+    }
+
+    pub fn to_raw_ty(&self) -> RawType {
+        from_any(self.ty.clone())
+    }
+}
+
 impl From<RawCard> for BaseCard {
     fn from(raw: RawCard) -> Self {
         Self {
@@ -455,20 +479,20 @@ impl RawType {
 }
 
 #[derive(Serialize, Deserialize, Default, Debug, Clone)]
-pub struct RawCard {
-    pub id: Uuid,
+struct RawCard {
+    id: Uuid,
     #[serde(flatten)]
-    pub data: RawType,
+    data: RawType,
     #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
-    pub dependencies: BTreeSet<Uuid>,
+    dependencies: BTreeSet<Uuid>,
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
-    pub tags: BTreeMap<String, String>,
+    tags: BTreeMap<String, String>,
     #[serde(default, skip_serializing_if = "is_false")]
-    pub deleted: bool,
+    deleted: bool,
     #[serde(default)]
-    pub last_modified: Duration,
+    last_modified: Duration,
     #[serde(default)]
-    pub source: ModifiedSource,
+    source: ModifiedSource,
 }
 
 impl Item for BaseCard {

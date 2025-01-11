@@ -12,7 +12,7 @@ use eyre::Result;
 use speki_dto::Item;
 
 use crate::{
-    card::{CardId, RawCard, RecallRate},
+    card::{BaseCard, CardId, RecallRate},
     metadata::Metadata,
     recall_rate::History,
     Card, Provider, Recaller, TimeGetter,
@@ -275,11 +275,16 @@ impl CardProvider {
         self.provider.reviews.save_item(reviews).await;
     }
 
+    pub async fn save_basecard(&self, card: BaseCard) -> Arc<Card> {
+        let id = card.id();
+        self.provider.cards.save_item(card).await;
+        self.load(id).await.unwrap()
+    }
+
     pub async fn save_card(&self, card: Card) {
         self.update_cache(Arc::new(card.clone()));
         self.provider.metadata.save_item(card.meta()).await;
-        let raw: RawCard = card.base.into();
-        self.provider.cards.save_item(raw.into()).await;
+        self.provider.cards.save_item(card.base).await;
     }
 
     pub fn time_provider(&self) -> TimeGetter {

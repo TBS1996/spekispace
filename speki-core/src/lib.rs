@@ -1,6 +1,6 @@
 use std::{fmt::Debug, sync::Arc, time::Duration};
 
-use card::{BackSide, BaseCard, CardId, RawCard, RecallRate};
+use card::{BackSide, BaseCard, CardId, RecallRate};
 use card_provider::CardProvider;
 use collection::Collection;
 use dioxus_logger::tracing::info;
@@ -10,8 +10,6 @@ use recall_rate::History;
 use samsvar::{Matcher, Schema};
 use speki_dto::{SpekiProvider, TimeProvider};
 use tracing::trace;
-
-use crate::card::serializing::new_raw_card;
 
 mod attribute;
 pub mod card;
@@ -103,6 +101,10 @@ impl App {
         }
     }
 
+    pub fn card_provider(&self) -> CardProvider {
+        self.card_provider.clone()
+    }
+
     pub async fn fill_cache(&self) {
         info!("filling cache");
         let start = self.time_provider.current_time();
@@ -173,7 +175,8 @@ impl App {
             parent_class,
         };
 
-        self.new_any(data).await.id()
+        let base = BaseCard::new(data);
+        self.card_provider().save_basecard(base).await.id()
     }
 
     pub async fn add_instance(
@@ -188,27 +191,28 @@ impl App {
             back,
             class,
         };
-        self.new_any(data).await.id()
+        let base = BaseCard::new(data);
+        self.card_provider().save_basecard(base).await.id()
     }
 
     pub async fn add_card_with_id(&self, front: String, back: impl Into<BackSide>, id: CardId) {
         let back = back.into();
         let data = NormalCard { front, back };
-        let mut raw_card = new_raw_card(data);
-        raw_card.id = id;
-        let card = BaseCard::from(raw_card);
+        let card = BaseCard::new_with_id(id, data);
         self.provider.cards.save_item(card).await;
     }
 
     pub async fn add_card(&self, front: String, back: impl Into<BackSide>) -> CardId {
         let back = back.into();
         let data = NormalCard { front, back };
-        self.new_any(data).await.id()
+        let base = BaseCard::new(data);
+        self.card_provider().save_basecard(base).await.id()
     }
 
     pub async fn add_unfinished(&self, front: String) -> CardId {
         let data = UnfinishedCard { front };
-        self.new_any(data).await.id()
+        let base = BaseCard::new(data);
+        self.card_provider().save_basecard(base).await.id()
     }
 
     pub async fn set_class(&self, card_id: CardId, class: CardId) -> Result<()> {
@@ -281,22 +285,6 @@ impl App {
         }
 
         ids
-    }
-
-    pub async fn new_from_raw(&self, raw: RawCard) -> Arc<Card> {
-        let mut card = Card::from_raw(raw, self.card_provider.clone(), self.recaller.clone()).await;
-        card.persist().await;
-        self.card_provider.load(card.id()).await.unwrap()
-    }
-
-    pub async fn new_any(&self, any: impl Into<CardType>) -> Card {
-        let raw_card = new_raw_card(any);
-        let id = raw_card.id;
-        let card =
-            Card::from_raw(raw_card, self.card_provider.clone(), self.recaller.clone()).await;
-
-        self.card_provider.save_card(card).await;
-        Arc::unwrap_or_clone(self.card_provider.load(id).await.unwrap())
     }
 }
 

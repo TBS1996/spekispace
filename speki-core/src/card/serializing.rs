@@ -1,9 +1,8 @@
 use omtrent::TimeStamp;
-use uuid::Uuid;
 
 use super::{
-    AttributeCard, CType, CardType, ClassCard, EventCard, InstanceCard, NormalCard, RawCard,
-    RawType, StatementCard, UnfinishedCard,
+    AttributeCard, CType, CardType, ClassCard, EventCard, InstanceCard, NormalCard, RawType,
+    StatementCard, UnfinishedCard,
 };
 
 pub fn into_any(raw: RawType) -> CardType {
@@ -107,70 +106,4 @@ pub fn from_any(ty: CardType) -> RawType {
     };
 
     raw
-}
-
-pub fn new_raw_card(card: impl Into<CardType>) -> RawCard {
-    let card: CardType = card.into();
-    match card {
-        CardType::Instance(concept) => new_concept(concept),
-        CardType::Normal(normal) => new_normal(normal),
-        CardType::Unfinished(unfinished) => new_unfinished(unfinished),
-        CardType::Attribute(attribute) => new_attribute(attribute),
-        CardType::Class(class) => new_class(class),
-        CardType::Statement(statement) => new_statement(statement),
-        CardType::Event(event) => new_event(event),
-    }
-}
-
-pub fn new_unfinished(unfinished: UnfinishedCard) -> RawCard {
-    RawCard {
-        id: Uuid::new_v4(),
-        data: from_any(unfinished.into()),
-        ..Default::default()
-    }
-}
-
-pub fn new_event(statement: EventCard) -> RawCard {
-    RawCard {
-        id: Uuid::new_v4(),
-        data: from_any(statement.into()),
-        ..Default::default()
-    }
-}
-
-pub fn new_statement(statement: StatementCard) -> RawCard {
-    RawCard {
-        id: Uuid::new_v4(),
-        data: from_any(statement.into()),
-        ..Default::default()
-    }
-}
-
-pub fn new_class(class: ClassCard) -> RawCard {
-    RawCard {
-        id: Uuid::new_v4(),
-        data: from_any(class.into()),
-        ..Default::default()
-    }
-}
-pub fn new_attribute(attr: AttributeCard) -> RawCard {
-    RawCard {
-        id: Uuid::new_v4(),
-        data: from_any(attr.into()),
-        ..Default::default()
-    }
-}
-pub fn new_concept(concept: InstanceCard) -> RawCard {
-    RawCard {
-        id: Uuid::new_v4(),
-        data: from_any(concept.into()),
-        ..Default::default()
-    }
-}
-pub fn new_normal(normal: NormalCard) -> RawCard {
-    RawCard {
-        id: Uuid::new_v4(),
-        data: from_any(normal.into()),
-        ..Default::default()
-    }
 }

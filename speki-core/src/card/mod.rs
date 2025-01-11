@@ -31,7 +31,6 @@ mod basecard;
 pub(crate) mod serializing;
 
 pub use basecard::*;
-pub use serializing::new_raw_card;
 
 #[derive(Clone)]
 pub struct Card {
@@ -112,10 +111,6 @@ impl Card {
         self.card_provider.dependents(self.id).await
     }
 
-    pub fn to_raw(&self) -> RawCard {
-        self.base.clone().into()
-    }
-
     pub fn meta(&self) -> Metadata {
         self.metadata.clone()
     }
@@ -184,23 +179,6 @@ impl Card {
             card_provider,
             recaller,
         }
-    }
-
-    pub async fn from_raw(
-        raw_card: RawCard,
-        card_provider: CardProvider,
-        recaller: Recaller,
-    ) -> Card {
-        let id = raw_card.id;
-        let reviews = card_provider.load_reviews(id).await;
-        let meta = card_provider
-            .provider
-            .metadata
-            .load_item(id)
-            .await
-            .unwrap_or_default();
-
-        Self::from_parts(raw_card.into(), reviews, meta, card_provider, recaller)
     }
 
     pub fn card_type(&self) -> &CardType {
@@ -287,13 +265,10 @@ impl Card {
         self.card_provider.remove_card(self.id).await;
     }
 
-    pub async fn into_type(self, data: impl Into<CardType>) -> Card {
-        let id = self.id();
-        let mut raw: RawCard = self.base.clone().into();
-        raw.data = from_any(data.into());
-        let card = Card::from_raw(raw, self.card_provider.clone(), self.recaller.clone()).await;
-        self.card_provider.save_card(card).await;
-        (*self.card_provider.load(id).await.unwrap()).clone()
+    pub async fn into_type(mut self, data: impl Into<CardType>) -> Self {
+        self.base.ty = data.into();
+        self.persist().await;
+        self
     }
 
     // Call this function every time SavedCard is mutated.

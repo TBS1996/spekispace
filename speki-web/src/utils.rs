@@ -3,7 +3,7 @@ use std::{fmt::Debug, sync::Arc};
 use dioxus::prelude::*;
 use futures::future::join;
 use speki_core::{
-    card::{BaseCard, CardId, RawCard},
+    card::{BaseCard, CardId},
     collection::{Collection, CollectionId},
     metadata::Metadata,
     AttributeDTO, Card,
@@ -79,12 +79,6 @@ impl App {
 
     pub async fn save_collection(&self, collection: Collection) {
         self.0.provider.collections.save_item(collection).await;
-    }
-
-    pub async fn new_from_raw(&self, raw: RawCard) -> Arc<Card> {
-        info!("new from raw");
-        let card = self.0.new_from_raw(raw).await;
-        card
     }
 
     pub async fn new_instance(
