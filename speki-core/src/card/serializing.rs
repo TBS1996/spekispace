@@ -2,7 +2,7 @@ use omtrent::TimeStamp;
 use uuid::Uuid;
 
 use super::{
-    AttributeCard, CType, Card, CardType, ClassCard, EventCard, InstanceCard, NormalCard, RawCard,
+    AttributeCard, CType, CardType, ClassCard, EventCard, InstanceCard, NormalCard, RawCard,
     RawType, StatementCard, UnfinishedCard,
 };
 use crate::card_provider::CardProvider;
@@ -175,19 +175,5 @@ pub fn new_normal(normal: NormalCard) -> RawCard {
         id: Uuid::new_v4(),
         data: from_any(normal.into()),
         ..Default::default()
-    }
-}
-
-impl From<Card> for RawCard {
-    fn from(card: Card) -> Self {
-        RawCard {
-            id: card.id,
-            data: from_any(card.ty),
-            dependencies: card.dependencies,
-            tags: card.tags,
-            deleted: false,
-            last_modified: card.last_modified,
-            source: card.source,
-        }
     }
 }

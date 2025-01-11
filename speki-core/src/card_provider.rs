@@ -82,7 +82,7 @@ impl CardProvider {
 
         let mut raw_card: RawCard = {
             let card = Arc::unwrap_or_clone(card.unwrap().card);
-            card.into()
+            card.base.into()
         };
 
         raw_card.deleted = true;
@@ -283,7 +283,7 @@ impl CardProvider {
     pub async fn save_card(&self, card: Card) {
         self.update_cache(Arc::new(card.clone()));
         self.provider.metadata.save_item(card.meta()).await;
-        let raw: RawCard = card.into();
+        let raw: RawCard = card.base.into();
         self.provider.cards.save_item(raw).await;
     }
 

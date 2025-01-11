@@ -10,7 +10,6 @@ use std::{
 use async_trait::async_trait;
 use dioxus_logger::tracing::instrument;
 use futures::executor::block_on;
-use omtrent::TimeStamp;
 use samsvar::{json, Matcher};
 use serde::{ser::SerializeSeq, Deserialize, Deserializer, Serialize};
 use serde_json::Value;
@@ -28,201 +27,20 @@ use crate::{
 
 pub type RecallRate = f32;
 
-mod card_types;
+mod basecard;
 pub(crate) mod serializing;
 
-pub use card_types::*;
+pub use basecard::*;
 pub use serializing::new_raw_card;
 
-#[async_trait::async_trait(?Send)]
-pub trait CardTrait: Debug + Clone {
-    async fn get_dependencies(&self) -> BTreeSet<CardId>;
-    async fn display_front(&self) -> String;
-}
-
-#[derive(Debug, Clone)]
-pub enum CardType {
-    Instance(InstanceCard),
-    Normal(NormalCard),
-    Unfinished(UnfinishedCard),
-    Attribute(AttributeCard),
-    Class(ClassCard),
-    Statement(StatementCard),
-    Event(EventCard),
-}
-
-impl CardType {
-    pub async fn get_dependencies(&self) -> BTreeSet<CardId> {
-        match self {
-            CardType::Instance(card) => card.get_dependencies().await,
-            CardType::Normal(card) => card.get_dependencies().await,
-            CardType::Unfinished(card) => card.get_dependencies().await,
-            CardType::Attribute(card) => card.get_dependencies().await,
-            CardType::Class(card) => card.get_dependencies().await,
-            CardType::Statement(card) => card.get_dependencies().await,
-            CardType::Event(card) => card.get_dependencies().await,
-        }
-    }
-
-    pub async fn display_front(&self) -> String {
-        match self {
-            CardType::Instance(card) => card.display_front().await,
-            CardType::Normal(card) => card.display_front().await,
-            CardType::Unfinished(card) => card.display_front().await,
-            CardType::Attribute(card) => card.display_front().await,
-            CardType::Class(card) => card.display_front().await,
-            CardType::Statement(card) => card.display_front().await,
-            CardType::Event(card) => card.display_front().await,
-        }
-    }
-
-    fn mut_backside(&mut self) -> Option<&mut BackSide> {
-        match self {
-            CardType::Instance(InstanceCard { back, .. }) => back.as_mut(),
-            CardType::Normal(NormalCard { back, .. }) => Some(back),
-            CardType::Unfinished(_) => None,
-            CardType::Attribute(AttributeCard { back, .. }) => Some(back),
-            CardType::Class(ClassCard { back, .. }) => Some(back),
-            CardType::Statement(_) => None,
-            CardType::Event(_) => None,
-        }
-    }
-
-    // if a card is deleted that is being referenced we might have to change the card type
-    pub fn remove_dep(&mut self, id: CardId) {
-        if let Some(back) = self.mut_backside() {
-            back.invalidate_if_has_ref(id);
-        }
-
-        match self {
-            CardType::Instance(InstanceCard {
-                ref name,
-                ref back,
-                class,
-            }) => {
-                if *class == id {
-                    match back.clone() {
-                        Some(backside) => {
-                            *self = Self::Normal(NormalCard {
-                                front: name.clone(),
-                                back: backside,
-                            })
-                        }
-                        None => {
-                            *self = Self::Unfinished(UnfinishedCard {
-                                front: name.clone(),
-                            })
-                        }
-                    }
-                }
-            }
-            CardType::Normal(_) => {}
-            CardType::Unfinished(_) => {}
-            CardType::Attribute(_) => {}
-            CardType::Class(ClassCard {
-                name,
-                back,
-                parent_class,
-            }) => {
-                if *parent_class == Some(id) {
-                    *self = Self::Class(ClassCard {
-                        name: name.clone(),
-                        back: back.clone(),
-                        parent_class: None,
-                    });
-                }
-            }
-            CardType::Statement(_) => {}
-            CardType::Event(_) => {}
-        };
-    }
-
-    pub fn type_name(&self) -> &str {
-        match self {
-            CardType::Unfinished(_) => "unfinished",
-            CardType::Statement(_) => "statement",
-            CardType::Attribute(_) => "attribute",
-            CardType::Instance(_) => "instance",
-            CardType::Normal(_) => "normal",
-            CardType::Class(_) => "class",
-            CardType::Event(_) => "event",
-        }
-    }
-
-    /// This is mainly just so i dont forget to update the CType when the AnyType changes
-    pub fn fieldless(&self) -> CType {
-        match self {
-            CardType::Instance(_) => CType::Instance,
-            CardType::Normal(_) => CType::Normal,
-            CardType::Unfinished(_) => CType::Unfinished,
-            CardType::Attribute(_) => CType::Attribute,
-            CardType::Class(_) => CType::Class,
-            CardType::Statement(_) => CType::Statement,
-            CardType::Event(_) => CType::Event,
-        }
-    }
-
-    pub fn is_class(&self) -> bool {
-        matches!(self, Self::Class(_))
-    }
-    pub fn is_instance(&self) -> bool {
-        matches!(self, Self::Instance(_))
-    }
-    pub fn is_finished(&self) -> bool {
-        !matches!(self, Self::Unfinished(_))
-    }
-
-    pub fn set_backside(self, new_back: BackSide, card_provider: &CardProvider) -> Self {
-        match self {
-            x @ CardType::Event(_) => x,
-            x @ CardType::Instance(_) => x,
-            x @ CardType::Statement(_) => x,
-            CardType::Normal(NormalCard { front, .. }) => NormalCard {
-                front,
-                back: new_back,
-            }
-            .into(),
-            CardType::Unfinished(UnfinishedCard { front }) => NormalCard {
-                front,
-                back: new_back,
-            }
-            .into(),
-            CardType::Attribute(AttributeCard {
-                attribute,
-                instance: concept_card,
-                ..
-            }) => AttributeCard {
-                attribute,
-                back: new_back,
-                instance: concept_card,
-                card_provider: card_provider.clone(),
-            }
-            .into(),
-            Self::Class(class) => ClassCard {
-                name: class.name,
-                back: new_back,
-                parent_class: class.parent_class,
-            }
-            .into(),
-        }
-    }
-}
-
-/// Represents a card that has been saved as a toml file, which is basically anywhere in the codebase
-/// except for when youre constructing a new card.
-/// Every time you mutate it, call the persist() method.
 #[derive(Clone)]
 pub struct Card {
     id: CardId,
-    ty: CardType,
-    dependencies: BTreeSet<CardId>,
+    pub base: BaseCard,
     metadata: Metadata,
-    tags: BTreeMap<String, String>,
     history: History,
     card_provider: CardProvider,
     recaller: Recaller,
-    last_modified: Duration,
-    source: ModifiedSource,
 }
 
 impl PartialEq for Card {
@@ -249,7 +67,7 @@ impl Debug for Card {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let mut s = String::new();
         s.push_str(&format!("{:?}\n", self.id));
-        s.push_str(&format!("{:?}\n", self.ty));
+        s.push_str(&format!("{:?}\n", self.base.ty));
 
         write!(f, "{}", s)
     }
@@ -257,7 +75,7 @@ impl Debug for Card {
 
 impl std::fmt::Display for Card {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", block_on(self.ty.display_front()))
+        write!(f, "{}", block_on(self.base.ty.display_front()))
     }
 }
 
@@ -269,11 +87,11 @@ impl AsRef<CardId> for Card {
 
 impl Card {
     pub fn get_ty(&self) -> CardType {
-        self.ty.clone()
+        self.base.ty.clone()
     }
 
     pub fn last_modified(&self) -> Duration {
-        self.last_modified
+        self.base.last_modified
     }
 
     /// Loads all the ancestor ancestor classes
@@ -295,7 +113,7 @@ impl Card {
     }
 
     pub fn to_raw(&self) -> RawCard {
-        self.clone().into()
+        self.base.clone().into()
     }
 
     pub fn meta(&self) -> Metadata {
@@ -358,15 +176,11 @@ impl Card {
 
         Self {
             id,
-            ty: into_any(raw_card.data, &card_provider),
-            dependencies: raw_card.dependencies,
-            tags: raw_card.tags,
+            base: BaseCard::from_raw(raw_card, card_provider.clone()),
             metadata,
             history,
             card_provider,
             recaller,
-            last_modified: Duration::default(),
-            source: raw_card.source,
         }
     }
 
@@ -388,12 +202,12 @@ impl Card {
     }
 
     pub fn card_type(&self) -> &CardType {
-        &self.ty
+        &self.base.ty
     }
 
     /// Returns the class this card belongs to (if any)
     pub fn parent_class(&self) -> Option<CardId> {
-        match &self.ty {
+        match &self.base.ty {
             CardType::Instance(instance) => Some(instance.class),
             CardType::Class(class) => class.parent_class,
             CardType::Normal(_) => None,
@@ -405,15 +219,15 @@ impl Card {
     }
 
     pub fn is_finished(&self) -> bool {
-        self.ty.is_finished()
+        self.base.ty.is_finished()
     }
 
     pub fn is_class(&self) -> bool {
-        self.ty.is_class()
+        self.base.ty.is_class()
     }
 
     pub fn is_instance_of(&self, _class: CardId) -> bool {
-        if let CardType::Instance(InstanceCard { class, .. }) = self.ty {
+        if let CardType::Instance(InstanceCard { class, .. }) = self.base.ty {
             class == _class
         } else {
             false
@@ -421,19 +235,19 @@ impl Card {
     }
 
     pub fn is_instance(&self) -> bool {
-        self.ty.is_instance()
+        self.base.ty.is_instance()
     }
 
     pub async fn set_ref(mut self, reff: CardId) -> Card {
         let backside = BackSide::Card(reff);
-        self.ty = self.ty.set_backside(backside, &self.card_provider);
+        self.base.ty = self.base.ty.set_backside(backside, &self.card_provider);
         self.persist().await;
         self
     }
 
     pub async fn rm_dependency(&mut self, dependency: CardId) -> bool {
-        let res = self.dependencies.remove(&dependency);
-        self.ty.remove_dep(dependency);
+        let res = self.base.dependencies.remove(&dependency);
+        self.base.ty.remove_dep(dependency);
         self.card_provider.rm_dependent(dependency, self.id());
         self.persist().await;
         res
@@ -451,7 +265,7 @@ impl Card {
             return;
         }
 
-        self.dependencies.insert(dependency);
+        self.base.dependencies.insert(dependency);
         self.persist().await;
     }
 
@@ -473,7 +287,7 @@ impl Card {
 
     pub async fn into_type(self, data: impl Into<CardType>) -> Card {
         let id = self.id();
-        let mut raw: RawCard = self.clone().into();
+        let mut raw: RawCard = self.base.clone().into();
         raw.data = from_any(data.into());
         let card = Card::from_raw(raw, self.card_provider.clone(), self.recaller.clone()).await;
         self.card_provider.save_card(card).await;
@@ -635,7 +449,7 @@ impl Card {
     }
 
     pub async fn print(&self) -> String {
-        self.ty.display_front().await
+        self.base.ty.display_front().await
     }
 
     pub fn is_pending(&self) -> bool {
@@ -660,8 +474,8 @@ impl Card {
     }
 
     pub async fn dependency_ids(&self) -> BTreeSet<CardId> {
-        let mut deps = self.dependencies.clone();
-        deps.extend(self.ty.get_dependencies().await);
+        let mut deps = self.base.dependencies.clone();
+        deps.extend(self.base.ty.get_dependencies().await);
         deps
     }
 
@@ -675,7 +489,7 @@ impl Matcher for Card {
     #[instrument]
     async fn get_val(&self, key: &str) -> Option<samsvar::Value> {
         match key {
-            "front" => json!(self.ty.display_front().await),
+            "front" => json!(self.base.ty.display_front().await),
             "pending" => json!(self.is_pending()),
             "back" => json!(self.display_backside().await.unwrap_or_default()),
             "suspended" => json!(&self.is_suspended()),
@@ -714,244 +528,6 @@ impl Matcher for Card {
         }
         .into()
     }
-}
-
-#[derive(Serialize, Deserialize, Default, Debug, Clone)]
-pub struct RawType {
-    pub ty: CType,
-    pub front: Option<String>,
-    pub back: Option<BackSide>,
-    pub class: Option<Uuid>,
-    pub instance: Option<Uuid>,
-    pub attribute: Option<Uuid>,
-    pub start_time: Option<String>,
-    pub end_time: Option<String>,
-    pub parent_event: Option<Uuid>,
-}
-
-impl RawType {
-    pub fn class(&self) -> Option<Uuid> {
-        self.class.clone()
-    }
-}
-
-#[derive(Serialize, Deserialize, Default, Debug, Clone)]
-pub struct RawCard {
-    pub id: Uuid,
-    #[serde(flatten)]
-    pub data: RawType,
-    #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
-    pub dependencies: BTreeSet<Uuid>,
-    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
-    pub tags: BTreeMap<String, String>,
-    #[serde(default, skip_serializing_if = "is_false")]
-    pub deleted: bool,
-    #[serde(default)]
-    pub last_modified: Duration,
-    #[serde(default)]
-    pub source: ModifiedSource,
-}
-
-impl Item for RawCard {
-    fn last_modified(&self) -> Duration {
-        self.last_modified
-    }
-
-    fn set_last_modified(&mut self, time: Duration) {
-        self.last_modified = time;
-    }
-
-    fn set_source(&mut self, source: ModifiedSource) {
-        self.source = source;
-    }
-
-    fn source(&self) -> ModifiedSource {
-        self.source
-    }
-
-    fn id(&self) -> Uuid {
-        self.id
-    }
-
-    fn identifier() -> &'static str {
-        "cards"
-    }
-
-    fn deleted(&self) -> bool {
-        self.deleted
-    }
-
-    fn set_delete(&mut self) {
-        self.deleted = true;
-    }
-}
-
-pub type CardId = Uuid;
-
-#[derive(Ord, PartialOrd, Eq, Hash, PartialEq, Debug, Clone)]
-pub enum BackSide {
-    Text(String),
-    Card(CardId),
-    List(Vec<CardId>),
-    Time(TimeStamp),
-    Trivial, // Answer is obvious, used when card is more of a dependency anchor
-    Invalid, // A reference card was deleted
-}
-
-impl Default for BackSide {
-    fn default() -> Self {
-        Self::Text(Default::default())
-    }
-}
-
-impl From<String> for BackSide {
-    fn from(s: String) -> Self {
-        if let Ok(uuid) = Uuid::parse_str(&s) {
-            Self::Card(uuid)
-        } else if let Some(timestamp) = TimeStamp::from_string(s.clone()) {
-            Self::Time(timestamp)
-        } else if s.as_str() == Self::INVALID_STR {
-            Self::Invalid
-        } else {
-            Self::Text(s)
-        }
-    }
-}
-
-impl BackSide {
-    pub const INVALID_STR: &'static str = "__INVALID__";
-
-    pub fn is_empty_text(&self) -> bool {
-        if let Self::Text(s) = self {
-            s.is_empty()
-        } else {
-            false
-        }
-    }
-
-    pub fn invalidate_if_has_ref(&mut self, dep: CardId) {
-        let has_ref = match self {
-            BackSide::Card(card_id) => card_id == &dep,
-            BackSide::List(vec) => vec.contains(&dep),
-            BackSide::Text(_) => false,
-            BackSide::Time(_) => false,
-            BackSide::Trivial => false,
-            BackSide::Invalid => false,
-        };
-
-        if has_ref {
-            *self = Self::Invalid;
-        }
-    }
-
-    pub fn is_ref(&self) -> bool {
-        matches!(self, Self::Card(_))
-    }
-
-    pub fn as_card(&self) -> Option<CardId> {
-        if let Self::Card(card) = self {
-            Some(*card)
-        } else {
-            None
-        }
-    }
-
-    pub fn to_string(&self) -> String {
-        let mut s = serde_json::to_string(self).unwrap();
-        s.remove(0);
-        s.pop();
-        s
-    }
-
-    pub fn dependencies(&self) -> BTreeSet<CardId> {
-        let mut set = BTreeSet::default();
-        match self {
-            BackSide::Text(_) => {}
-            BackSide::Card(card_id) => {
-                let _ = set.insert(*card_id);
-            }
-            BackSide::List(vec) => {
-                set.extend(vec.iter());
-            }
-            BackSide::Time(_) => {}
-            BackSide::Trivial => {}
-            BackSide::Invalid => {}
-        }
-
-        set
-    }
-}
-
-impl<'de> Deserialize<'de> for BackSide {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        let value = Value::deserialize(deserializer)?;
-
-        match value {
-            Value::Array(arr) => {
-                let mut ids = Vec::new();
-                for item in arr {
-                    if let Value::String(ref s) = item {
-                        if let Ok(uuid) = Uuid::parse_str(s) {
-                            ids.push(uuid);
-                        } else {
-                            return Err(serde::de::Error::custom("Invalid UUID in array"));
-                        }
-                    } else {
-                        return Err(serde::de::Error::custom("Expected string in array"));
-                    }
-                }
-                Ok(BackSide::List(ids))
-            }
-            Value::Bool(_) => Ok(BackSide::Trivial),
-            Value::String(s) => Ok(s.into()),
-            _ => Err(serde::de::Error::custom("Expected a string or an array")),
-        }
-    }
-}
-
-impl Serialize for BackSide {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        match *self {
-            BackSide::Trivial => serializer.serialize_bool(false),
-            BackSide::Invalid => serializer.serialize_str(Self::INVALID_STR),
-            BackSide::Time(ref t) => serializer.serialize_str(&t.serialize()),
-            BackSide::Text(ref s) => serializer.serialize_str(s),
-            BackSide::Card(ref id) => serializer.serialize_str(&id.to_string()),
-            BackSide::List(ref ids) => {
-                let mut seq = serializer.serialize_seq(Some(ids.len()))?;
-                for id in ids {
-                    seq.serialize_element(&id.to_string())?;
-                }
-                seq.end()
-            }
-        }
-    }
-}
-
-fn is_false(flag: &bool) -> bool {
-    !flag
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone, Default)]
-pub struct Config;
-
-#[derive(Serialize, Deserialize, Debug, Clone, Default, Copy, Eq, PartialEq)]
-#[serde(rename_all = "lowercase")]
-pub enum CType {
-    Instance,
-    #[default]
-    Normal,
-    Unfinished,
-    Attribute,
-    Class,
-    Statement,
-    Event,
 }
 
 /*
