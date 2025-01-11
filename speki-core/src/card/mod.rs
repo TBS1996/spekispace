@@ -1,6 +1,6 @@
 use core::f32;
 use std::{
-    cmp::{Ord, PartialEq},
+    cmp::{Ord, Ordering, PartialEq},
     collections::{BTreeMap, BTreeSet},
     fmt::Debug,
     sync::Arc,
@@ -76,8 +76,8 @@ impl CardType {
         }
     }
 
-    fn invalidate_backside(&mut self, id: CardId) {
-        let backside = match self {
+    fn mut_backside(&mut self) -> Option<&mut BackSide> {
+        match self {
             CardType::Instance(InstanceCard { back, .. }) => back.as_mut(),
             CardType::Normal(NormalCard { back, .. }) => Some(back),
             CardType::Unfinished(_) => None,
@@ -85,16 +85,14 @@ impl CardType {
             CardType::Class(ClassCard { back, .. }) => Some(back),
             CardType::Statement(_) => None,
             CardType::Event(_) => None,
-        };
-
-        if let Some(back) = backside {
-            back.invalidate_if_has_ref(id);
         }
     }
 
     // if a card is deleted that is being referenced we might have to change the card type
     pub fn remove_dep(&mut self, id: CardId) {
-        self.invalidate_backside(id);
+        if let Some(back) = self.mut_backside() {
+            back.invalidate_if_has_ref(id);
+        }
 
         match self {
             CardType::Instance(InstanceCard {
@@ -232,8 +230,6 @@ impl PartialEq for Card {
         self.id == other.id
     }
 }
-
-use std::cmp::Ordering;
 
 impl Ord for Card {
     fn cmp(&self, other: &Self) -> Ordering {
@@ -436,6 +432,7 @@ impl Card {
     pub async fn rm_dependency(&mut self, dependency: CardId) -> bool {
         let res = self.dependencies.remove(&dependency);
         self.ty.remove_dep(dependency);
+        self.card_provider.rm_dependent(dependency, self.id());
         self.persist().await;
         res
     }

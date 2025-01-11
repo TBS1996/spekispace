@@ -18,6 +18,10 @@ use crate::{
     Card, Provider, Recaller, TimeGetter,
 };
 
+/// Card cache
+///
+/// Has basically two functions. One is caching stuff in-memory so it'll be faster to load cards.
+/// The other is to
 #[derive(Clone)]
 pub struct CardProvider {
     inner: Arc<RwLock<Inner>>,
@@ -36,14 +40,24 @@ impl Debug for CardProvider {
 }
 
 impl CardProvider {
-    pub fn set_dependent(&self, dependency: CardId, dependent: CardId) {
+    pub fn rm_dependent(&self, dependency: CardId, dependent: CardId) -> bool {
         self.inner
             .write()
             .unwrap()
             .dependents
             .entry(dependency)
             .or_default()
-            .insert(dependent);
+            .remove(&dependent)
+    }
+
+    pub fn set_dependent(&self, dependency: CardId, dependent: CardId) -> bool {
+        self.inner
+            .write()
+            .unwrap()
+            .dependents
+            .entry(dependency)
+            .or_default()
+            .insert(dependent)
     }
 
     pub async fn remove_card(&self, card_id: CardId) {
