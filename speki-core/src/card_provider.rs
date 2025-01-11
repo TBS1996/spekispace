@@ -40,6 +40,22 @@ impl Debug for CardProvider {
 }
 
 impl CardProvider {
+    pub async fn invalidate_card(&self, id: CardId) {
+        let mut guard = self.inner.write().unwrap();
+
+        let Some(card) = guard.cards.remove(&id) else {
+            return;
+        };
+
+        guard.metadata.remove(&id);
+        guard.reviews.remove(&id);
+
+        for dependency in card.card.dependency_ids().await {
+            let dependent = card.card.id();
+            self.rm_dependent(dependency, dependent);
+        }
+    }
+
     pub fn rm_dependent(&self, dependency: CardId, dependent: CardId) -> bool {
         self.inner
             .write()
