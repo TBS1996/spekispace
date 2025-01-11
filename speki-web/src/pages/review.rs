@@ -192,6 +192,7 @@ impl ReviewState {
         let currcard = self.card.clone();
         let overlay = OVERLAY.cloned();
         let card = self.card.clone();
+        let selv2 = self.clone();
 
         rsx! {
             div {
@@ -246,6 +247,7 @@ impl ReviewState {
                     },
                     "✏️"
                 }
+                { selv2.suspend() }
             }
         }
     }
@@ -288,6 +290,32 @@ impl ReviewState {
                     class: "w-full flex justify-center items-center",
                     { review_buttons(show_backside) }
                 }
+            }
+        }
+    }
+
+    fn suspend(&self) -> Element {
+        let Some(card) = self.card.cloned() else {
+            return rsx! {};
+        };
+
+        let is_suspended = card.is_suspended();
+        let txt = if is_suspended { "unsuspend" } else { "suspend" };
+        let selv = self.clone();
+
+        rsx! {
+            button {
+                class: "mt-2 inline-flex items-center text-white bg-gray-800 border-0 py-1 px-3 focus:outline-none hover:bg-gray-700 rounded text-base md:mt-0",
+                onclick: move |_| {
+                    let card = card.clone();
+                    let mut selv = selv.clone();
+                    spawn(async move {
+                        let mut card = card;
+                        card.set_suspend(true).await;
+                        selv.next_card().await;
+                    });
+                },
+                "{txt}"
             }
         }
     }
