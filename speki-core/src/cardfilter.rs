@@ -1,4 +1,4 @@
-use std::time::Duration;
+use std::{cmp::Ordering, fmt::Display, time::Duration};
 
 use serde::{Deserialize, Serialize};
 use speki_dto::{Item, ModifiedSource};
@@ -9,12 +9,43 @@ pub enum NumOrd {
     Equal,
     Greater,
     Less,
+    Any,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub enum MyNumOrd {
+    Equal,
+    Greater,
+    Less,
+}
+
+impl From<MyNumOrd> for NumOrd {
+    fn from(value: MyNumOrd) -> Self {
+        match value {
+            MyNumOrd::Equal => NumOrd::Equal,
+            MyNumOrd::Greater => NumOrd::Greater,
+            MyNumOrd::Less => NumOrd::Less,
+        }
+    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct NumOp {
-    num: f32,
-    ord: NumOrd,
+    pub num: f32,
+    pub ord: MyNumOrd,
+}
+
+impl Display for NumOrd {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let s = match self {
+            NumOrd::Equal => "=",
+            NumOrd::Greater => ">",
+            NumOrd::Less => "<",
+            NumOrd::Any => "any",
+        };
+
+        write!(f, "{s}")
+    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -35,28 +66,37 @@ pub struct CardFilter {
     pub suspended: Option<bool>,
     pub pending: Option<bool>,
     pub lapses: Option<NumOp>,
-    meta: ItemData,
 }
 
-impl Item for CardFilter {
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct FilterItem {
+    last_modified: Duration,
+    name: String,
+    deleted: bool,
+    id: Uuid,
+    source: ModifiedSource,
+    filters: CardFilter,
+}
+
+impl Item for FilterItem {
     fn deleted(&self) -> bool {
-        self.meta.deleted
+        self.deleted
     }
 
     fn set_delete(&mut self) {
-        self.meta.deleted = true;
+        self.deleted = true;
     }
 
     fn set_last_modified(&mut self, time: std::time::Duration) {
-        self.meta.last_modified = time;
+        self.last_modified = time;
     }
 
     fn last_modified(&self) -> std::time::Duration {
-        self.meta.last_modified
+        self.last_modified
     }
 
     fn id(&self) -> uuid::Uuid {
-        self.meta.id
+        self.id
     }
 
     fn identifier() -> &'static str {
@@ -64,10 +104,10 @@ impl Item for CardFilter {
     }
 
     fn source(&self) -> speki_dto::ModifiedSource {
-        self.meta.source
+        self.source
     }
 
     fn set_source(&mut self, source: speki_dto::ModifiedSource) {
-        self.meta.source = source;
+        self.source = source;
     }
 }

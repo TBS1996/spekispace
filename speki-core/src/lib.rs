@@ -2,7 +2,7 @@ use std::{fmt::Debug, sync::Arc, time::Duration};
 
 use card::{BackSide, BaseCard, CardId, RecallRate};
 use card_provider::CardProvider;
-use cardfilter::CardFilter;
+use cardfilter::FilterItem;
 use collection::Collection;
 use dioxus_logger::tracing::info;
 use eyre::Result;
@@ -42,7 +42,7 @@ pub struct Provider {
     pub attrs: Arc<Box<dyn SpekiProvider<AttributeDTO>>>,
     pub collections: Arc<Box<dyn SpekiProvider<Collection>>>,
     pub metadata: Arc<Box<dyn SpekiProvider<Metadata>>>,
-    pub cardfilter: Arc<Box<dyn SpekiProvider<CardFilter>>>,
+    pub cardfilter: Arc<Box<dyn SpekiProvider<FilterItem>>>,
 }
 
 pub type Recaller = Arc<Box<dyn RecallCalc + Send>>;
@@ -80,7 +80,7 @@ impl App {
         E: SpekiProvider<AttributeDTO> + 'static + Send,
         F: SpekiProvider<Collection> + 'static + Send,
         G: SpekiProvider<Metadata> + 'static + Send,
-        H: SpekiProvider<CardFilter> + 'static + Send,
+        H: SpekiProvider<FilterItem> + 'static + Send,
     {
         info!("initialtize app");
 
