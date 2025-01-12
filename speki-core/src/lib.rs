@@ -2,6 +2,7 @@ use std::{fmt::Debug, sync::Arc, time::Duration};
 
 use card::{BackSide, BaseCard, CardId, RecallRate};
 use card_provider::CardProvider;
+use cardfilter::CardFilter;
 use collection::Collection;
 use dioxus_logger::tracing::info;
 use eyre::Result;
@@ -14,6 +15,7 @@ use tracing::trace;
 mod attribute;
 pub mod card;
 mod card_provider;
+pub mod cardfilter;
 pub mod collection;
 mod common;
 pub mod healthcheck;
@@ -40,6 +42,7 @@ pub struct Provider {
     pub attrs: Arc<Box<dyn SpekiProvider<AttributeDTO>>>,
     pub collections: Arc<Box<dyn SpekiProvider<Collection>>>,
     pub metadata: Arc<Box<dyn SpekiProvider<Metadata>>>,
+    pub cardfilter: Arc<Box<dyn SpekiProvider<CardFilter>>>,
 }
 
 pub type Recaller = Arc<Box<dyn RecallCalc + Send>>;
@@ -59,7 +62,7 @@ impl Debug for App {
 }
 
 impl App {
-    pub fn new<A, B, C, D, E, F, G>(
+    pub fn new<A, B, C, D, E, F, G, H>(
         recall_calc: A,
         time_provider: B,
         card_provider: C,
@@ -67,6 +70,7 @@ impl App {
         attr_provider: E,
         collections_provider: F,
         meta_provider: G,
+        filter_provider: H,
     ) -> Self
     where
         A: RecallCalc + 'static + Send,
@@ -76,6 +80,7 @@ impl App {
         E: SpekiProvider<AttributeDTO> + 'static + Send,
         F: SpekiProvider<Collection> + 'static + Send,
         G: SpekiProvider<Metadata> + 'static + Send,
+        H: SpekiProvider<CardFilter> + 'static + Send,
     {
         info!("initialtize app");
 
@@ -88,6 +93,7 @@ impl App {
             attrs: Arc::new(Box::new(attr_provider)),
             collections: Arc::new(Box::new(collections_provider)),
             metadata: Arc::new(Box::new(meta_provider)),
+            cardfilter: Arc::new(Box::new(filter_provider)),
         };
 
         let card_provider =

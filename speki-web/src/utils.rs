@@ -4,6 +4,7 @@ use dioxus::prelude::*;
 use futures::future::join;
 use speki_core::{
     card::{BaseCard, CardId},
+    cardfilter::CardFilter,
     collection::{Collection, CollectionId},
     metadata::Metadata,
     AttributeDTO, Card,
@@ -28,6 +29,7 @@ impl App {
         Self(Arc::new(speki_core::App::new(
             speki_core::SimpleRecall,
             WasmTime,
+            DexieProvider::new(),
             DexieProvider::new(),
             DexieProvider::new(),
             DexieProvider::new(),
@@ -165,8 +167,12 @@ pub async fn sync(agent: AuthUser) {
     let attrsync = Syncable::<AttributeDTO>::sync(fire.clone(), dex.clone());
     let colsync = Syncable::<Collection>::sync(fire.clone(), dex.clone());
     let metasync = Syncable::<Metadata>::sync(fire.clone(), dex.clone());
+    let filtersync = Syncable::<CardFilter>::sync(fire.clone(), dex.clone());
 
-    futures::future::join5(cardsync, revsync, attrsync, colsync, metasync).await;
+    futures::future::join_all(vec![
+        cardsync, revsync, attrsync, colsync, metasync, filtersync,
+    ])
+    .await;
 
     *SYNCING.write() = false;
     let elapsed = time_provider.current_time() - now;
