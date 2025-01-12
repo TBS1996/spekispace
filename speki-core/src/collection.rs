@@ -1,4 +1,4 @@
-use std::{collections::BTreeSet, sync::Arc, time::Duration};
+use std::{collections::BTreeSet, fmt::Display, sync::Arc, time::Duration};
 
 use serde::{Deserialize, Serialize};
 use speki_dto::{Item, ModifiedSource};
@@ -12,7 +12,6 @@ pub type CollectionId = Uuid;
 pub struct Collection {
     pub id: Uuid,
     pub name: String,
-    pub cards: Vec<CardId>,
     pub dyncards: Vec<DynCard>,
     pub last_modified: Duration,
     pub deleted: bool,
@@ -24,7 +23,6 @@ impl Collection {
         Self {
             id: CollectionId::new_v4(),
             name,
-            cards: Default::default(),
             dyncards: Default::default(),
             last_modified: Default::default(),
             deleted: Default::default(),
@@ -32,13 +30,8 @@ impl Collection {
         }
     }
 
-    pub async fn expand(&self, provider: CardProvider) -> BTreeSet<Arc<Card>> {
+    pub async fn expand(&self, provider: CardProvider) -> Vec<Arc<Card>> {
         let mut out = BTreeSet::new();
-
-        for card in self.cards.clone() {
-            let card = provider.load(card).await.unwrap();
-            out.insert(card.clone());
-        }
 
         for dyncard in &self.dyncards {
             for card in dyncard.evaluate(provider.clone()).await {
@@ -57,20 +50,34 @@ impl Collection {
 
         out.extend(dependencies);
 
-        out
+        out.into_iter().collect()
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, Eq, PartialEq)]
 pub enum DynCard {
+    Card(CardId),
     Instances(CardId),
     Dependents(CardId),
     RecDependents(CardId),
 }
 
 impl DynCard {
+    pub fn id(&self) -> CardId {
+        *match self {
+            DynCard::Card(id) => id,
+            DynCard::Instances(id) => id,
+            DynCard::Dependents(id) => id,
+            DynCard::RecDependents(id) => id,
+        }
+    }
+
     pub async fn evaluate(&self, provider: CardProvider) -> Vec<Arc<Card>> {
         match self {
+            DynCard::Card(id) => {
+                let card = provider.load(*id).await.unwrap();
+                vec![card]
+            }
             DynCard::Instances(id) => {
                 let card = provider.load(*id).await.unwrap();
                 let mut output = vec![];

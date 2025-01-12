@@ -77,6 +77,10 @@ for example if you're learning two languages, maybe one you need to use 6 months
 maybe can integrate smart watch data into the app so users can see how well their memory affected by things like sleep recovery exercise
 
 
+# extension vs intension classes
+
+extension classes can have instances where the instance itself is also a class. is the same also true for intension classes?
+
 
 # release goals
 

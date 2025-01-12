@@ -78,20 +78,41 @@ impl CardSelector {
         selv
     }
 
-    pub async fn dependency_picker(f: Box<dyn Fn(Arc<Card>)>) -> Self {
+    pub async fn class_picker(f: Box<dyn Fn(Arc<Card>)>) -> Self {
+        let filter: Box<dyn Fn(CardType) -> bool> = Box::new(move |ty: CardType| ty.is_class());
+
         let selv = Self {
-            title: "set dependency".to_string(),
+            title: "pick class".to_string(),
             on_card_selected: Arc::new(f),
             allow_new: true,
-            filter: None,
+            done: Signal::new_in_scope(false, ScopeId(3)),
+            filter: Some(Arc::new(filter)),
             ..Default::default()
         };
+
+        let selv2 = selv.clone();
+
+        selv2.init_lol().await;
+
+        selv
+    }
+
+    pub async fn dependency_picker(f: Box<dyn Fn(Arc<Card>)>) -> Self {
+        let mut selv = Self::new()
+            .with_title("set dependency".into())
+            .new_on_card_selected(f);
+        selv.allow_new = true;
 
         let selv2 = selv.clone();
         selv2.init_lol().await;
         info!("after init!");
 
         selv
+    }
+
+    pub fn new_on_card_selected(mut self, f: Box<dyn Fn(Arc<Card>)>) -> Self {
+        self.on_card_selected = Arc::new(f);
+        self
     }
 
     pub fn with_dependents(self, deps: Vec<Node>) -> Self {
