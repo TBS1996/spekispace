@@ -1,8 +1,10 @@
-use std::{cmp::Ordering, fmt::Display, time::Duration};
+use std::{cmp::Ordering, fmt::Display, sync::Arc, time::Duration};
 
 use serde::{Deserialize, Serialize};
 use speki_dto::{Item, ModifiedSource};
 use uuid::Uuid;
+
+use crate::Card;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum NumOrd {
@@ -66,6 +68,116 @@ pub struct CardFilter {
     pub suspended: Option<bool>,
     pub pending: Option<bool>,
     pub lapses: Option<NumOp>,
+}
+
+impl CardFilter {
+    pub async fn filter(&self, card: Arc<Card>) -> bool {
+        if let Some(NumOp { ord, num }) = &self.recall {
+            let num = *num;
+            let recall = card.recall_rate().unwrap_or_default();
+
+            match ord {
+                MyNumOrd::Equal => {
+                    if recall != num {
+                        return false;
+                    }
+                }
+                MyNumOrd::Greater => {
+                    if recall < num {
+                        return false;
+                    }
+                }
+                MyNumOrd::Less => {
+                    if recall > num {
+                        return false;
+                    }
+                }
+            }
+        }
+
+        if let Some(NumOp { ord, num }) = &self.stability {
+            let num = *num;
+            let stability = card.maybeturity().unwrap_or_default();
+
+            match ord {
+                MyNumOrd::Equal => {
+                    if stability != num {
+                        return false;
+                    }
+                }
+                MyNumOrd::Greater => {
+                    if stability < num {
+                        return false;
+                    }
+                }
+                MyNumOrd::Less => {
+                    if stability > num {
+                        return false;
+                    }
+                }
+            }
+        }
+
+        if let Some(NumOp { ord, num }) = &self.rec_recall {
+            let num = *num;
+            let recall = card.min_rec_recall_rate().await;
+
+            match ord {
+                MyNumOrd::Equal => {
+                    if recall != num {
+                        return false;
+                    }
+                }
+                MyNumOrd::Greater => {
+                    if recall < num {
+                        return false;
+                    }
+                }
+                MyNumOrd::Less => {
+                    if recall > num {
+                        return false;
+                    }
+                }
+            }
+        }
+
+        if let Some(NumOp { ord, num }) = &self.lapses {
+            let num = *num;
+            let lapses = card.lapses() as f32;
+
+            match ord {
+                MyNumOrd::Equal => {
+                    if lapses != num {
+                        return false;
+                    }
+                }
+                MyNumOrd::Greater => {
+                    if lapses < num {
+                        return false;
+                    }
+                }
+                MyNumOrd::Less => {
+                    if lapses > num {
+                        return false;
+                    }
+                }
+            }
+        }
+
+        if let Some(flag) = self.finished {
+            if flag != card.is_finished() {
+                return false;
+            }
+        }
+
+        if let Some(flag) = self.suspended {
+            if flag != card.is_suspended() {
+                return false;
+            }
+        }
+
+        true
+    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
