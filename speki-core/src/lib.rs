@@ -2,7 +2,7 @@ use std::{fmt::Debug, sync::Arc, time::Duration};
 
 use card::{BackSide, BaseCard, CardId, RecallRate};
 use card_provider::CardProvider;
-use cardfilter::FilterItem;
+use cardfilter::{CardFilter, FilterItem};
 use collection::Collection;
 use dioxus_logger::tracing::info;
 use eyre::Result;
@@ -156,12 +156,12 @@ impl App {
         }
     }
 
-    pub async fn cards_filtered(&self, filter: String) -> Vec<Arc<Card>> {
+    pub async fn cards_filtered(&self, filter: CardFilter) -> Vec<Arc<Card>> {
         let cards = self.load_all_cards().await;
         let mut ids = vec![];
 
         for card in cards {
-            if card.eval(filter.clone()).await {
+            if filter.filter(card.clone()).await {
                 ids.push(card);
             }
         }

@@ -7,6 +7,7 @@ use strum::{EnumIter, IntoEnumIterator};
 
 use super::{DropDownMenu, Komponent};
 
+#[derive(Clone, Debug)]
 pub struct FilterEditor {
     filter_name: Signal<String>,
     rec_recall: FloatEntry,
@@ -17,29 +18,6 @@ pub struct FilterEditor {
     finished: BoolEntry,
     suspended: BoolEntry,
     pending: BoolEntry,
-}
-
-impl Komponent for FilterEditor {
-    fn render(&self) -> Element {
-        let name = self.filter_name.clone();
-        rsx! {
-            input {
-                oninput: move |evt|   {
-                    let val = evt.value().clone();
-                    name.clone().set(val);
-                },
-                value: "{name}",
-            }
-            {self.rec_recall.render()}
-            {self.recall.render()}
-            {self.stability.render()}
-            {self.rec_stability.render()}
-            {self.lapses.render()}
-            {self.finished.render()}
-            {self.suspended.render()}
-            {self.pending.render()}
-        }
-    }
 }
 
 impl FilterEditor {
@@ -89,7 +67,7 @@ impl Display for BoolOpt {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 struct BoolEntry {
     name: Arc<String>,
     opt: DropDownMenu<BoolOpt>,
@@ -125,18 +103,7 @@ impl BoolEntry {
     }
 }
 
-impl Komponent for BoolEntry {
-    fn render(&self) -> Element {
-        rsx! {
-            div {
-                h1 {"self.name"}
-                {self.opt.render()}
-            }
-        }
-    }
-}
-
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 struct FloatEntry {
     input: Signal<String>,
     ord: DropDownMenu<NumOrd>,
@@ -151,7 +118,7 @@ impl FloatEntry {
                 ScopeId::APP,
             ),
             ord: DropDownMenu::new(
-                vec![NumOrd::Greater, NumOrd::Less, NumOrd::Equal],
+                vec![NumOrd::Any, NumOrd::Greater, NumOrd::Less, NumOrd::Equal],
                 Some(ord),
             ),
             name: Arc::new(name.to_string()),
@@ -184,27 +151,6 @@ impl FloatEntry {
         let val: f32 = input.parse().unwrap();
 
         Some(NumOp { num: val, ord })
-    }
-}
-
-impl Komponent for FloatEntry {
-    fn render(&self) -> Element {
-        let input = self.input.clone();
-        rsx! {
-            div {
-                h1 {"{self.name}"}
-                { self.ord.render() }
-                input {
-                    value: "{input}",
-                    oninput: move |evt| {
-                        let new_value = evt.value().clone();
-                        if new_value.parse::<f64>().is_ok() || new_value.is_empty() {
-                            input.clone().set(new_value);
-                        }
-                    },
-                }
-            }
-        }
     }
 }
 
@@ -244,6 +190,68 @@ impl FilterEditor {
             suspended: self.suspended.get_value(),
             pending: self.pending.get_value(),
             lapses: self.lapses.get_value(),
+        }
+    }
+}
+
+impl Komponent for FilterEditor {
+    fn render(&self) -> Element {
+        rsx! {
+            div {
+                class: "p-4 bg-white rounded-lg shadow-md flex flex-col gap-y-2 max-w-sm",
+
+                {self.rec_recall.render()}
+                {self.recall.render()}
+                {self.stability.render()}
+                {self.rec_stability.render()}
+                {self.lapses.render()}
+                {self.finished.render()}
+                {self.suspended.render()}
+                {self.pending.render()}
+            }
+        }
+    }
+}
+
+impl Komponent for BoolEntry {
+    fn render(&self) -> Element {
+        rsx! {
+            div {
+                class: "flex items-center gap-x-2",
+                label {
+                    class: "text-sm font-medium text-gray-700 w-28",
+                    "{self.name}:"
+                }
+                {self.opt.render()}
+            }
+        }
+    }
+}
+
+impl Komponent for FloatEntry {
+    fn render(&self) -> Element {
+        let input = self.input.clone();
+        rsx! {
+            div {
+                class: "flex items-center gap-x-2",
+                label {
+                    class: "text-sm font-medium text-gray-700 w-28",
+                    "{self.name}:"
+                }
+                {self.ord.render()}
+                if !matches!(self.ord.selected.cloned(), NumOrd::Any) {
+                    input {
+                        class: "w-20 p-1 border rounded focus:ring focus:ring-blue-200",
+                        value: "{input}",
+                        oninput: move |evt| {
+                            let new_value = evt.value().clone();
+                            if new_value.parse::<f64>().is_ok() || new_value.is_empty() {
+                                input.clone().set(new_value);
+                            }
+                        },
+                    }
+                }
+            }
         }
     }
 }

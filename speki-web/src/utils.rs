@@ -4,7 +4,7 @@ use dioxus::prelude::*;
 use futures::future::join;
 use speki_core::{
     card::{BaseCard, CardId},
-    cardfilter::FilterItem,
+    cardfilter::{CardFilter, FilterItem},
     collection::{Collection, CollectionId},
     metadata::Metadata,
     AttributeDTO, Card,
@@ -50,7 +50,7 @@ impl App {
         self.0.fill_cache().await;
     }
 
-    pub async fn load_all(&self, filter: Option<String>) -> Vec<Arc<Card>> {
+    pub async fn load_all(&self, filter: Option<CardFilter>) -> Vec<Arc<Card>> {
         match filter {
             Some(filter) => self.0.cards_filtered(filter).await,
             None => self.0.load_all_cards().await,

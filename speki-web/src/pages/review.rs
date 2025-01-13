@@ -9,7 +9,7 @@ use speki_core::{card::CardId, recall_rate::Recall, Card};
 use tracing::info;
 
 use crate::{
-    components::{CardRef, GraphRep, Komponent},
+    components::{CardRef, FilterEditor, GraphRep, Komponent},
     overlays::{card_selector::CardSelector, cardviewer::CardViewer},
     APP, DEFAULT_FILTER, IS_SHORT, OVERLAY,
 };
@@ -23,8 +23,8 @@ pub fn Review() -> Element {
     let card = review.card.clone();
     let _card = card.clone();
     let reviewing = use_memo(move || _card().is_some());
-    let filter_sig = review.filter.clone();
     let cardref = review.dependents.clone();
+    let editor = review.filtereditor.clone();
 
     let log_event = move |event: Rc<KeyboardData>| {
         let _review = review.clone();
@@ -53,7 +53,7 @@ pub fn Review() -> Element {
             if reviewing() {
               { rev2.render_queue() }
             } else {
-                { review_start(filter_sig, cardref) }
+                { review_start(cardref, editor) }
             }
         }
     }
@@ -81,9 +81,7 @@ fn recall_button(recall: Recall) -> Element {
     }
 }
 
-fn review_start(mut filter: Signal<String>, cardref: CardRef) -> Element {
-    let mut editing = use_signal(|| false);
-
+fn review_start(cardref: CardRef, editor: FilterEditor) -> Element {
     let class = if IS_SHORT.cloned() {
         "flex flex-col items-center h-screen space-y-4 justify-center"
     } else {
@@ -100,17 +98,6 @@ fn review_start(mut filter: Signal<String>, cardref: CardRef) -> Element {
                     { cardref.render() }
                 }
 
-
-            if *editing.read() {
-                div{
-                    input {
-                        class: "bg-white w-full max-w-[1000px] border border-gray-300 rounded-md p-2 text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent",
-                        value: "{filter}",
-                        oninput: move |evt| filter.set(evt.value().clone()),
-                    }
-                }
-            }
-
             div {
                 class: "flex space-x-4 mt-6",
 
@@ -122,22 +109,10 @@ fn review_start(mut filter: Signal<String>, cardref: CardRef) -> Element {
                             REVIEW_STATE.cloned().start_review().await;
                         });
                     },
-                    if editing() {
-                        "Start review"
-                    } else {
-                        "Default Review"
-                    }
+                    "review"
                 },
 
-                if !*editing.read() {
-                    button {
-                        class: "px-4 py-2 text-sm font-medium text-gray-700 bg-gray-200 border border-gray-300 rounded hover:bg-gray-300 focus:outline-none",
-                        onclick: move |_| {
-                            editing.set(true);
-                        },
-                        "Custom"
-                    }
-                }
+                {editor.render()}
 
             }
         }
@@ -170,6 +145,7 @@ fn review_buttons(mut show_backside: Signal<bool>) -> Element {
 
 #[derive(Clone, Debug)]
 pub struct ReviewState {
+    pub filtereditor: FilterEditor,
     pub card: Signal<Option<Card>>,
     pub queue: Arc<Mutex<Vec<CardId>>>,
     pub tot_len: Signal<usize>,
@@ -435,17 +411,18 @@ impl ReviewState {
             graph: Default::default(),
             dependencies: Default::default(),
             dependents: CardRef::new(),
+            filtereditor: FilterEditor::new_default(),
         }
     }
 
     pub async fn start_review(&mut self) {
         info!("refreshing..");
-        let filter = Some(self.filter.cloned());
+        let filter = self.filtereditor.to_filter();
         let mut cards = vec![];
         let mut set: HashSet<CardId> = HashSet::new();
         set.extend(
             APP.read()
-                .load_all(filter.clone())
+                .load_all(Some(filter.clone()))
                 .await
                 .into_iter()
                 .map(|card| card.id()),

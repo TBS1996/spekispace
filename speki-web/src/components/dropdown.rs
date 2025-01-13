@@ -1,4 +1,7 @@
-use std::{fmt::Display, sync::Arc};
+use std::{
+    fmt::{Debug, Display},
+    sync::Arc,
+};
 
 use dioxus::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -16,6 +19,14 @@ where
     pub selected: Signal<T>,
     pub hook: Option<Arc<Box<dyn Fn(T)>>>,
     init: Signal<bool>,
+}
+
+impl<T: Serialize + for<'de> Deserialize<'de> + 'static + Clone + Display> Debug
+    for DropDownMenu<T>
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("DropDownMenu").finish()
+    }
 }
 
 impl<T> DropDownMenu<T>
