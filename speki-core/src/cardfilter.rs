@@ -1,4 +1,4 @@
-use std::{cmp::Ordering, fmt::Display, sync::Arc, time::Duration};
+use std::{fmt::Display, sync::Arc, time::Duration};
 
 use serde::{Deserialize, Serialize};
 use speki_dto::{Item, ModifiedSource};
@@ -72,8 +72,18 @@ pub struct CardFilter {
 
 impl CardFilter {
     pub async fn filter(&self, card: Arc<Card>) -> bool {
-        if let Some(NumOp { ord, num }) = &self.recall {
-            let num = *num;
+        let CardFilter {
+            recall,
+            rec_recall,
+            stability,
+            rec_stability: _,
+            finished,
+            suspended,
+            pending,
+            lapses,
+        } = self.clone();
+
+        if let Some(NumOp { ord, num }) = recall {
             let recall = card.recall_rate().unwrap_or_default();
 
             match ord {
@@ -95,8 +105,7 @@ impl CardFilter {
             }
         }
 
-        if let Some(NumOp { ord, num }) = &self.stability {
-            let num = *num;
+        if let Some(NumOp { ord, num }) = stability {
             let stability = card.maybeturity().unwrap_or_default();
 
             match ord {
@@ -118,8 +127,7 @@ impl CardFilter {
             }
         }
 
-        if let Some(NumOp { ord, num }) = &self.rec_recall {
-            let num = *num;
+        if let Some(NumOp { ord, num }) = rec_recall {
             let recall = card.min_rec_recall_rate().await;
 
             match ord {
@@ -141,8 +149,7 @@ impl CardFilter {
             }
         }
 
-        if let Some(NumOp { ord, num }) = &self.lapses {
-            let num = *num;
+        if let Some(NumOp { ord, num }) = lapses {
             let lapses = card.lapses() as f32;
 
             match ord {
@@ -164,14 +171,20 @@ impl CardFilter {
             }
         }
 
-        if let Some(flag) = self.finished {
+        if let Some(flag) = finished {
             if flag != card.is_finished() {
                 return false;
             }
         }
 
-        if let Some(flag) = self.suspended {
+        if let Some(flag) = suspended {
             if flag != card.is_suspended() {
+                return false;
+            }
+        }
+
+        if let Some(flag) = pending {
+            if flag != card.is_pending() {
                 return false;
             }
         }

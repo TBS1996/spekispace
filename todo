@@ -81,18 +81,100 @@ maybe can integrate smart watch data into the app so users can see how well thei
 
 extension classes can have instances where the instance itself is also a class. is the same also true for intension classes?
 
+on whether the answer on an instances should be which class it belongs to or something about its property, is whether it's intensional or extension class matter here?
+
+
+# sorter
+
+
+like an item for sorting cards. takes in a card as an input, returns a float value you can use to sort with. mainly used for review but can use the same concept in browse page, either explicitly by selecting a sorter or implicitly when you click one of the columns. 
+
+so a review session basically takes in 3 arguments.
+
+the collection of items, based on static data saved in the RawCard type.
+user data, which is basically reviews + metadata
+and the sorter, which decides the order you see the items in 
+
+so the sorter should be like a method i guess on the card which takes in an enum which will return a numeric value. example fields of enum: lastmodified, recall_rate, dependenc_qty...
+
+hmm in a way this seems like a superset of both the static and user data things.. i should explore that. maybe those can just wrap this thing? maybe the enum can be on the top level two enum fields, one for static and one for user data.
+
+
+# github sync
+
+while I stopped working on this, progress with syncing should make it easier. I cna make a github syncer trait, which will before the sync, pull items from upstream, then i can fetch everything from the origin/main, fetch everything from main, sync them, write to both basically, and maybe force override origin/main since i take care of merging?
+
+idk about the github sync from web-app as i thought of earlier.
+
+# desktop version
+
+should be able to choose between sqlite and filesystem.
+
+and also when you click sync you should be able to choose target to sync with. and you can for example use sqlite as your main backend for speed but then also every time you press sync it'll sync with your filesystem (as well as firestore if configured).
+
+# healthcheck
+
+integrity is kinda crucial, hard to ensure integrity when all cards depend on each other and stuff
+
+i should write out a list of invariants basically
+it's too expensive to run proper healthcheck all the time
+maybe i should write a separate script to run the healthcheck? or maybe not
+not sure how i can reasonably integrate more with type system. for example i could re-introduce the types of instances vs classes as diff types but i think it's more annoying than not. 
+
+
+# log based state
+
+log based meaning each change in the state of the program is based on a log of actions, like, create new card, suspend, do review, etc...
+
+advantages is, would make it easier to debug when an incorrect state happened, can easily roll back stuff, if i wanna make a schema change to something i can simply change how the events create the items, then remove the state and re-run the actions to re-create it.
+
+also fits well with syncing i guess? easy to just pick up logs from a given timestamp
+
+disadvantage, well, it's more cumbersome, potentially slower but i dont think that's a big problem. 
+
+
+# properties
+
+sometimes a card depends on another because it describes the card in more detail, while other times it just references it. I'd like to be able to properly distinguish that, so that you can see how well you know a certain card not just by its own recall rate but also how well you know the properties, while ignoring the cards that just reference it.
+
+for example, where was shakespeare born is like a property of him
+but a card that's like, whats churchill favorite author and if it's shakespeare would just be a reference, knowing this wouldn't teach you more about shakespeare.
+
+could be used to determine which cards should be reviewed first to understand something. like if A has a dependency on B, you need to learn B first, but maybe you could also learn all the properties of B, even tho not strictly necessary. hmm... or i guess A should depend on the correct properties of A but i still feel it's better to know all the properties yaknow?
+
+also would make it easier to learn about a given subject, like if you do wanna learn about shakespeaere, first it'll teach you to learn the depencies (here just "male" i guess), then you'll learn the concept itself of shakespeare which is just a person (dumb example lol), and then it can start drilling you on its properties, so all the dependents that are considered properties. 
+
+and it can just skip all the references to it cause that's not important, or at least put that last lol.
+
+can all cards have properties of itself? i guess instances can, classes can too right? can properties have properties? i dont think so.. 
+
+attributes would automatically be considered properties tho but i guess we can't fit everything into the attributes thing. or maybe we can rename attributes to properties and not only have the auto-generated ones be that?
+
+should propertyness be defined in the card itself or in the dependency?
+
+
+# other sync options?
+
+
+dropbox? google drive?
+
 
 # release goals
 
 ## todo
 
+- remove all dependencies and dependents of a card in the cache on persist() call
 - make certain cards trivial, like instances of certain classes
+- make dependency removal more intuitive, not accidentally clicking it away
+- fix dependency removal
 - custom question format for instances
 - add filter cards thing to browsepage
 - sort on browsepage
 - move x to left
 - firebaseprovider use online timestamp for current_time
 - collections 
+- fix bug where card reference dont show up sometimes in cardviewer
+- if too many dependencies of a card in graphview, instead of render, just show like e.g. "100+" on a node and if you press it, it'll open a browse page with all the dependencies listed there.
 
 ## done
 
@@ -109,3 +191,9 @@ extension classes can have instances where the instance itself is also a class. 
 - priorities
 - audio
 - firestore backups
+- symlink, if you wanna merge a card to another one, turn one card into a symlink to the other card lol. 
+- add sorter stuff (mentioned above)
+- extract provider trait to separate crate, not mentioning speki there
+- proper healthcheck stuff
+- timeseries for syncing upstream, so we don't need to read entire user dir to find out which stuff are modified after given timestamp
+- graphview edges should be diff based on relationship (subclass, instance..)
