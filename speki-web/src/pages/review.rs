@@ -439,7 +439,12 @@ impl ReviewState {
             for dep in dependents {
                 dependencies.insert(dep);
                 let deps = APP.read().load_card(dep).await.all_dependencies().await;
-                dependencies.extend(deps);
+                for dep in deps {
+                    let dep = APP.read().load_card(dep).await;
+                    if filter.filter(dep.clone()).await {
+                        dependencies.insert(dep.id());
+                    }
+                }
             }
 
             for card in dependencies {
