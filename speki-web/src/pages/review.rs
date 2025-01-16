@@ -1,17 +1,19 @@
 use std::{
-    collections::HashSet,
     rc::Rc,
     sync::{Arc, Mutex},
 };
 
 use dioxus::prelude::*;
-use speki_core::{card::CardId, recall_rate::Recall, Card};
+use speki_core::{card::CardId, collection::Collection, recall_rate::Recall, Card};
 use tracing::info;
 
 use crate::{
     components::{CardRef, FilterEditor, GraphRep, Komponent},
-    overlays::{card_selector::CardSelector, cardviewer::CardViewer},
-    APP, DEFAULT_FILTER, IS_SHORT, OVERLAY,
+    overlays::{
+        card_selector::CardSelector, cardviewer::CardViewer, colviewer::ColViewer,
+        textinput::TextInput,
+    },
+    APP, IS_SHORT, OVERLAY,
 };
 
 static REVIEW_STATE: GlobalSignal<ReviewState> = Signal::global(ReviewState::new);
@@ -81,7 +83,86 @@ fn recall_button(recall: Recall) -> Element {
     }
 }
 
-fn review_start(cardref: CardRef, editor: FilterEditor) -> Element {
+fn render_collections() -> Element {
+    let state = REVIEW_STATE.cloned();
+    let collections = state.collections.clone();
+
+    rsx! {
+        div {
+            class: "flex flex-col max-w-[350px] mr-5",
+
+            button {
+                class: "inline-flex items-center text-white bg-gray-800 border-0 py-1 px-3 focus:outline-none hover:bg-gray-700 rounded text-base mb-2",
+                onclick: move |_| {
+                    spawn(async move {
+                        let cards = APP.read().load_all(None).await;
+                        REVIEW_STATE.cloned().start_review(cards).await;
+                    });
+                },
+                "review all"
+
+            }
+
+            for col in collections() {
+                div {
+                    class: "flex flex-row",
+                    button {
+                        class: "inline-flex items-center text-white bg-gray-800 border-0 py-1 px-3 focus:outline-none hover:bg-gray-700 rounded text-base mb-2",
+                        onclick: move |_| {
+                            spawn(async move {
+                                let col = APP.read().load_collection(col.id).await;
+                                let cards = col.expand(APP.read().inner().card_provider.clone()).await;
+                                REVIEW_STATE.cloned().start_review(cards).await;
+                            });
+                        },
+                        "{col.name}"
+                    }
+                    button {
+                        onclick: move |_|{
+                            spawn(async move {
+                                let viewer = ColViewer::new(col.id).await;
+                                OVERLAY.read().set(Box::new(viewer));
+                            });
+                        },
+                        "✏️"
+                    }
+                    button {
+                        onclick: move|_| {
+                            let id = col.id;
+                            let mut cols = collections.cloned();
+                            cols.retain(|kol|kol.id != col.id);
+                            collections.clone().set(cols);
+                            spawn(async move{
+                                APP.read().delete_collection(id).await;
+                            });
+                        },
+                        "❌"
+                    }
+                }
+            }
+
+            button {
+                class: "inline-flex items-center text-white bg-blue-700 border-0 py-1 px-3 focus:outline-none hover:bg-blue-900 rounded text-base mb-5",
+                onclick: move |_| {
+                    let f = move |name: String| {
+                        let col = Collection::new(name);
+                        spawn(async move {
+                            APP.read().save_collection(col).await;
+                        });
+                    };
+
+                    let txt = TextInput::new("add collection".to_string(), Arc::new(Box::new(f)));
+                    OVERLAY.read().set(Box::new(txt));
+                },
+                "add collection"
+            }
+
+
+        }
+    }
+}
+
+fn review_start(cardref: CardRef, filter_editor: FilterEditor) -> Element {
     let class = if IS_SHORT.cloned() {
         "flex flex-col items-center h-screen space-y-4 justify-center"
     } else {
@@ -101,18 +182,10 @@ fn review_start(cardref: CardRef, editor: FilterEditor) -> Element {
             div {
                 class: "flex space-x-4 mt-6",
 
-                button {
-                    class: "px-6 py-2 text-lg font-bold text-white bg-gray-600 border-0 rounded hover:bg-gray-500 focus:outline-none",
-                    onclick: move |_| {
-                        info!("Starting review...");
-                        spawn(async move {
-                            REVIEW_STATE.cloned().start_review().await;
-                        });
-                    },
-                    "review"
-                },
+                { render_collections() }
 
-                {editor.render()}
+
+                {filter_editor.render()}
 
             }
         }
@@ -153,10 +226,10 @@ pub struct ReviewState {
     pub front: Signal<String>,
     pub back: Signal<String>,
     pub show_backside: Signal<bool>,
-    pub filter: Signal<String>,
     pub graph: GraphRep,
     pub dependencies: Signal<Vec<(String, Arc<Card>, Self)>>,
     pub dependents: CardRef,
+    pub collections: Signal<Vec<Collection>>,
 }
 
 impl ReviewState {
@@ -399,6 +472,14 @@ impl ReviewState {
     }
 
     pub fn new() -> Self {
+        let collections = Signal::default();
+
+        spawn(async move {
+            let col = collections.clone();
+            let cols = APP.read().load_collections().await;
+            col.clone().set(cols);
+        });
+
         Self {
             card: Default::default(),
             queue: Default::default(),
@@ -407,65 +488,23 @@ impl ReviewState {
             front: Default::default(),
             back: Default::default(),
             show_backside: Default::default(),
-            filter: Signal::new(DEFAULT_FILTER.to_string()),
             graph: Default::default(),
             dependencies: Default::default(),
             dependents: CardRef::new(),
             filtereditor: FilterEditor::new_default(),
+            collections,
         }
     }
 
-    pub async fn start_review(&mut self) {
-        info!("refreshing..");
+    pub async fn start_review(&mut self, cards: Vec<Arc<Card>>) {
+        info!("start review for {} cards", cards.len());
+
         let filter = self.filtereditor.to_filter();
-        let mut cards = vec![];
-        let mut set: HashSet<CardId> = HashSet::new();
-        set.extend(
-            APP.read()
-                .load_all(Some(filter.clone()))
-                .await
-                .into_iter()
-                .map(|card| card.id()),
-        );
-
-        // When dependent-reviewing is chosen, we only review cards that are a dependent of that card, or a dependency of
-        // any such dependents (as they are required to get to the dependent)
-        if let Some(dep) = self.dependents.selected_card().cloned() {
-            info!("loading deps..");
-
-            let dependents = APP.read().load_card(dep).await.all_dependents().await;
-            let mut dependencies = HashSet::new();
-
-            for dep in dependents {
-                dependencies.insert(dep);
-                let deps = APP.read().load_card(dep).await.all_dependencies().await;
-                for dep in deps {
-                    let dep = APP.read().load_card(dep).await;
-                    if filter.filter(dep.clone()).await {
-                        dependencies.insert(dep.id());
-                    }
-                }
-            }
-
-            for card in dependencies {
-                if set.contains(&card) {
-                    info!("set contains");
-                    cards.push(card);
-                }
-            }
-        } else {
-            for c in set {
-                cards.push(c);
-            }
-        }
-
         let mut thecards = vec![];
 
         for card in cards {
-            if APP.read().load_card(card).await.is_pending() {
-                thecards.insert(0, card);
-            } else {
-                thecards.push(card);
+            if filter.filter(card.clone()).await {
+                thecards.push(card.id());
             }
         }
 

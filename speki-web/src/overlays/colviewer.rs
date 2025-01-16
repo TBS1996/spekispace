@@ -5,7 +5,6 @@ use speki_core::{
     collection::{Collection, CollectionId, DynCard},
     Card,
 };
-use tracing::info;
 
 use crate::{components::Komponent, APP};
 

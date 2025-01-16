@@ -46,6 +46,11 @@ impl App {
         self.0.card_provider.remove_card(id).await;
     }
 
+    pub async fn delete_collection(&self, id: CollectionId) {
+        let col = self.load_collection(id).await;
+        self.0.provider.collections.delete_item(col).await;
+    }
+
     pub async fn fill_cache(&self) {
         self.0.fill_cache().await;
     }
@@ -69,6 +74,7 @@ impl App {
     pub async fn load_collection(&self, id: CollectionId) -> Collection {
         self.0.provider.collections.load_item(id).await.unwrap()
     }
+
     pub async fn load_collections(&self) -> Vec<Collection> {
         self.0
             .provider

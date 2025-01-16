@@ -2067,6 +2067,10 @@ input.tab:checked + .tab-content,
   margin-top: 2rem;
 }
 
+.mr-5 {
+  margin-right: 1.25rem;
+}
+
 .box-border {
   box-sizing: border-box;
 }

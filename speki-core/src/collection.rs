@@ -1,4 +1,4 @@
-use std::{collections::BTreeSet, fmt::Display, sync::Arc, time::Duration};
+use std::{collections::BTreeSet, sync::Arc, time::Duration};
 
 use serde::{Deserialize, Serialize};
 use speki_dto::{Item, ModifiedSource};
