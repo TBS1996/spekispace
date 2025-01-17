@@ -69,6 +69,17 @@ impl DynEntry {
 enum DynTab {
     Card,
     Instance,
+    RecDependents,
+}
+
+impl DynTab {
+    fn next(&mut self) {
+        *self = match self {
+            Self::Card => Self::Instance,
+            Self::Instance => Self::RecDependents,
+            Self::RecDependents => Self::Card,
+        };
+    }
 }
 
 #[derive(Clone)]
@@ -79,6 +90,7 @@ pub struct ColViewer {
     pub entries: Signal<Vec<DynEntry>>,
     pub cardselector: CardSelector,
     pub instance_selector: CardSelector,
+    pub dependents_selector: CardSelector,
     pub dynty: Signal<DynTab>,
 }
 
@@ -97,6 +109,24 @@ impl ColViewer {
             let entries = entries.clone();
             spawn(async move {
                 let mut inner = entries.cloned();
+                let entry = DynEntry::new(DynCard::RecDependents(card.id())).await;
+                let contains = inner.iter().any(|inentry| inentry.dy == entry.dy);
+
+                if !contains {
+                    inner.push(entry);
+                    entries.clone().set(inner);
+                }
+            });
+        });
+
+        let depselector = CardSelector::dependency_picker(f)
+            .await
+            .with_title("all dependents of...".to_string());
+
+        let f = Box::new(move |card: Arc<Card>| {
+            let entries = entries.clone();
+            spawn(async move {
+                let mut inner = entries.cloned();
                 let entry = DynEntry::new(DynCard::Card(card.id())).await;
                 let contains = inner.iter().any(|inentry| inentry.dy == entry.dy);
 
@@ -107,7 +137,9 @@ impl ColViewer {
             });
         });
 
-        let cardselector = CardSelector::dependency_picker(f).await;
+        let cardselector = CardSelector::dependency_picker(f)
+            .await
+            .with_title("pick card".to_string());
 
         let f = Box::new(move |card: Arc<Card>| {
             let entries = entries.clone();
@@ -132,6 +164,7 @@ impl ColViewer {
             instance_selector,
             entries,
             cardselector,
+            dependents_selector: depselector,
             dynty: Signal::new_in_scope(DynTab::Instance, ScopeId::APP),
         }
     }
@@ -143,6 +176,7 @@ impl Komponent for ColViewer {
         let cards = self.entries.clone();
         let selector = self.cardselector.clone();
         let inselector = self.instance_selector.clone();
+        let depselector = self.dependents_selector.clone();
         let selv = self.clone();
         let ty = self.dynty.clone();
         let ty2 = self.dynty.clone();
@@ -157,14 +191,9 @@ impl Komponent for ColViewer {
             button {
                 class: "inline-flex items-center text-white bg-gray-800 border-0 py-1 px-3 focus:outline-none hover:bg-gray-700 rounded text-base",
                 onclick: move |_| {
-                    let ty = ty.clone();
-
-                    let next = match ty.cloned() {
-                        DynTab::Card => DynTab::Instance,
-                        DynTab::Instance => DynTab::Card,
-                    };
-
-                    ty.clone().set(next);
+                    let mut _ty = ty.cloned();
+                    _ty.next();
+                    ty.clone().set(_ty);
 
                 },
                 "change dynty"
@@ -231,6 +260,7 @@ impl Komponent for ColViewer {
                         match ty.cloned() {
                             DynTab::Card => { selector.render() },
                             DynTab::Instance => { inselector.render() },
+                            DynTab::RecDependents => { depselector.render() },
                         }
                     }
 
