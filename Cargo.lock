@@ -3188,17 +3188,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f3cb5ba0dc43242ce17de99c180e96db90b235b8a9fdc9543c96d2209116bd9f"
 
 [[package]]
-name = "samsvar"
-version = "0.1.2"
-dependencies = [
- "async-trait",
- "nom",
- "serde_json",
- "tokio",
- "tracing",
-]
-
-[[package]]
 name = "schannel"
 version = "0.1.27"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3617,7 +3606,6 @@ dependencies = [
  "futures",
  "gkquad",
  "omtrent",
- "samsvar",
  "serde",
  "serde_json",
  "speki-dto",

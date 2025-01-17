@@ -7,10 +7,7 @@ use std::{
     time::Duration,
 };
 
-use async_trait::async_trait;
-use dioxus_logger::tracing::instrument;
 use futures::executor::block_on;
-use samsvar::{json, Matcher};
 use serde::{ser::SerializeSeq, Deserialize, Deserializer, Serialize};
 use serde_json::Value;
 use speki_dto::{Item, ModifiedSource};
@@ -470,52 +467,6 @@ impl Card {
 
     pub fn lapses(&self) -> u32 {
         self.history.lapses()
-    }
-}
-
-#[async_trait(?Send)]
-impl Matcher for Card {
-    #[instrument]
-    async fn get_val(&self, key: &str) -> Option<samsvar::Value> {
-        match key {
-            "front" => json!(self.print().await),
-            "pending" => json!(self.is_pending()),
-            "back" => json!(self.display_backside().await.unwrap_or_default()),
-            "suspended" => json!(&self.is_suspended()),
-            "finished" => json!(&self.is_finished()),
-            "resolved" => json!(&self.is_resolved().await),
-            "id" => json!(&self.id().to_string()),
-            "recall" => json!(self.recall_rate().unwrap_or_default()),
-            "stability" => json!(self.maturity()),
-            "lapses" => json!(self.lapses()),
-            "weeklapses" => json!(self.lapses_last_week()),
-            "monthlapses" => json!(self.lapses_last_month()),
-            "lastreview" => json!(
-                self.time_since_last_review()
-                    .unwrap_or_else(|| Duration::MAX)
-                    .as_secs_f32()
-                    / 86400.
-            ),
-            "minrecrecall" => {
-                json!(self.min_rec_recall_rate().await)
-            }
-            "minrecstab" => {
-                let mut min_recall = usize::MAX;
-                let selfs = self.all_dependencies().await;
-                for id in selfs {
-                    let stab =
-                        (self.card_provider.load(id).await.unwrap().maturity() * 1000.) as usize;
-                    min_recall = min_recall.min(stab);
-                }
-
-                json!(min_recall as f32 / 1000.)
-            }
-            "dependencies" => json!(self.dependency_ids().await.len()),
-            invalid_key => {
-                panic!("invalid key: {}", invalid_key);
-            }
-        }
-        .into()
     }
 }
 

@@ -14,7 +14,6 @@ toml.workspace = true
 uuid.workspace = true
 futures.workspace = true
 eyre.workspace = true
-samsvar.workspace = true
 omtrent.workspace = true
 speki-dto.workspace = true
 dioxus-logger.workspace = true

@@ -8,7 +8,6 @@ use dioxus_logger::tracing::info;
 use eyre::Result;
 use metadata::Metadata;
 use recall_rate::History;
-use samsvar::{Matcher, Schema};
 use speki_dto::{SpekiProvider, TimeProvider};
 use tracing::trace;
 
@@ -239,58 +238,6 @@ impl App {
             .into_iter()
             .filter(|card| card.is_class())
             .collect()
-    }
-
-    pub async fn load_non_pending(&self, filter: Option<String>) -> Vec<CardId> {
-        info!("loading non pending card ids");
-
-        let schema = filter.map(|filter| Schema::new(filter).unwrap());
-        let schema = Arc::new(schema);
-        info!("schema is: {:?}", schema);
-
-        let filter = {
-            let schema = schema.clone();
-            move |card: Arc<Card>| {
-                let schema = schema.clone();
-                async move {
-                    match &*schema {
-                        Some(sch) => card.eval_schema(sch).await,
-                        None => true,
-                    }
-                }
-            }
-        };
-
-        self.card_provider
-            .filtered_load(filter)
-            .await
-            .into_iter()
-            .map(|card| card.id())
-            .collect()
-    }
-
-    pub async fn load_pending(&self, filter: Option<String>) -> Vec<CardId> {
-        let iter = self
-            .load_all_cards()
-            .await
-            .into_iter()
-            .filter(|card| card.history().is_empty());
-
-        let mut ids = vec![];
-
-        if let Some(ref filter) = filter {
-            for card in iter {
-                if card.eval(filter.clone()).await {
-                    ids.push(card.id());
-                }
-            }
-        } else {
-            for card in iter {
-                ids.push(card.id());
-            }
-        }
-
-        ids
     }
 }
 

@@ -1,6 +1,5 @@
 [workspace]
 members = [
-    "samsvar",
     "speki-cli",
     "speki-core",
     "speki-dto",
@@ -17,7 +16,6 @@ resolver = "2"
 [workspace.dependencies]
 speki-core = { path = "speki-core" }
 speki-provider = { path = "speki-provider" }
-samsvar = { path = "samsvar" }
 omtrent = { path = "omtrent" }
 speki-dto = { path = "speki-dto" }
 
