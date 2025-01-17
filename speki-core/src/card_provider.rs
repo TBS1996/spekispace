@@ -40,6 +40,29 @@ impl Debug for CardProvider {
 }
 
 impl CardProvider {
+    /// Removes a card from the cache, along with all its dependents and dependencies
+    ///
+    /// This is because certain properties are cached based on dependencies, so when a card in cache is no longer valid,
+    /// the dependencies/dependents are also no longer guaranteed to be valid.
+    /// For example, when you make a review, it'll change the recall rate of the given card, but it'll also change the min_rec_recall_rate of
+    /// all its dependents, which we store in the cache.
+    pub async fn invalidate_card_and_deps(&self, id: CardId) {
+        info!("invalidating card with deps: {id}");
+        let card = self.load(id).await.unwrap();
+
+        self.invalidate_card(id).await;
+
+        for dep in card.all_dependents().await {
+            self.invalidate_card(dep).await;
+        }
+
+        for dep in card.all_dependencies().await {
+            self.invalidate_card(dep).await;
+        }
+
+        info!("done invalidating card with deps");
+    }
+
     pub async fn invalidate_card(&self, id: CardId) {
         info!("invalidating card: {id}");
         let mut guard = self.inner.write().unwrap();

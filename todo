@@ -169,7 +169,6 @@ maybe that main global graph thing can simply be a collection i make where i inc
 
 ## todo
 
-- remove all dependencies and dependents of a card in the cache on persist() call
 - make certain cards trivial, like instances of certain classes
 - make dependency removal more intuitive, not accidentally clicking it away
 - fix dependency removal
@@ -178,15 +177,17 @@ maybe that main global graph thing can simply be a collection i make where i inc
 - sort on browsepage
 - move x to left
 - firebaseprovider use online timestamp for current_time
-- collections 
 - fix bug where card reference dont show up sometimes in cardviewer
 - if too many dependencies of a card in graphview, instead of render, just show like e.g. "100+" on a node and if you press it, it'll open a browse page with all the dependencies listed there.
+- make collections pretty
 
 ## done
 
 - suspend cards
 - fix deleted bugs?
 - suspend from review
+- collections 
+- remove all dependencies and dependents of a card in the cache on persist() call
 
 # post-release goals
 
@@ -203,3 +204,5 @@ maybe that main global graph thing can simply be a collection i make where i inc
 - proper healthcheck stuff
 - timeseries for syncing upstream, so we don't need to read entire user dir to find out which stuff are modified after given timestamp
 - graphview edges should be diff based on relationship (subclass, instance..)
+- make provider into stream, so no need to wait until all is loaded before you get items
+- natively support composite items in the provider trait (like how card is RawCard, Metadata, and Reviews)

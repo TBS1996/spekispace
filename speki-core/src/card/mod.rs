@@ -131,7 +131,7 @@ impl Card {
             .await
             .unwrap();
 
-        self.card_provider.invalidate_card(self.id()).await;
+        self.card_provider.invalidate_card_and_deps(self.id()).await;
     }
 
     pub fn time_provider(&self) -> TimeGetter {
@@ -290,7 +290,7 @@ impl Card {
             self.card_provider.set_dependent(dependency, id);
         }
 
-        self.card_provider.invalidate_card(self.id()).await;
+        self.card_provider.invalidate_card_and_deps(self.id()).await;
         self.card_provider.save_card(self.clone()).await;
         *self = Arc::unwrap_or_clone(self.card_provider.load(id).await.unwrap());
         info!("done persisting card: {}", self.id);
