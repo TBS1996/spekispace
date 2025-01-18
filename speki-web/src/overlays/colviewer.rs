@@ -1,14 +1,12 @@
-use std::{fmt::Display, sync::Arc};
-
+use super::{card_selector::CardSelector, itemselector::ItemSelector, Overlay};
+use crate::{components::Komponent, APP};
 use dioxus::prelude::*;
 use speki_core::{
     collection::{Collection, CollectionId, DynCard},
     Card,
 };
-
-use crate::{components::Komponent, APP};
-
-use super::{card_selector::CardSelector, Overlay};
+use speki_dto::Item;
+use std::{fmt::Display, sync::Arc};
 
 /*
 
@@ -47,19 +45,38 @@ impl Display for DynEntry {
     }
 }
 
+async fn name(dy: DynCard) -> String {
+    match dy {
+        DynCard::Card(id) => {
+            let card = APP.read().load_card(id).await;
+            format!("{card}")
+        }
+        DynCard::Instances(id) => {
+            let card = APP.read().load_card(id).await;
+            format!("instances of {card}")
+        }
+        DynCard::Dependents(id) => {
+            let card = APP.read().load_card(id).await;
+            format!("dependents of {card}")
+        }
+        DynCard::RecDependents(id) => {
+            let card = APP.read().load_card(id).await;
+            format!("rec dependents of {card}")
+        }
+        DynCard::Collection(id) => {
+            let col = APP.read().load_collection(id).await;
+            format!("collection: {col}")
+        }
+    }
+}
+
 impl DynEntry {
     async fn new(dy: DynCard) -> Self {
-        let id = dy.id();
-        let card = APP.read().load_card(id).await;
         let provider = APP.read().inner().card_provider();
 
-        let name = match dy {
-            DynCard::Card(_) => format!("{card}"),
-            DynCard::Instances(_) => format!("instances of {card}"),
-            DynCard::Dependents(_) => format!("dependents of {card}"),
-            DynCard::RecDependents(_) => format!("rec deps of {card}"),
-        };
-        let cards = dy.evaluate(provider).await;
+        let name = name(dy.clone()).await;
+
+        let cards = dy.evaluate(provider, Default::default()).await;
 
         Self { name, dy, cards }
     }
@@ -70,6 +87,7 @@ pub enum DynTab {
     Card,
     Instance,
     RecDependents,
+    Collection,
 }
 
 impl DynTab {
@@ -77,7 +95,8 @@ impl DynTab {
         *self = match self {
             Self::Card => Self::Instance,
             Self::Instance => Self::RecDependents,
-            Self::RecDependents => Self::Card,
+            Self::RecDependents => Self::Collection,
+            Self::Collection => Self::Card,
         };
     }
 }
@@ -89,6 +108,7 @@ pub struct ColViewer {
     pub done: Signal<bool>,
     pub entries: Signal<Vec<DynEntry>>,
     pub cardselector: CardSelector,
+    pub colselector: ItemSelector<Collection>,
     pub instance_selector: CardSelector,
     pub dependents_selector: CardSelector,
     pub dynty: Signal<DynTab>,
@@ -157,9 +177,29 @@ impl ColViewer {
 
         let instance_selector = CardSelector::class_picker(f).await;
 
+        let mut cols = APP.read().load_collections().await;
+        cols.retain(|_col| _col.id != col.id);
+
+        let f = Box::new(move |col: Collection| {
+            let entries = entries.clone();
+            spawn(async move {
+                let mut inner = entries.cloned();
+                let entry = DynEntry::new(DynCard::Collection(col.id())).await;
+                let contains = inner.iter().any(|inentry| inentry.dy == entry.dy);
+
+                if !contains {
+                    inner.push(entry);
+                    entries.clone().set(inner);
+                }
+            });
+        });
+
+        let colselector = ItemSelector::new(cols, Arc::new(f));
+
         Self {
             col,
             colname,
+            colselector,
             done: Signal::new_in_scope(false, ScopeId::APP),
             instance_selector,
             entries,
@@ -177,6 +217,7 @@ impl Komponent for ColViewer {
         let selector = self.cardselector.clone();
         let inselector = self.instance_selector.clone();
         let depselector = self.dependents_selector.clone();
+        let colselector = self.colselector.clone();
         let selv = self.clone();
         let ty = self.dynty.clone();
         let ty2 = self.dynty.clone();
@@ -194,7 +235,6 @@ impl Komponent for ColViewer {
                     let mut _ty = ty.cloned();
                     _ty.next();
                     ty.clone().set(_ty);
-
                 },
                 "change dynty"
             }
@@ -261,13 +301,11 @@ impl Komponent for ColViewer {
                             DynTab::Card => { selector.render() },
                             DynTab::Instance => { inselector.render() },
                             DynTab::RecDependents => { depselector.render() },
+                            DynTab::Collection => { colselector.render() },
                         }
                     }
-
                 }
             }
-
-
         }
     }
 }

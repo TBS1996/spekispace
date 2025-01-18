@@ -131,7 +131,10 @@ impl RecallDist {
     async fn new(col: Collection) -> Self {
         let mut selv = Self::default();
 
-        for card in col.expand(APP.read().inner().card_provider()).await {
+        for card in col
+            .expand(APP.read().inner().card_provider(), Default::default())
+            .await
+        {
             *match card.recall_rate() {
                 Some(rate) => {
                     if rate < 0.05 {
@@ -218,7 +221,7 @@ fn render_collections(state: ReviewPage) -> Element {
                                 let filter = filter.clone();
                                 spawn(async move {
                                     let col = APP.read().load_collection(col.id).await;
-                                    let cards = col.expand(APP.read().inner().card_provider.clone()).await;
+                                    let cards = col.expand(APP.read().inner().card_provider.clone(), Default::default()).await;
                                     let session = ReviewState::new_with_filter(cards, filter).await;
                                     OVERLAY.cloned().set(Box::new(session));
                                 });

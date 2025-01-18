@@ -1,5 +1,11 @@
-use std::{collections::BTreeSet, sync::Arc, time::Duration};
+use std::{
+    collections::{BTreeSet, HashSet},
+    fmt::Display,
+    sync::Arc,
+    time::Duration,
+};
 
+use async_recursion::async_recursion;
 use serde::{Deserialize, Serialize};
 use speki_dto::{Item, ModifiedSource};
 use uuid::Uuid;
@@ -8,9 +14,15 @@ use crate::{card::CardId, card_provider::CardProvider, Card};
 
 pub type CollectionId = Uuid;
 
+impl Display for Collection {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", &self.name)
+    }
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Collection {
-    pub id: Uuid,
+    pub id: CollectionId,
     pub name: String,
     pub dyncards: Vec<DynCard>,
     pub last_modified: Duration,
@@ -30,11 +42,22 @@ impl Collection {
         }
     }
 
-    pub async fn expand(&self, provider: CardProvider) -> Vec<Arc<Card>> {
+    #[async_recursion(?Send)]
+    pub async fn expand(
+        &self,
+        provider: CardProvider,
+        mut seen_cols: HashSet<CollectionId>,
+    ) -> Vec<Arc<Card>> {
+        if seen_cols.contains(&self.id) {
+            return vec![];
+        } else {
+            seen_cols.insert(self.id);
+        };
+
         let mut out = BTreeSet::new();
 
         for dyncard in &self.dyncards {
-            for card in dyncard.evaluate(provider.clone()).await {
+            for card in dyncard.evaluate(provider.clone(), seen_cols.clone()).await {
                 out.insert(card);
             }
         }
@@ -60,20 +83,20 @@ pub enum DynCard {
     Instances(CardId),
     Dependents(CardId),
     RecDependents(CardId),
+    Collection(CollectionId),
 }
 
 impl DynCard {
-    pub fn id(&self) -> CardId {
-        *match self {
-            DynCard::Card(id) => id,
-            DynCard::Instances(id) => id,
-            DynCard::Dependents(id) => id,
-            DynCard::RecDependents(id) => id,
-        }
-    }
-
-    pub async fn evaluate(&self, provider: CardProvider) -> Vec<Arc<Card>> {
+    pub async fn evaluate(
+        &self,
+        provider: CardProvider,
+        seen_cols: HashSet<CollectionId>,
+    ) -> Vec<Arc<Card>> {
         match self {
+            DynCard::Collection(id) => {
+                let col = provider.provider.collections.load_item(*id).await.unwrap();
+                col.expand(provider.clone(), seen_cols).await
+            }
             DynCard::Card(id) => {
                 let card = provider.load(*id).await.unwrap();
                 vec![card]

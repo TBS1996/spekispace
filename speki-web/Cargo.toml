@@ -36,6 +36,7 @@ speki-provider = { workspace = true, features = ["dexie"] }
 strum.workspace = true
 fancy-regex.workspace = true
 eyre.workspace = true
+async-recursion.workspace = true
 
 
 speki-dto = { path = "../speki-dto" }
