@@ -21,12 +21,13 @@ tracing.workspace = true
 async-trait.workspace = true
 speki-dto.workspace = true
 uuid.workspace = true
-serde-wasm-bindgen.workspace = true
+serde-wasm-bindgen = { workspace = true, optional = true }
 
 [features]
-fs = ["dep:rayon", "dep:serde", "dep:dirs"]
+fs = ["dep:rayon"]
 dexie = [
     "dep:wasm-bindgen",
+    "dep:serde-wasm-bindgen",
     "dep:gloo-utils",
     "dep:js-sys",
     "dep:wasm-bindgen-futures",

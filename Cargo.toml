@@ -13,46 +13,29 @@ speki-dto = { path = "speki-dto" }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0.128"
 uuid = { version = "1.0", features = ["v4", "serde", "js"] }
-tokio = { version = "1.40.0", features = ["full"] }
-rand = "0.8.5"
-dirs = "5.0.1"
 toml = "0.8.19"
 futures = "0.3"
 eyre = "0.6.12"
 rayon = "1.10.0"
-dioxus-logger = "0.5.1"
 log = "0.4.22"
 tracing = { version = "0.1.40", features = ["attributes"] }
 tracing-subscriber = "0.3.18"
+dioxus-logger = "0.6.1"
 wasm-bindgen = "0.2.95"
-futures-util = "0.3"
-gloo = "0.11.0"
-gloo-net = "0.6.0"
-gloo-timers = { version = "0.3", features = ["futures"] }
 gloo-utils = "0.2.0"
 js-sys = "0.3.72"
 serde-wasm-bindgen = "0.6.5"
 wasm-bindgen-futures = "0.4.45"
-wasm-cookies = "0.2.1"
 web-sys = { version = "0.3.72", features = ["Element", "Screen"] }
 async-trait = "0.1.83"
-async-lock = "3.4.0"
-manganis = "0.2.2"
-time = { version = "0.3.36", features = ["parsing"] }
-nom = "7.0"
-axum-extra = { version = "0.9.4", features = ["cookie"] }
-axum = { version = "0.6", features = ["macros"] }
-reqwest = { version = "0.11", features = ["json"] }
-jsonwebtoken = "9.3.0"
 chrono = "0.4.38"
-tower-http = { version = "0.3", features = ["cors"] }
-hyper = { version = "0.14", features = ["full"] }
-hyper-tls = "0.5"
 petgraph = "0.6.5"
 once_cell = "1.20.2"
 strum = { version = "0.24", features = ["derive"] }
 fancy-regex = "0.14.0"
 async-recursion = "1.1.1"
+futures-util = "0.3"
+dirs = "5.0.1"
 
 [profile]
 

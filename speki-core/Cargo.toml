@@ -26,7 +26,3 @@ async-trait.workspace = true
 [dependencies.gkquad]
 version = "0.0.4"
 default-features = false
-
-
-[dev-dependencies]
-tokio.workspace = true
