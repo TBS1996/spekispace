@@ -1,12 +1,12 @@
 use std::sync::Arc;
 
 use dioxus::prelude::*;
-use speki_core::{Card, CardType};
+use speki_core::{cardfilter::CardFilter, Card, CardType};
 use speki_web::Node;
 use tracing::info;
 
 use crate::{
-    components::{CardTy, GraphRep, Komponent},
+    components::{CardTy, FilterEditor, GraphRep, Komponent},
     overlays::{cardviewer::CardViewer, Overlay},
     pages::CardEntry,
     APP, OVERLAY,
@@ -27,12 +27,15 @@ pub struct CardSelector {
     title: String,
     search: Signal<String>,
     on_card_selected: Arc<Box<dyn Fn(Arc<Card>)>>,
-    cards: Signal<Vec<CardEntry>>,
+    all_cards: Signal<Vec<CardEntry>>,
+    filtered_cards: Signal<Vec<CardEntry>>,
     allow_new: bool,
     done: Signal<bool>,
     filter: Option<Arc<Box<dyn Fn(CardType) -> bool>>>,
     dependents: Signal<Vec<Node>>,
     allowed_cards: Vec<CardTy>,
+    filtereditor: FilterEditor,
+    filtermemo: Memo<CardFilter>,
 }
 
 impl Default for CardSelector {
@@ -43,16 +46,23 @@ impl Default for CardSelector {
 
 impl CardSelector {
     pub fn new() -> Self {
+        let filtereditor = FilterEditor::new_permissive();
+        let filtermemo = filtereditor.memo();
+        let search = Signal::new_in_scope(String::new(), ScopeId::APP);
+
         Self {
             title: "select card".to_string(),
-            search: Signal::new_in_scope(Default::default(), ScopeId::APP),
+            search,
             on_card_selected: overlay_card_viewer(),
-            cards: Signal::new_in_scope(Default::default(), ScopeId::APP),
+            all_cards: Signal::new_in_scope(Default::default(), ScopeId::APP),
+            filtered_cards: Signal::new_in_scope(Default::default(), ScopeId::APP),
             allow_new: false,
             done: Signal::new_in_scope(Default::default(), ScopeId::APP),
             filter: None,
             dependents: Signal::new_in_scope(Default::default(), ScopeId::APP),
             allowed_cards: vec![],
+            filtereditor,
+            filtermemo,
         }
     }
 
@@ -132,7 +142,7 @@ impl CardSelector {
 
     pub async fn init_lol(&self) {
         info!("render hook in cardselector :)");
-        let sig = self.cards.clone();
+        let sig = self.all_cards.clone();
         let selv = self.clone();
         let cards = APP.cloned().load_all(None).await;
         let mut entries = vec![];
@@ -169,26 +179,47 @@ impl Komponent for CardSelector {
     fn render(&self) -> Element {
         info!("render cardselector");
         let title = &self.title;
+
+        let filtered_cards = self.filtered_cards.clone();
+        let search = self.search.clone();
+        let cardfilter = self.filtermemo.clone();
+        let all_cards = self.all_cards.clone();
+        use_effect(move || {
+            info!("recompute cards");
+            let filtered_cards = filtered_cards.clone();
+            let search = search.cloned();
+            let filter = cardfilter.cloned();
+
+            spawn(async move {
+                let mut filtered = vec![];
+                for card in all_cards() {
+                    if filter.filter(card.card.clone()).await {
+                        if card.front.to_lowercase().contains(&search.to_lowercase()) {
+                            filtered.push(card);
+                        }
+                    }
+                }
+
+                filtered_cards.clone().set(filtered);
+            });
+        });
+
         let mut search = self.search.clone();
 
         let closure = Arc::new(self.on_card_selected.clone());
 
         let filtered_cards: Vec<_> = self
-            .cards
-            .iter()
-            .filter(|card| {
-                card.front
-                    .to_lowercase()
-                    .contains(&search.cloned().to_lowercase())
-            })
-            .take(50)
+            .filtered_cards
+            .cloned()
+            .into_iter()
+            .take(1000)
             .zip(std::iter::repeat_with(|| Arc::clone(&closure)))
             .map(|(card, closure)| (card.clone(), closure, self.done.clone()))
             .collect();
 
         use_hook(move || {
             info!("rendering uhhh hook in cardselector :)");
-            let sig = self.cards.clone();
+            let sig = self.all_cards.clone();
             let selv = self.clone();
             spawn(async move {
                 let cards = APP.cloned().load_all(None).await;
@@ -210,6 +241,8 @@ impl Komponent for CardSelector {
         });
 
         let selv = self.clone();
+
+        let filteditor = self.filtereditor.clone();
 
         rsx! {
             div {
@@ -253,6 +286,8 @@ impl Komponent for CardSelector {
                             "new card"
                          }
                     }
+
+                    { filteditor.render() }
 
                     input {
                         class: "bg-white w-full max-w-md border border-gray-300 rounded-md p-2 mb-4 text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent",

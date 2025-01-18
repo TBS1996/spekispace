@@ -24,6 +24,10 @@ impl FilterEditor {
     pub fn new_default() -> Self {
         Self::new(default_filter())
     }
+
+    pub fn new_permissive() -> Self {
+        Self::new(CardFilter::default())
+    }
 }
 
 fn default_filter() -> CardFilter {
@@ -178,6 +182,20 @@ impl FilterEditor {
             suspended,
             pending,
         }
+    }
+
+    pub fn memo(&self) -> Memo<CardFilter> {
+        let selv = self.clone();
+        Signal::memo(move || CardFilter {
+            recall: selv.recall.get_value(),
+            rec_recall: selv.rec_recall.get_value(),
+            stability: selv.stability.get_value(),
+            rec_stability: selv.rec_stability.get_value(),
+            finished: selv.finished.get_value(),
+            suspended: selv.suspended.get_value(),
+            pending: selv.pending.get_value(),
+            lapses: selv.lapses.get_value(),
+        })
     }
 
     pub fn to_filter(&self) -> CardFilter {

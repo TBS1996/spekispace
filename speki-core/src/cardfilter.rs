@@ -14,7 +14,7 @@ pub enum NumOrd {
     Any,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub enum MyNumOrd {
     Equal,
     Greater,
@@ -31,7 +31,7 @@ impl From<MyNumOrd> for NumOrd {
     }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct NumOp {
     pub num: f32,
     pub ord: MyNumOrd,
@@ -58,7 +58,7 @@ struct ItemData {
     source: ModifiedSource,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Default)]
 pub struct CardFilter {
     pub recall: Option<NumOp>,
     pub rec_recall: Option<NumOp>,

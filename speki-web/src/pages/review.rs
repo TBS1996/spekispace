@@ -12,13 +12,17 @@ use crate::{
 #[derive(Clone)]
 pub struct ReviewPage {
     filter: FilterEditor,
+    cardfilter: Memo<CardFilter>,
     collections: Signal<Vec<(Collection, RecallDist)>>,
 }
 
 impl ReviewPage {
     pub fn new() -> Self {
+        let filter = FilterEditor::new_default();
+        let cardfilter = filter.memo();
         let selv = Self {
-            filter: FilterEditor::new_default(),
+            filter,
+            cardfilter,
             collections: Default::default(),
         };
 
@@ -43,6 +47,7 @@ impl ReviewPage {
 pub fn Review() -> Element {
     let state: ReviewPage = use_context::<ReviewPage>();
     let editor = state.filter.clone();
+    tracing::info!("memo lol: {:?}", &state.cardfilter);
 
     let class = if IS_SHORT.cloned() {
         "flex flex-col items-center h-screen space-y-4 justify-center"
