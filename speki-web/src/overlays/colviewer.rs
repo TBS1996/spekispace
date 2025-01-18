@@ -219,6 +219,7 @@ impl Komponent for ColViewer {
         let depselector = self.dependents_selector.clone();
         let colselector = self.colselector.clone();
         let selv = self.clone();
+        let selv2 = self.clone();
         let ty = self.dynty.clone();
         let ty2 = self.dynty.clone();
 
@@ -258,6 +259,21 @@ impl Komponent for ColViewer {
 
                 },
                 "save"
+            }
+
+
+            button {
+                class: "inline-flex items-center text-white bg-gray-800 border-0 py-1 px-3 focus:outline-none hover:bg-gray-700 rounded text-base",
+                onclick: move |_| {
+                    let selv = selv2.clone();
+                    spawn(async move {
+                        APP.read().delete_collection(selv.col.id).await;
+                        selv.done.clone().set(true);
+                    });
+
+
+                },
+                "delete"
             }
 
             div {

@@ -204,18 +204,6 @@ fn render_collections(state: ReviewPage) -> Element {
                             "✏️"
                         }
                         button {
-                            onclick: move|_| {
-                                let id = col.id;
-                                let mut cols = collections.cloned();
-                                cols.retain(|kol|kol.0.id != col.id);
-                                collections.clone().set(cols);
-                                spawn(async move{
-                                    APP.read().delete_collection(id).await;
-                                });
-                            },
-                            "❌"
-                        }
-                        button {
                             class: "inline-flex items-center text-white bg-gray-800 border-0 py-1 px-3 focus:outline-none hover:bg-gray-700 rounded text-base mb-2",
                             onclick: move |_| {
                                 let filter = filter.clone();

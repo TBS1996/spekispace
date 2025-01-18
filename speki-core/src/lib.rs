@@ -1,9 +1,9 @@
-use std::{fmt::Debug, sync::Arc, time::Duration};
+use std::{collections::HashMap, fmt::Debug, sync::Arc, time::Duration};
 
 use card::{BackSide, BaseCard, CardId, RecallRate};
 use card_provider::CardProvider;
 use cardfilter::{CardFilter, FilterItem};
-use collection::Collection;
+use collection::{Collection, CollectionId, DynCard};
 use dioxus_logger::tracing::info;
 use eyre::Result;
 use metadata::Metadata;
@@ -35,11 +35,50 @@ pub trait RecallCalc {
 }
 
 #[derive(Clone)]
+pub struct CollectionProvider {
+    inner: Arc<Box<dyn SpekiProvider<Collection>>>,
+}
+
+impl CollectionProvider {
+    pub async fn save(&self, collection: Collection) {
+        self.inner.save_item(collection).await
+    }
+
+    pub async fn load(&self, id: CollectionId) -> Option<Collection> {
+        if let Some(mut col) = self.inner.load_item(id).await {
+            let mut dyns = vec![];
+            for d in col.dyncards.clone() {
+                if let DynCard::Collection(id) = d.clone() {
+                    if self.inner.load_item(id).await.is_some() {
+                        dyns.push(d);
+                    }
+                } else {
+                    dyns.push(d);
+                }
+            }
+
+            col.dyncards = dyns;
+            Some(col)
+        } else {
+            None
+        }
+    }
+
+    pub async fn load_all(&self) -> HashMap<CollectionId, Collection> {
+        self.inner.load_all().await
+    }
+
+    pub async fn delete(&self, item: Collection) {
+        self.inner.delete_item(item).await
+    }
+}
+
+#[derive(Clone)]
 pub struct Provider {
     pub cards: Arc<Box<dyn SpekiProvider<BaseCard>>>,
     pub reviews: Arc<Box<dyn SpekiProvider<History>>>,
     pub attrs: Arc<Box<dyn SpekiProvider<AttributeDTO>>>,
-    pub collections: Arc<Box<dyn SpekiProvider<Collection>>>,
+    pub collections: CollectionProvider,
     pub metadata: Arc<Box<dyn SpekiProvider<Metadata>>>,
     pub cardfilter: Arc<Box<dyn SpekiProvider<FilterItem>>>,
 }
@@ -90,7 +129,9 @@ impl App {
             cards: Arc::new(Box::new(card_provider)),
             reviews: Arc::new(Box::new(history_provider)),
             attrs: Arc::new(Box::new(attr_provider)),
-            collections: Arc::new(Box::new(collections_provider)),
+            collections: CollectionProvider {
+                inner: Arc::new(Box::new(collections_provider)),
+            },
             metadata: Arc::new(Box::new(meta_provider)),
             cardfilter: Arc::new(Box::new(filter_provider)),
         };

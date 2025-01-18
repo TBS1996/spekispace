@@ -94,7 +94,9 @@ impl DynCard {
     ) -> Vec<Arc<Card>> {
         match self {
             DynCard::Collection(id) => {
-                let col = provider.provider.collections.load_item(*id).await.unwrap();
+                let Some(col) = provider.provider.collections.load(*id).await else {
+                    return vec![];
+                };
                 col.expand(provider.clone(), seen_cols).await
             }
             DynCard::Card(id) => {

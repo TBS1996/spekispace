@@ -48,7 +48,7 @@ impl App {
 
     pub async fn delete_collection(&self, id: CollectionId) {
         let col = self.load_collection(id).await;
-        self.0.provider.collections.delete_item(col).await;
+        self.0.provider.collections.delete(col).await;
     }
 
     pub async fn fill_cache(&self) {
@@ -72,7 +72,7 @@ impl App {
     }
 
     pub async fn load_collection(&self, id: CollectionId) -> Collection {
-        self.0.provider.collections.load_item(id).await.unwrap()
+        self.0.provider.collections.load(id).await.unwrap()
     }
 
     pub async fn load_collections(&self) -> Vec<Collection> {
@@ -86,7 +86,7 @@ impl App {
     }
 
     pub async fn save_collection(&self, collection: Collection) {
-        self.0.provider.collections.save_item(collection).await;
+        self.0.provider.collections.save(collection).await;
     }
 
     pub async fn new_instance(
