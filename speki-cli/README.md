@@ -1,1 +1,0 @@
-# speki-cli
