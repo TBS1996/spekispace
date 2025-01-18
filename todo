@@ -206,3 +206,4 @@ maybe that main global graph thing can simply be a collection i make where i inc
 - graphview edges should be diff based on relationship (subclass, instance..)
 - make provider into stream, so no need to wait until all is loaded before you get items
 - natively support composite items in the provider trait (like how card is RawCard, Metadata, and Reviews)
+- tag for a card having all its dependencies in order and stuff (so like, even more finished than finished)

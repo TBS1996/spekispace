@@ -30,7 +30,7 @@ other is the various dynamic things like, choose dependents of cards, choose oth
 */
 
 #[derive(Clone, Eq, PartialEq)]
-struct DynEntry {
+pub struct DynEntry {
     name: String,
     dy: DynCard,
     cards: Vec<Arc<Card>>,
@@ -66,7 +66,7 @@ impl DynEntry {
 }
 
 #[derive(Debug, Clone, Copy)]
-enum DynTab {
+pub enum DynTab {
     Card,
     Instance,
     RecDependents,

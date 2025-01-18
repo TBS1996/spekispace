@@ -13,7 +13,7 @@ use dioxus::prelude::*;
 use dioxus_logger::tracing::{info, Level};
 use firebase::AuthUser;
 use overlays::OverlayManager;
-use pages::ImportState;
+use pages::{ImportState, ReviewPage};
 
 use crate::{
     pages::{About, Add, Browse, Collections, Import, Menu, Review},
@@ -113,6 +113,7 @@ pub fn TheApp() -> Element {
     let id = current_scope_id();
     info!("omg?? scope id: {id:?}");
     use_context_provider(ImportState::new);
+    use_context_provider(ReviewPage::new);
 
     spawn(async move {
         APP.read().fill_cache().await;

@@ -11,6 +11,7 @@ use crate::{components::Komponent, Route, CURRENT_ROUTE, NONCLICKABLE};
 pub mod card_selector;
 pub mod cardviewer;
 pub mod colviewer;
+pub mod reviewsession;
 pub mod textinput;
 pub mod uploader;
 pub mod yesno;

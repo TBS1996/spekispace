@@ -1,8 +1,8 @@
-use std::{cmp::Ordering, fmt::Display, sync::Arc};
+use std::{fmt::Display, sync::Arc};
 
 use dioxus::prelude::*;
 use serde::{Deserialize, Serialize};
-use speki_core::cardfilter::{CardFilter, FilterItem, MyNumOrd, NumOp, NumOrd};
+use speki_core::cardfilter::{CardFilter, MyNumOrd, NumOp, NumOrd};
 use strum::{EnumIter, IntoEnumIterator};
 
 use super::{DropDownMenu, Komponent};
