@@ -35,19 +35,23 @@ pub struct CardSelector {
     dependents: Signal<Vec<Node>>,
     allowed_cards: Vec<CardTy>,
     filtereditor: FilterEditor,
-    filtermemo: Memo<CardFilter>,
+    filtermemo: Option<Memo<CardFilter>>,
 }
 
 impl Default for CardSelector {
     fn default() -> Self {
-        Self::new()
+        Self::new(true)
     }
 }
 
 impl CardSelector {
-    pub fn new() -> Self {
+    pub fn new(with_memo: bool) -> Self {
         let filtereditor = FilterEditor::new_permissive();
-        let filtermemo = filtereditor.memo();
+        let filtermemo = if with_memo {
+            Some(filtereditor.memo())
+        } else {
+            None
+        };
         let search = Signal::new_in_scope(String::new(), ScopeId::APP);
 
         Self {
@@ -91,14 +95,11 @@ impl CardSelector {
     pub async fn class_picker(f: Box<dyn Fn(Arc<Card>)>) -> Self {
         let filter: Box<dyn Fn(CardType) -> bool> = Box::new(move |ty: CardType| ty.is_class());
 
-        let selv = Self {
-            title: "pick class".to_string(),
-            on_card_selected: Arc::new(f),
-            allow_new: true,
-            done: Signal::new_in_scope(false, ScopeId(3)),
-            filter: Some(Arc::new(filter)),
-            ..Default::default()
-        };
+        let mut selv = Self::new(false)
+            .with_title("pick class".into())
+            .new_on_card_selected(f);
+
+        selv.filter = Some(Arc::new(filter));
 
         let selv2 = selv.clone();
 
@@ -108,7 +109,7 @@ impl CardSelector {
     }
 
     pub async fn dependency_picker(f: Box<dyn Fn(Arc<Card>)>) -> Self {
-        let mut selv = Self::new()
+        let mut selv = Self::new(false)
             .with_title("set dependency".into())
             .new_on_card_selected(f);
         selv.allow_new = true;
@@ -188,12 +189,18 @@ impl Komponent for CardSelector {
             info!("recompute cards");
             let filtered_cards = filtered_cards.clone();
             let search = search.cloned();
-            let filter = cardfilter.cloned();
+            let filter = cardfilter.map(|mem| mem.cloned());
 
             spawn(async move {
                 let mut filtered = vec![];
                 for card in all_cards() {
-                    if filter.filter(card.card.clone()).await {
+                    if let Some(filter) = filter.clone() {
+                        if filter.filter(card.card.clone()).await {
+                            if card.front.to_lowercase().contains(&search.to_lowercase()) {
+                                filtered.push(card);
+                            }
+                        }
+                    } else {
                         if card.front.to_lowercase().contains(&search.to_lowercase()) {
                             filtered.push(card);
                         }
@@ -243,12 +250,15 @@ impl Komponent for CardSelector {
         let selv = self.clone();
 
         let filteditor = self.filtereditor.clone();
+        let filter_render = self.filtermemo.is_some();
 
         rsx! {
             div {
                 class: "flex flex-row",
 
-            { filteditor.render() }
+            if filter_render {
+                { filteditor.render() }
+            }
 
             div {
                 class: "h-screen flex flex-col w-full max-w-3xl",
@@ -338,9 +348,6 @@ impl Komponent for CardSelector {
                     }
                 }
             }
-
-
-
             }
         }
     }

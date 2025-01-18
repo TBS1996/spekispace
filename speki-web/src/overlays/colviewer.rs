@@ -114,8 +114,11 @@ pub struct ColViewer {
     pub dynty: Signal<DynTab>,
 }
 
+use tracing::info;
+
 impl ColViewer {
     pub async fn new(id: CollectionId) -> Self {
+        info!("debug 1");
         let col = APP.read().load_collection(id).await;
         let colname = Signal::new_in_scope(col.name.clone(), ScopeId::APP);
         let mut entries = vec![];
@@ -138,6 +141,7 @@ impl ColViewer {
                 }
             });
         });
+        info!("debug 2");
 
         let depselector = CardSelector::dependency_picker(f)
             .await
@@ -156,6 +160,8 @@ impl ColViewer {
                 }
             });
         });
+
+        info!("debug 3");
 
         let cardselector = CardSelector::dependency_picker(f)
             .await
@@ -179,6 +185,7 @@ impl ColViewer {
 
         let mut cols = APP.read().load_collections().await;
         cols.retain(|_col| _col.id != col.id);
+        info!("debug 4");
 
         let f = Box::new(move |col: Collection| {
             let entries = entries.clone();
@@ -195,8 +202,9 @@ impl ColViewer {
         });
 
         let colselector = ItemSelector::new(cols, Arc::new(f));
+        info!("debug 5");
 
-        Self {
+        let selv = Self {
             col,
             colname,
             colselector,
@@ -205,8 +213,11 @@ impl ColViewer {
             entries,
             cardselector,
             dependents_selector: depselector,
-            dynty: Signal::new_in_scope(DynTab::Instance, ScopeId::APP),
-        }
+            dynty: Signal::new_in_scope(DynTab::Collection, ScopeId::APP),
+        };
+        info!("debug 6");
+
+        selv
     }
 }
 
