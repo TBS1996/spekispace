@@ -246,6 +246,11 @@ impl Komponent for CardSelector {
 
         rsx! {
             div {
+                class: "flex flex-row",
+
+            { filteditor.render() }
+
+            div {
                 class: "h-screen flex flex-col w-full max-w-3xl",
 
                 h1 {
@@ -287,7 +292,6 @@ impl Komponent for CardSelector {
                          }
                     }
 
-                    { filteditor.render() }
 
                     input {
                         class: "bg-white w-full max-w-md border border-gray-300 rounded-md p-2 mb-4 text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent",
@@ -333,6 +337,10 @@ impl Komponent for CardSelector {
                         }
                     }
                 }
+            }
+
+
+
             }
         }
     }

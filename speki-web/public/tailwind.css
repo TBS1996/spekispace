@@ -2011,6 +2011,10 @@ input.tab:checked + .tab-content,
   margin-bottom: 1.25rem;
 }
 
+.mb-8 {
+  margin-bottom: 2rem;
+}
+
 .ml-20 {
   margin-left: 5rem;
 }
@@ -2049,10 +2053,6 @@ input.tab:checked + .tab-content,
 
 .mt-8 {
   margin-top: 2rem;
-}
-
-.mb-8 {
-  margin-bottom: 2rem;
 }
 
 .box-border {
@@ -2143,10 +2143,6 @@ input.tab:checked + .tab-content,
   width: 100%;
 }
 
-.min-w-\[750px\] {
-  min-width: 750px;
-}
-
 .min-w-full {
   min-width: 100%;
 }
@@ -2163,6 +2159,10 @@ input.tab:checked + .tab-content,
   max-width: 500px;
 }
 
+.max-w-\[550px\] {
+  max-width: 550px;
+}
+
 .max-w-full {
   max-width: 100%;
 }
@@ -2177,14 +2177,6 @@ input.tab:checked + .tab-content,
 
 .max-w-sm {
   max-width: 24rem;
-}
-
-.max-w-\[350px\] {
-  max-width: 350px;
-}
-
-.max-w-\[550px\] {
-  max-width: 550px;
 }
 
 .flex-1 {
