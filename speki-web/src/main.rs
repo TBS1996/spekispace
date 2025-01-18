@@ -16,7 +16,7 @@ use overlays::OverlayManager;
 use pages::{ImportState, ReviewPage};
 
 use crate::{
-    pages::{About, Add, Browse, Collections, Import, Menu, Review},
+    pages::{About, Add, Browse, Import, Menu, Review},
     utils::App,
 };
 
@@ -213,8 +213,6 @@ pub enum Route {
     About {},
     #[route("/import")]
     Import {},
-    #[route("/collections")]
-    Collections {},
 }
 
 impl Route {
@@ -226,7 +224,6 @@ impl Route {
             Route::Browse {} => "browse",
             Route::About {} => "about",
             Route::Import {} => "import",
-            Route::Collections {} => "collections",
         }
     }
 }
