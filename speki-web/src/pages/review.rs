@@ -4,7 +4,7 @@ use dioxus::prelude::*;
 use speki_core::{cardfilter::CardFilter, collection::Collection};
 
 use crate::{
-    components::{FilterEditor, Komponent},
+    components::{FilterComp, FilterEditor},
     overlays::{colviewer::ColViewer, reviewsession::ReviewState, textinput::TextInput},
     APP, IS_SHORT, OVERLAY,
 };
@@ -65,7 +65,7 @@ pub fn Review() -> Element {
                 { render_collections(state) }
 
 
-                {editor.render()}
+                 FilterComp {editor}
 
             }
         }

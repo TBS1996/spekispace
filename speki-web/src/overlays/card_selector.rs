@@ -6,7 +6,7 @@ use speki_web::Node;
 use tracing::info;
 
 use crate::{
-    components::{CardTy, FilterEditor, GraphRep, Komponent},
+    components::{CardTy, FilterComp, FilterEditor, GraphRep, Komponent},
     overlays::{cardviewer::CardViewer, Overlay},
     pages::CardEntry,
     APP, OVERLAY,
@@ -257,7 +257,7 @@ impl Komponent for CardSelector {
                 class: "flex flex-row",
 
             if filter_render {
-                { filteditor.render() }
+                FilterComp {editor: filteditor}
             }
 
             div {

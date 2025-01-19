@@ -10,6 +10,15 @@ use tracing::info;
 use super::Komponent;
 use crate::CURRENT_ROUTE;
 
+impl<T> PartialEq for DropDownMenu<T>
+where
+    T: Serialize + for<'de> Deserialize<'de> + 'static + Clone + Display + PartialEq,
+{
+    fn eq(&self, other: &Self) -> bool {
+        self.options == other.options && self.selected == other.selected && self.init == other.init
+    }
+}
+
 #[derive(Clone)]
 pub struct DropDownMenu<T>
 where

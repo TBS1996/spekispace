@@ -7,7 +7,7 @@ use strum::{EnumIter, IntoEnumIterator};
 
 use super::{DropDownMenu, Komponent};
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct FilterEditor {
     filter_name: Signal<String>,
     rec_recall: FloatEntry,
@@ -52,7 +52,7 @@ fn default_filter() -> CardFilter {
     }
 }
 
-#[derive(Clone, Serialize, Deserialize, Debug, EnumIter)]
+#[derive(Clone, Serialize, Deserialize, Debug, EnumIter, PartialEq)]
 enum BoolOpt {
     True,
     False,
@@ -71,7 +71,7 @@ impl Display for BoolOpt {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 struct BoolEntry {
     name: Arc<String>,
     opt: DropDownMenu<BoolOpt>,
@@ -107,7 +107,7 @@ impl BoolEntry {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 struct FloatEntry {
     input: Signal<String>,
     ord: DropDownMenu<NumOrd>,
@@ -212,21 +212,20 @@ impl FilterEditor {
     }
 }
 
-impl Komponent for FilterEditor {
-    fn render(&self) -> Element {
-        rsx! {
-            div {
-                class: "p-4 bg-white rounded-lg shadow-md flex flex-col gap-y-2 max-w-sm",
+#[component]
+pub fn FilterComp(editor: FilterEditor) -> Element {
+    rsx! {
+        div {
+            class: "p-4 bg-white rounded-lg shadow-md flex flex-col gap-y-2 max-w-sm",
 
-                {self.rec_recall.render()}
-                {self.recall.render()}
-                {self.stability.render()}
-                {self.rec_stability.render()}
-                {self.lapses.render()}
-                {self.finished.render()}
-                {self.suspended.render()}
-                {self.pending.render()}
-            }
+            {editor.rec_recall.render()}
+            {editor.recall.render()}
+            {editor.stability.render()}
+            {editor.rec_stability.render()}
+            {editor.lapses.render()}
+            {editor.finished.render()}
+            {editor.suspended.render()}
+            {editor.pending.render()}
         }
     }
 }

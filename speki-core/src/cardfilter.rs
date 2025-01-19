@@ -6,7 +6,7 @@ use uuid::Uuid;
 
 use crate::Card;
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub enum NumOrd {
     Equal,
     Greater,
