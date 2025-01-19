@@ -31,7 +31,7 @@ pub struct CardSelector {
     filtered_cards: Signal<Vec<CardEntry>>,
     allow_new: bool,
     done: Signal<bool>,
-    filter: Option<Arc<Box<dyn Fn(CardType) -> bool>>>,
+    filter: Option<Callback<CardType, bool>>,
     dependents: Signal<Vec<Node>>,
     allowed_cards: Vec<CardTy>,
     filtereditor: FilterEditor,
@@ -73,7 +73,7 @@ impl CardSelector {
     pub async fn ref_picker(
         fun: Arc<Box<dyn Fn(Arc<Card>)>>,
         dependents: Vec<Node>,
-        filter: Option<Arc<Box<dyn Fn(CardType) -> bool>>>,
+        filter: Option<Callback<CardType, bool>>,
     ) -> Self {
         let selv = Self {
             title: "choose reference".to_string(),
@@ -93,13 +93,13 @@ impl CardSelector {
     }
 
     pub async fn class_picker(f: Box<dyn Fn(Arc<Card>)>) -> Self {
-        let filter: Box<dyn Fn(CardType) -> bool> = Box::new(move |ty: CardType| ty.is_class());
+        let filter: Callback<CardType, bool> = Callback::new(move |ty: CardType| ty.is_class());
 
         let mut selv = Self::new(false)
             .with_title("pick class".into())
             .new_on_card_selected(f);
 
-        selv.filter = Some(Arc::new(filter));
+        selv.filter = Some(filter);
 
         let selv2 = selv.clone();
 

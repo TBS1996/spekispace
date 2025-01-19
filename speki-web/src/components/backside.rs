@@ -11,7 +11,7 @@ use tracing::info;
 
 use super::Komponent;
 use crate::{
-    components::{dropdown::DropComponent, CardRef, DropDownMenu},
+    components::{cardref::CardRefRender, dropdown::DropComponent, CardRef, DropDownMenu},
     overlays::cardviewer::TempNode,
     APP, IS_SHORT,
 };
@@ -39,7 +39,16 @@ impl Komponent for BackPut {
                         class: "flex-grow overflow-hidden",
                         { match *self.dropdown.selected.read() {
                             BackOpts::Text => self.render_text(),
-                            BackOpts::Card => self.ref_card.render(),
+                            BackOpts::Card => rsx!{ CardRefRender{
+                                card_display: self.ref_card.display.clone(),
+                                selected_card: self.ref_card.card.clone(),
+                                placeholder: self.ref_card.placeholder.cloned(),
+                                on_select: self.ref_card.on_select.clone(),
+                                on_deselect: self.ref_card.on_deselect.clone(),
+                                dependent: self.ref_card.dependent.clone(),
+                                filter: self.ref_card.filter.clone(),
+                                allowed: self.ref_card.allowed.clone(),
+                            }},
                         }}
                     }
 
@@ -79,12 +88,12 @@ impl BackPut {
         }
     }
 
-    pub fn with_deselect(mut self, f: Arc<Box<dyn Fn(Arc<Card>)>>) -> Self {
-        self.ref_card = self.ref_card.with_deselect(f);
+    pub fn with_deselect(mut self, f: Callback<Arc<Card>, ()>) -> Self {
+        self.ref_card = self.ref_card.with_closure(f);
         self
     }
 
-    pub fn with_closure(mut self, f: Arc<Box<dyn Fn(Arc<Card>)>>) -> Self {
+    pub fn with_closure(mut self, f: Callback<Arc<Card>, ()>) -> Self {
         self.ref_card = self.ref_card.with_closure(f);
         self
     }

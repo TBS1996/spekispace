@@ -4,7 +4,7 @@ use dioxus::prelude::*;
 use speki_core::{card::CardId, Card, CardType};
 use tracing::info;
 
-use super::{CardTy, Komponent};
+use super::CardTy;
 use crate::{
     overlays::{card_selector::CardSelector, cardviewer::TempNode},
     APP, OVERLAY,
@@ -14,14 +14,14 @@ const PLACEHOLDER: &'static str = "pick card...";
 
 #[derive(Clone)]
 pub struct CardRef {
-    card: Signal<Option<CardId>>,
-    display: Signal<String>,
-    filter: Option<Arc<Box<dyn Fn(CardType) -> bool>>>,
-    dependent: Option<TempNode>,
-    allowed: Vec<CardTy>,
-    on_select: Option<Arc<Box<dyn Fn(Arc<Card>)>>>,
-    on_deselect: Option<Arc<Box<dyn Fn(Arc<Card>)>>>,
-    placeholder: Signal<&'static str>,
+    pub card: Signal<Option<CardId>>,
+    pub display: Signal<String>,
+    pub filter: Option<Callback<CardType, bool>>,
+    pub dependent: Option<TempNode>,
+    pub allowed: Vec<CardTy>,
+    pub on_select: Option<Callback<Arc<Card>, ()>>,
+    pub on_deselect: Option<Callback<Arc<Card>, ()>>,
+    pub placeholder: Signal<&'static str>,
 }
 
 impl Debug for CardRef {
@@ -34,47 +34,77 @@ impl Debug for CardRef {
     }
 }
 
-impl Komponent for CardRef {
-    fn render(&self) -> Element {
-        let card_display = self.display.clone();
-        let selv = self.clone();
-        let selv2 = self.clone();
+#[component]
+pub fn CardRefRender(
+    card_display: Signal<String>,
+    selected_card: Signal<Option<CardId>>,
+    placeholder: &'static str,
+    on_select: Option<Callback<Arc<Card>, ()>>,
+    on_deselect: Option<Callback<Arc<Card>, ()>>,
+    dependent: Option<TempNode>,
+    filter: Option<Callback<CardType, bool>>,
+    allowed: Vec<CardTy>,
+) -> Element {
+    let is_selected = selected_card.read().is_some();
 
-        let is_selected = self.card.read().is_some();
-        let placeholder = self.placeholder.clone();
+    rsx! {
+        div {
+            class: "relative w-full",
+            input {
+                class: "bg-white w-full border border-gray-300 rounded-md p-2 mb-2 text-gray-950 cursor-pointer focus:outline-none",
+                placeholder: "{placeholder}",
+                value: "{card_display}",
+                readonly: "true",
+                onclick: move |_| {
+                    let f = on_select.clone();
+                    let fun = move |card: Arc<Card>| {
+                        if let Some(fun) = f.clone() {
+                            fun(card.clone());
+                        }
 
-        rsx! {
-            div {
-                class: "relative w-full",
-                // Container to position the input and the button
-                input {
-                    class: "bg-white w-full border border-gray-300 rounded-md p-2 mb-2 text-gray-950 cursor-pointer focus:outline-none",
-                    placeholder: "{placeholder()}",
-                    value: "{card_display}",
-                    readonly: "true",
+                        spawn(async move {
+                            let id = card.id();
+                            selected_card.clone().set(Some(id));
+                            let display = card.print().await;
+                            card_display.clone().set(display);
+                        });
+                    };
+
+                    let dependents = dependent
+                        .clone()
+                        .map(|node| vec![node.into()])
+                        .unwrap_or_default();
+
+                    let filter = filter.clone();
+                    let allowed = allowed.clone();
+                    spawn(async move {
+                        let props = CardSelector::ref_picker(Arc::new(Box::new(fun)), dependents, filter)
+                            .await
+                            .with_allowed_cards(allowed);
+
+                        OVERLAY.cloned().set(Box::new(props));
+                    });
+                },
+            }
+            if is_selected {
+                button {
+                    class: "absolute top-0 right-0 mt-2 mr-3 ml-6 mb-2 text-gray-500 hover:text-gray-700 focus:outline-none",
                     onclick: move |_| {
-                        selv.start_ref_search();
-                    },
-                }
-                if is_selected {
-                    button {
-                        class: "absolute top-0 right-0 mt-2 mr-3 ml-6 mb-2 text-gray-500 hover:text-gray-700 focus:outline-none",
-                        onclick: move |_| {
-                            info!("clicked a button");
-                            let selv2 = selv2.clone();
-                            spawn(async move {
-                                if let Some(card) = selv2.card.cloned(){
-                                    let card = APP.cloned().load_card(card).await;
-                                    if let Some(f) = selv2.on_deselect.clone(){
-                                        f(card);
-                                    }
-
+                        info!("clicked a button");
+                        spawn(async move {
+                            if let Some(card) = selected_card.cloned(){
+                                let card = APP.cloned().load_card(card).await;
+                                if let Some(f) = on_deselect.clone(){
+                                    f(card);
                                 }
-                                selv2.reset();
-                            });
-                        },
-                        "X",
-                    }
+
+                            }
+
+                            selected_card.clone().set(None);
+                            card_display.clone().set(Default::default());
+                        });
+                    },
+                    "X",
                 }
             }
         }
@@ -95,17 +125,12 @@ impl CardRef {
         }
     }
 
-    pub fn with_placeholder(self, placeholder: &'static str) -> Self {
-        self.placeholder.clone().set(placeholder);
+    pub fn with_deselect(mut self, f: Callback<Arc<Card>, ()>) -> Self {
+        self.on_select = Some(f);
         self
     }
 
-    pub fn with_deselect(mut self, f: Arc<Box<dyn Fn(Arc<Card>)>>) -> Self {
-        self.on_deselect = Some(f);
-        self
-    }
-
-    pub fn with_closure(mut self, f: Arc<Box<dyn Fn(Arc<Card>)>>) -> Self {
+    pub fn with_closure(mut self, f: Callback<Arc<Card>, ()>) -> Self {
         self.on_select = Some(f);
         self
     }
@@ -120,7 +145,7 @@ impl CardRef {
         self
     }
 
-    pub fn with_filter(mut self, filter: Arc<Box<dyn Fn(CardType) -> bool>>) -> Self {
+    pub fn with_filter(mut self, filter: Callback<CardType, bool>) -> Self {
         self.filter = Some(filter);
         self
     }
@@ -139,37 +164,5 @@ impl CardRef {
         self.card.clone().set(Some(id));
         let display = card.print().await;
         self.display.clone().set(display);
-    }
-
-    pub fn start_ref_search(&self) {
-        let _selv = self.clone();
-
-        let f = self.on_select.clone();
-        let fun = move |card: Arc<Card>| {
-            let selv = _selv.clone();
-            if let Some(fun) = f.clone() {
-                fun(card.clone());
-            }
-
-            spawn(async move {
-                selv.set_ref(card).await;
-            });
-        };
-
-        let dependents = self
-            .dependent
-            .clone()
-            .map(|node| vec![node.into()])
-            .unwrap_or_default();
-
-        let filter = self.filter.clone();
-        let allowed = self.allowed.clone();
-        spawn(async move {
-            let props = CardSelector::ref_picker(Arc::new(Box::new(fun)), dependents, filter)
-                .await
-                .with_allowed_cards(allowed);
-
-            OVERLAY.cloned().set(Box::new(props));
-        });
     }
 }

@@ -7,7 +7,9 @@ use serde::{Deserialize, Serialize};
 use strum::{EnumIter, IntoEnumIterator};
 
 use crate::{
-    components::{dropdown::DropComponent, CardRef, CardTy, DropDownMenu, Komponent},
+    components::{
+        cardref::CardRefRender, dropdown::DropComponent, CardRef, CardTy, DropDownMenu, Komponent,
+    },
     overlays::Overlay,
     APP,
 };
@@ -174,7 +176,16 @@ impl Komponent for Uploader {
                         div {
                             class: "block text-gray-700 text-sm font-medium max-w-[100px] mx-auto",
                             style: "margin-right: 81px;",
-                            { concept.with_placeholder("pick class of instance").render() }
+                            CardRefRender{
+                                card_display: concept.display.clone(),
+                                selected_card: concept.card.clone(),
+                                placeholder: "pick class of instance",
+                                on_select: concept.on_select.clone(),
+                                on_deselect: concept.on_deselect.clone(),
+                                dependent: concept.dependent.clone(),
+                                filter: concept.filter.clone(),
+                                allowed: concept.allowed.clone(),
+                            },
                         }
 
                 div {

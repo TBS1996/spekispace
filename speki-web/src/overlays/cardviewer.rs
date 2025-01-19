@@ -10,14 +10,14 @@ use tracing::info;
 
 use crate::{
     components::{
-        frontside::FrontPutRender, BackPut, CardRef, CardTy, DropDownMenu, FrontPut, GraphRep,
-        Komponent,
+        cardref::CardRefRender, frontside::FrontPutRender, BackPut, CardRef, CardTy, DropDownMenu,
+        FrontPut, GraphRep, Komponent,
     },
     overlays::{card_selector::CardSelector, yesno::Yesno, Overlay},
     APP, IS_SHORT, OVERLAY,
 };
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq)]
 pub enum TempNode {
     Old(CardId),
     New {
@@ -99,7 +99,7 @@ pub struct CardViewer {
     is_done: Signal<bool>,
     old_card: Signal<Option<Arc<Card>>>,
     old_meta: Signal<Option<NodeMetadata>>,
-    filter: Option<Arc<Box<dyn Fn(CardType) -> bool>>>,
+    filter: Option<Callback<CardType, bool>>,
     tempnode: TempNode,
     allowed_cards: Vec<CardTy>,
 }
@@ -120,7 +120,7 @@ impl CardViewer {
         self
     }
 
-    pub fn with_filter(mut self, filter: Arc<Box<dyn Fn(CardType) -> bool>>) -> Self {
+    pub fn with_filter(mut self, filter: Callback<CardType, bool>) -> Self {
         self.filter = Some(filter);
         self
     }
@@ -143,11 +143,11 @@ impl CardViewer {
         let meta = NodeMetadata::from_card(card.clone(), true).await;
 
         let tempnode = TempNode::Old(card.id());
-        let filter = move |ty: CardType| ty.is_class();
+        let filter = Callback::new(move |ty: CardType| ty.is_class());
 
         let raw_ty = card.base.ty.clone();
         let concept = CardRef::new()
-            .with_filter(Arc::new(Box::new(filter)))
+            .with_filter(filter)
             .with_dependents(tempnode.clone())
             .with_allowed(vec![CardTy::Class]);
         if let Some(class) = raw_ty.class() {
@@ -174,25 +174,25 @@ impl CardViewer {
         let _front = frnt.clone();
         let _graph = graph.clone();
         let _meta = meta.clone();
-        let f: Arc<Box<dyn Fn(Arc<Card>)>> = Arc::new(Box::new(move |card: Arc<Card>| {
+        let f: Callback<Arc<Card>, ()> = Callback::new(move |card: Arc<Card>| {
             let graph = _graph.clone();
             let front = _front.clone();
             let meta = _meta.clone();
             let deps = dependencies.clone();
             deps.clone().write().push(card.id());
             refresh_graph(graph, front, deps, dependents.clone(), Some(meta));
-        }));
+        });
         let _front = frnt.clone();
         let _graph = graph.clone();
         let _meta = meta.clone();
-        let af: Arc<Box<dyn Fn(Arc<Card>)>> = Arc::new(Box::new(move |card: Arc<Card>| {
+        let af: Callback<Arc<Card>, ()> = Callback::new(move |card: Arc<Card>| {
             let graph = _graph.clone();
             let front = _front.clone();
             let deps = dependencies.clone();
             let meta = _meta.clone();
             deps.clone().write().retain(|dep| *dep != card.id());
             refresh_graph(graph, front, deps, dependents.clone(), Some(meta));
-        }));
+        });
 
         let bck = bck.with_closure(f.clone()).with_deselect(af.clone());
         let concept = concept.with_closure(f.clone()).with_deselect(af.clone());
@@ -225,23 +225,23 @@ impl CardViewer {
         let _graph = graph.clone();
         let _front = front.clone();
 
-        let f: Arc<Box<dyn Fn(Arc<Card>)>> = Arc::new(Box::new(move |card: Arc<Card>| {
+        let f: Callback<Arc<Card>, ()> = Callback::new(move |card: Arc<Card>| {
             let graph = _graph.clone();
             let front = _front.clone();
             let deps = dependencies.clone();
             deps.clone().write().push(card.id());
             refresh_graph(graph, front, deps, dependents.clone(), None);
-        }));
+        });
 
         let _front = front.clone();
         let _graph = graph.clone();
-        let af: Arc<Box<dyn Fn(Arc<Card>)>> = Arc::new(Box::new(move |card: Arc<Card>| {
+        let af: Callback<Arc<Card>, ()> = Callback::new(move |card: Arc<Card>| {
             let graph = _graph.clone();
             let front = _front.clone();
             let deps = dependencies.clone();
             deps.clone().write().retain(|dep| *dep != card.id());
             refresh_graph(graph, front, deps, dependents.clone(), None);
-        }));
+        });
 
         let tempnode = TempNode::New {
             id: NodeId::new_temp(),
@@ -255,10 +255,10 @@ impl CardViewer {
             .with_closure(f.clone())
             .with_deselect(af.clone());
 
-        let filter = move |ty: CardType| ty.is_class();
+        let filter = Callback::new(move |ty: CardType| ty.is_class());
 
         let concept = CardRef::new()
-            .with_filter(Arc::new(Box::new(filter)))
+            .with_filter(filter)
             .with_dependents(tempnode.clone())
             .with_allowed(vec![CardTy::Class])
             .with_closure(f.clone())
@@ -512,13 +512,33 @@ impl CardViewer {
                             class: "block text-gray-700 text-sm font-medium mb-2",
                             style: "margin-right: 81px;",
                             "Parent class"
-                            { selv.concept.render() }
+
+                            CardRefRender{
+                                card_display: selv.concept.display.clone(),
+                                selected_card: selv.concept.card.clone(),
+                                placeholder: "pick parent class",
+                                on_select: selv.concept.on_select.clone(),
+                                on_deselect: selv.concept.on_deselect.clone(),
+                                dependent: selv.concept.dependent.clone(),
+                                filter: selv.concept.filter.clone(),
+                                allowed: selv.concept.allowed.clone(),
+                            },
                         }
                     } else {
                         div {
                             class: "block text-gray-700 text-sm font-medium",
                             style: "margin-right: 81px;",
-                            { selv.concept.with_placeholder("pick parent class").render() }
+
+                            CardRefRender{
+                                card_display: selv.concept.display.clone(),
+                                selected_card: selv.concept.card.clone(),
+                                placeholder: "pick parent class",
+                                on_select: selv.concept.on_select.clone(),
+                                on_deselect: selv.concept.on_deselect.clone(),
+                                dependent: selv.concept.dependent.clone(),
+                                filter: selv.concept.filter.clone(),
+                                allowed: selv.concept.allowed.clone(),
+                            },
                         }
                     }
                 },
@@ -530,18 +550,35 @@ impl CardViewer {
                             class: "block text-gray-700 text-sm font-medium mb-2",
                             style: "margin-right: 81px;",
                             "Class of instance"
-                            { selv.concept.render() }
+                            CardRefRender{
+                                card_display: selv.concept.display.clone(),
+                                selected_card: selv.concept.card.clone(),
+                                placeholder: "pick class of instance",
+                                on_select: selv.concept.on_select.clone(),
+                                on_deselect: selv.concept.on_deselect.clone(),
+                                dependent: selv.concept.dependent.clone(),
+                                filter: selv.concept.filter.clone(),
+                                allowed: selv.concept.allowed.clone(),
+                            },
                         }
                     } else {
                         div {
                             class: "block text-gray-700 text-sm font-medium",
                             style: "margin-right: 81px;",
-                            { selv.concept.with_placeholder("pick class of instance").render() }
+                            CardRefRender{
+                                card_display: selv.concept.display.clone(),
+                                selected_card: selv.concept.card.clone(),
+                                placeholder: "pick class of instance",
+                                on_select: selv.concept.on_select.clone(),
+                                on_deselect: selv.concept.on_deselect.clone(),
+                                dependent: selv.concept.dependent.clone(),
+                                filter: selv.concept.filter.clone(),
+                                allowed: selv.concept.allowed.clone(),
+                            },
                         }
                     }
                 },
             }
-
         }
     }
 

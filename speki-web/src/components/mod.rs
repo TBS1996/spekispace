@@ -1,5 +1,5 @@
 pub mod backside;
-mod cardref;
+pub mod cardref;
 pub mod dropdown;
 mod filtereditor;
 pub mod frontside;
