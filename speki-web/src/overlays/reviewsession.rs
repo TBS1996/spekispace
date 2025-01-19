@@ -1,8 +1,5 @@
 use dioxus::prelude::*;
-use std::{
-    rc::Rc,
-    sync::{Arc, Mutex},
-};
+use std::{rc::Rc, sync::Arc};
 
 use speki_core::{card::CardId, cardfilter::CardFilter, recall_rate::Recall, Card};
 use tracing::info;
@@ -136,9 +133,8 @@ impl Komponent for ReviewState {
 #[derive(Clone, Debug)]
 pub struct ReviewState {
     pub card: Signal<Option<Card>>,
-    pub queue: Arc<Mutex<Vec<CardId>>>,
+    pub queue: Signal<Vec<CardId>>,
     pub tot_len: Signal<usize>,
-    pub pos: Signal<usize>,
     pub front: Signal<String>,
     pub back: Signal<String>,
     pub show_backside: Signal<bool>,
@@ -164,7 +160,6 @@ impl ReviewState {
         let mut selv = Self {
             card: Signal::new_in_scope(Default::default(), ScopeId::APP),
             tot_len: Signal::new_in_scope(Default::default(), ScopeId::APP),
-            pos: Signal::new_in_scope(Default::default(), ScopeId::APP),
             front: Signal::new_in_scope(Default::default(), ScopeId::APP),
             back: Signal::new_in_scope(Default::default(), ScopeId::APP),
             show_backside: Signal::new_in_scope(Default::default(), ScopeId::APP),
@@ -190,23 +185,19 @@ impl ReviewState {
 
         info!("review cards loaded!: so many cards: {}", thecards.len());
         self.tot_len.clone().set(thecards.len());
-        {
-            info!("setting queue");
-            let mut lock = self.queue.lock().unwrap();
-            *lock = thecards;
-            info!("queue was set");
-        }
+        self.queue.set(thecards);
+        info!("queue was set");
         self.next_card().await;
     }
 
     fn info_bar(&self) -> Element {
         let front = self.front.clone();
         let back = self.back.clone();
-        let pos = self.pos.clone();
         let tot = self.tot_len.clone();
         let currcard = self.card.clone();
         let selv2 = self.clone();
         let overlay = self.overlay.clone();
+        let pos = self.current_pos();
 
         rsx! {
             div {
@@ -413,7 +404,7 @@ impl ReviewState {
     }
 
     fn current_pos(&self) -> usize {
-        self.tot_len - self.queue.lock().unwrap().len()
+        self.tot_len - self.queue.read().len()
     }
 
     async fn refresh(&self) {
@@ -436,7 +427,7 @@ impl ReviewState {
     }
 
     async fn next_card(&mut self) {
-        let card = self.queue.lock().unwrap().pop();
+        let card = self.queue.write().pop();
         let card = match card {
             Some(id) => {
                 let card = APP.read().load_card(id).await;
@@ -460,7 +451,6 @@ impl ReviewState {
 
         info!("card set: {:?}", card);
         self.card.clone().set(card.map(Arc::unwrap_or_clone));
-        self.pos.clone().set(self.current_pos());
         self.show_backside.set(false);
         self.refresh().await;
     }
