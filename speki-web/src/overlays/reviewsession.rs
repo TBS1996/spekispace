@@ -9,8 +9,12 @@ use tracing::info;
 
 use crate::{
     components::Komponent,
-    overlays::{card_selector::CardSelector, cardviewer::CardViewer},
-    APP, OVERLAY,
+    overlays::{
+        card_selector::{CardSelector, MyClosure},
+        cardviewer::CardViewer,
+    },
+    pages::{Overender, OverlayEnum},
+    APP,
 };
 
 use super::Overlay;
@@ -90,34 +94,41 @@ impl Komponent for ReviewState {
             });
         };
 
+        let overlay = self.overlay.clone();
         rsx! {
-            div {
-                class: "h-full w-full flex flex-col",
-                id: "receiver",
-                tabindex: 0,
-                onkeydown: move |event| log_event(event.data()),
+            Overender {
+                overlay,
+                root: rsx! {
+                    div {
+                        class: "h-full w-full flex flex-col",
+                        id: "receiver",
+                        tabindex: 0,
+                        onkeydown: move |event| log_event(event.data()),
 
-                div {
-                    class: "flex-none w-full",
-                    { selv.info_bar() }
+                        div {
+                            class: "flex-none w-full",
+                            { selv.info_bar() }
+                        }
+
+                        div {
+                            class: "flex flex-col md:flex-row w-full h-full overflow-hidden",
+
+                            div {
+                                class: "flex-1 w-full md:w-1/2 box-border order-1 md:order-2 relative",
+                                style: "min-height: 0; flex-grow: 1;",
+                                { selv.render_dependencies() }
+                            }
+
+                            div {
+                                class: "flex-none w-full md:w-1/2 p-4 box-border overflow-y-auto overflow-x-hidden order-2 md:order-1",
+                                style: "min-height: 0; max-height: 100%;",
+                                { self.card_sides() }
+                            }
+                        }
+                    }
                 }
 
-                div {
-                    class: "flex flex-col md:flex-row w-full h-full overflow-hidden",
-
-                    div {
-                        class: "flex-1 w-full md:w-1/2 box-border order-1 md:order-2 relative",
-                        style: "min-height: 0; flex-grow: 1;",
-                        { selv.render_dependencies() }
-                    }
-
-                    div {
-                        class: "flex-none w-full md:w-1/2 p-4 box-border overflow-y-auto overflow-x-hidden order-2 md:order-1",
-                        style: "min-height: 0; max-height: 100%;",
-                        { self.card_sides() }
-                    }
-                }
-            }
+            },
         }
     }
 }
@@ -133,6 +144,7 @@ pub struct ReviewState {
     pub show_backside: Signal<bool>,
     pub dependencies: Signal<Vec<(String, Arc<Card>, Self)>>,
     pub is_done: Signal<bool>,
+    pub overlay: Signal<Option<OverlayEnum>>,
 }
 
 impl ReviewState {
@@ -159,6 +171,7 @@ impl ReviewState {
             dependencies: Signal::new_in_scope(Default::default(), ScopeId::APP),
             is_done: Signal::new_in_scope(Default::default(), ScopeId::APP),
             queue: Default::default(),
+            overlay: Default::default(),
         };
 
         selv.start_review(cards).await;
@@ -192,8 +205,8 @@ impl ReviewState {
         let pos = self.pos.clone();
         let tot = self.tot_len.clone();
         let currcard = self.card.clone();
-        let overlay = OVERLAY.cloned();
         let selv2 = self.clone();
+        let overlay = self.overlay.clone();
 
         rsx! {
             div {
@@ -232,7 +245,8 @@ impl ReviewState {
                         let overlay = overlay.clone();
                         spawn(async move {
                             let viewer = CardViewer::new_from_card(Arc::new(card), Default::default()).await.with_hook(Arc::new(Box::new(fun)));
-                            overlay.set(Box::new(viewer));
+                            let viewer = OverlayEnum::CardViewer(viewer);
+                            overlay.clone().set(Some(viewer));
                         });
                     },
                     "✏️"
@@ -319,7 +333,10 @@ impl ReviewState {
         };
 
         let deps = self.dependencies.clone();
-        let card = Arc::new(self.card.cloned().unwrap());
+        let Some(card) = self.card.cloned() else {
+            return rsx! {"no card??"};
+        };
+
         let selv = self.clone();
         rsx! {
             div {
@@ -339,18 +356,19 @@ impl ReviewState {
                                 let currcard = card.clone();
 
                                 let selv = selv.clone();
-                                let fun = Callback::new(move |card: Arc<Card>| {
+                                let selv2 = selv.clone();
+                                let fun = MyClosure(Arc::new(Box::new(move |card: Arc<Card>| {
                                     let selv = selv.clone();
-                                    let old_card = currcard.clone();
+                                    let mut old_card = currcard.clone();
                                     spawn(async move {
-                                        Arc::unwrap_or_clone(old_card).add_dependency(card.id()).await;
+                                        old_card.add_dependency(card.id()).await;
                                         selv.refresh().await;
                                     });
-                                });
+                                })));
 
                                 spawn(async move {
                                     let props = CardSelector::dependency_picker(fun).await;
-                                    OVERLAY.cloned().set(Box::new(props));
+                                    selv2.overlay.clone().set(Some(OverlayEnum::CardSelector(props)));
                                 });
                             },
                             "➕"
@@ -362,6 +380,7 @@ impl ReviewState {
                         class: "mb-1 p-1 bg-gray-100 rounded-md text-left",
                         onclick: move|_|{
                             let selv = selv.clone();
+                            let selv2 = selv.clone();
                             let card = card.clone();
                             spawn(async move{
                                 let fun: Box<dyn Fn(Arc<Card>)> = Box::new(move |_: Arc<Card>| {
@@ -372,7 +391,7 @@ impl ReviewState {
                                 });
 
                                 let viewer = CardViewer::new_from_card(card, Default::default()).await.with_hook(Arc::new(fun));
-                                OVERLAY.write().set(Box::new(viewer));
+                                selv2.overlay.clone().set(Some(OverlayEnum::CardViewer(viewer)));
                             });
                         },
                         "{name}"

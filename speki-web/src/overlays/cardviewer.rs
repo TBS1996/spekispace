@@ -14,8 +14,13 @@ use crate::{
         graph::GraphRepRender, BackPut, CardRef, CardTy, DropDownMenu, FrontPut, GraphRep,
         Komponent,
     },
-    overlays::{card_selector::CardSelector, yesno::Yesno, Overlay},
-    APP, IS_SHORT, OVERLAY,
+    overlays::{
+        card_selector::{CardSelector, MyClosure},
+        yesno::Yesno,
+        Overlay,
+    },
+    pages::{Overender, OverlayEnum},
+    APP, IS_SHORT,
 };
 
 #[derive(Clone, PartialEq)]
@@ -103,6 +108,7 @@ pub struct CardViewer {
     filter: Option<Callback<CardType, bool>>,
     tempnode: TempNode,
     allowed_cards: Vec<CardTy>,
+    pub overlay: Signal<Option<OverlayEnum>>,
 }
 
 impl CardViewer {
@@ -141,6 +147,8 @@ impl CardViewer {
     }
 
     pub async fn new_from_card(card: Arc<Card>, graph: GraphRep) -> Self {
+        let overlay: Signal<Option<OverlayEnum>> =
+            Signal::new_in_scope(Default::default(), ScopeId::APP);
         let meta = NodeMetadata::from_card(card.clone(), true).await;
 
         let tempnode = TempNode::Old(card.id());
@@ -158,7 +166,8 @@ impl CardViewer {
 
         graph.new_set_card(card.clone());
         let dependencies = card.dependency_ids().await;
-        let bck = BackPut::new(raw_ty.backside()).with_dependents(tempnode.clone());
+        let bck =
+            BackPut::new(raw_ty.backside(), overlay.clone()).with_dependents(tempnode.clone());
         let front = raw_ty.raw_front();
         let back = raw_ty.raw_back();
         let frnt = FrontPut::new(CardTy::from_ctype(card.get_ty().fieldless()));
@@ -175,25 +184,26 @@ impl CardViewer {
         let _front = frnt.clone();
         let _graph = graph.clone();
         let _meta = meta.clone();
-        let f: Callback<Arc<Card>, ()> = Callback::new(move |card: Arc<Card>| {
+        let f = MyClosure(Arc::new(Box::new(move |card: Arc<Card>| {
             let graph = _graph.clone();
             let front = _front.clone();
             let meta = _meta.clone();
             let deps = dependencies.clone();
             deps.clone().write().push(card.id());
             refresh_graph(graph, front, deps, dependents.clone(), Some(meta));
-        });
+        })));
+
         let _front = frnt.clone();
         let _graph = graph.clone();
         let _meta = meta.clone();
-        let af: Callback<Arc<Card>, ()> = Callback::new(move |card: Arc<Card>| {
+        let af = MyClosure(Arc::new(Box::new(move |card: Arc<Card>| {
             let graph = _graph.clone();
             let front = _front.clone();
             let deps = dependencies.clone();
             let meta = _meta.clone();
             deps.clone().write().retain(|dep| *dep != card.id());
             refresh_graph(graph, front, deps, dependents.clone(), Some(meta));
-        });
+        })));
 
         let bck = bck.with_closure(f.clone()).with_deselect(af.clone());
         let concept = concept.with_closure(f.clone()).with_deselect(af.clone());
@@ -213,11 +223,14 @@ impl CardViewer {
             tempnode,
             allowed_cards: vec![],
             old_meta: Signal::new_in_scope(Some(meta), ScopeId::APP),
+            overlay,
         }
     }
 
     pub fn new() -> Self {
-        let front = FrontPut::new(CardTy::Class);
+        let overlay: Signal<Option<OverlayEnum>> =
+            Signal::new_in_scope(Default::default(), ScopeId::APP);
+        let front = FrontPut::new(CardTy::Normal);
         let dependencies: Signal<Vec<CardId>> =
             Signal::new_in_scope(Default::default(), ScopeId(3));
         let dependents = Signal::new_in_scope(Default::default(), ScopeId(3));
@@ -226,23 +239,24 @@ impl CardViewer {
         let _graph = graph.clone();
         let _front = front.clone();
 
-        let f: Callback<Arc<Card>, ()> = Callback::new(move |card: Arc<Card>| {
+        let f = MyClosure(Arc::new(Box::new(move |card: Arc<Card>| {
+            info!("ref card set ?");
             let graph = _graph.clone();
             let front = _front.clone();
             let deps = dependencies.clone();
             deps.clone().write().push(card.id());
             refresh_graph(graph, front, deps, dependents.clone(), None);
-        });
+        })));
 
         let _front = front.clone();
         let _graph = graph.clone();
-        let af: Callback<Arc<Card>, ()> = Callback::new(move |card: Arc<Card>| {
+        let af = MyClosure(Arc::new(Box::new(move |card: Arc<Card>| {
             let graph = _graph.clone();
             let front = _front.clone();
             let deps = dependencies.clone();
             deps.clone().write().retain(|dep| *dep != card.id());
             refresh_graph(graph, front, deps, dependents.clone(), None);
-        });
+        })));
 
         let tempnode = TempNode::New {
             id: NodeId::new_temp(),
@@ -251,7 +265,7 @@ impl CardViewer {
             dependents: dependents.clone(),
         };
 
-        let back = BackPut::new(None)
+        let back = BackPut::new(None, overlay.clone())
             .with_dependents(tempnode.clone())
             .with_closure(f.clone())
             .with_deselect(af.clone());
@@ -280,6 +294,7 @@ impl CardViewer {
             tempnode,
             allowed_cards: vec![],
             old_meta: Signal::new_in_scope(None, ScopeId::APP),
+            overlay,
         };
 
         selv.set_graph();
@@ -361,6 +376,7 @@ impl CardViewer {
 
     fn delete(&self, card: CardId) -> Element {
         let isdone = self.is_done.clone();
+        let overlay = self.overlay.clone();
         rsx! {
             button {
                 class: "mt-2 inline-flex items-center text-white bg-gray-800 border-0 py-1 px-3 focus:outline-none hover:bg-gray-700 rounded text-base md:mt-0",
@@ -374,7 +390,7 @@ impl CardViewer {
                     });
 
                     let yesno = Yesno::new("Really delete card?".to_string(), Arc::new(fun));
-                    OVERLAY.read().set(Box::new(yesno));
+                    overlay.clone().set(Some(OverlayEnum::YesNo(yesno)));
                 },
                 "delete"
             }
@@ -409,6 +425,7 @@ impl CardViewer {
 
     fn add_dep(&self) -> Element {
         let selv = self.clone();
+        let overlay = self.overlay.clone();
         rsx! {
             button {
                 class: "mt-2 inline-flex items-center text-white bg-gray-800 border-0 py-1 px-3 focus:outline-none hover:bg-gray-700 rounded text-base md:mt-0",
@@ -416,7 +433,8 @@ impl CardViewer {
                     let selv = selv.clone();
                     let selv2 = selv.clone();
 
-                    let fun = Callback::new(move |card: Arc<Card>| {
+                    let fun = MyClosure(Arc::new(Box::new(
+                        move |card: Arc<Card>| {
                         selv.dependencies.clone().write().push(card.id());
                         selv.set_graph();
                         let old_card = selv.old_card.cloned();
@@ -425,14 +443,17 @@ impl CardViewer {
                                 Arc::unwrap_or_clone(old_card).add_dependency(card.id()).await;
                             }
                         });
-                    });
+                    }
+
+
+                )));
 
                     info!("1 scope is ! {:?}", current_scope_id().unwrap());
 
                     spawn(async move {
                         let dependent: Node = selv2.tempnode.clone().into();
                         let props = CardSelector::dependency_picker(fun).await.with_dependents(vec![dependent]);
-                        OVERLAY.cloned().set(Box::new(props));
+                        overlay.clone().set(Some(OverlayEnum::CardSelector(props)));
                         info!("2 scope is ! {:?}", current_scope_id().unwrap());
                     });
                 },
@@ -497,6 +518,7 @@ impl CardViewer {
     fn input_elements(&self, ty: CardTy) -> Element {
         let selv = self.clone();
         let is_short = IS_SHORT.cloned();
+        let overlay = self.overlay.clone();
         rsx! {
             FrontPutRender { dropdown: self.front.dropdown.clone(), text: self.front.text.clone() }
 
@@ -508,6 +530,7 @@ impl CardViewer {
                         text: selv.back.text.clone(),
                         dropdown: selv.back.dropdown.clone(),
                         ref_card: selv.back.ref_card.clone(),
+                        overlay: overlay.clone(),
                     }
                 },
                 CardTy::Class => rsx! {
@@ -515,6 +538,7 @@ impl CardViewer {
                         text: selv.back.text.clone(),
                         dropdown: selv.back.dropdown.clone(),
                         ref_card: selv.back.ref_card.clone(),
+                        overlay: overlay.clone(),
                     }
 
 
@@ -533,6 +557,7 @@ impl CardViewer {
                                 dependent: selv.concept.dependent.clone(),
                                 filter: selv.concept.filter.clone(),
                                 allowed: selv.concept.allowed.clone(),
+                                overlay: overlay.clone(),
                             },
                         }
                     } else {
@@ -549,6 +574,7 @@ impl CardViewer {
                                 dependent: selv.concept.dependent.clone(),
                                 filter: selv.concept.filter.clone(),
                                 allowed: selv.concept.allowed.clone(),
+                        overlay: overlay.clone(),
                             },
                         }
                     }
@@ -558,6 +584,7 @@ impl CardViewer {
                         text: selv.back.text.clone(),
                         dropdown: selv.back.dropdown.clone(),
                         ref_card: selv.back.ref_card.clone(),
+                        overlay: overlay.clone(),
                     }
 
                     if !is_short {
@@ -574,6 +601,7 @@ impl CardViewer {
                                 dependent: selv.concept.dependent.clone(),
                                 filter: selv.concept.filter.clone(),
                                 allowed: selv.concept.allowed.clone(),
+                                overlay: overlay.clone(),
                             },
                         }
                     } else {
@@ -589,6 +617,7 @@ impl CardViewer {
                                 dependent: selv.concept.dependent.clone(),
                                 filter: selv.concept.filter.clone(),
                                 allowed: selv.concept.allowed.clone(),
+                                overlay: overlay.clone(),
                             },
                         }
                     }
@@ -625,33 +654,42 @@ impl Overlay for CardViewer {
 impl Komponent for CardViewer {
     fn render(&self) -> Element {
         info!("render cardviewer");
-        rsx! {
-            div {
-                class: "flex flex-col w-full h-full",
-                if let Some(title) = self.title.as_ref() {
-                    h1 {
-                        class: "text-3xl font-bold mb-4 text-center",
-                        "{title}"
-                    }
-                }
 
-                div {
-                    class: "flex flex-col md:flex-row w-full h-full overflow-hidden",
+        let overlay = self.overlay.clone();
+
+        rsx! {
+            Overender {
+            overlay,
+            root:
+                rsx! {
                     div {
-                        class: "flex-none p-2 w-full max-w-[500px] box-border order-2 md:order-1 overflow-y-auto",
-                        style: "min-height: 0; max-height: 100%;",
-                        { self.render_inputs() }
-                    }
-                    div {
-                        class: "flex-1 w-full box-border mb-2 md:mb-0 order-1 md:order-2",
-                        style: "min-height: 0; flex-grow: 1;",
-                        GraphRepRender{
-                            cyto_id: self.graph.cyto_id.clone(),
-                            scope: self.graph.scope.clone(),
-                            label: self.graph.label.clone(),
-                            inner: self.graph.inner.clone(),
-                            new_card_hook: self.graph.new_card_hook.clone(),
-                            is_init: self.graph.is_init.clone(),
+                        class: "flex flex-col w-full h-full",
+                        if let Some(title) = self.title.as_ref() {
+                            h1 {
+                                class: "text-3xl font-bold mb-4 text-center",
+                                "{title}"
+                            }
+                        }
+
+                        div {
+                            class: "flex flex-col md:flex-row w-full h-full overflow-hidden",
+                            div {
+                                class: "flex-none p-2 w-full max-w-[500px] box-border order-2 md:order-1 overflow-y-auto",
+                                style: "min-height: 0; max-height: 100%;",
+                                { self.render_inputs() }
+                            }
+                            div {
+                                class: "flex-1 w-full box-border mb-2 md:mb-0 order-1 md:order-2",
+                                style: "min-height: 0; flex-grow: 1;",
+                                GraphRepRender{
+                                    cyto_id: self.graph.cyto_id.clone(),
+                                    scope: self.graph.scope.clone(),
+                                    label: self.graph.label.clone(),
+                                    inner: self.graph.inner.clone(),
+                                    new_card_hook: self.graph.new_card_hook.clone(),
+                                    is_init: self.graph.is_init.clone(),
+                                }
+                            }
                         }
                     }
                 }

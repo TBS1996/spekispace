@@ -1,19 +1,140 @@
-use std::sync::Arc;
+use std::{fmt::Debug, sync::Arc};
 
 use dioxus::prelude::*;
 use speki_core::{cardfilter::CardFilter, collection::Collection};
 
 use crate::{
     components::{FilterComp, FilterEditor},
-    overlays::{colviewer::ColViewer, reviewsession::ReviewState, textinput::TextInput},
-    APP, IS_SHORT, OVERLAY,
+    overlays::{
+        card_selector::CardSelector, cardviewer::CardViewer, colviewer::ColViewer,
+        itemselector::ItemSelector, reviewsession::ReviewState, textinput::TextInput,
+        uploader::Uploader, yesno::Yesno,
+    },
+    APP, IS_SHORT,
 };
+
+use crate::components::Komponent;
+use crate::overlays::Overlay;
+
+#[derive(Clone)]
+pub enum OverlayEnum {
+    Review(ReviewState),
+    Colviewer(ColViewer),
+    Text(TextInput),
+    CardViewer(CardViewer),
+    CardSelector(CardSelector),
+    YesNo(Yesno),
+    ColSelector(ItemSelector<Collection>),
+    Uploader(Uploader),
+}
+
+impl Debug for OverlayEnum {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Review(_) => f.debug_tuple("Review").finish(),
+            Self::Colviewer(_) => f.debug_tuple("Colviewer").finish(),
+            Self::Text(_) => f.debug_tuple("Text").finish(),
+            Self::CardViewer(_) => f.debug_tuple("card viewer").finish(),
+            Self::CardSelector(_) => f.debug_tuple("card selector").finish(),
+            Self::YesNo(_) => f.debug_tuple("yesno").finish(),
+            Self::ColSelector(_) => f.debug_tuple("col selector").finish(),
+            Self::Uploader(_) => f.debug_tuple("uploader").finish(),
+        }
+    }
+}
+
+#[component]
+pub fn Overender(overlay: Signal<Option<OverlayEnum>>, root: Element) -> Element {
+    rsx! {
+        match overlay.cloned() {
+            Some(elm) => rsx!{
+                div {
+                    button {
+                        onclick: move |_| {
+                            overlay.clone().set(None);
+                        },
+                        "❌"
+                    }
+
+                    match elm {
+                        OverlayEnum::Review(elm) => {
+                            if elm.is_done().cloned() {
+                                overlay.clone().set(None);
+                                root
+                            } else {
+                                elm.render()
+                            }
+                        },
+                        OverlayEnum::Colviewer(elm) => {
+                            if elm.is_done().cloned() {
+                                overlay.clone().set(None);
+                                root
+                            } else {
+                                elm.render()
+                            }
+                        },
+                        OverlayEnum::Text(elm) => {
+                            if elm.is_done().cloned() {
+                                overlay.clone().set(None);
+                                root
+                            } else {
+                                elm.render()
+                            }
+                        },
+                        OverlayEnum::CardViewer(elm) => {
+                            if elm.is_done().cloned() {
+                                overlay.clone().set(None);
+                                root
+                            } else {
+                                elm.render()
+                            }
+                        },
+                        OverlayEnum::YesNo(elm) => {
+                            if elm.is_done().cloned() {
+                                overlay.clone().set(None);
+                                root
+                            } else {
+                                elm.render()
+                            }
+                        },
+                        OverlayEnum::ColSelector(elm) => {
+                            if elm.is_done().cloned() {
+                                overlay.clone().set(None);
+                                root
+                            } else {
+                                elm.render()
+                            }
+                        },
+                        OverlayEnum::CardSelector(elm) => {
+                            if elm.is_done().cloned() {
+                                overlay.clone().set(None);
+                                root
+                            } else {
+                                elm.render()
+                            }
+                        },
+                        OverlayEnum::Uploader(elm) => {
+                            if elm.is_done().cloned() {
+                                overlay.clone().set(None);
+                                root
+                            } else {
+                                elm.render()
+                            }
+                        },
+                    }
+                }
+            },
+            None => root ,
+        }
+    }
+}
 
 #[derive(Clone)]
 pub struct ReviewPage {
     filter: FilterEditor,
     cardfilter: Memo<CardFilter>,
     collections: Signal<Vec<(Collection, RecallDist)>>,
+    overlay: Signal<Option<OverlayEnum>>,
 }
 
 impl ReviewPage {
@@ -24,6 +145,7 @@ impl ReviewPage {
             filter,
             cardfilter,
             collections: Default::default(),
+            overlay: Default::default(),
         };
 
         let cols = selv.collections.clone();
@@ -55,18 +177,21 @@ pub fn Review() -> Element {
         "flex flex-col items-start h-screen space-y-4 pl-32"
     };
 
+    let overlay = state.overlay.clone();
+
     rsx! {
-        div {
-            class: "{class}",
+        Overender {
+            overlay,
+            root: rsx!{
+                div {
+                    class: "{class}",
+                    div {
+                        class: "flex space-x-4 mt-6",
+                        { render_collections(state) }
+                        FilterComp {editor}
 
-            div {
-                class: "flex space-x-4 mt-6",
-
-                { render_collections(state) }
-
-
-                 FilterComp {editor}
-
+                    }
+                }
             }
         }
     }
@@ -176,6 +301,8 @@ fn render_collections(state: ReviewPage) -> Element {
         colfil.push((col, dist, filter.clone()));
     }
 
+    let overlay = state.overlay.clone();
+
     rsx! {
         div {
             class: "flex flex-col max-w-[550px] mr-5",
@@ -186,8 +313,8 @@ fn render_collections(state: ReviewPage) -> Element {
                     let filter = filter.clone();
                     spawn(async move {
                         let cards = APP.read().load_all(Some(filter)).await;
-                        let session = ReviewState::new(cards).await;
-                        OVERLAY.cloned().set(Box::new(session));
+                        let revses = OverlayEnum::Review(ReviewState::new(cards).await);
+                        overlay.clone().set(Some(revses));
                     });
                 },
                 "review all"
@@ -202,8 +329,8 @@ fn render_collections(state: ReviewPage) -> Element {
                         button {
                             onclick: move |_|{
                                 spawn(async move {
-                                    let viewer = ColViewer::new(col.id).await;
-                                    OVERLAY.read().set(Box::new(viewer));
+                                    let viewer = OverlayEnum::Colviewer(ColViewer::new(col.id).await);
+                                    overlay.clone().set(Some(viewer));
                                 });
                             },
                             "✏️"
@@ -215,8 +342,8 @@ fn render_collections(state: ReviewPage) -> Element {
                                 spawn(async move {
                                     let col = APP.read().load_collection(col.id).await;
                                     let cards = col.expand(APP.read().inner().card_provider.clone(), Default::default()).await;
-                                    let session = ReviewState::new_with_filter(cards, filter).await;
-                                    OVERLAY.cloned().set(Box::new(session));
+                                    let session = OverlayEnum::Review(ReviewState::new_with_filter(cards, filter).await);
+                                    overlay.clone().set(Some(session));
                                 });
                             },
                             "{col.name}"
@@ -237,13 +364,11 @@ fn render_collections(state: ReviewPage) -> Element {
                         });
                     };
 
-                    let txt = TextInput::new("add collection".to_string(), Arc::new(Box::new(f)));
-                    OVERLAY.read().set(Box::new(txt));
+                    let txt = OverlayEnum::Text(TextInput::new("add collection".to_string(), Arc::new(Box::new(f))));
+                    overlay.clone().set(Some(txt));
                 },
                 "add collection"
             }
-
-
         }
     }
 }

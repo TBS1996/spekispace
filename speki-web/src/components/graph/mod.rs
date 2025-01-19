@@ -12,7 +12,7 @@ use speki_core::{card::CardId, Card};
 use speki_web::{Node, NodeMetadata};
 use tracing::info;
 
-use crate::{utils, TouchRec, APP, NONCLICKABLE, ROUTE_CHANGE};
+use crate::{overlays::card_selector::MyClosure, utils, TouchRec, APP, ROUTE_CHANGE};
 
 mod digraph;
 mod js;
@@ -33,7 +33,7 @@ pub struct GraphRep {
     pub inner: RustGraph,
     pub is_init: Signal<bool>,
     pub cyto_id: Arc<String>,
-    pub new_card_hook: Option<Callback<Arc<Card>, ()>>,
+    pub new_card_hook: Option<MyClosure>,
     pub label: Option<Signal<String>>,
     pub scope: Signal<usize>,
 }
@@ -49,11 +49,11 @@ impl GraphRep {
         let id = format!("cyto_id-{}", COUNTER.fetch_add(1, Ordering::SeqCst));
         Self {
             inner: Default::default(),
-            is_init: Default::default(),
+            is_init: Signal::new_in_scope(false, ScopeId::APP),
             cyto_id: Arc::new(id),
             new_card_hook: Default::default(),
             label: Default::default(),
-            scope: Default::default(),
+            scope: Signal::new_in_scope(Default::default(), ScopeId::APP),
         }
     }
 
@@ -61,7 +61,7 @@ impl GraphRep {
         utils::rect(&self.cyto_id)
     }
 
-    pub fn with_hook(mut self, hook: Callback<Arc<Card>, ()>) -> Self {
+    pub fn with_hook(mut self, hook: MyClosure) -> Self {
         self.new_card_hook = Some(hook);
         self
     }
@@ -111,23 +111,12 @@ impl GraphRep {
 
     fn is_dom_rendered(&self) -> bool {
         let x = utils::is_element_present(&self.cyto_id);
-        if x {
-            if let Some(dom) = self.coordinates() {
-                NONCLICKABLE.write().insert(self.cyto_id.to_string(), dom);
-            }
-        }
         x
     }
 }
 
 fn is_dom_rendered(cyto_id: &str) -> bool {
     let x = utils::is_element_present(cyto_id);
-    let coords = utils::rect(cyto_id);
-    if x {
-        if let Some(dom) = coords {
-            NONCLICKABLE.write().insert(cyto_id.to_string(), dom);
-        }
-    }
     x
 }
 
@@ -137,12 +126,11 @@ pub fn GraphRepRender(
     scope: Signal<usize>,
     label: Option<Signal<String>>,
     inner: RustGraph,
-    new_card_hook: Option<Callback<Arc<Card>, ()>>,
+    new_card_hook: Option<MyClosure>,
     is_init: Signal<bool>,
 ) -> Element {
     if let Some(dom) = utils::rect(&cyto_id) {
         tracing::trace!("nice, a dom! {dom:?}");
-        NONCLICKABLE.write().insert(cyto_id.to_string(), dom);
     } else {
         tracing::trace!("oh no theres no dom");
     }
@@ -181,7 +169,7 @@ pub fn GraphRepRender(
                     let card = app.load_card(id).await;
 
                     if let Some(hook) = new_card_hook.clone() {
-                        (hook)(card.clone());
+                        (hook.0)(card.clone());
                     }
                 });
             }

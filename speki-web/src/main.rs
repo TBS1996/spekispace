@@ -2,7 +2,6 @@
 
 use std::{
     collections::HashMap,
-    rc::Rc,
     sync::{
         atomic::{AtomicBool, Ordering},
         Arc, Mutex,
@@ -12,7 +11,6 @@ use std::{
 use dioxus::prelude::*;
 use dioxus_logger::tracing::{info, Level};
 use firebase::AuthUser;
-use overlays::OverlayManager;
 use pages::{ImportState, ReviewPage};
 
 use crate::{
@@ -102,8 +100,6 @@ impl NonClickable {
 }
 
 static APP: GlobalSignal<App> = Signal::global(App::new);
-static OVERLAY: GlobalSignal<OverlayManager> = Signal::global(Default::default);
-static NONCLICKABLE: GlobalSignal<NonClickable> = Signal::global(Default::default);
 static IS_SHORT: GlobalSignal<bool> = Signal::global(|| screen_height_in_inches().unwrap() < 4.);
 static CURRENT_ROUTE: GlobalSignal<Route> = Signal::global(|| Route::Menu {});
 static LOGIN_STATE: GlobalSignal<Option<AuthUser>> = Signal::global(|| None);
@@ -154,19 +150,9 @@ fn Wrapper() -> Element {
     *CURRENT_ROUTE.write() = use_route::<Route>();
     info!("wrapper scope id: {:?}", current_scope_id().unwrap());
     ROUTE_CHANGE.store(true, Ordering::SeqCst);
-    let overlay = OVERLAY.cloned();
-
-    let log_event = move |event: Rc<KeyboardData>| {
-        if let Key::Escape = event.key() {
-            OVERLAY.read().pop();
-        }
-    };
 
     rsx! {
         div {
-            id: "receiver",
-            tabindex: 0,
-            onkeydown: move |event| log_event(event.data()),
             class: "h-screen overflow-hidden flex flex-col",
 
             if !IS_SHORT() {
@@ -174,22 +160,14 @@ fn Wrapper() -> Element {
 
                 div {
                     class: "flex-1 overflow-hidden",
-                    if let Some(overlay) = overlay.render() {
-                        { overlay }
-                    } else {
-                        Outlet::<Route> {}
-                    }
+                    Outlet::<Route> {}
                 }
             }
 
             if IS_SHORT() {
                 div {
                     class: "flex-1 overflow-hidden",
-                    if let Some(overlay) = overlay.render() {
-                        { overlay }
-                    } else {
-                        Outlet::<Route> {}
-                    }
+                    Outlet::<Route> {}
                 }
 
                 crate::nav::nav {}

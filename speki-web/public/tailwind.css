@@ -2087,10 +2087,6 @@ input.tab:checked + .tab-content,
   height: 1rem;
 }
 
-.h-8 {
-  height: 2rem;
-}
-
 .h-\[68px\] {
   height: 68px;
 }
@@ -2169,10 +2165,6 @@ input.tab:checked + .tab-content,
 
 .max-w-md {
   max-width: 28rem;
-}
-
-.max-w-screen-xl {
-  max-width: 1280px;
 }
 
 .max-w-sm {
@@ -2255,10 +2247,6 @@ input.tab:checked + .tab-content,
   justify-content: flex-start;
 }
 
-.justify-end {
-  justify-content: flex-end;
-}
-
 .justify-center {
   justify-content: center;
 }
@@ -2308,10 +2296,6 @@ input.tab:checked + .tab-content,
   --tw-space-y-reverse: 0;
   margin-top: calc(1rem * calc(1 - var(--tw-space-y-reverse)));
   margin-bottom: calc(1rem * var(--tw-space-y-reverse));
-}
-
-.overflow-auto {
-  overflow: auto;
 }
 
 .overflow-hidden {

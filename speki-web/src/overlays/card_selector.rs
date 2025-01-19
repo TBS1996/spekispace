@@ -8,25 +8,25 @@ use tracing::info;
 use crate::{
     components::{CardTy, FilterComp, FilterEditor, GraphRep, Komponent},
     overlays::{cardviewer::CardViewer, Overlay},
-    pages::CardEntry,
-    APP, OVERLAY,
+    pages::{CardEntry, Overender, OverlayEnum},
+    APP,
 };
 
-pub fn overlay_card_viewer() -> Callback<Arc<Card>, ()> {
-    Callback::new(move |card: Arc<Card>| {
+pub fn overlay_card_viewer(overlay: Signal<Option<OverlayEnum>>) -> MyClosure {
+    MyClosure(Arc::new(Box::new(move |card: Arc<Card>| {
         spawn(async move {
-            let graph = GraphRep::new().with_hook(overlay_card_viewer());
+            let graph = GraphRep::new().with_hook(overlay_card_viewer(overlay.clone()));
             let viewer = CardViewer::new_from_card(card, graph).await;
-            OVERLAY.cloned().replace(Box::new(viewer));
+            overlay.clone().set(Some(OverlayEnum::CardViewer(viewer)));
         });
-    })
+    })))
 }
 
 #[derive(Props, Clone)]
 pub struct CardSelector {
     title: String,
     search: Signal<String>,
-    on_card_selected: Callback<Arc<Card>, ()>,
+    on_card_selected: MyClosure,
     all_cards: Signal<Vec<CardEntry>>,
     filtered_cards: Signal<Vec<CardEntry>>,
     allow_new: bool,
@@ -36,6 +36,7 @@ pub struct CardSelector {
     allowed_cards: Vec<CardTy>,
     filtereditor: FilterEditor,
     filtermemo: Option<Memo<CardFilter>>,
+    overlay: Signal<Option<OverlayEnum>>,
 }
 
 impl Default for CardSelector {
@@ -53,11 +54,13 @@ impl CardSelector {
             None
         };
         let search = Signal::new_in_scope(String::new(), ScopeId::APP);
+        let overlay: Signal<Option<OverlayEnum>> =
+            Signal::new_in_scope(Default::default(), ScopeId::APP);
 
         Self {
             title: "select card".to_string(),
             search,
-            on_card_selected: overlay_card_viewer(),
+            on_card_selected: overlay_card_viewer(overlay.clone()),
             all_cards: Signal::new_in_scope(Default::default(), ScopeId::APP),
             filtered_cards: Signal::new_in_scope(Default::default(), ScopeId::APP),
             allow_new: false,
@@ -67,11 +70,12 @@ impl CardSelector {
             allowed_cards: vec![],
             filtereditor,
             filtermemo,
+            overlay,
         }
     }
 
     pub async fn ref_picker(
-        fun: Callback<Arc<Card>, ()>,
+        fun: MyClosure,
         dependents: Vec<Node>,
         filter: Option<Callback<CardType, bool>>,
     ) -> Self {
@@ -82,7 +86,7 @@ impl CardSelector {
             done: Signal::new_in_scope(false, ScopeId(3)),
             filter,
             dependents: Signal::new_in_scope(dependents, ScopeId(3)),
-            ..Default::default()
+            ..Self::new(false)
         };
 
         let selv2 = selv.clone();
@@ -92,7 +96,7 @@ impl CardSelector {
         selv
     }
 
-    pub async fn class_picker(f: Callback<Arc<Card>>) -> Self {
+    pub async fn class_picker(f: MyClosure) -> Self {
         let filter: Callback<CardType, bool> = Callback::new(move |ty: CardType| ty.is_class());
 
         let mut selv = Self::new(false)
@@ -108,7 +112,7 @@ impl CardSelector {
         selv
     }
 
-    pub async fn dependency_picker(f: Callback<Arc<Card>, ()>) -> Self {
+    pub async fn dependency_picker(f: MyClosure) -> Self {
         let mut selv = Self::new(false)
             .with_title("set dependency".into())
             .new_on_card_selected(f);
@@ -121,7 +125,7 @@ impl CardSelector {
         selv
     }
 
-    pub fn new_on_card_selected(mut self, f: Callback<Arc<Card>, ()>) -> Self {
+    pub fn new_on_card_selected(mut self, f: MyClosure) -> Self {
         self.on_card_selected = f;
         self
     }
@@ -175,11 +179,20 @@ impl PartialEq for CardSelector {
     }
 }
 
+#[derive(Clone)]
+pub struct MyClosure(pub Arc<Box<dyn Fn(Arc<Card>)>>);
+
+impl PartialEq for MyClosure {
+    fn eq(&self, _other: &Self) -> bool {
+        true
+    }
+}
+
 #[component]
 pub fn CardSelectorRender(
     title: String,
     search: Signal<String>,
-    on_card_selected: Callback<Arc<Card>, ()>,
+    on_card_selected: MyClosure,
     all_cards: Signal<Vec<CardEntry>>,
     filtered_cards: Signal<Vec<CardEntry>>,
     allow_new: bool,
@@ -189,6 +202,7 @@ pub fn CardSelectorRender(
     allowed_cards: Vec<CardTy>,
     filtereditor: FilterEditor,
     filtermemo: Option<Memo<CardFilter>>,
+    overlay: Signal<Option<OverlayEnum>>,
 ) -> Element {
     info!("render cardselector");
     let title = &title;
@@ -286,8 +300,8 @@ pub fn CardSelectorRender(
                             let done = done.clone();
                             let closure = closure.clone();
                             let hook = move |card: Arc<Card>| {
+                                (closure.0)(card);
                                 done.clone().set(true);
-                                (closure)(card);
                             };
 
                             let mut viewer = CardViewer::new()
@@ -303,7 +317,7 @@ pub fn CardSelectorRender(
 
                             viewer.set_graph();
 
-                            crate::OVERLAY.cloned().set(Box::new(viewer));
+                            overlay.clone().set(Some(OverlayEnum::CardViewer(viewer)));
 
                         },
                         "new card"
@@ -336,13 +350,11 @@ pub fn CardSelectorRender(
                             tr {
                                 class: "hover:bg-gray-50 cursor-pointer",
                                 onclick: move |_| {
+                                    info!("omggggggggggggggggggggggggg");
                                     let card = card.clone();
                                     let closure = _closure.clone();
                                     let done = is_done.clone();
-                                    spawn(async move {
-                                        closure(card.card.clone());
-                                    });
-
+                                    (closure.0)(card.card.clone());
                                     done.clone().set(true);
 
                                 },
@@ -363,20 +375,29 @@ pub fn CardSelectorRender(
 impl Komponent for CardSelector {
     /// Selects a card from the collection and calls a closure on it.
     fn render(&self) -> Element {
-        rsx! {   CardSelectorRender {
-               title: self.title.clone(),
-               search: self.search.clone(),
-               on_card_selected: self.on_card_selected.clone(),
-               all_cards: self.all_cards.clone(),
-               filtered_cards: self.filtered_cards.clone(),
-               allow_new: self.allow_new.clone(),
-               done: self.done.clone(),
-               filter: self.filter.clone(),
-               dependents: self.dependents.clone(),
-               allowed_cards: self.allowed_cards.clone(),
-               filtereditor: self.filtereditor.clone(),
-               filtermemo: self.filtermemo.clone(),
-           }
+        let overlay = self.overlay.clone();
+        rsx! {
+            Overender {
+                overlay,
+                root:
+                    rsx! {
+                        CardSelectorRender {
+                        title: self.title.clone(),
+                        search: self.search.clone(),
+                        on_card_selected: self.on_card_selected.clone(),
+                        all_cards: self.all_cards.clone(),
+                        filtered_cards: self.filtered_cards.clone(),
+                        allow_new: self.allow_new.clone(),
+                        done: self.done.clone(),
+                        filter: self.filter.clone(),
+                        dependents: self.dependents.clone(),
+                        allowed_cards: self.allowed_cards.clone(),
+                        filtereditor: self.filtereditor.clone(),
+                        filtermemo: self.filtermemo.clone(),
+                        overlay: self.overlay.clone(),
+                    }
+                }
+            }
         }
     }
 }

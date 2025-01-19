@@ -11,6 +11,7 @@ use crate::{
         cardref::CardRefRender, dropdown::DropComponent, CardRef, CardTy, DropDownMenu, Komponent,
     },
     overlays::Overlay,
+    pages::{Overender, OverlayEnum},
     APP,
 };
 
@@ -89,6 +90,7 @@ pub struct Uploader {
     dropdown: DropDownMenu<Extraction>,
     _done: Signal<bool>,
     concept: CardRef,
+    overlay: Signal<Option<OverlayEnum>>,
 }
 
 impl Uploader {
@@ -132,6 +134,7 @@ impl Uploader {
             _done: Signal::new_in_scope(Default::default(), ScopeId(3)),
             dropdown,
             concept,
+            overlay: Default::default(),
         }
     }
 }
@@ -162,11 +165,15 @@ impl Komponent for Uploader {
         let concept = self.concept.clone();
         let concept2 = self.concept.clone();
         let selv = self.clone();
+        let overlay = self.overlay.clone();
 
+        rsx! {
+            Overender {
+                overlay,
+                root:
         rsx! {
             div {
                 class: "flex flex-col gap-10",
-                // title
                 h1 {
                     class: "text-3xl font-bold text-center",
                     "Upload Cards"
@@ -185,6 +192,7 @@ impl Komponent for Uploader {
                                 dependent: concept.dependent.clone(),
                                 filter: concept.filter.clone(),
                                 allowed: concept.allowed.clone(),
+                                overlay: overlay.clone(),
                             },
                         }
 
@@ -300,10 +308,11 @@ impl Komponent for Uploader {
                         },
                         "Save Cards"
                     }
-
-
                     }
                 }
+            }
+        }
+
             }
         }
     }

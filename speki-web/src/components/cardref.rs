@@ -6,8 +6,12 @@ use tracing::info;
 
 use super::CardTy;
 use crate::{
-    overlays::{card_selector::CardSelector, cardviewer::TempNode},
-    APP, OVERLAY,
+    overlays::{
+        card_selector::{CardSelector, MyClosure},
+        cardviewer::TempNode,
+    },
+    pages::OverlayEnum,
+    APP,
 };
 
 const PLACEHOLDER: &'static str = "pick card...";
@@ -19,8 +23,8 @@ pub struct CardRef {
     pub filter: Option<Callback<CardType, bool>>,
     pub dependent: Option<TempNode>,
     pub allowed: Vec<CardTy>,
-    pub on_select: Option<Callback<Arc<Card>, ()>>,
-    pub on_deselect: Option<Callback<Arc<Card>, ()>>,
+    pub on_select: Option<MyClosure>,
+    pub on_deselect: Option<MyClosure>,
     pub placeholder: Signal<&'static str>,
 }
 
@@ -39,11 +43,12 @@ pub fn CardRefRender(
     card_display: Signal<String>,
     selected_card: Signal<Option<CardId>>,
     placeholder: &'static str,
-    on_select: Option<Callback<Arc<Card>, ()>>,
-    on_deselect: Option<Callback<Arc<Card>, ()>>,
+    on_select: Option<MyClosure>,
+    on_deselect: Option<MyClosure>,
     dependent: Option<TempNode>,
     filter: Option<Callback<CardType, bool>>,
     allowed: Vec<CardTy>,
+    overlay: Signal<Option<OverlayEnum>>,
 ) -> Element {
     let is_selected = selected_card.read().is_some();
 
@@ -57,18 +62,18 @@ pub fn CardRefRender(
                 readonly: "true",
                 onclick: move |_| {
                     let f = on_select.clone();
-                    let fun = Callback::new(move |card: Arc<Card>| {
+                    let fun = MyClosure(Arc::new(Box::new(move |card: Arc<Card>| {
+                        info!("x1");
                         if let Some(fun) = f.clone() {
-                            fun(card.clone());
+                            info!("x2");
+                            fun.0(card.clone());
                         }
 
-                        spawn(async move {
-                            let id = card.id();
-                            selected_card.clone().set(Some(id));
-                            let display = card.print().await;
-                            card_display.clone().set(display);
-                        });
-                    });
+                        let id = card.id();
+                        selected_card.clone().set(Some(id));
+                        let display = futures::executor::block_on(card.print());
+                        card_display.clone().set(display);
+                    })));
 
                     let dependents = dependent
                         .clone()
@@ -82,7 +87,7 @@ pub fn CardRefRender(
                             .await
                             .with_allowed_cards(allowed);
 
-                        OVERLAY.cloned().set(Box::new(props));
+                        overlay.clone().set(Some(OverlayEnum::CardSelector(props)));
                     });
                 },
             }
@@ -91,11 +96,12 @@ pub fn CardRefRender(
                     class: "absolute top-0 right-0 mt-2 mr-3 ml-6 mb-2 text-gray-500 hover:text-gray-700 focus:outline-none",
                     onclick: move |_| {
                         info!("clicked a button");
+                        let on_deselect = on_deselect.clone();
                         spawn(async move {
                             if let Some(card) = selected_card.cloned(){
                                 let card = APP.cloned().load_card(card).await;
                                 if let Some(f) = on_deselect.clone(){
-                                    f(card);
+                                    f.0(card);
                                 }
 
                             }
@@ -125,12 +131,12 @@ impl CardRef {
         }
     }
 
-    pub fn with_deselect(mut self, f: Callback<Arc<Card>, ()>) -> Self {
+    pub fn with_deselect(mut self, f: MyClosure) -> Self {
         self.on_select = Some(f);
         self
     }
 
-    pub fn with_closure(mut self, f: Callback<Arc<Card>, ()>) -> Self {
+    pub fn with_closure(mut self, f: MyClosure) -> Self {
         self.on_select = Some(f);
         self
     }

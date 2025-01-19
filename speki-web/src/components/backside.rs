@@ -1,17 +1,15 @@
-use std::{
-    fmt::{Debug, Display},
-    sync::Arc,
-};
+use std::fmt::{Debug, Display};
 
 use dioxus::prelude::*;
 use serde::{Deserialize, Serialize};
-use speki_core::{card::BackSide, Card};
+use speki_core::card::BackSide;
 use strum::{EnumIter, IntoEnumIterator};
 use tracing::info;
 
 use crate::{
     components::{cardref::CardRefRender, dropdown::DropComponent, CardRef, DropDownMenu},
-    overlays::cardviewer::TempNode,
+    overlays::{card_selector::MyClosure, cardviewer::TempNode},
+    pages::OverlayEnum,
     APP, IS_SHORT,
 };
 
@@ -27,6 +25,7 @@ pub fn BackPutRender(
     text: Signal<String>,
     dropdown: DropDownMenu<BackOpts>,
     ref_card: CardRef,
+    overlay: Signal<Option<OverlayEnum>>,
 ) -> Element {
     rsx! {
         div {
@@ -54,8 +53,6 @@ pub fn BackPutRender(
                 oninput: move |evt| sig.set(evt.value()),
             }
         }
-
-
                         },
                         BackOpts::Card => rsx!{ CardRefRender{
                             card_display: ref_card.display.clone(),
@@ -66,6 +63,7 @@ pub fn BackPutRender(
                             dependent: ref_card.dependent.clone(),
                             filter: ref_card.filter.clone(),
                             allowed: ref_card.allowed.clone(),
+                            overlay,
                         }},
                     }}
                 }
@@ -81,7 +79,7 @@ pub fn BackPutRender(
 }
 
 impl BackPut {
-    pub fn new(default: Option<BackSide>) -> Self {
+    pub fn new(default: Option<BackSide>, overlay: Signal<Option<OverlayEnum>>) -> Self {
         let default = default.unwrap_or_default();
         let ref_card = CardRef::new();
         if let Some(card) = default.as_card() {
@@ -105,12 +103,12 @@ impl BackPut {
         }
     }
 
-    pub fn with_deselect(mut self, f: Callback<Arc<Card>, ()>) -> Self {
+    pub fn with_deselect(mut self, f: MyClosure) -> Self {
         self.ref_card = self.ref_card.with_closure(f);
         self
     }
 
-    pub fn with_closure(mut self, f: Callback<Arc<Card>, ()>) -> Self {
+    pub fn with_closure(mut self, f: MyClosure) -> Self {
         self.ref_card = self.ref_card.with_closure(f);
         self
     }

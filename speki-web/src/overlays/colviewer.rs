@@ -1,5 +1,5 @@
 use super::{card_selector::CardSelector, itemselector::ItemSelector, Overlay};
-use crate::{components::Komponent, APP};
+use crate::{components::Komponent, overlays::card_selector::MyClosure, APP};
 use dioxus::prelude::*;
 use speki_core::{
     collection::{Collection, CollectionId, DynCard},
@@ -128,7 +128,7 @@ impl ColViewer {
 
         let entries = Signal::new_in_scope(entries, ScopeId::APP);
 
-        let f = Callback::new(move |card: Arc<Card>| {
+        let f = MyClosure(Arc::new(Box::new(move |card: Arc<Card>| {
             let entries = entries.clone();
             spawn(async move {
                 let mut inner = entries.cloned();
@@ -140,14 +140,14 @@ impl ColViewer {
                     entries.clone().set(inner);
                 }
             });
-        });
+        })));
         info!("debug 2");
 
         let depselector = CardSelector::dependency_picker(f)
             .await
             .with_title("all dependents of...".to_string());
 
-        let f = Callback::new(move |card: Arc<Card>| {
+        let f = MyClosure(Arc::new(Box::new(move |card: Arc<Card>| {
             let entries = entries.clone();
             spawn(async move {
                 let mut inner = entries.cloned();
@@ -159,7 +159,7 @@ impl ColViewer {
                     entries.clone().set(inner);
                 }
             });
-        });
+        })));
 
         info!("debug 3");
 
@@ -167,7 +167,7 @@ impl ColViewer {
             .await
             .with_title("pick card".to_string());
 
-        let f = Callback::new(move |card: Arc<Card>| {
+        let f = MyClosure(Arc::new(Box::new(move |card: Arc<Card>| {
             let entries = entries.clone();
             spawn(async move {
                 let mut inner = entries.cloned();
@@ -179,7 +179,7 @@ impl ColViewer {
                     entries.clone().set(inner);
                 }
             });
-        });
+        })));
 
         let instance_selector = CardSelector::class_picker(f).await;
 
