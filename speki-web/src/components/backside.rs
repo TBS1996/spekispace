@@ -9,7 +9,6 @@ use speki_core::{card::BackSide, Card};
 use strum::{EnumIter, IntoEnumIterator};
 use tracing::info;
 
-use super::Komponent;
 use crate::{
     components::{cardref::CardRefRender, dropdown::DropComponent, CardRef, DropDownMenu},
     overlays::cardviewer::TempNode,
@@ -23,40 +22,58 @@ pub struct BackPut {
     pub ref_card: CardRef,
 }
 
-impl Komponent for BackPut {
-    fn render(&self) -> Element {
-        rsx! {
+#[component]
+pub fn BackPutRender(
+    text: Signal<String>,
+    dropdown: DropDownMenu<BackOpts>,
+    ref_card: CardRef,
+) -> Element {
+    rsx! {
+        div {
+            class: "block text-gray-700 text-sm font-medium max-w-full",
+            if !IS_SHORT() {
+                "Back:"
+            }
+
             div {
-                class: "block text-gray-700 text-sm font-medium max-w-full",
-                if !IS_SHORT() {
-                    "Back:"
+                class: "backside-editor flex items-center space-x-4",
+
+                div {
+                    class: "flex-grow overflow-hidden",
+                    { match *dropdown.selected.read() {
+                        BackOpts::Text => {
+
+
+        let placeholder = if IS_SHORT.cloned() { "Back side" } else { "" };
+        let mut sig = text.clone();
+        rsx! {
+            input {
+                class: "bg-white w-full border border-gray-300 rounded-md p-2 mb-4 text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent",
+                value: "{sig}",
+                placeholder: "{placeholder}",
+                oninput: move |evt| sig.set(evt.value()),
+            }
+        }
+
+
+                        },
+                        BackOpts::Card => rsx!{ CardRefRender{
+                            card_display: ref_card.display.clone(),
+                            selected_card: ref_card.card.clone(),
+                            placeholder: ref_card.placeholder.cloned(),
+                            on_select: ref_card.on_select.clone(),
+                            on_deselect: ref_card.on_deselect.clone(),
+                            dependent: ref_card.dependent.clone(),
+                            filter: ref_card.filter.clone(),
+                            allowed: ref_card.allowed.clone(),
+                        }},
+                    }}
                 }
 
                 div {
-                    class: "backside-editor flex items-center space-x-4",
-
-                    div {
-                        class: "flex-grow overflow-hidden",
-                        { match *self.dropdown.selected.read() {
-                            BackOpts::Text => self.render_text(),
-                            BackOpts::Card => rsx!{ CardRefRender{
-                                card_display: self.ref_card.display.clone(),
-                                selected_card: self.ref_card.card.clone(),
-                                placeholder: self.ref_card.placeholder.cloned(),
-                                on_select: self.ref_card.on_select.clone(),
-                                on_deselect: self.ref_card.on_deselect.clone(),
-                                dependent: self.ref_card.dependent.clone(),
-                                filter: self.ref_card.filter.clone(),
-                                allowed: self.ref_card.allowed.clone(),
-                            }},
-                        }}
-                    }
-
-                    div {
-                        class: "flex-shrink-0",
-                        style: "width: 65px;",
-                        DropComponent {options: self.dropdown.options.clone(), selected: self.dropdown.selected.clone()}
-                    }
+                    class: "flex-shrink-0",
+                    style: "width: 65px;",
+                    DropComponent {options: dropdown.options.clone(), selected: dropdown.selected.clone()}
                 }
             }
         }
@@ -119,19 +136,6 @@ impl BackPut {
                 let s = self.text.cloned();
                 info!("text is: {s}");
                 Some(BackSide::Text(s))
-            }
-        }
-    }
-
-    fn render_text(&self) -> Element {
-        let placeholder = if IS_SHORT.cloned() { "Back side" } else { "" };
-        let mut sig = self.text.clone();
-        rsx! {
-            input {
-                class: "bg-white w-full border border-gray-300 rounded-md p-2 mb-4 text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent",
-                value: "{sig}",
-                placeholder: "{placeholder}",
-                oninput: move |evt| sig.set(evt.value()),
             }
         }
     }

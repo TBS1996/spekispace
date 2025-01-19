@@ -10,8 +10,8 @@ use tracing::info;
 
 use crate::{
     components::{
-        cardref::CardRefRender, frontside::FrontPutRender, BackPut, CardRef, CardTy, DropDownMenu,
-        FrontPut, GraphRep, Komponent,
+        backside::BackPutRender, cardref::CardRefRender, frontside::FrontPutRender, BackPut,
+        CardRef, CardTy, DropDownMenu, FrontPut, GraphRep, Komponent,
     },
     overlays::{card_selector::CardSelector, yesno::Yesno, Overlay},
     APP, IS_SHORT, OVERLAY,
@@ -503,10 +503,20 @@ impl CardViewer {
                 CardTy::Unfinished => rsx! {},
 
                 CardTy::Normal => rsx! {
-                    { selv.back.render() }
+                    BackPutRender {
+                        text: selv.back.text.clone(),
+                        dropdown: selv.back.dropdown.clone(),
+                        ref_card: selv.back.ref_card.clone(),
+                    }
                 },
                 CardTy::Class => rsx! {
-                    { selv.back.render() }
+                    BackPutRender {
+                        text: selv.back.text.clone(),
+                        dropdown: selv.back.dropdown.clone(),
+                        ref_card: selv.back.ref_card.clone(),
+                    }
+
+
                     if !is_short {
                         div {
                             class: "block text-gray-700 text-sm font-medium mb-2",
@@ -543,7 +553,11 @@ impl CardViewer {
                     }
                 },
                 CardTy::Instance => rsx! {
-                    { selv.back.render() }
+                    BackPutRender {
+                        text: selv.back.text.clone(),
+                        dropdown: selv.back.dropdown.clone(),
+                        ref_card: selv.back.ref_card.clone(),
+                    }
 
                     if !is_short {
                         div {

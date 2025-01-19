@@ -12,7 +12,7 @@ use crate::{
 
 const PLACEHOLDER: &'static str = "pick card...";
 
-#[derive(Clone)]
+#[derive(PartialEq, Clone)]
 pub struct CardRef {
     pub card: Signal<Option<CardId>>,
     pub display: Signal<String>,
