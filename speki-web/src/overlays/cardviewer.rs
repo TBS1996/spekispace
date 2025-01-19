@@ -213,7 +213,7 @@ impl CardViewer {
     }
 
     pub fn new() -> Self {
-        let front = FrontPut::new(CardTy::Normal);
+        let front = FrontPut::new(CardTy::Class);
         let dependencies: Signal<Vec<CardId>> =
             Signal::new_in_scope(Default::default(), ScopeId(3));
         let dependents = Signal::new_in_scope(Default::default(), ScopeId(3));

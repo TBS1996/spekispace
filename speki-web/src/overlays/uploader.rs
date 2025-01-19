@@ -7,12 +7,12 @@ use serde::{Deserialize, Serialize};
 use strum::{EnumIter, IntoEnumIterator};
 
 use crate::{
-    components::{CardRef, CardTy, DropDownMenu, Komponent},
+    components::{dropdown::DropComponent, CardRef, CardTy, DropDownMenu, Komponent},
     overlays::Overlay,
     APP,
 };
 
-#[derive(EnumIter, Clone, Serialize, Deserialize, Debug)]
+#[derive(EnumIter, Clone, Serialize, Deserialize, Debug, PartialEq)]
 enum Extraction {
     Tabs,
     Multiline,
@@ -119,8 +119,9 @@ impl Uploader {
                 .set(QA::extract(regex.cloned(), content.cloned()));
         };
 
-        let dropdown =
-            DropDownMenu::new(Extraction::iter(), None).with_hook(Arc::new(Box::new(hook)));
+        let callback = Callback::new(hook);
+
+        let dropdown = DropDownMenu::new(Extraction::iter(), None).with_callback(callback);
 
         Self {
             content,
@@ -226,7 +227,7 @@ impl Komponent for Uploader {
                                 },
                             }
 
-                            {dropdown.render()}
+                            DropComponent {options: dropdown.options.clone(), selected: dropdown.selected.clone(), hook: dropdown.hook.clone()}
                             div {
                                 button {
                                     onclick: move |_| {

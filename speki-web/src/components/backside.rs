@@ -11,7 +11,7 @@ use tracing::info;
 
 use super::Komponent;
 use crate::{
-    components::{CardRef, DropDownMenu},
+    components::{dropdown::DropComponent, CardRef, DropDownMenu},
     overlays::cardviewer::TempNode,
     APP, IS_SHORT,
 };
@@ -46,7 +46,7 @@ impl Komponent for BackPut {
                     div {
                         class: "flex-shrink-0",
                         style: "width: 65px;",
-                        { self.dropdown.render() }
+                        DropComponent {options: self.dropdown.options.clone(), selected: self.dropdown.selected.clone()}
                     }
                 }
             }
@@ -128,7 +128,7 @@ impl BackPut {
     }
 }
 
-#[derive(Default, Copy, Clone, Debug, Serialize, Deserialize, EnumIter)]
+#[derive(Default, Copy, Clone, Debug, Serialize, Deserialize, EnumIter, PartialEq)]
 pub enum BackOpts {
     #[default]
     Text,

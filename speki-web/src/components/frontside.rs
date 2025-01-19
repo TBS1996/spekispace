@@ -7,9 +7,12 @@ use strum::{EnumIter, IntoEnumIterator};
 use tracing::info;
 
 use super::Komponent;
-use crate::{components::DropDownMenu, IS_SHORT};
+use crate::{
+    components::{dropdown::DropComponent, DropDownMenu},
+    IS_SHORT,
+};
 
-#[derive(EnumIter, Clone, Serialize, Deserialize)]
+#[derive(EnumIter, Clone, Serialize, Deserialize, PartialEq)]
 pub enum CardTy {
     Normal,
     Instance,
@@ -63,6 +66,8 @@ impl Komponent for FrontPut {
     fn render(&self) -> Element {
         let mut text = self.text.clone();
         let placeholder = if IS_SHORT.cloned() { "Front side" } else { "" };
+        let props = self.dropdown.clone();
+
         rsx! {
             div {
                 class: "block text-gray-700 text-sm font-medium ",
@@ -84,7 +89,7 @@ impl Komponent for FrontPut {
                     div {
                         class: "flex-shrink-0",
                         style: "width: 65px;",
-                        { self.dropdown.render() }
+                        DropComponent {options: props.options.clone(), selected: props.selected.clone()}
                     }
                 }
             }

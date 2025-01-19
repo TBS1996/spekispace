@@ -1,6 +1,6 @@
 pub mod backside;
 mod cardref;
-mod dropdown;
+pub mod dropdown;
 mod filtereditor;
 mod frontside;
 mod graph;

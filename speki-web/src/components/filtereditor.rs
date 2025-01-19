@@ -3,7 +3,9 @@ use std::{fmt::Display, sync::Arc};
 use dioxus::prelude::*;
 use serde::{Deserialize, Serialize};
 use speki_core::cardfilter::{CardFilter, MyNumOrd, NumOp, NumOrd};
-use strum::{EnumIter, IntoEnumIterator};
+use strum::EnumIter;
+
+use crate::components::dropdown::DropComponent;
 
 use super::{DropDownMenu, Komponent};
 
@@ -78,13 +80,6 @@ struct BoolEntry {
 }
 
 impl BoolEntry {
-    fn new(name: &str, opt: BoolOpt) -> Self {
-        Self {
-            name: Arc::new(name.to_string()),
-            opt: DropDownMenu::new(BoolOpt::iter(), opt.into()),
-        }
-    }
-
     fn from_bool(name: &str, bool: Option<bool>) -> Self {
         let val: BoolOpt = match bool {
             Some(true) => BoolOpt::True,
@@ -239,7 +234,8 @@ impl Komponent for BoolEntry {
                     class: "text-sm font-medium text-gray-700 w-28",
                     "{self.name}:"
                 }
-                {self.opt.render()}
+
+                DropComponent{options: self.opt.options.clone(), selected: self.opt.selected.clone()}
             }
         }
     }
@@ -255,7 +251,9 @@ impl Komponent for FloatEntry {
                     class: "text-sm font-medium text-gray-700 w-28",
                     "{self.name}:"
                 }
-                {self.ord.render()}
+
+                DropComponent {options: self.ord.options.clone(), selected: self.ord.selected.clone()  }
+
                 if !matches!(self.ord.selected.cloned(), NumOrd::Any) {
                     input {
                         class: "w-20 p-1 border rounded focus:ring focus:ring-blue-200",
