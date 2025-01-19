@@ -2,7 +2,7 @@ pub mod backside;
 mod cardref;
 pub mod dropdown;
 mod filtereditor;
-mod frontside;
+pub mod frontside;
 mod graph;
 
 pub use backside::BackPut;

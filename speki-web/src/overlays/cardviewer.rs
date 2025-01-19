@@ -9,7 +9,10 @@ use speki_web::{Node, NodeId, NodeMetadata};
 use tracing::info;
 
 use crate::{
-    components::{BackPut, CardRef, CardTy, DropDownMenu, FrontPut, GraphRep, Komponent},
+    components::{
+        frontside::FrontPutRender, BackPut, CardRef, CardTy, DropDownMenu, FrontPut, GraphRep,
+        Komponent,
+    },
     overlays::{card_selector::CardSelector, yesno::Yesno, Overlay},
     APP, IS_SHORT, OVERLAY,
 };
@@ -494,7 +497,7 @@ impl CardViewer {
         let selv = self.clone();
         let is_short = IS_SHORT.cloned();
         rsx! {
-            { self.front.render() }
+            FrontPutRender { dropdown: self.front.dropdown.clone(), text: self.front.text.clone() }
 
             match ty {
                 CardTy::Unfinished => rsx! {},

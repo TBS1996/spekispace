@@ -6,7 +6,6 @@ use speki_core::card::CType;
 use strum::{EnumIter, IntoEnumIterator};
 use tracing::info;
 
-use super::Komponent;
 use crate::{
     components::{dropdown::DropComponent, DropDownMenu},
     IS_SHORT,
@@ -56,41 +55,38 @@ impl Display for CardTy {
     }
 }
 
-#[derive(Clone)]
+#[derive(PartialEq, Props, Clone)]
 pub struct FrontPut {
     pub dropdown: DropDownMenu<CardTy>,
     pub text: Signal<String>,
 }
 
-impl Komponent for FrontPut {
-    fn render(&self) -> Element {
-        let mut text = self.text.clone();
-        let placeholder = if IS_SHORT.cloned() { "Front side" } else { "" };
-        let props = self.dropdown.clone();
+#[component]
+pub fn FrontPutRender(dropdown: DropDownMenu<CardTy>, text: Signal<String>) -> Element {
+    let placeholder = if IS_SHORT.cloned() { "Front side" } else { "" };
 
-        rsx! {
+    rsx! {
+        div {
+            class: "block text-gray-700 text-sm font-medium ",
+            if !IS_SHORT() {
+                "Front:"
+            }
+
             div {
-                class: "block text-gray-700 text-sm font-medium ",
-                if !IS_SHORT() {
-                    "Front:"
+                class: "backside-editor flex items-center space-x-4",
+
+                input {
+                    class: "bg-white w-full border border-gray-300 rounded-md p-2 mb-4 text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent",
+                    placeholder: "{placeholder}",
+                    value: "{text}",
+                    oninput: move |evt| text.set(evt.value()),
                 }
 
+
                 div {
-                    class: "backside-editor flex items-center space-x-4",
-
-                    input {
-                        class: "bg-white w-full border border-gray-300 rounded-md p-2 mb-4 text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent",
-                        placeholder: "{placeholder}",
-                        value: "{text}",
-                        oninput: move |evt| text.set(evt.value()),
-                    }
-
-
-                    div {
-                        class: "flex-shrink-0",
-                        style: "width: 65px;",
-                        DropComponent {options: props.options.clone(), selected: props.selected.clone()}
-                    }
+                    class: "flex-shrink-0",
+                    style: "width: 65px;",
+                    DropComponent {options: dropdown.options.clone(), selected: dropdown.selected.clone()}
                 }
             }
         }
