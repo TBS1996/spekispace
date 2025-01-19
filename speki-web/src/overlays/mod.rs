@@ -6,7 +6,7 @@ use std::{
 use dioxus::prelude::*;
 use tracing::info;
 
-use crate::{components::Komponent, Route, CURRENT_ROUTE, NONCLICKABLE};
+use crate::{components::Komponent, Route, CURRENT_ROUTE};
 
 pub mod card_selector;
 pub mod cardviewer;
@@ -57,8 +57,6 @@ impl OverlayManager {
             .or_default()
             .push(popup);
         self.update_scope();
-        let _x = NONCLICKABLE.cloned();
-        NONCLICKABLE.read().clear();
     }
 
     pub fn render(&self) -> Option<Element> {
