@@ -28,6 +28,21 @@ pub enum OverlayEnum {
     Uploader(Uploader),
 }
 
+impl OverlayEnum {
+    pub fn is_done(&self) -> bool {
+        match self {
+            OverlayEnum::Review(elm) => elm.is_done().cloned(),
+            OverlayEnum::Colviewer(elm) => elm.is_done().cloned(),
+            OverlayEnum::Text(elm) => elm.is_done().cloned(),
+            OverlayEnum::CardViewer(elm) => elm.is_done().cloned(),
+            OverlayEnum::CardSelector(elm) => elm.is_done().cloned(),
+            OverlayEnum::YesNo(elm) => elm.is_done().cloned(),
+            OverlayEnum::ColSelector(elm) => elm.is_done().cloned(),
+            OverlayEnum::Uploader(elm) => elm.is_done().cloned(),
+        }
+    }
+}
+
 impl Debug for OverlayEnum {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -45,6 +60,12 @@ impl Debug for OverlayEnum {
 
 #[component]
 pub fn Overender(overlay: Signal<Option<OverlayEnum>>, root: Element) -> Element {
+    let is_done = overlay.as_ref().is_some_and(|ol| ol.is_done());
+
+    if is_done {
+        overlay.set(None);
+    }
+
     rsx! {
         match overlay.cloned() {
             Some(elm) => rsx!{
@@ -57,70 +78,14 @@ pub fn Overender(overlay: Signal<Option<OverlayEnum>>, root: Element) -> Element
                     }
 
                     match elm {
-                        OverlayEnum::Review(elm) => {
-                            if elm.is_done().cloned() {
-                                overlay.clone().set(None);
-                                root
-                            } else {
-                                elm.render()
-                            }
-                        },
-                        OverlayEnum::Colviewer(elm) => {
-                            if elm.is_done().cloned() {
-                                overlay.clone().set(None);
-                                root
-                            } else {
-                                elm.render()
-                            }
-                        },
-                        OverlayEnum::Text(elm) => {
-                            if elm.is_done().cloned() {
-                                overlay.clone().set(None);
-                                root
-                            } else {
-                                elm.render()
-                            }
-                        },
-                        OverlayEnum::CardViewer(elm) => {
-                            if elm.is_done().cloned() {
-                                overlay.clone().set(None);
-                                root
-                            } else {
-                                elm.render()
-                            }
-                        },
-                        OverlayEnum::YesNo(elm) => {
-                            if elm.is_done().cloned() {
-                                overlay.clone().set(None);
-                                root
-                            } else {
-                                elm.render()
-                            }
-                        },
-                        OverlayEnum::ColSelector(elm) => {
-                            if elm.is_done().cloned() {
-                                overlay.clone().set(None);
-                                root
-                            } else {
-                                elm.render()
-                            }
-                        },
-                        OverlayEnum::CardSelector(elm) => {
-                            if elm.is_done().cloned() {
-                                overlay.clone().set(None);
-                                root
-                            } else {
-                                elm.render()
-                            }
-                        },
-                        OverlayEnum::Uploader(elm) => {
-                            if elm.is_done().cloned() {
-                                overlay.clone().set(None);
-                                root
-                            } else {
-                                elm.render()
-                            }
-                        },
+                        OverlayEnum::Review(elm) => elm.render(),
+                        OverlayEnum::Colviewer(elm) => elm.render(),
+                        OverlayEnum::Text(elm) => elm.render(),
+                        OverlayEnum::CardViewer(elm) => elm.render(),
+                        OverlayEnum::YesNo(elm) => elm.render(),
+                        OverlayEnum::ColSelector(elm) => elm.render(),
+                        OverlayEnum::CardSelector(elm) => elm.render(),
+                        OverlayEnum::Uploader(elm) => elm.render(),
                     }
                 }
             },
