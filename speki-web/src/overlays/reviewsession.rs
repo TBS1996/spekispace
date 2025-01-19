@@ -339,17 +339,17 @@ impl ReviewState {
                                 let currcard = card.clone();
 
                                 let selv = selv.clone();
-                                let fun = move |card: Arc<Card>| {
+                                let fun = Callback::new(move |card: Arc<Card>| {
                                     let selv = selv.clone();
                                     let old_card = currcard.clone();
                                     spawn(async move {
                                         Arc::unwrap_or_clone(old_card).add_dependency(card.id()).await;
                                         selv.refresh().await;
                                     });
-                                };
+                                });
 
                                 spawn(async move {
-                                    let props = CardSelector::dependency_picker(Box::new(fun)).await;
+                                    let props = CardSelector::dependency_picker(fun).await;
                                     OVERLAY.cloned().set(Box::new(props));
                                 });
                             },

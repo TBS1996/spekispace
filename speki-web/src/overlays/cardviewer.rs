@@ -10,8 +10,9 @@ use tracing::info;
 
 use crate::{
     components::{
-        backside::BackPutRender, cardref::CardRefRender, frontside::FrontPutRender, BackPut,
-        CardRef, CardTy, DropDownMenu, FrontPut, GraphRep, Komponent,
+        backside::BackPutRender, cardref::CardRefRender, frontside::FrontPutRender,
+        graph::GraphRepRender, BackPut, CardRef, CardTy, DropDownMenu, FrontPut, GraphRep,
+        Komponent,
     },
     overlays::{card_selector::CardSelector, yesno::Yesno, Overlay},
     APP, IS_SHORT, OVERLAY,
@@ -94,7 +95,7 @@ pub struct CardViewer {
     concept: CardRef,
     dependencies: Signal<Vec<CardId>>,
     dependents: Signal<Vec<Node>>,
-    graph: GraphRep,
+    pub graph: GraphRep,
     save_hook: Option<Arc<Box<dyn Fn(Arc<Card>)>>>,
     is_done: Signal<bool>,
     old_card: Signal<Option<Arc<Card>>>,
@@ -415,7 +416,7 @@ impl CardViewer {
                     let selv = selv.clone();
                     let selv2 = selv.clone();
 
-                    let fun = move |card: Arc<Card>| {
+                    let fun = Callback::new(move |card: Arc<Card>| {
                         selv.dependencies.clone().write().push(card.id());
                         selv.set_graph();
                         let old_card = selv.old_card.cloned();
@@ -424,13 +425,13 @@ impl CardViewer {
                                 Arc::unwrap_or_clone(old_card).add_dependency(card.id()).await;
                             }
                         });
-                    };
+                    });
 
                     info!("1 scope is ! {:?}", current_scope_id().unwrap());
 
                     spawn(async move {
                         let dependent: Node = selv2.tempnode.clone().into();
-                        let props = CardSelector::dependency_picker(Box::new(fun)).await.with_dependents(vec![dependent]);
+                        let props = CardSelector::dependency_picker(fun).await.with_dependents(vec![dependent]);
                         OVERLAY.cloned().set(Box::new(props));
                         info!("2 scope is ! {:?}", current_scope_id().unwrap());
                     });
@@ -644,7 +645,14 @@ impl Komponent for CardViewer {
                     div {
                         class: "flex-1 w-full box-border mb-2 md:mb-0 order-1 md:order-2",
                         style: "min-height: 0; flex-grow: 1;",
-                        { self.graph.render() }
+                        GraphRepRender{
+                            cyto_id: self.graph.cyto_id.clone(),
+                            scope: self.graph.scope.clone(),
+                            label: self.graph.label.clone(),
+                            inner: self.graph.inner.clone(),
+                            new_card_hook: self.graph.new_card_hook.clone(),
+                            is_init: self.graph.is_init.clone(),
+                        }
                     }
                 }
             }

@@ -15,6 +15,12 @@ use tracing::info;
 
 use crate::{utils::get_meta, App, APP};
 
+impl PartialEq for RustGraph {
+    fn eq(&self, _other: &Self) -> bool {
+        true
+    }
+}
+
 #[derive(Clone, Default)]
 pub struct RustGraph {
     inner: Arc<Mutex<DiGraph<NodeMetadata, ()>>>,

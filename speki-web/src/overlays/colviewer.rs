@@ -128,7 +128,7 @@ impl ColViewer {
 
         let entries = Signal::new_in_scope(entries, ScopeId::APP);
 
-        let f = Box::new(move |card: Arc<Card>| {
+        let f = Callback::new(move |card: Arc<Card>| {
             let entries = entries.clone();
             spawn(async move {
                 let mut inner = entries.cloned();
@@ -147,7 +147,7 @@ impl ColViewer {
             .await
             .with_title("all dependents of...".to_string());
 
-        let f = Box::new(move |card: Arc<Card>| {
+        let f = Callback::new(move |card: Arc<Card>| {
             let entries = entries.clone();
             spawn(async move {
                 let mut inner = entries.cloned();
@@ -167,7 +167,7 @@ impl ColViewer {
             .await
             .with_title("pick card".to_string());
 
-        let f = Box::new(move |card: Arc<Card>| {
+        let f = Callback::new(move |card: Arc<Card>| {
             let entries = entries.clone();
             spawn(async move {
                 let mut inner = entries.cloned();

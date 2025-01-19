@@ -57,7 +57,7 @@ pub fn CardRefRender(
                 readonly: "true",
                 onclick: move |_| {
                     let f = on_select.clone();
-                    let fun = move |card: Arc<Card>| {
+                    let fun = Callback::new(move |card: Arc<Card>| {
                         if let Some(fun) = f.clone() {
                             fun(card.clone());
                         }
@@ -68,7 +68,7 @@ pub fn CardRefRender(
                             let display = card.print().await;
                             card_display.clone().set(display);
                         });
-                    };
+                    });
 
                     let dependents = dependent
                         .clone()
@@ -78,7 +78,7 @@ pub fn CardRefRender(
                     let filter = filter.clone();
                     let allowed = allowed.clone();
                     spawn(async move {
-                        let props = CardSelector::ref_picker(Arc::new(Box::new(fun)), dependents, filter)
+                        let props = CardSelector::ref_picker(fun, dependents, filter)
                             .await
                             .with_allowed_cards(allowed);
 

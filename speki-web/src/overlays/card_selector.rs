@@ -12,21 +12,21 @@ use crate::{
     APP, OVERLAY,
 };
 
-pub fn overlay_card_viewer() -> Arc<Box<dyn Fn(Arc<Card>)>> {
-    Arc::new(Box::new(move |card: Arc<Card>| {
+pub fn overlay_card_viewer() -> Callback<Arc<Card>, ()> {
+    Callback::new(move |card: Arc<Card>| {
         spawn(async move {
             let graph = GraphRep::new().with_hook(overlay_card_viewer());
             let viewer = CardViewer::new_from_card(card, graph).await;
             OVERLAY.cloned().replace(Box::new(viewer));
         });
-    }))
+    })
 }
 
 #[derive(Props, Clone)]
 pub struct CardSelector {
     title: String,
     search: Signal<String>,
-    on_card_selected: Arc<Box<dyn Fn(Arc<Card>)>>,
+    on_card_selected: Callback<Arc<Card>, ()>,
     all_cards: Signal<Vec<CardEntry>>,
     filtered_cards: Signal<Vec<CardEntry>>,
     allow_new: bool,
@@ -71,7 +71,7 @@ impl CardSelector {
     }
 
     pub async fn ref_picker(
-        fun: Arc<Box<dyn Fn(Arc<Card>)>>,
+        fun: Callback<Arc<Card>, ()>,
         dependents: Vec<Node>,
         filter: Option<Callback<CardType, bool>>,
     ) -> Self {
@@ -92,7 +92,7 @@ impl CardSelector {
         selv
     }
 
-    pub async fn class_picker(f: Box<dyn Fn(Arc<Card>)>) -> Self {
+    pub async fn class_picker(f: Callback<Arc<Card>>) -> Self {
         let filter: Callback<CardType, bool> = Callback::new(move |ty: CardType| ty.is_class());
 
         let mut selv = Self::new(false)
@@ -108,7 +108,7 @@ impl CardSelector {
         selv
     }
 
-    pub async fn dependency_picker(f: Box<dyn Fn(Arc<Card>)>) -> Self {
+    pub async fn dependency_picker(f: Callback<Arc<Card>, ()>) -> Self {
         let mut selv = Self::new(false)
             .with_title("set dependency".into())
             .new_on_card_selected(f);
@@ -121,8 +121,8 @@ impl CardSelector {
         selv
     }
 
-    pub fn new_on_card_selected(mut self, f: Box<dyn Fn(Arc<Card>)>) -> Self {
-        self.on_card_selected = Arc::new(f);
+    pub fn new_on_card_selected(mut self, f: Callback<Arc<Card>, ()>) -> Self {
+        self.on_card_selected = f;
         self
     }
 

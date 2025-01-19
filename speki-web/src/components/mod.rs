@@ -3,7 +3,7 @@ pub mod cardref;
 pub mod dropdown;
 mod filtereditor;
 pub mod frontside;
-mod graph;
+pub mod graph;
 
 pub use backside::BackPut;
 pub use cardref::CardRef;
