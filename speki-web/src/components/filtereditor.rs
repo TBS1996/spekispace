@@ -7,7 +7,7 @@ use strum::EnumIter;
 
 use crate::components::dropdown::DropComponent;
 
-use super::{DropDownMenu, Komponent};
+use super::DropDownMenu;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct FilterEditor {
@@ -213,58 +213,61 @@ pub fn FilterComp(editor: FilterEditor) -> Element {
         div {
             class: "p-4 bg-white rounded-lg shadow-md flex flex-col gap-y-2 max-w-sm",
 
-            {editor.rec_recall.render()}
-            {editor.recall.render()}
-            {editor.stability.render()}
-            {editor.rec_stability.render()}
-            {editor.lapses.render()}
-            {editor.finished.render()}
-            {editor.suspended.render()}
-            {editor.pending.render()}
+            FloatEntryRender { input: editor.rec_recall.input.clone(), ord: editor.rec_recall.ord.clone(), name: editor.rec_recall.name.clone() },
+            FloatEntryRender { input: editor.recall.input.clone(), ord: editor.recall.ord.clone(), name: editor.recall.name.clone() },
+            FloatEntryRender { input: editor.rec_recall.input.clone(), ord: editor.rec_recall.ord.clone(), name: editor.rec_recall.name.clone() },
+            FloatEntryRender { input: editor.stability.input.clone(), ord: editor.stability.ord.clone(), name: editor.stability.name.clone() },
+            FloatEntryRender { input: editor.rec_stability.input.clone(), ord: editor.rec_stability.ord.clone(), name: editor.rec_stability.name.clone() },
+            FloatEntryRender { input: editor.lapses.input.clone(), ord: editor.lapses.ord.clone(), name: editor.lapses.name.clone() },
+            BoolEntryRender { name: editor.finished.name.clone(), opt: editor.finished.opt.clone() },
+            BoolEntryRender { name: editor.suspended.name.clone(), opt: editor.suspended.opt.clone() },
+            BoolEntryRender { name: editor.pending.name.clone(), opt: editor.pending.opt.clone() },
         }
     }
 }
 
-impl Komponent for BoolEntry {
-    fn render(&self) -> Element {
-        rsx! {
-            div {
-                class: "flex items-center gap-x-2",
-                label {
-                    class: "text-sm font-medium text-gray-700 w-28",
-                    "{self.name}:"
-                }
-
-                DropComponent{options: self.opt.options.clone(), selected: self.opt.selected.clone()}
+#[component]
+fn BoolEntryRender(name: Arc<String>, opt: DropDownMenu<BoolOpt>) -> Element {
+    rsx! {
+        div {
+            class: "flex items-center gap-x-2",
+            label {
+                class: "text-sm font-medium text-gray-700 w-28",
+                "{name}:"
             }
+
+            DropComponent{options: opt.options.clone(), selected: opt.selected.clone()}
         }
     }
 }
 
-impl Komponent for FloatEntry {
-    fn render(&self) -> Element {
-        let input = self.input.clone();
-        rsx! {
-            div {
-                class: "flex items-center gap-x-2",
-                label {
-                    class: "text-sm font-medium text-gray-700 w-28",
-                    "{self.name}:"
-                }
+#[component]
+fn FloatEntryRender(
+    input: Signal<String>,
+    ord: DropDownMenu<NumOrd>,
+    name: Arc<String>,
+) -> Element {
+    let input = input.clone();
+    rsx! {
+        div {
+            class: "flex items-center gap-x-2",
+            label {
+                class: "text-sm font-medium text-gray-700 w-28",
+                "{name}:"
+            }
 
-                DropComponent {options: self.ord.options.clone(), selected: self.ord.selected.clone()  }
+            DropComponent {options: ord.options.clone(), selected: ord.selected.clone()  }
 
-                if !matches!(self.ord.selected.cloned(), NumOrd::Any) {
-                    input {
-                        class: "w-20 p-1 border rounded focus:ring focus:ring-blue-200",
-                        value: "{input}",
-                        oninput: move |evt| {
-                            let new_value = evt.value().clone();
-                            if new_value.parse::<f64>().is_ok() || new_value.is_empty() {
-                                input.clone().set(new_value);
-                            }
-                        },
-                    }
+            if !matches!(ord.selected.cloned(), NumOrd::Any) {
+                input {
+                    class: "w-20 p-1 border rounded focus:ring focus:ring-blue-200",
+                    value: "{input}",
+                    oninput: move |evt| {
+                        let new_value = evt.value().clone();
+                        if new_value.parse::<f64>().is_ok() || new_value.is_empty() {
+                            input.clone().set(new_value);
+                        }
+                    },
                 }
             }
         }
