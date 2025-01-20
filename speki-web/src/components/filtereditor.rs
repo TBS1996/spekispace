@@ -209,19 +209,29 @@ impl FilterEditor {
 
 #[component]
 pub fn FilterComp(editor: FilterEditor) -> Element {
+    let FilterEditor {
+        filter_name: _,
+        rec_recall,
+        recall,
+        stability,
+        rec_stability,
+        lapses,
+        finished,
+        suspended,
+        pending,
+    } = editor;
     rsx! {
         div {
             class: "p-4 bg-white rounded-lg shadow-md flex flex-col gap-y-2 max-w-sm",
 
-            FloatEntryRender { input: editor.rec_recall.input.clone(), ord: editor.rec_recall.ord.clone(), name: editor.rec_recall.name.clone() },
-            FloatEntryRender { input: editor.recall.input.clone(), ord: editor.recall.ord.clone(), name: editor.recall.name.clone() },
-            FloatEntryRender { input: editor.rec_recall.input.clone(), ord: editor.rec_recall.ord.clone(), name: editor.rec_recall.name.clone() },
-            FloatEntryRender { input: editor.stability.input.clone(), ord: editor.stability.ord.clone(), name: editor.stability.name.clone() },
-            FloatEntryRender { input: editor.rec_stability.input.clone(), ord: editor.rec_stability.ord.clone(), name: editor.rec_stability.name.clone() },
-            FloatEntryRender { input: editor.lapses.input.clone(), ord: editor.lapses.ord.clone(), name: editor.lapses.name.clone() },
-            BoolEntryRender { name: editor.finished.name.clone(), opt: editor.finished.opt.clone() },
-            BoolEntryRender { name: editor.suspended.name.clone(), opt: editor.suspended.opt.clone() },
-            BoolEntryRender { name: editor.pending.name.clone(), opt: editor.pending.opt.clone() },
+            FloatEntryRender { input: rec_recall.input.clone(), ord: rec_recall.ord.clone(), name: rec_recall.name.clone() },
+            FloatEntryRender { input: recall.input.clone(), ord: recall.ord.clone(), name: recall.name.clone() },
+            FloatEntryRender { input: stability.input.clone(), ord: stability.ord.clone(), name: stability.name.clone() },
+            FloatEntryRender { input: rec_stability.input.clone(), ord: rec_stability.ord.clone(), name: rec_stability.name.clone() },
+            FloatEntryRender { input: lapses.input.clone(), ord: lapses.ord.clone(), name: lapses.name.clone() },
+            BoolEntryRender { name: finished.name.clone(), opt: finished.opt.clone() },
+            BoolEntryRender { name: suspended.name.clone(), opt: suspended.opt.clone() },
+            BoolEntryRender { name: pending.name.clone(), opt: pending.opt.clone() },
         }
     }
 }
