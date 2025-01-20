@@ -14,6 +14,8 @@ where
     T: Serialize + for<'de> Deserialize<'de> + 'static + Clone + Display,
 {
     let mut dropdown = selected.clone();
+    let value = serde_json::to_string(&dropdown.cloned()).unwrap();
+    info!("value: {value}");
 
     rsx! {
         div {
@@ -21,7 +23,7 @@ where
             select {
                 class: "appearance-none bg-white w-full border border-gray-300 rounded-md p-2 text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent",
                 style: "background-image: none;",
-                value: serde_json::to_string(&dropdown.cloned()).unwrap(),
+                value: "{value}",
                 onchange: move |evt| {
                     let new_choice: T =  serde_json::from_str(evt.value().as_str()).unwrap();
                     if let Some(hook) = hook{
@@ -31,7 +33,11 @@ where
                 },
 
                 for opt in options {
-                    option { value: serde_json::to_string(&opt).unwrap(), "{opt}" }
+                    option {
+                        value: serde_json::to_string(&opt).unwrap(),
+                        selected: *selected.read() == opt,
+                        "{opt}"
+                    }
                 }
             }
         }
