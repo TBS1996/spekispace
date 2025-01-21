@@ -14,8 +14,6 @@ use crate::{
     APP,
 };
 
-use super::Overlay;
-
 fn recall_button(recall: Recall, rev_state: ReviewState) -> Element {
     let label = match recall {
         Recall::None => "😡",
@@ -60,12 +58,6 @@ fn review_buttons(mut show_backside: Signal<bool>, state: ReviewState) -> Elemen
                 }
             }
         }
-    }
-}
-
-impl Overlay for ReviewState {
-    fn is_done(&self) -> Signal<bool> {
-        self.is_done.clone()
     }
 }
 
@@ -132,14 +124,14 @@ impl Komponent for ReviewState {
 
 #[derive(Clone, Debug)]
 pub struct ReviewState {
-    pub card: Signal<Option<Card>>,
+    pub card: Resource<Option<Card>>,
     pub queue: Signal<Vec<CardId>>,
     pub tot_len: Signal<usize>,
-    pub front: Signal<String>,
-    pub back: Signal<String>,
+    pub front: Resource<String>,
+    pub back: Resource<String>,
     pub show_backside: Signal<bool>,
     pub dependencies: Signal<Vec<(String, Arc<Card>, Self)>>,
-    pub is_done: Signal<bool>,
+    pub is_done: Memo<bool>,
     pub overlay: Signal<Option<OverlayEnum>>,
 }
 
@@ -157,16 +149,50 @@ impl ReviewState {
     }
 
     pub async fn new(cards: Vec<Arc<Card>>) -> Self {
+        let queue: Signal<Vec<CardId>> = Signal::new_in_scope(Default::default(), ScopeId::APP);
+
+        let is_done: Memo<bool> =
+            ScopeId::APP.in_runtime(|| use_memo(move || queue.read().last().is_none()));
+
+        let card = ScopeId::APP.in_runtime(|| {
+            use_resource(move || async move {
+                match queue.read().last() {
+                    Some(id) => {
+                        let card = APP.read().load_card(*id).await;
+                        Some(Arc::unwrap_or_clone(card))
+                    }
+                    None => None,
+                }
+            })
+        });
+
+        let front = ScopeId::APP.in_runtime(|| {
+            use_resource(move || async move {
+                match card.cloned() {
+                    Some(Some(card)) => card.print().await,
+                    _ => "".to_string(),
+                }
+            })
+        });
+        let back = ScopeId::APP.in_runtime(|| {
+            use_resource(move || async move {
+                match card.cloned() {
+                    Some(Some(card)) => card.display_backside().await.unwrap_or_default(),
+                    _ => "".to_string(),
+                }
+            })
+        });
+
         let mut selv = Self {
-            card: Signal::new_in_scope(Default::default(), ScopeId::APP),
+            card,
             tot_len: Signal::new_in_scope(Default::default(), ScopeId::APP),
-            front: Signal::new_in_scope(Default::default(), ScopeId::APP),
-            back: Signal::new_in_scope(Default::default(), ScopeId::APP),
+            front,
+            back,
             show_backside: Signal::new_in_scope(Default::default(), ScopeId::APP),
             dependencies: Signal::new_in_scope(Default::default(), ScopeId::APP),
-            is_done: Signal::new_in_scope(Default::default(), ScopeId::APP),
-            queue: Signal::new_in_scope(Default::default(), ScopeId::APP),
-            overlay: Default::default(),
+            is_done,
+            queue,
+            overlay: Signal::new_in_scope(Default::default(), ScopeId::APP),
         };
 
         selv.start_review(cards).await;
@@ -191,8 +217,6 @@ impl ReviewState {
     }
 
     fn info_bar(&self) -> Element {
-        let front = self.front.clone();
-        let back = self.back.clone();
         let tot = self.tot_len.clone();
         let currcard = self.card.clone();
         let selv2 = self.clone();
@@ -211,31 +235,13 @@ impl ReviewState {
                 button {
                     class: "cursor-pointer text-gray-500 hover:text-gray-700",
                     onclick: move |_| {
-                        let Some(card) = currcard.cloned() else {
+                        let Some(Some(card)) = currcard.cloned() else {
                             return;
-                        };
-
-
-                        let front = front.clone();
-                        let back = back.clone();
-                        let fun = move |card: Arc<Card>| {
-                            spawn(async move{
-                                let f = card.print().await;
-                                let b = card
-                                    .display_backside()
-                                    .await
-                                    .unwrap_or_else(|| "___".to_string());
-                                front.clone().set(f);
-                                back.clone().set(b);
-
-                                currcard.clone().set(Some(Arc::unwrap_or_clone(card)));
-                            });
-
                         };
 
                         let overlay = overlay.clone();
                         spawn(async move {
-                            let viewer = CardViewer::new_from_card(Arc::new(card), Default::default()).await.with_hook(Arc::new(Box::new(fun)));
+                            let viewer = CardViewer::new_from_card(Arc::new(card), Default::default()).await;
                             let viewer = OverlayEnum::CardViewer(viewer);
                             overlay.clone().set(Some(viewer));
                         });
@@ -248,8 +254,8 @@ impl ReviewState {
     }
 
     fn card_sides(&self) -> Element {
-        let front = self.front.clone();
-        let back = self.back.clone();
+        let front = self.front.cloned().unwrap_or_default();
+        let back = self.back.cloned().unwrap_or_default();
         let show_backside = self.show_backside.clone();
         let selv = self.clone();
 
@@ -291,7 +297,7 @@ impl ReviewState {
     }
 
     fn suspend(&self) -> Element {
-        let Some(card) = self.card.cloned() else {
+        let Some(Some(card)) = self.card.cloned() else {
             return rsx! {};
         };
 
@@ -324,7 +330,7 @@ impl ReviewState {
         };
 
         let deps = self.dependencies.clone();
-        let Some(card) = self.card.cloned() else {
+        let Some(Some(card)) = self.card.cloned() else {
             return rsx! {"no card??"};
         };
 
@@ -400,7 +406,12 @@ impl ReviewState {
 
     async fn make_review(&self, recall: Recall) {
         info!("make review");
-        self.card.cloned().unwrap().add_review(recall).await;
+        self.card
+            .cloned()
+            .unwrap()
+            .unwrap()
+            .add_review(recall)
+            .await;
     }
 
     fn current_pos(&self) -> usize {
@@ -409,7 +420,7 @@ impl ReviewState {
 
     async fn refresh(&self) {
         info!("refreshing!");
-        if let Some(card) = self.card.cloned() {
+        if let Some(Some(card)) = self.card.cloned() {
             let card = APP.read().load_card(card.id()).await;
 
             let mut deps = vec![];
@@ -420,7 +431,6 @@ impl ReviewState {
             }
 
             self.dependencies.clone().set(deps);
-            self.card.clone().set(Some(Arc::unwrap_or_clone(card)))
         } else {
             self.dependencies.clone().write().clear();
         }
@@ -431,26 +441,12 @@ impl ReviewState {
         let card = match card {
             Some(id) => {
                 let card = APP.read().load_card(id).await;
-                let front = card.print().await;
-                let back = card
-                    .display_backside()
-                    .await
-                    .unwrap_or_else(|| "___".to_string());
-
-                self.front.clone().set(front);
-                self.back.clone().set(back);
                 Some(card)
             }
             None => None,
         };
 
-        if card.is_none() {
-            self.is_done.clone().set(true);
-            return;
-        }
-
         info!("card set: {:?}", card);
-        self.card.clone().set(card.map(Arc::unwrap_or_clone));
         self.show_backside.set(false);
         self.refresh().await;
     }

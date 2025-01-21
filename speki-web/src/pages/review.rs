@@ -31,7 +31,7 @@ pub enum OverlayEnum {
 impl OverlayEnum {
     pub fn is_done(&self) -> bool {
         match self {
-            OverlayEnum::Review(elm) => elm.is_done().cloned(),
+            OverlayEnum::Review(elm) => elm.is_done.cloned(),
             OverlayEnum::Colviewer(elm) => elm.is_done().cloned(),
             OverlayEnum::Text(elm) => elm.is_done().cloned(),
             OverlayEnum::CardViewer(elm) => elm.is_done().cloned(),
@@ -283,7 +283,6 @@ fn render_collections(state: ReviewPage) -> Element {
                     });
                 },
                 "review all"
-
             }
 
             for (col, dist, filter) in colfil {
