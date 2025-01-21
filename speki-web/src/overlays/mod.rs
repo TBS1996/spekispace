@@ -1,12 +1,5 @@
-use std::{
-    collections::HashMap,
-    sync::{Arc, RwLock},
-};
-
-use dioxus::prelude::*;
-use tracing::info;
-
 use crate::components::Komponent;
+use dioxus::prelude::*;
 
 pub mod card_selector;
 pub mod cardviewer;

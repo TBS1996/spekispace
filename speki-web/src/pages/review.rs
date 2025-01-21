@@ -6,9 +6,14 @@ use speki_core::{cardfilter::CardFilter, collection::Collection};
 use crate::{
     components::{FilterComp, FilterEditor},
     overlays::{
-        card_selector::CardSelector, cardviewer::CardViewer, colviewer::ColViewer,
-        itemselector::ItemSelector, reviewsession::ReviewState, textinput::TextInput,
-        uploader::Uploader, yesno::Yesno,
+        card_selector::CardSelector,
+        cardviewer::CardViewer,
+        colviewer::ColViewer,
+        itemselector::ItemSelector,
+        reviewsession::{ReviewRender, ReviewState},
+        textinput::TextInput,
+        uploader::Uploader,
+        yesno::Yesno,
     },
     APP, IS_SHORT,
 };
@@ -78,7 +83,20 @@ pub fn Overender(overlay: Signal<Option<OverlayEnum>>, root: Element) -> Element
                     }
 
                     match elm {
-                        OverlayEnum::Review(elm) => elm.render(),
+                        OverlayEnum::Review(elm) => {
+                            rsx!{
+                                ReviewRender {
+                                    front: elm.front.cloned().unwrap_or_default(),
+                                    back: elm.back.cloned().unwrap_or_default(),
+                                    card: elm.card.cloned().unwrap().unwrap(),
+                                    queue: elm.queue.clone(),
+                                    show_backside: elm.show_backside.clone(),
+                                    tot: elm.tot_len,
+                                    overlay: elm.overlay.clone(),
+                                    dependencies:elm.dependencies.clone(),
+                                }
+                            }
+                        },
                         OverlayEnum::Colviewer(elm) => elm.render(),
                         OverlayEnum::Text(elm) => elm.render(),
                         OverlayEnum::CardViewer(elm) => elm.render(),
