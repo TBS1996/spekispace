@@ -165,7 +165,7 @@ impl ReviewState {
             show_backside: Signal::new_in_scope(Default::default(), ScopeId::APP),
             dependencies: Signal::new_in_scope(Default::default(), ScopeId::APP),
             is_done: Signal::new_in_scope(Default::default(), ScopeId::APP),
-            queue: Default::default(),
+            queue: Signal::new_in_scope(Default::default(), ScopeId::APP),
             overlay: Default::default(),
         };
 
