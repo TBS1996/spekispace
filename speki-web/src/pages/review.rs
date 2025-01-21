@@ -170,7 +170,11 @@ pub fn Review() -> Element {
                     class: "{class}",
                     div {
                         class: "flex space-x-4 mt-6",
-                        { render_collections(state) }
+                        RenderCols{
+                            filter: state.filter.to_filter(),
+                            collections: state.collections.clone(),
+                            overlay: state.overlay.clone(),
+                        }
                         FilterComp {editor}
 
                     }
@@ -274,17 +278,17 @@ impl RecallDist {
     }
 }
 
-fn render_collections(state: ReviewPage) -> Element {
-    let filter = state.filter.to_filter();
-    let collections = state.collections.clone();
-
+#[component]
+fn RenderCols(
+    filter: CardFilter,
+    collections: Signal<Vec<(Collection, RecallDist)>>,
+    overlay: Signal<Option<OverlayEnum>>,
+) -> Element {
     let mut colfil: Vec<(Collection, RecallDist, CardFilter)> = vec![];
 
     for (col, dist) in collections.cloned() {
         colfil.push((col, dist, filter.clone()));
     }
-
-    let overlay = state.overlay.clone();
 
     rsx! {
         div {
@@ -296,7 +300,7 @@ fn render_collections(state: ReviewPage) -> Element {
                     let filter = filter.clone();
                     spawn(async move {
                         let cards = APP.read().load_all(Some(filter)).await;
-                        let revses = OverlayEnum::Review(ReviewState::new(cards).await);
+                        let revses = OverlayEnum::Review(ReviewState::new(cards));
                         overlay.clone().set(Some(revses));
                     });
                 },

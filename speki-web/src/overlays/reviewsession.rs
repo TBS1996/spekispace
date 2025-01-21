@@ -189,10 +189,10 @@ impl ReviewState {
             }
         }
 
-        Self::new(filtered).await
+        Self::new(filtered)
     }
 
-    pub async fn new(cards: Vec<Arc<Card>>) -> Self {
+    pub fn new(cards: Vec<Arc<Card>>) -> Self {
         info!("start review for {} cards", cards.len());
 
         let mut thecards = vec![];
