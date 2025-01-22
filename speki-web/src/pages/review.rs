@@ -37,6 +37,13 @@ impl ReviewPage {
             let _cols = APP.read().load_collections().await;
             let mut out = vec![];
 
+            for col in _cols.clone() {
+                out.push((col, RecallDist::default()));
+            }
+            cols.clone().set(out);
+
+            let mut out = vec![];
+
             for col in _cols {
                 let dist = RecallDist::new(col.clone()).await;
                 out.push((col, dist));
