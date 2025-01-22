@@ -28,7 +28,7 @@ impl Debug for GraphRep {
     }
 }
 
-#[derive(Clone)]
+#[derive(PartialEq, Clone)]
 pub struct GraphRep {
     pub inner: RustGraph,
     pub is_init: Signal<bool>,
@@ -55,10 +55,6 @@ impl GraphRep {
             label: Default::default(),
             scope: Signal::new_in_scope(Default::default(), ScopeId::APP),
         }
-    }
-
-    pub fn coordinates(&self) -> Option<TouchRec> {
-        utils::rect(&self.cyto_id)
     }
 
     pub fn with_hook(mut self, hook: MyClosure) -> Self {

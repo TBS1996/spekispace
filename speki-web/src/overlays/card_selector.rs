@@ -6,9 +6,9 @@ use speki_web::Node;
 use tracing::info;
 
 use crate::{
-    components::{CardTy, FilterComp, FilterEditor, GraphRep, Komponent},
-    overlays::{cardviewer::CardViewer, Overlay},
-    pages::{CardEntry, Overender, OverlayEnum},
+    components::{CardTy, FilterComp, FilterEditor, GraphRep},
+    overlays::cardviewer::CardViewer,
+    pages::{CardEntry, OverlayEnum},
     APP,
 };
 
@@ -24,19 +24,19 @@ pub fn overlay_card_viewer(overlay: Signal<Option<OverlayEnum>>) -> MyClosure {
 
 #[derive(Props, Clone)]
 pub struct CardSelector {
-    title: String,
-    search: Signal<String>,
-    on_card_selected: MyClosure,
-    all_cards: Signal<Vec<CardEntry>>,
-    filtered_cards: Signal<Vec<CardEntry>>,
-    allow_new: bool,
-    done: Signal<bool>,
-    filter: Option<Callback<CardType, bool>>,
-    dependents: Signal<Vec<Node>>,
-    allowed_cards: Vec<CardTy>,
-    filtereditor: FilterEditor,
-    filtermemo: Option<Memo<CardFilter>>,
-    overlay: Signal<Option<OverlayEnum>>,
+    pub title: String,
+    pub search: Signal<String>,
+    pub on_card_selected: MyClosure,
+    pub all_cards: Signal<Vec<CardEntry>>,
+    pub filtered_cards: Signal<Vec<CardEntry>>,
+    pub allow_new: bool,
+    pub done: Signal<bool>,
+    pub filter: Option<Callback<CardType, bool>>,
+    pub dependents: Signal<Vec<Node>>,
+    pub allowed_cards: Vec<CardTy>,
+    pub filtereditor: FilterEditor,
+    pub filtermemo: Option<Memo<CardFilter>>,
+    pub overlay: Signal<Option<OverlayEnum>>,
 }
 
 impl Default for CardSelector {
@@ -97,7 +97,8 @@ impl CardSelector {
     }
 
     pub async fn class_picker(f: MyClosure) -> Self {
-        let filter: Callback<CardType, bool> = Callback::new(move |ty: CardType| ty.is_class());
+        let filter: Callback<CardType, bool> =
+            ScopeId::APP.in_runtime(|| Callback::new(move |ty: CardType| ty.is_class()));
 
         let mut selv = Self::new(false)
             .with_title("pick class".into())
@@ -164,12 +165,6 @@ impl CardSelector {
         }
 
         sig.clone().set(entries);
-    }
-}
-
-impl Overlay for CardSelector {
-    fn is_done(&self) -> Signal<bool> {
-        self.done.clone()
     }
 }
 
@@ -368,36 +363,6 @@ pub fn CardSelectorRender(
                 }
             }
         }
-        }
-    }
-}
-
-impl Komponent for CardSelector {
-    /// Selects a card from the collection and calls a closure on it.
-    fn render(&self) -> Element {
-        let overlay = self.overlay.clone();
-        rsx! {
-            Overender {
-                overlay,
-                root:
-                    rsx! {
-                        CardSelectorRender {
-                        title: self.title.clone(),
-                        search: self.search.clone(),
-                        on_card_selected: self.on_card_selected.clone(),
-                        all_cards: self.all_cards.clone(),
-                        filtered_cards: self.filtered_cards.clone(),
-                        allow_new: self.allow_new.clone(),
-                        done: self.done.clone(),
-                        filter: self.filter.clone(),
-                        dependents: self.dependents.clone(),
-                        allowed_cards: self.allowed_cards.clone(),
-                        filtereditor: self.filtereditor.clone(),
-                        filtermemo: self.filtermemo.clone(),
-                        overlay: self.overlay.clone(),
-                    }
-                }
-            }
         }
     }
 }

@@ -12,12 +12,10 @@ use crate::{
     components::{
         backside::BackPutRender, cardref::CardRefRender, frontside::FrontPutRender,
         graph::GraphRepRender, BackPut, CardRef, CardTy, DropDownMenu, FrontPut, GraphRep,
-        Komponent,
     },
     overlays::{
         card_selector::{CardSelector, MyClosure},
         yesno::Yesno,
-        Overlay,
     },
     pages::{Overender, OverlayEnum},
     APP, IS_SHORT,
@@ -92,23 +90,42 @@ pub struct CardRep {
     deps: Vec<CardId>,
 }
 
-#[derive(Clone)]
+#[derive(Props, Clone)]
 pub struct CardViewer {
-    title: Option<String>,
-    front: FrontPut,
-    back: BackPut,
-    concept: CardRef,
-    dependencies: Signal<Vec<CardId>>,
-    dependents: Signal<Vec<Node>>,
+    pub title: Option<String>,
+    pub front: FrontPut,
+    pub back: BackPut,
+    pub concept: CardRef,
+    pub dependencies: Signal<Vec<CardId>>,
+    pub dependents: Signal<Vec<Node>>,
     pub graph: GraphRep,
-    save_hook: Option<Arc<Box<dyn Fn(Arc<Card>)>>>,
-    is_done: Signal<bool>,
-    old_card: Signal<Option<Arc<Card>>>,
-    old_meta: Signal<Option<NodeMetadata>>,
-    filter: Option<Callback<CardType, bool>>,
-    tempnode: TempNode,
-    allowed_cards: Vec<CardTy>,
+    pub save_hook: Option<Arc<Box<dyn Fn(Arc<Card>)>>>,
+    pub is_done: Signal<bool>,
+    pub old_card: Signal<Option<Arc<Card>>>,
+    pub old_meta: Signal<Option<NodeMetadata>>,
+    pub filter: Option<Callback<CardType, bool>>,
+    pub tempnode: TempNode,
+    pub allowed_cards: Vec<CardTy>,
     pub overlay: Signal<Option<OverlayEnum>>,
+}
+
+impl PartialEq for CardViewer {
+    fn eq(&self, other: &Self) -> bool {
+        self.title == other.title
+            && self.front == other.front
+            && self.back == other.back
+            && self.concept == other.concept
+            && self.dependencies == other.dependencies
+            && self.dependents == other.dependents
+            && self.graph == other.graph
+            && self.is_done == other.is_done
+            && self.old_card == other.old_card
+            && self.old_meta == other.old_meta
+            && self.filter == other.filter
+            && self.tempnode == other.tempnode
+            && self.allowed_cards == other.allowed_cards
+            && self.overlay == other.overlay
+    }
 }
 
 impl CardViewer {
@@ -645,50 +662,43 @@ impl CardViewer {
     }
 }
 
-impl Overlay for CardViewer {
-    fn is_done(&self) -> Signal<bool> {
-        self.is_done.clone()
-    }
-}
+#[component]
+pub fn CardViewerRender(props: CardViewer) -> Element {
+    info!("render cardviewer");
 
-impl Komponent for CardViewer {
-    fn render(&self) -> Element {
-        info!("render cardviewer");
+    let overlay = props.overlay.clone();
 
-        let overlay = self.overlay.clone();
-
-        rsx! {
-            Overender {
-            overlay,
-            root:
-                rsx! {
-                    div {
-                        class: "flex flex-col w-full h-full",
-                        if let Some(title) = self.title.as_ref() {
-                            h1 {
-                                class: "text-3xl font-bold mb-4 text-center",
-                                "{title}"
-                            }
+    rsx! {
+        Overender {
+        overlay,
+        root:
+            rsx! {
+                div {
+                    class: "flex flex-col w-full h-full",
+                    if let Some(title) = props.title.as_ref() {
+                        h1 {
+                            class: "text-3xl font-bold mb-4 text-center",
+                            "{title}"
                         }
+                    }
 
+                    div {
+                        class: "flex flex-col md:flex-row w-full h-full overflow-hidden",
                         div {
-                            class: "flex flex-col md:flex-row w-full h-full overflow-hidden",
-                            div {
-                                class: "flex-none p-2 w-full max-w-[500px] box-border order-2 md:order-1 overflow-y-auto",
-                                style: "min-height: 0; max-height: 100%;",
-                                { self.render_inputs() }
-                            }
-                            div {
-                                class: "flex-1 w-full box-border mb-2 md:mb-0 order-1 md:order-2",
-                                style: "min-height: 0; flex-grow: 1;",
-                                GraphRepRender{
-                                    cyto_id: self.graph.cyto_id.clone(),
-                                    scope: self.graph.scope.clone(),
-                                    label: self.graph.label.clone(),
-                                    inner: self.graph.inner.clone(),
-                                    new_card_hook: self.graph.new_card_hook.clone(),
-                                    is_init: self.graph.is_init.clone(),
-                                }
+                            class: "flex-none p-2 w-full max-w-[500px] box-border order-2 md:order-1 overflow-y-auto",
+                            style: "min-height: 0; max-height: 100%;",
+                            { props.render_inputs() }
+                        }
+                        div {
+                            class: "flex-1 w-full box-border mb-2 md:mb-0 order-1 md:order-2",
+                            style: "min-height: 0; flex-grow: 1;",
+                            GraphRepRender{
+                                cyto_id: props.graph.cyto_id.clone(),
+                                scope: props.graph.scope.clone(),
+                                label: props.graph.label.clone(),
+                                inner: props.graph.inner.clone(),
+                                new_card_hook: props.graph.new_card_hook.clone(),
+                                is_init: props.graph.is_init.clone(),
                             }
                         }
                     }

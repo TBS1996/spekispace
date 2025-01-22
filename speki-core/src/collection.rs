@@ -20,7 +20,7 @@ impl Display for Collection {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub struct Collection {
     pub id: CollectionId,
     pub name: String,

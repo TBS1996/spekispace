@@ -1,5 +1,11 @@
-use super::{card_selector::CardSelector, itemselector::ItemSelector, Overlay};
-use crate::{components::Komponent, overlays::card_selector::MyClosure, APP};
+use super::{card_selector::CardSelector, itemselector::ItemSelector};
+use crate::{
+    overlays::{
+        card_selector::{CardSelectorRender, MyClosure},
+        itemselector::ItemSelectorRender,
+    },
+    APP,
+};
 use dioxus::prelude::*;
 use speki_core::{
     collection::{Collection, CollectionId, DynCard},
@@ -101,7 +107,7 @@ impl DynTab {
     }
 }
 
-#[derive(Clone)]
+#[derive(Props, PartialEq, Clone)]
 pub struct ColViewer {
     pub col: Collection,
     pub colname: Signal<String>,
@@ -221,124 +227,171 @@ impl ColViewer {
     }
 }
 
-impl Komponent for ColViewer {
-    fn render(&self) -> Element {
-        let mut name = self.colname.clone();
-        let cards = self.entries.clone();
-        let selector = self.cardselector.clone();
-        let inselector = self.instance_selector.clone();
-        let depselector = self.dependents_selector.clone();
-        let colselector = self.colselector.clone();
-        let selv = self.clone();
-        let selv2 = self.clone();
-        let ty = self.dynty.clone();
-        let ty2 = self.dynty.clone();
+#[component]
+pub fn ColViewRender(props: ColViewer) -> Element {
+    let mut name = props.colname.clone();
+    let cards = props.entries.clone();
+    let selector = props.cardselector.clone();
+    let inselector = props.instance_selector.clone();
+    let depselector = props.dependents_selector.clone();
+    let colselector = props.colselector.clone();
+    let selv = props.clone();
+    let selv2 = props.clone();
+    let ty = props.dynty.clone();
+    let ty2 = props.dynty.clone();
 
-        rsx! {
+    rsx! {
+
+        div {
+            h1 {"{ty2:?}"}
+        }
+
+
+        button {
+            class: "inline-flex items-center text-white bg-gray-800 border-0 py-1 px-3 focus:outline-none hover:bg-gray-700 rounded text-base",
+            onclick: move |_| {
+                let mut _ty = ty.cloned();
+                _ty.next();
+                ty.clone().set(_ty);
+            },
+            "change dynty"
+        }
+
+        button {
+            class: "inline-flex items-center text-white bg-gray-800 border-0 py-1 px-3 focus:outline-none hover:bg-gray-700 rounded text-base",
+            onclick: move |_| {
+                let selv = selv.clone();
+
+                let name = selv.colname.cloned();
+                let entries = selv.entries.cloned();
+                let mut col = selv.col.clone();
+                col.name = name;
+                col.dyncards = entries.into_iter().map(|entry|entry.dy).collect();
+
+                spawn(async move {
+                    APP.read().save_collection(col).await;
+                    selv.done.clone().set(true);
+                });
+
+
+            },
+            "save"
+        }
+
+
+        button {
+            class: "inline-flex items-center text-white bg-gray-800 border-0 py-1 px-3 focus:outline-none hover:bg-gray-700 rounded text-base",
+            onclick: move |_| {
+                let selv = selv2.clone();
+                spawn(async move {
+                    APP.read().delete_collection(selv.col.id).await;
+                    selv.done.clone().set(true);
+                });
+
+
+            },
+            "delete"
+        }
+
+        div {
+            div {
+                class: "mb-10",
+                input {
+                    value: "{name}",
+                    oninput: move |evt| name.set(evt.value()),
+                }
+            }
 
             div {
-                h1 {"{ty2:?}"}
-            }
-
-
-            button {
-                class: "inline-flex items-center text-white bg-gray-800 border-0 py-1 px-3 focus:outline-none hover:bg-gray-700 rounded text-base",
-                onclick: move |_| {
-                    let mut _ty = ty.cloned();
-                    _ty.next();
-                    ty.clone().set(_ty);
-                },
-                "change dynty"
-            }
-
-            button {
-                class: "inline-flex items-center text-white bg-gray-800 border-0 py-1 px-3 focus:outline-none hover:bg-gray-700 rounded text-base",
-                onclick: move |_| {
-                    let selv = selv.clone();
-
-                    let name = selv.colname.cloned();
-                    let entries = selv.entries.cloned();
-                    let mut col = selv.col.clone();
-                    col.name = name;
-                    col.dyncards = entries.into_iter().map(|entry|entry.dy).collect();
-
-                    spawn(async move {
-                        APP.read().save_collection(col).await;
-                        selv.done.clone().set(true);
-                    });
-
-
-                },
-                "save"
-            }
-
-
-            button {
-                class: "inline-flex items-center text-white bg-gray-800 border-0 py-1 px-3 focus:outline-none hover:bg-gray-700 rounded text-base",
-                onclick: move |_| {
-                    let selv = selv2.clone();
-                    spawn(async move {
-                        APP.read().delete_collection(selv.col.id).await;
-                        selv.done.clone().set(true);
-                    });
-
-
-                },
-                "delete"
-            }
-
-            div {
+                class: "flex flex-row",
                 div {
-                    class: "mb-10",
-                    input {
-                        value: "{name}",
-                        oninput: move |evt| name.set(evt.value()),
+                    for card in cards.read().clone() {
+                        div {
+                            class: "flex flex-row mb-2",
+
+                            button {
+                                onclick: move |_| {
+                                    let mut inner = cards.cloned();
+                                    inner.retain(|entry|entry.dy != card.dy);
+                                    cards.clone().set(inner);
+                                },
+
+                                "❌"
+
+                            }
+
+                            h1 {
+                                "{card}"
+                            }
+                        }
                     }
                 }
 
                 div {
-                    class: "flex flex-row",
-                    div {
-                        for card in cards.read().clone() {
-                            div {
-                                class: "flex flex-row mb-2",
+                    class: "ml-20",
 
-                                button {
-                                    onclick: move |_| {
-                                        let mut inner = cards.cloned();
-                                        inner.retain(|entry|entry.dy != card.dy);
-                                        cards.clone().set(inner);
-                                    },
-
-                                    "❌"
-
-                                }
-
-                                h1 {
-                                    "{card}"
-                                }
+                    match ty.cloned() {
+                        DynTab::Card => rsx!{
+                            CardSelectorRender {
+                                title: selector.title.clone(),
+                                search: selector.search.clone(),
+                                on_card_selected: selector.on_card_selected.clone(),
+                                all_cards: selector.all_cards.clone(),
+                                filtered_cards: selector.filtered_cards.clone(),
+                                allow_new: selector.allow_new.clone(),
+                                done: selector.done.clone(),
+                                filter: selector.filter.clone(),
+                                dependents: selector.dependents.clone(),
+                                allowed_cards: selector.allowed_cards.clone(),
+                                filtereditor: selector.filtereditor.clone(),
+                                filtermemo: selector.filtermemo.clone(),
+                                overlay: selector.overlay.clone(),
                             }
-                        }
-                    }
-
-                    div {
-                        class: "ml-20",
-
-                        match ty.cloned() {
-                            DynTab::Card => { selector.render() },
-                            DynTab::Instance => { inselector.render() },
-                            DynTab::RecDependents => { depselector.render() },
-                            DynTab::Collection => { colselector.render() },
-                        }
+                        },
+                        DynTab::Instance => rsx!{
+                            CardSelectorRender {
+                                title: inselector.title.clone(),
+                                search: inselector.search.clone(),
+                                on_card_selected: inselector.on_card_selected.clone(),
+                                all_cards: inselector.all_cards.clone(),
+                                filtered_cards: inselector.filtered_cards.clone(),
+                                allow_new: inselector.allow_new.clone(),
+                                done: inselector.done.clone(),
+                                filter: inselector.filter.clone(),
+                                dependents: inselector.dependents.clone(),
+                                allowed_cards: inselector.allowed_cards.clone(),
+                                filtereditor: inselector.filtereditor.clone(),
+                                filtermemo: inselector.filtermemo.clone(),
+                                overlay: inselector.overlay.clone(),
+                            }
+                        },
+                        DynTab::RecDependents => rsx!{
+                            CardSelectorRender {
+                                title: depselector.title.clone(),
+                                search: depselector.search.clone(),
+                                on_card_selected: depselector.on_card_selected.clone(),
+                                all_cards: depselector.all_cards.clone(),
+                                filtered_cards: depselector.filtered_cards.clone(),
+                                allow_new: depselector.allow_new.clone(),
+                                done: depselector.done.clone(),
+                                filter: depselector.filter.clone(),
+                                dependents: depselector.dependents.clone(),
+                                allowed_cards: depselector.allowed_cards.clone(),
+                                filtereditor: depselector.filtereditor.clone(),
+                                filtermemo: depselector.filtermemo.clone(),
+                                overlay: depselector.overlay.clone(),
+                            }
+                        },
+                        DynTab::Collection => rsx!{
+                            ItemSelectorRender{
+                                items: colselector.items.clone(),
+                                on_selected: colselector.on_selected.clone(),
+                                done: colselector.done.clone(),
+                            }
+                        },
                     }
                 }
             }
         }
-    }
-}
-
-impl Overlay for ColViewer {
-    fn is_done(&self) -> Signal<bool> {
-        self.done.clone()
     }
 }

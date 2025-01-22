@@ -1,8 +1,6 @@
 use dioxus::prelude::*;
 
-use crate::overlays::uploader::Uploader;
-
-use crate::components::Komponent;
+use crate::overlays::uploader::{UploadRender, Uploader};
 
 #[derive(Clone)]
 pub struct ImportState {
@@ -21,6 +19,14 @@ impl ImportState {
 pub fn Import() -> Element {
     let state = use_context::<ImportState>();
     rsx! {
-    {      state.uploader.render() }
-      }
+        UploadRender {
+            content: state.uploader.content.clone(),
+            regex: state.uploader.regex.clone(),
+            cards: state.uploader.cards.clone(),
+            dropdown: state.uploader.dropdown.clone(),
+            done: state.uploader.done.clone(),
+            concept: state.uploader.concept.clone(),
+            overlay: state.uploader.overlay.clone(),
+        }
+    }
 }

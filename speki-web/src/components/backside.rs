@@ -13,7 +13,7 @@ use crate::{
     APP, IS_SHORT,
 };
 
-#[derive(Clone)]
+#[derive(PartialEq, Clone)]
 pub struct BackPut {
     pub text: Signal<String>,
     pub dropdown: DropDownMenu<BackOpts>,
