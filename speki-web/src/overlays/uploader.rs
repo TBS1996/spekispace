@@ -8,7 +8,7 @@ use strum::{EnumIter, IntoEnumIterator};
 
 use crate::{
     components::{cardref::CardRefRender, dropdown::DropComponent, CardRef, CardTy, DropDownMenu},
-    pages::OverlayEnum,
+    overlays::OverlayEnum,
     APP,
 };
 

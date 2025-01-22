@@ -13,11 +13,11 @@ use crate::{
         backside::BackPutRender, cardref::CardRefRender, frontside::FrontPutRender,
         graph::GraphRepRender, BackPut, CardRef, CardTy, DropDownMenu, FrontPut, GraphRep,
     },
+    overlays::OverlayEnum,
     overlays::{
         card_selector::{CardSelector, MyClosure},
         yesno::Yesno,
     },
-    pages::OverlayEnum,
     APP, IS_SHORT,
 };
 

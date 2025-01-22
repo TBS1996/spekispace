@@ -6,7 +6,7 @@ use tracing::info;
 
 use crate::{
     overlays::card_selector::{CardSelector, CardSelectorRender},
-    pages::Overender,
+    overlays::Overender,
 };
 
 #[derive(Clone)]

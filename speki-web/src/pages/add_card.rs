@@ -2,7 +2,7 @@ use dioxus::prelude::*;
 
 use crate::{
     overlays::cardviewer::{CardViewer, CardViewerRender},
-    pages::Overender,
+    overlays::Overender,
 };
 
 static ADD_CARDS: GlobalSignal<AddCardState> = Signal::global(AddCardState::new);

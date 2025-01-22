@@ -8,9 +8,11 @@ use tracing::info;
 use crate::{
     components::{CardTy, FilterComp, FilterEditor, GraphRep},
     overlays::cardviewer::CardViewer,
-    pages::{CardEntry, OverlayEnum},
+    pages::CardEntry,
     APP,
 };
+
+use super::OverlayEnum;
 
 pub fn overlay_card_viewer(overlay: Signal<Option<OverlayEnum>>) -> MyClosure {
     MyClosure(Arc::new(Box::new(move |card: Arc<Card>| {

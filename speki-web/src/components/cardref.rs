@@ -9,8 +9,8 @@ use crate::{
     overlays::{
         card_selector::{CardSelector, MyClosure},
         cardviewer::TempNode,
+        OverlayEnum,
     },
-    pages::OverlayEnum,
     APP,
 };
 

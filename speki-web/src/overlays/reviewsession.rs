@@ -9,9 +9,10 @@ use crate::{
         card_selector::{CardSelector, MyClosure},
         cardviewer::CardViewer,
     },
-    pages::OverlayEnum,
     APP,
 };
+
+use super::OverlayEnum;
 
 #[component]
 fn RecallButton(
