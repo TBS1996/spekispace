@@ -43,12 +43,12 @@ pub struct CardSelector {
 
 impl Default for CardSelector {
     fn default() -> Self {
-        Self::new(true)
+        Self::new(true, None)
     }
 }
 
 impl CardSelector {
-    pub fn new(with_memo: bool) -> Self {
+    pub fn new(with_memo: bool, filter: Option<Callback<CardType, bool>>) -> Self {
         let filtereditor = FilterEditor::new_permissive();
         let filtermemo = if with_memo {
             Some(filtereditor.memo())
@@ -67,7 +67,7 @@ impl CardSelector {
             filtered_cards: Signal::new_in_scope(Default::default(), ScopeId::APP),
             allow_new: false,
             done: Signal::new_in_scope(Default::default(), ScopeId::APP),
-            filter: None,
+            filter,
             dependents: Signal::new_in_scope(Default::default(), ScopeId::APP),
             allowed_cards: vec![],
             filtereditor,
@@ -86,9 +86,8 @@ impl CardSelector {
             on_card_selected: fun,
             allow_new: true,
             done: Signal::new_in_scope(false, ScopeId(3)),
-            filter,
             dependents: Signal::new_in_scope(dependents, ScopeId(3)),
-            ..Self::new(false)
+            ..Self::new(false, filter)
         };
 
         let selv2 = selv.clone();
@@ -102,11 +101,9 @@ impl CardSelector {
         let filter: Callback<CardType, bool> =
             ScopeId::APP.in_runtime(|| Callback::new(move |ty: CardType| ty.is_class()));
 
-        let mut selv = Self::new(false)
+        let selv = Self::new(false, Some(filter))
             .with_title("pick class".into())
             .new_on_card_selected(f);
-
-        selv.filter = Some(filter);
 
         let selv2 = selv.clone();
 
@@ -116,7 +113,7 @@ impl CardSelector {
     }
 
     pub async fn dependency_picker(f: MyClosure) -> Self {
-        let mut selv = Self::new(false)
+        let mut selv = Self::new(false, None)
             .with_title("set dependency".into())
             .new_on_card_selected(f);
         selv.allow_new = true;

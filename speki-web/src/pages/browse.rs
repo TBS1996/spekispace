@@ -64,7 +64,7 @@ impl BrowseState {
     pub fn new() -> Self {
         info!("creating browse state!");
 
-        let browse_page = CardSelector::new(true).with_title("Browse cards".to_string());
+        let browse_page = CardSelector::new(true, None).with_title("Browse cards".to_string());
 
         Self { browse_page }
     }
