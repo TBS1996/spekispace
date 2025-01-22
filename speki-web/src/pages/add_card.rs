@@ -1,6 +1,9 @@
 use dioxus::prelude::*;
 
-use crate::overlays::cardviewer::{CardViewer, CardViewerRender};
+use crate::{
+    overlays::cardviewer::{CardViewer, CardViewerRender},
+    pages::Overender,
+};
 
 static ADD_CARDS: GlobalSignal<AddCardState> = Signal::global(AddCardState::new);
 
@@ -22,6 +25,11 @@ pub fn Add() -> Element {
     let selv = ADD_CARDS.cloned();
 
     rsx! {
+        Overender {
+            overlay: selv.viewer.overlay.clone(),
+            root:
+            rsx! {
+
         CardViewerRender {
             title: selv.viewer.title.clone(),
             front: selv.viewer.front.clone(),
@@ -39,5 +47,9 @@ pub fn Add() -> Element {
             allowed_cards: selv.viewer.allowed_cards.clone(),
             overlay: selv.viewer.overlay.clone(),
         }
+
+            }
+
+         }
     }
 }

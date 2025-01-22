@@ -17,7 +17,7 @@ use crate::{
         card_selector::{CardSelector, MyClosure},
         yesno::Yesno,
     },
-    pages::{Overender, OverlayEnum},
+    pages::OverlayEnum,
     APP, IS_SHORT,
 };
 
@@ -183,8 +183,7 @@ impl CardViewer {
 
         graph.new_set_card(card.clone());
         let dependencies = card.dependency_ids().await;
-        let bck =
-            BackPut::new(raw_ty.backside(), overlay.clone()).with_dependents(tempnode.clone());
+        let bck = BackPut::new(raw_ty.backside()).with_dependents(tempnode.clone());
         let front = raw_ty.raw_front();
         let back = raw_ty.raw_back();
         let frnt = FrontPut::new(CardTy::from_ctype(card.get_ty().fieldless()));
@@ -282,7 +281,7 @@ impl CardViewer {
             dependents: dependents.clone(),
         };
 
-        let back = BackPut::new(None, overlay.clone())
+        let back = BackPut::new(None)
             .with_dependents(tempnode.clone())
             .with_closure(f.clone())
             .with_deselect(af.clone());
@@ -666,41 +665,33 @@ impl CardViewer {
 pub fn CardViewerRender(props: CardViewer) -> Element {
     info!("render cardviewer");
 
-    let overlay = props.overlay.clone();
-
     rsx! {
-        Overender {
-        overlay,
-        root:
-            rsx! {
-                div {
-                    class: "flex flex-col w-full h-full",
-                    if let Some(title) = props.title.as_ref() {
-                        h1 {
-                            class: "text-3xl font-bold mb-4 text-center",
-                            "{title}"
-                        }
-                    }
+        div {
+            class: "flex flex-col w-full h-full",
+            if let Some(title) = props.title.as_ref() {
+                h1 {
+                    class: "text-3xl font-bold mb-4 text-center",
+                    "{title}"
+                }
+            }
 
-                    div {
-                        class: "flex flex-col md:flex-row w-full h-full overflow-hidden",
-                        div {
-                            class: "flex-none p-2 w-full max-w-[500px] box-border order-2 md:order-1 overflow-y-auto",
-                            style: "min-height: 0; max-height: 100%;",
-                            { props.render_inputs() }
-                        }
-                        div {
-                            class: "flex-1 w-full box-border mb-2 md:mb-0 order-1 md:order-2",
-                            style: "min-height: 0; flex-grow: 1;",
-                            GraphRepRender{
-                                cyto_id: props.graph.cyto_id.clone(),
-                                scope: props.graph.scope.clone(),
-                                label: props.graph.label.clone(),
-                                inner: props.graph.inner.clone(),
-                                new_card_hook: props.graph.new_card_hook.clone(),
-                                is_init: props.graph.is_init.clone(),
-                            }
-                        }
+            div {
+                class: "flex flex-col md:flex-row w-full h-full overflow-hidden",
+                div {
+                    class: "flex-none p-2 w-full max-w-[500px] box-border order-2 md:order-1 overflow-y-auto",
+                    style: "min-height: 0; max-height: 100%;",
+                    { props.render_inputs() }
+                }
+                div {
+                    class: "flex-1 w-full box-border mb-2 md:mb-0 order-1 md:order-2",
+                    style: "min-height: 0; flex-grow: 1;",
+                    GraphRepRender{
+                        cyto_id: props.graph.cyto_id.clone(),
+                        scope: props.graph.scope.clone(),
+                        label: props.graph.label.clone(),
+                        inner: props.graph.inner.clone(),
+                        new_card_hook: props.graph.new_card_hook.clone(),
+                        is_init: props.graph.is_init.clone(),
                     }
                 }
             }

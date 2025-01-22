@@ -293,18 +293,6 @@ impl Card {
         info!("done persisting card: {}", self.id);
     }
 
-    async fn is_resolved(&self) -> bool {
-        for id in self.all_dependencies().await {
-            if let Some(card) = self.card_provider.load(id).await {
-                if !card.is_finished() {
-                    return false;
-                }
-            }
-        }
-
-        true
-    }
-
     pub async fn all_dependents(&self) -> Vec<CardId> {
         info!("getting dependents of: {}", self.id);
         let mut deps = vec![];

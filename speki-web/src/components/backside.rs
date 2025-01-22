@@ -79,7 +79,7 @@ pub fn BackPutRender(
 }
 
 impl BackPut {
-    pub fn new(default: Option<BackSide>, overlay: Signal<Option<OverlayEnum>>) -> Self {
+    pub fn new(default: Option<BackSide>) -> Self {
         let default = default.unwrap_or_default();
         let ref_card = CardRef::new();
         if let Some(card) = default.as_card() {

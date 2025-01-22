@@ -8,7 +8,7 @@ use strum::{EnumIter, IntoEnumIterator};
 
 use crate::{
     components::{cardref::CardRefRender, dropdown::DropComponent, CardRef, CardTy, DropDownMenu},
-    pages::{Overender, OverlayEnum},
+    pages::OverlayEnum,
     APP,
 };
 
@@ -165,10 +165,6 @@ pub fn UploadRender(props: Uploader) -> Element {
     let overlay = props.overlay.clone();
 
     rsx! {
-        Overender {
-            overlay,
-            root:
-    rsx! {
         div {
             class: "flex flex-col gap-10",
             h1 {
@@ -307,9 +303,6 @@ pub fn UploadRender(props: Uploader) -> Element {
                 }
                 }
             }
-        }
-    }
-
         }
     }
 }

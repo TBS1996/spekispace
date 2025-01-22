@@ -9,7 +9,7 @@ use crate::{
         card_selector::{CardSelector, MyClosure},
         cardviewer::CardViewer,
     },
-    pages::{Overender, OverlayEnum},
+    pages::OverlayEnum,
     APP,
 };
 
@@ -117,9 +117,6 @@ pub fn ReviewRender(
     };
 
     rsx! {
-        Overender {
-            overlay,
-            root: rsx! {
                 div {
                     class: "h-full w-full flex flex-col",
                     id: "receiver",
@@ -160,9 +157,7 @@ pub fn ReviewRender(
                              }
                         }
                     }
-                }
-            }
-        },
+        }
     }
 }
 

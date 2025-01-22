@@ -12,7 +12,7 @@ use speki_core::{card::CardId, Card};
 use speki_web::{Node, NodeMetadata};
 use tracing::info;
 
-use crate::{overlays::card_selector::MyClosure, utils, TouchRec, APP, ROUTE_CHANGE};
+use crate::{overlays::card_selector::MyClosure, utils, APP, ROUTE_CHANGE};
 
 mod digraph;
 mod js;

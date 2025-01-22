@@ -9,10 +9,8 @@ use crate::{
         card_selector::{CardSelector, CardSelectorRender},
         cardviewer::{CardViewer, CardViewerRender},
         colviewer::{ColViewRender, ColViewer},
-        itemselector::{ItemSelector, ItemSelectorRender},
         reviewsession::{ReviewRender, ReviewState},
         textinput::{TextInput, TextInputRender},
-        uploader::{UploadRender, Uploader},
         yesno::{Yesno, YesnoRender},
     },
     APP, IS_SHORT,
@@ -26,11 +24,20 @@ pub enum OverlayEnum {
     CardViewer(CardViewer),
     CardSelector(CardSelector),
     YesNo(Yesno),
-    ColSelector(ItemSelector<Collection>),
-    Uploader(Uploader),
 }
 
 impl OverlayEnum {
+    pub fn overlay(&self) -> Signal<Option<OverlayEnum>> {
+        match self {
+            OverlayEnum::Review(elm) => elm.overlay.clone(),
+            OverlayEnum::Colviewer(_) => Signal::new_in_scope(Default::default(), ScopeId::APP),
+            OverlayEnum::Text(_) => Signal::new_in_scope(Default::default(), ScopeId::APP),
+            OverlayEnum::YesNo(_) => Signal::new_in_scope(Default::default(), ScopeId::APP),
+            OverlayEnum::CardViewer(elm) => elm.overlay.clone(),
+            OverlayEnum::CardSelector(elm) => elm.overlay.clone(),
+        }
+    }
+
     pub fn is_done(&self) -> bool {
         match self {
             OverlayEnum::Review(elm) => elm.is_done.cloned(),
@@ -39,8 +46,6 @@ impl OverlayEnum {
             OverlayEnum::CardViewer(elm) => elm.is_done.cloned(),
             OverlayEnum::CardSelector(elm) => elm.done.cloned(),
             OverlayEnum::YesNo(elm) => elm.done.cloned(),
-            OverlayEnum::ColSelector(elm) => elm.done.cloned(),
-            OverlayEnum::Uploader(elm) => elm.done.cloned(),
         }
     }
 }
@@ -54,8 +59,6 @@ impl Debug for OverlayEnum {
             Self::CardViewer(_) => f.debug_tuple("card viewer").finish(),
             Self::CardSelector(_) => f.debug_tuple("card selector").finish(),
             Self::YesNo(_) => f.debug_tuple("yesno").finish(),
-            Self::ColSelector(_) => f.debug_tuple("col selector").finish(),
-            Self::Uploader(_) => f.debug_tuple("uploader").finish(),
         }
     }
 }
@@ -71,18 +74,19 @@ pub fn Overender(overlay: Signal<Option<OverlayEnum>>, root: Element) -> Element
     rsx! {
         match overlay.cloned() {
             None => root,
-            Some(elm) => rsx!{
-                div {
-                    button {
-                        onclick: move |_| {
-                            overlay.clone().set(None);
-                        },
-                        "❌"
-                    }
+            Some(elm) => {
+                let theoverlay = elm.overlay();
+                let root = rsx!{
+                    div {
+                        button {
+                            onclick: move |_| {
+                                overlay.clone().set(None);
+                            },
+                            "❌"
+                        }
 
-                    match elm {
-                        OverlayEnum::Review(elm) =>
-                            rsx!{
+                        match elm {
+                            OverlayEnum::Review(elm) => rsx!{
                                 ReviewRender {
                                     front: elm.front.cloned().unwrap_or_default(),
                                     back: elm.back.cloned().unwrap_or_default(),
@@ -94,105 +98,76 @@ pub fn Overender(overlay: Signal<Option<OverlayEnum>>, root: Element) -> Element
                                     dependencies:elm.dependencies.clone(),
                                 }
                             },
-                        OverlayEnum::Colviewer(elm) => rsx!{
-                            ColViewRender{
-                                col: elm.col.clone(),
-                                colname:  elm.colname.clone(),
-                                done:  elm.done.clone(),
-                                entries: elm.entries.clone(),
-                                cardselector: elm.cardselector.clone(),
-                                colselector: elm.colselector.clone(),
-                                instance_selector: elm.instance_selector.clone(),
-                                dependents_selector: elm.dependents_selector.clone(),
-                                dynty: elm.dynty.clone(),
-                            }
-                        },
-                        OverlayEnum::Text(elm) => rsx!{
-                            TextInputRender {
-
-    question: elm.question.clone(),
-    input_value: elm.input_value.clone(),
-    done: elm.done.clone(),
-    on_submit: elm.on_submit.clone(),
-
-
-
-                            }
-                        },
-                        OverlayEnum::CardViewer(elm) => rsx!{
-
-
-        CardViewerRender {
-            title: elm.title.clone(),
-            front: elm.front.clone(),
-            back: elm.back.clone(),
-            concept: elm.concept.clone(),
-            dependencies: elm.dependencies.clone(),
-            dependents: elm.dependents.clone(),
-            graph: elm.graph.clone(),
-            save_hook: elm.save_hook.clone(),
-            is_done: elm.is_done.clone(),
-            old_card: elm.old_card.clone(),
-            old_meta: elm.old_meta.clone(),
-            filter: elm.filter.clone(),
-            tempnode: elm.tempnode.clone(),
-            allowed_cards: elm.allowed_cards.clone(),
-            overlay: elm.overlay.clone(),
-        }
-
-
-
-                        },
-                        OverlayEnum::YesNo(elm) => rsx! {
-                            YesnoRender {
-                                question: elm.question.clone(),
+                            OverlayEnum::Colviewer(elm) => rsx!{
+                                ColViewRender{
+                                    col: elm.col.clone(),
+                                    colname:  elm.colname.clone(),
+                                    done:  elm.done.clone(),
+                                    entries: elm.entries.clone(),
+                                    cardselector: elm.cardselector.clone(),
+                                    colselector: elm.colselector.clone(),
+                                    instance_selector: elm.instance_selector.clone(),
+                                    dependents_selector: elm.dependents_selector.clone(),
+                                    dynty: elm.dynty.clone(),
+                                }
+                            },
+                            OverlayEnum::Text(elm) => rsx!{
+                                TextInputRender {
+                                    question: elm.question.clone(),
+                                    input_value: elm.input_value.clone(),
+                                    done: elm.done.clone(),
+                                    on_submit: elm.on_submit.clone(),
+                                }
+                            },
+                            OverlayEnum::CardViewer(elm) => rsx!{
+                                CardViewerRender {
+                                    title: elm.title.clone(),
+                                    front: elm.front.clone(),
+                                    back: elm.back.clone(),
+                                    concept: elm.concept.clone(),
+                                    dependencies: elm.dependencies.clone(),
+                                    dependents: elm.dependents.clone(),
+                                    graph: elm.graph.clone(),
+                                    save_hook: elm.save_hook.clone(),
+                                    is_done: elm.is_done.clone(),
+                                    old_card: elm.old_card.clone(),
+                                    old_meta: elm.old_meta.clone(),
+                                    filter: elm.filter.clone(),
+                                    tempnode: elm.tempnode.clone(),
+                                    allowed_cards: elm.allowed_cards.clone(),
+                                    overlay: elm.overlay.clone(),
+                                }
+                            },
+                            OverlayEnum::YesNo(elm) => rsx! {
+                                YesnoRender {
+                                    question: elm.question.clone(),
+                                    done: elm.done.clone(),
+                                    on_yes: elm.on_yes.clone(),
+                                }
+                            },
+                            OverlayEnum::CardSelector(elm) => rsx!{
+                                CardSelectorRender {
+                                title: elm.title.clone(),
+                                search: elm.search.clone(),
+                                on_card_selected: elm.on_card_selected.clone(),
+                                all_cards: elm.all_cards.clone(),
+                                filtered_cards: elm.filtered_cards.clone(),
+                                allow_new: elm.allow_new.clone(),
                                 done: elm.done.clone(),
-                                on_yes: elm.on_yes.clone(),
-                            }
-                        },
-                        OverlayEnum::ColSelector(elm) => rsx!{
-                            ItemSelectorRender {
-                                items: elm.items.clone(),
-                                on_selected: elm.on_selected.clone(),
-                                done: elm.done.clone(),
-                            }
-                        },
-                        OverlayEnum::CardSelector(elm) => rsx!{
-                            CardSelectorRender {
-                            title: elm.title.clone(),
-                            search: elm.search.clone(),
-                            on_card_selected: elm.on_card_selected.clone(),
-                            all_cards: elm.all_cards.clone(),
-                            filtered_cards: elm.filtered_cards.clone(),
-                            allow_new: elm.allow_new.clone(),
-                            done: elm.done.clone(),
-                            filter: elm.filter.clone(),
-                            dependents: elm.dependents.clone(),
-                            allowed_cards: elm.allowed_cards.clone(),
-                            filtereditor: elm.filtereditor.clone(),
-                            filtermemo: elm.filtermemo.clone(),
-                            overlay: elm.overlay.clone(),
+                                filter: elm.filter.clone(),
+                                dependents: elm.dependents.clone(),
+                                allowed_cards: elm.allowed_cards.clone(),
+                                filtereditor: elm.filtereditor.clone(),
+                                filtermemo: elm.filtermemo.clone(),
+                                overlay: elm.overlay.clone(),
+                                }
+                            },
                         }
-                    },
-                        OverlayEnum::Uploader(elm) => rsx!{
-
-
-        UploadRender {
-            content: elm.content.clone(),
-            regex: elm.regex.clone(),
-            cards: elm.cards.clone(),
-            dropdown: elm.dropdown.clone(),
-            done: elm.done.clone(),
-            concept: elm.concept.clone(),
-            overlay: elm.overlay.clone(),
-        }
-
-
-
-                        },
                     }
-                }
-            },
+                };
+
+                rsx! {Overender {overlay: theoverlay, root}}
+            }
         }
     }
 }
