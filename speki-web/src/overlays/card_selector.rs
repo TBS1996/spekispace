@@ -29,8 +29,7 @@ pub struct CardSelector {
     pub title: String,
     pub search: Signal<String>,
     pub on_card_selected: MyClosure,
-    pub all_cards: Signal<Vec<CardEntry>>,
-    pub filtered_cards: Signal<Vec<CardEntry>>,
+    pub cards: Resource<Vec<CardEntry>>,
     pub allow_new: bool,
     pub done: Signal<bool>,
     pub filter: Option<Callback<CardType, bool>>,
@@ -59,12 +58,45 @@ impl CardSelector {
         let overlay: Signal<Option<OverlayEnum>> =
             Signal::new_in_scope(Default::default(), ScopeId::APP);
 
+        let cards = ScopeId::APP.in_runtime(|| {
+            use_resource(move || async move {
+                let mut filtered_cards: Vec<CardEntry> = vec![];
+
+                let cards = APP.cloned().load_all(None).await;
+
+                for card in cards {
+                    if filter
+                        .as_ref()
+                        .map(|filter| (filter)(card.get_ty()))
+                        .unwrap_or(true)
+                    {
+                        let flag = match filtermemo.clone() {
+                            Some(filter) => filter.cloned().filter(card.clone()).await,
+                            None => true,
+                        };
+
+                        if flag {
+                            if card
+                                .print()
+                                .await
+                                .to_lowercase()
+                                .contains(&search.cloned().to_lowercase())
+                            {
+                                filtered_cards.push(CardEntry::new(card).await);
+                            }
+                        }
+                    }
+                }
+
+                filtered_cards
+            })
+        });
+
         Self {
             title: "select card".to_string(),
             search,
             on_card_selected: overlay_card_viewer(overlay.clone()),
-            all_cards: Signal::new_in_scope(Default::default(), ScopeId::APP),
-            filtered_cards: Signal::new_in_scope(Default::default(), ScopeId::APP),
+            cards,
             allow_new: false,
             done: Signal::new_in_scope(Default::default(), ScopeId::APP),
             filter,
@@ -81,48 +113,32 @@ impl CardSelector {
         dependents: Vec<Node>,
         filter: Option<Callback<CardType, bool>>,
     ) -> Self {
-        let selv = Self {
+        Self {
             title: "choose reference".to_string(),
             on_card_selected: fun,
             allow_new: true,
             done: Signal::new_in_scope(false, ScopeId(3)),
             dependents: Signal::new_in_scope(dependents, ScopeId(3)),
             ..Self::new(false, filter)
-        };
-
-        let selv2 = selv.clone();
-
-        selv2.init_lol().await;
-
-        selv
+        }
     }
 
     pub async fn class_picker(f: MyClosure) -> Self {
         let filter: Callback<CardType, bool> =
             ScopeId::APP.in_runtime(|| Callback::new(move |ty: CardType| ty.is_class()));
 
-        let selv = Self::new(false, Some(filter))
+        Self::new(false, Some(filter))
             .with_title("pick class".into())
-            .new_on_card_selected(f);
-
-        let selv2 = selv.clone();
-
-        selv2.init_lol().await;
-
-        selv
+            .new_on_card_selected(f)
     }
 
     pub async fn dependency_picker(f: MyClosure) -> Self {
-        let mut selv = Self::new(false, None)
-            .with_title("set dependency".into())
-            .new_on_card_selected(f);
-        selv.allow_new = true;
-
-        let selv2 = selv.clone();
-        selv2.init_lol().await;
-        info!("after init!");
-
-        selv
+        Self {
+            title: "set dependency".to_string(),
+            on_card_selected: f,
+            allow_new: true,
+            ..Self::new(false, None)
+        }
     }
 
     pub fn new_on_card_selected(mut self, f: MyClosure) -> Self {
@@ -143,27 +159,6 @@ impl CardSelector {
     pub fn with_title(mut self, title: String) -> Self {
         self.title = title;
         self
-    }
-
-    pub async fn init_lol(&self) {
-        info!("render hook in cardselector :)");
-        let sig = self.all_cards.clone();
-        let selv = self.clone();
-        let cards = APP.cloned().load_all(None).await;
-        let mut entries = vec![];
-
-        for card in cards {
-            if selv
-                .filter
-                .clone()
-                .map(|filter| (filter)(card.get_ty()))
-                .unwrap_or(true)
-            {
-                entries.push(CardEntry::new(card).await);
-            }
-        }
-
-        sig.clone().set(entries);
     }
 }
 
@@ -187,8 +182,7 @@ pub fn CardSelectorRender(
     title: String,
     search: Signal<String>,
     on_card_selected: MyClosure,
-    all_cards: Signal<Vec<CardEntry>>,
-    filtered_cards: Signal<Vec<CardEntry>>,
+    cards: Resource<Vec<CardEntry>>,
     allow_new: bool,
     done: Signal<bool>,
     filter: Option<Callback<CardType, bool>>,
@@ -199,81 +193,12 @@ pub fn CardSelectorRender(
     overlay: Signal<Option<OverlayEnum>>,
 ) -> Element {
     info!("render cardselector");
-    let title = &title;
-
-    let filtered_cards = filtered_cards.clone();
-    let search = search.clone();
-    let cardfilter = filtermemo.clone();
-    let all_cards = all_cards.clone();
-    use_effect(move || {
-        info!("recompute cards");
-        let filtered_cards = filtered_cards.clone();
-        let search = search.cloned();
-        let filter = cardfilter.map(|mem| mem.cloned());
-
-        spawn(async move {
-            let mut filtered = vec![];
-            for card in all_cards() {
-                if let Some(filter) = filter.clone() {
-                    if filter.filter(card.card.clone()).await {
-                        if card.front.to_lowercase().contains(&search.to_lowercase()) {
-                            filtered.push(card);
-                        }
-                    }
-                } else {
-                    if card.front.to_lowercase().contains(&search.to_lowercase()) {
-                        filtered.push(card);
-                    }
-                }
-            }
-
-            filtered_cards.clone().set(filtered);
-        });
-    });
-
-    let mut search = search.clone();
-
-    let closure = Arc::new(on_card_selected.clone());
-
-    let filtered_cards: Vec<_> = filtered_cards
-        .cloned()
-        .into_iter()
-        .take(1000)
-        .zip(std::iter::repeat_with(|| Arc::clone(&closure)))
-        .map(|(card, closure)| (card.clone(), closure, done.clone()))
-        .collect();
-
-    use_hook(move || {
-        info!("rendering uhhh hook in cardselector :)");
-        let sig = all_cards.clone();
-        let filter = filter.clone();
-        spawn(async move {
-            let cards = APP.cloned().load_all(None).await;
-            let mut entries = vec![];
-
-            for card in cards {
-                if filter
-                    .clone()
-                    .map(|filter| (filter)(card.get_ty()))
-                    .unwrap_or(true)
-                {
-                    entries.push(CardEntry::new(card).await);
-                }
-            }
-
-            sig.clone().set(entries);
-        });
-    });
-
-    let filteditor = filtereditor.clone();
-    let filter_render = filtermemo.is_some();
-
     rsx! {
         div {
             class: "flex flex-row",
 
-        if filter_render {
-            FilterComp {editor: filteditor}
+        if filtermemo.is_some() {
+            FilterComp {editor: filtereditor}
         }
 
         div {
@@ -285,39 +210,9 @@ pub fn CardSelectorRender(
             }
 
             div {
-
                 if allow_new {
-                    button {
-                        class: "bg-blue-500 text-white font-medium px-4 py-2 rounded-md hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-300 mr-10",
-                        onclick: move |_| {
-
-                            let done = done.clone();
-                            let closure = closure.clone();
-                            let hook = move |card: Arc<Card>| {
-                                (closure.0)(card);
-                                done.clone().set(true);
-                            };
-
-                            let mut viewer = CardViewer::new()
-                                .with_title("create new card".to_string())
-                                .with_hook(Arc::new(Box::new(hook)))
-                                .with_dependents(dependents.cloned())
-                                .with_allowed_cards(allowed_cards.clone())
-                                .with_front_text(search.cloned());
-
-                            if let Some(filter) = filter.clone() {
-                                viewer = viewer.with_filter(filter);
-                            }
-
-                            viewer.set_graph();
-
-                            overlay.clone().set(Some(OverlayEnum::CardViewer(viewer)));
-
-                        },
-                        "new card"
-                     }
+                    NewcardButton { on_card_selected: on_card_selected.clone(), done, overlay, dependents: dependents(), allowed_cards, search, filter }
                 }
-
 
                 input {
                     class: "bg-white w-full max-w-md border border-gray-300 rounded-md p-2 mb-4 text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent",
@@ -326,9 +221,78 @@ pub fn CardSelectorRender(
                 }
             }
 
+            TableRender {
+                cards, on_card_selected, done
+              }
+            }
+        }
+    }
+}
 
+#[component]
+fn NewcardButton(
+    on_card_selected: MyClosure,
+    done: Signal<bool>,
+    overlay: Signal<Option<OverlayEnum>>,
+    dependents: Vec<Node>,
+    allowed_cards: Vec<CardTy>,
+    search: String,
+    filter: Option<Callback<CardType, bool>>,
+) -> Element {
+    let closure = Arc::new(on_card_selected.clone());
+    rsx! {
+        button {
+            class: "bg-blue-500 text-white font-medium px-4 py-2 rounded-md hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-300 mr-10",
+            onclick: move |_| {
+
+                let done = done.clone();
+                let closure = closure.clone();
+                let hook = move |card: Arc<Card>| {
+                    (closure.0)(card);
+                    done.clone().set(true);
+                };
+
+                let mut viewer = CardViewer::new()
+                    .with_title("create new card".to_string())
+                    .with_hook(Arc::new(Box::new(hook)))
+                    .with_dependents(dependents.clone())
+                    .with_allowed_cards(allowed_cards.clone())
+                    .with_front_text(search.clone());
+
+                if let Some(filter) = filter.clone() {
+                    viewer = viewer.with_filter(filter);
+                }
+
+                viewer.set_graph();
+
+                overlay.clone().set(Some(OverlayEnum::CardViewer(viewer)));
+
+            },
+            "new card"
+        }
+    }
+}
+
+#[component]
+fn TableRender(
+    cards: Resource<Vec<CardEntry>>,
+    on_card_selected: MyClosure,
+    done: Signal<bool>,
+) -> Element {
+    let closure = Arc::new(on_card_selected.clone());
+
+    let filtered_cards: Vec<_> = cards
+        .cloned()
+        .unwrap_or_default()
+        .into_iter()
+        .take(1000)
+        .zip(std::iter::repeat_with(|| Arc::clone(&closure)))
+        .map(|(card, closure)| (card.clone(), closure, done.clone()))
+        .collect();
+
+    rsx! {
             div {
-                class: "flex-1 overflow-y-auto", // Scrollable container, takes up remaining space
+                class: "flex-1 overflow-y-auto",
                 table {
                     class: "min-w-full table-fixed border-collapse border border-gray-200",
                     thead {
@@ -344,7 +308,7 @@ pub fn CardSelectorRender(
                             tr {
                                 class: "hover:bg-gray-50 cursor-pointer",
                                 onclick: move |_| {
-                                    info!("omggggggggggggggggggggggggg");
+                                    info!("clicky");
                                     let card = card.clone();
                                     let closure = _closure.clone();
                                     let done = is_done.clone();
@@ -361,7 +325,5 @@ pub fn CardSelectorRender(
                     }
                 }
             }
-        }
-        }
     }
 }

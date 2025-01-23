@@ -31,6 +31,7 @@ pub enum OverlayEnum {
 }
 
 impl OverlayEnum {
+    /// The overlay belonging to the overlay
     pub fn overlay(&self) -> Signal<Option<OverlayEnum>> {
         match self {
             OverlayEnum::Review(elm) => elm.overlay.clone(),
@@ -67,11 +68,16 @@ impl Debug for OverlayEnum {
     }
 }
 
+/// Handles recursive overlays
+///
+/// Takes in a view of an overlay, and an optional overlay.
+/// todo: should overlay be a memo or something of done signal ? i mean, when we press done, overlay should be closed? or is that unceessary
+/// abstraction?
 #[component]
 pub fn Overender(overlay: Signal<Option<OverlayEnum>>, root: Element) -> Element {
-    let is_done = overlay.as_ref().is_some_and(|ol| ol.is_done());
-
-    if is_done {
+    // If the given view has an overlay, before we render it we check if the overlay is marked as done
+    // if marked as done, we set the overlay to none and in the next block will render the current view instead.
+    if overlay.as_ref().is_some_and(|ol| ol.is_done()) {
         overlay.set(None);
     }
 
@@ -79,11 +85,12 @@ pub fn Overender(overlay: Signal<Option<OverlayEnum>>, root: Element) -> Element
         match overlay.cloned() {
             None => root,
             Some(elm) => {
-                let theoverlay = elm.overlay();
+                let theoverlay = elm.overlay(); // the overlay of the overlay, so to speak.
                 let root = rsx!{
                     div {
                         button {
                             onclick: move |_| {
+                                // Note that pressing X will close its parents overlay, which represents the current view.
                                 overlay.clone().set(None);
                             },
                             "❌"
@@ -151,26 +158,25 @@ pub fn Overender(overlay: Signal<Option<OverlayEnum>>, root: Element) -> Element
                             },
                             OverlayEnum::CardSelector(elm) => rsx!{
                                 CardSelectorRender {
-                                title: elm.title.clone(),
-                                search: elm.search.clone(),
-                                on_card_selected: elm.on_card_selected.clone(),
-                                all_cards: elm.all_cards.clone(),
-                                filtered_cards: elm.filtered_cards.clone(),
-                                allow_new: elm.allow_new.clone(),
-                                done: elm.done.clone(),
-                                filter: elm.filter.clone(),
-                                dependents: elm.dependents.clone(),
-                                allowed_cards: elm.allowed_cards.clone(),
-                                filtereditor: elm.filtereditor.clone(),
-                                filtermemo: elm.filtermemo.clone(),
-                                overlay: elm.overlay.clone(),
+                                    title: elm.title.clone(),
+                                    search: elm.search.clone(),
+                                    on_card_selected: elm.on_card_selected.clone(),
+                                    cards: elm.cards.clone(),
+                                    allow_new: elm.allow_new.clone(),
+                                    done: elm.done.clone(),
+                                    filter: elm.filter.clone(),
+                                    dependents: elm.dependents.clone(),
+                                    allowed_cards: elm.allowed_cards.clone(),
+                                    filtereditor: elm.filtereditor.clone(),
+                                    filtermemo: elm.filtermemo.clone(),
+                                    overlay: elm.overlay.clone(),
                                 }
                             },
                         }
                     }
                 };
 
-                rsx! {Overender {overlay: theoverlay, root}}
+                rsx! { Overender {overlay: theoverlay, root} }
             }
         }
     }
