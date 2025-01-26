@@ -165,7 +165,7 @@ pub fn GraphRepRender(
                     let card = app.load_card(id).await;
 
                     if let Some(hook) = new_card_hook.clone() {
-                        (hook.0)(card.clone());
+                        hook.call(card.clone()).await;
                     }
                 });
             }

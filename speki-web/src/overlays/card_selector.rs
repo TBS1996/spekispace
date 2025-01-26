@@ -86,6 +86,9 @@ impl CardSelector {
                     }
                 }
 
+                filtered_cards.sort_by_key(|card| card.card.last_modified());
+                filtered_cards.reverse();
+
                 filtered_cards
             })
         });

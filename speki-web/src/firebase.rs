@@ -1,7 +1,6 @@
 use std::{collections::HashMap, time::Duration};
 
 use async_trait::async_trait;
-use gloo_utils::format::JsValueSerdeExt;
 use js_sys::Promise;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
