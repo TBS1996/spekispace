@@ -1,4 +1,4 @@
-use super::{card_selector::CardSelector, itemselector::ItemSelector};
+use super::{card_selector::CardSelector, itemselector::ItemSelector, OverlayEnum};
 use crate::{
     overlays::{
         card_selector::{CardSelectorRender, MyClosure},
@@ -118,6 +118,7 @@ pub struct ColViewer {
     pub instance_selector: CardSelector,
     pub dependents_selector: CardSelector,
     pub dynty: Signal<DynTab>,
+    pub overlay: Signal<Option<OverlayEnum>>,
 }
 
 use tracing::info;
@@ -220,6 +221,7 @@ impl ColViewer {
             cardselector,
             dependents_selector: depselector,
             dynty: Signal::new_in_scope(DynTab::Collection, ScopeId::APP),
+            overlay: Signal::new_in_scope(None, ScopeId::APP),
         };
         info!("debug 6");
 
@@ -239,6 +241,7 @@ pub fn ColViewRender(props: ColViewer) -> Element {
     let selv2 = props.clone();
     let ty = props.dynty.clone();
     let ty2 = props.dynty.clone();
+    let overlay = props.overlay.clone();
 
     rsx! {
 
@@ -344,7 +347,7 @@ pub fn ColViewRender(props: ColViewer) -> Element {
                                 allowed_cards: selector.allowed_cards.clone(),
                                 filtereditor: selector.filtereditor.clone(),
                                 filtermemo: selector.filtermemo.clone(),
-                                overlay: selector.overlay.clone(),
+                                overlay: overlay.clone(),
                             }
                         },
                         DynTab::Instance => rsx!{
@@ -360,7 +363,7 @@ pub fn ColViewRender(props: ColViewer) -> Element {
                                 allowed_cards: inselector.allowed_cards.clone(),
                                 filtereditor: inselector.filtereditor.clone(),
                                 filtermemo: inselector.filtermemo.clone(),
-                                overlay: inselector.overlay.clone(),
+                                overlay: overlay.clone(),
                             }
                         },
                         DynTab::RecDependents => rsx!{
@@ -376,7 +379,7 @@ pub fn ColViewRender(props: ColViewer) -> Element {
                                 allowed_cards: depselector.allowed_cards.clone(),
                                 filtereditor: depselector.filtereditor.clone(),
                                 filtermemo: depselector.filtermemo.clone(),
-                                overlay: depselector.overlay.clone(),
+                                overlay: overlay.clone(),
                             }
                         },
                         DynTab::Collection => rsx!{

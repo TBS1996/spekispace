@@ -35,7 +35,7 @@ impl OverlayEnum {
     pub fn overlay(&self) -> Signal<Option<OverlayEnum>> {
         match self {
             OverlayEnum::Review(elm) => elm.overlay.clone(),
-            OverlayEnum::Colviewer(_) => Signal::new_in_scope(Default::default(), ScopeId::APP),
+            OverlayEnum::Colviewer(elm) => elm.overlay.clone(),
             OverlayEnum::Text(_) => Signal::new_in_scope(Default::default(), ScopeId::APP),
             OverlayEnum::YesNo(_) => Signal::new_in_scope(Default::default(), ScopeId::APP),
             OverlayEnum::CardViewer(elm) => elm.overlay.clone(),
@@ -120,6 +120,7 @@ pub fn Overender(overlay: Signal<Option<OverlayEnum>>, root: Element) -> Element
                                     instance_selector: elm.instance_selector.clone(),
                                     dependents_selector: elm.dependents_selector.clone(),
                                     dynty: elm.dynty.clone(),
+                                    overlay: elm.overlay.clone(),
                                 }
                             },
                             OverlayEnum::Text(elm) => rsx!{
