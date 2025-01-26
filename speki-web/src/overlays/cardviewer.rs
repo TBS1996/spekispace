@@ -102,7 +102,7 @@ pub struct CardViewer {
     pub dependencies: Signal<Vec<CardId>>,
     pub dependents: Signal<Vec<Node>>,
     pub graph: GraphRep,
-    pub save_hook: Option<Arc<Box<dyn Fn(Arc<Card>)>>>,
+    pub save_hook: Option<MyClosure>,
     pub is_done: Signal<bool>,
     pub old_card: Signal<Option<Arc<Card>>>,
     pub old_meta: Signal<Option<NodeMetadata>>,
@@ -132,7 +132,7 @@ impl PartialEq for CardViewer {
 }
 
 impl CardViewer {
-    pub fn with_hook(mut self, hook: Arc<Box<dyn Fn(Arc<Card>)>>) -> Self {
+    pub fn with_hook(mut self, hook: MyClosure) -> Self {
         self.save_hook = Some(hook);
         self
     }
@@ -211,26 +211,38 @@ impl CardViewer {
         let _front = frnt.clone();
         let _graph = graph.clone();
         let _meta = meta.clone();
-        let f = MyClosure(Arc::new(Box::new(move |card: Arc<Card>| {
-            let graph = _graph.clone();
-            let front = _front.clone();
-            let meta = _meta.clone();
-            let deps = dependencies.clone();
-            deps.clone().write().push(card.id());
-            refresh_graph(graph, front, deps, dependents.clone(), Some(meta));
-        })));
+        let f = MyClosure::new(move |card: Arc<Card>| {
+            let _front = _front.clone();
+            let _graph = _graph.clone();
+            let _meta = _meta.clone();
+
+            async move {
+                let graph = _graph.clone();
+                let front = _front.clone();
+                let meta = _meta.clone();
+                let deps = dependencies.clone();
+                deps.clone().write().push(card.id());
+                refresh_graph(graph, front, deps, dependents.clone(), Some(meta));
+            }
+        });
 
         let _front = frnt.clone();
         let _graph = graph.clone();
         let _meta = meta.clone();
-        let af = MyClosure(Arc::new(Box::new(move |card: Arc<Card>| {
-            let graph = _graph.clone();
-            let front = _front.clone();
-            let deps = dependencies.clone();
-            let meta = _meta.clone();
-            deps.clone().write().retain(|dep| *dep != card.id());
-            refresh_graph(graph, front, deps, dependents.clone(), Some(meta));
-        })));
+        let af = MyClosure::new(move |card: Arc<Card>| {
+            let _graph = _graph.clone();
+            let _front = _front.clone();
+            let _meta = _meta.clone();
+
+            async move {
+                let graph = _graph.clone();
+                let front = _front.clone();
+                let deps = dependencies.clone();
+                let meta = _meta.clone();
+                deps.clone().write().retain(|dep| *dep != card.id());
+                refresh_graph(graph, front, deps, dependents.clone(), Some(meta));
+            }
+        });
 
         let bck = bck.with_closure(f.clone()).with_deselect(af.clone());
         let concept = concept.with_closure(f.clone()).with_deselect(af.clone());
@@ -266,24 +278,26 @@ impl CardViewer {
         let _graph = graph.clone();
         let _front = front.clone();
 
-        let f = MyClosure(Arc::new(Box::new(move |card: Arc<Card>| {
+        let f = MyClosure::new(move |card: Arc<Card>| {
             info!("ref card set ?");
             let graph = _graph.clone();
             let front = _front.clone();
             let deps = dependencies.clone();
             deps.clone().write().push(card.id());
             refresh_graph(graph, front, deps, dependents.clone(), None);
-        })));
+            async move {}
+        });
 
         let _front = front.clone();
         let _graph = graph.clone();
-        let af = MyClosure(Arc::new(Box::new(move |card: Arc<Card>| {
+        let af = MyClosure::new(move |card: Arc<Card>| {
             let graph = _graph.clone();
             let front = _front.clone();
             let deps = dependencies.clone();
             deps.clone().write().retain(|dep| *dep != card.id());
             refresh_graph(graph, front, deps, dependents.clone(), None);
-        })));
+            async move {}
+        });
 
         let tempnode = TempNode::New {
             id: NodeId::new_temp(),
@@ -462,20 +476,20 @@ impl CardViewer {
                     let selv = selv.clone();
                     let selv2 = selv.clone();
 
-                    let fun = MyClosure(Arc::new(Box::new(
+                    let fun = MyClosure::new(
                         move |card: Arc<Card>| {
                         selv.dependencies.clone().write().push(card.id());
                         selv.set_graph();
                         let old_card = selv.old_card.cloned();
-                        spawn(async move {
+                        async move {
                             if let Some(old_card) = old_card {
                                 Arc::unwrap_or_clone(old_card).add_dependency(card.id()).await;
                             }
-                        });
+                        }
                     }
 
 
-                )));
+                );
 
                     info!("1 scope is ! {:?}", current_scope_id().unwrap());
 
@@ -523,7 +537,6 @@ impl CardViewer {
                             basecard.front_audio = card.front_audio;
                             basecard.back_audio = card.back_audio;
 
-                            selv.is_done.clone().set(true);
 
                             for dep in card.deps {
                                 basecard.dependencies.insert(dep);
@@ -538,9 +551,10 @@ impl CardViewer {
 
                             let card = APP.read().inner().card_provider().save_basecard(basecard).await;
                             if let Some(hook) = selveste.save_hook.clone() {
-                                (hook)(card);
+                                hook.call(card).await;
                             }
                             selveste.reset().await;
+                            selv.is_done.clone().set(true);
                         });
                     }
                 },

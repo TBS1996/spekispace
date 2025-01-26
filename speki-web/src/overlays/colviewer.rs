@@ -135,9 +135,9 @@ impl ColViewer {
 
         let entries = Signal::new_in_scope(entries, ScopeId::APP);
 
-        let f = MyClosure(Arc::new(Box::new(move |card: Arc<Card>| {
+        let f = MyClosure::new(move |card: Arc<Card>| {
             let entries = entries.clone();
-            spawn(async move {
+            async move {
                 let mut inner = entries.cloned();
                 let entry = DynEntry::new(DynCard::RecDependents(card.id())).await;
                 let contains = inner.iter().any(|inentry| inentry.dy == entry.dy);
@@ -146,18 +146,18 @@ impl ColViewer {
                     inner.push(entry);
                     entries.clone().set(inner);
                 }
-            });
-        })));
+            }
+        });
         info!("debug 2");
 
         let depselector = CardSelector::dependency_picker(f)
             .await
             .with_title("all dependents of...".to_string());
 
-        let f = MyClosure(Arc::new(Box::new(move |card: Arc<Card>| {
+        let f = MyClosure::new(move |card: Arc<Card>| {
             let entries = entries.clone();
-            spawn(async move {
-                let mut inner = entries.cloned();
+            let mut inner = entries.cloned();
+            async move {
                 let entry = DynEntry::new(DynCard::Card(card.id())).await;
                 let contains = inner.iter().any(|inentry| inentry.dy == entry.dy);
 
@@ -165,8 +165,8 @@ impl ColViewer {
                     inner.push(entry);
                     entries.clone().set(inner);
                 }
-            });
-        })));
+            }
+        });
 
         info!("debug 3");
 
@@ -174,9 +174,9 @@ impl ColViewer {
             .await
             .with_title("pick card".to_string());
 
-        let f = MyClosure(Arc::new(Box::new(move |card: Arc<Card>| {
+        let f = MyClosure::new(move |card: Arc<Card>| {
             let entries = entries.clone();
-            spawn(async move {
+            async move {
                 let mut inner = entries.cloned();
                 let entry = DynEntry::new(DynCard::Instances(card.id())).await;
                 let contains = inner.iter().any(|inentry| inentry.dy == entry.dy);
@@ -185,8 +185,8 @@ impl ColViewer {
                     inner.push(entry);
                     entries.clone().set(inner);
                 }
-            });
-        })));
+            }
+        });
 
         let instance_selector = CardSelector::class_picker(f).await;
 

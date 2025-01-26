@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{future::Future, pin::Pin, sync::Arc};
 
 use dioxus::prelude::*;
 use speki_core::{cardfilter::CardFilter, Card, CardType};
@@ -15,13 +15,11 @@ use crate::{
 use super::OverlayEnum;
 
 pub fn overlay_card_viewer(overlay: Signal<Option<OverlayEnum>>) -> MyClosure {
-    MyClosure(Arc::new(Box::new(move |card: Arc<Card>| {
-        spawn(async move {
-            let graph = GraphRep::new().with_hook(overlay_card_viewer(overlay.clone()));
-            let viewer = CardViewer::new_from_card(card, graph).await;
-            overlay.clone().set(Some(OverlayEnum::CardViewer(viewer)));
-        });
-    })))
+    MyClosure::new(move |card: Arc<Card>| async move {
+        let graph = GraphRep::new().with_hook(overlay_card_viewer(overlay.clone()));
+        let viewer = CardViewer::new_from_card(card, graph).await;
+        overlay.clone().set(Some(OverlayEnum::CardViewer(viewer)));
+    })
 }
 
 #[derive(Props, Clone)]
@@ -169,7 +167,26 @@ impl PartialEq for CardSelector {
 }
 
 #[derive(Clone)]
-pub struct MyClosure(pub Arc<Box<dyn Fn(Arc<Card>)>>);
+pub struct MyClosure(
+    pub Arc<Box<dyn Fn(Arc<Card>) -> Pin<Box<dyn Future<Output = ()> + 'static>> + 'static>>,
+);
+
+// Example usage:
+impl MyClosure {
+    pub fn new<F, Fut>(func: F) -> Self
+    where
+        F: Fn(Arc<Card>) -> Fut + 'static,
+        Fut: Future<Output = ()> + 'static,
+    {
+        MyClosure(Arc::new(Box::new(move |card| {
+            Box::pin(func(card)) as Pin<Box<dyn Future<Output = ()>>>
+        })))
+    }
+
+    pub async fn call(&self, card: Arc<Card>) {
+        (self.0)(card).await;
+    }
+}
 
 impl PartialEq for MyClosure {
     fn eq(&self, _other: &Self) -> bool {
@@ -247,14 +264,18 @@ fn NewcardButton(
 
                 let done = done.clone();
                 let closure = closure.clone();
-                let hook = move |card: Arc<Card>| {
-                    (closure.0)(card);
-                    done.clone().set(true);
-                };
+                let hook = MyClosure::new(move |card: Arc<Card>| {
+                    let closure = closure.clone();
+
+                    async move {
+                        closure.call(card).await;
+                        done.clone().set(true);
+                    }
+                });
 
                 let mut viewer = CardViewer::new()
                     .with_title("create new card".to_string())
-                    .with_hook(Arc::new(Box::new(hook)))
+                    .with_hook(hook)
                     .with_dependents(dependents.clone())
                     .with_allowed_cards(allowed_cards.clone())
                     .with_front_text(search.clone());
@@ -312,8 +333,10 @@ fn TableRender(
                                     let card = card.clone();
                                     let closure = _closure.clone();
                                     let done = is_done.clone();
-                                    (closure.0)(card.card.clone());
-                                    done.clone().set(true);
+                                    spawn(async move {
+                                        closure.call(card.card).await;
+                                        done.clone().set(true);
+                                    });
 
                                 },
 

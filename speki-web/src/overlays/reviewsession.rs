@@ -380,12 +380,12 @@ fn RenderDependencies(
                         onclick: move |_| {
                             let currcard = card.clone();
 
-                            let fun = MyClosure(Arc::new(Box::new(move |card: Arc<Card>| {
+                            let fun = MyClosure::new(move |card: Arc<Card>| {
                                 let mut old_card = currcard.clone();
-                                spawn(async move {
+                                async move {
                                     old_card.add_dependency(card.id()).await;
-                                });
-                            })));
+                                }
+                            });
 
                             spawn(async move {
                                 let props = CardSelector::dependency_picker(fun).await;

@@ -62,18 +62,21 @@ pub fn CardRefRender(
                 readonly: "true",
                 onclick: move |_| {
                     let f = on_select.clone();
-                    let fun = MyClosure(Arc::new(Box::new(move |card: Arc<Card>| {
+                    let fun = MyClosure::new(move |card: Arc<Card>| {
                         info!("x1");
+                        let f = f.clone();
+                        async move {
                         if let Some(fun) = f.clone() {
                             info!("x2");
-                            fun.0(card.clone());
+                            fun.0(card.clone()).await;
                         }
 
                         let id = card.id();
                         selected_card.clone().set(Some(id));
-                        let display = futures::executor::block_on(card.print());
+                        let display = card.print().await;
                         card_display.clone().set(display);
-                    })));
+                        }
+                    });
 
                     let dependents = dependent
                         .clone()
@@ -101,7 +104,7 @@ pub fn CardRefRender(
                             if let Some(card) = selected_card.cloned(){
                                 let card = APP.cloned().load_card(card).await;
                                 if let Some(f) = on_deselect.clone(){
-                                    f.0(card);
+                                    f.call(card).await;
                                 }
 
                             }
