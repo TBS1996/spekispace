@@ -19,10 +19,10 @@ impl PartialEq for TextInput {
 }
 
 impl TextInput {
-    pub fn new(q: String, hook: Arc<Box<dyn Fn(String)>>) -> Self {
+    pub fn new(q: String, hook: Arc<Box<dyn Fn(String)>>, done: Signal<bool>) -> Self {
         Self {
             question: Arc::new(q),
-            done: Signal::new_in_scope(false, ScopeId::APP),
+            done,
             input_value: Signal::new_in_scope(Default::default(), ScopeId::APP),
             on_submit: hook,
         }
@@ -32,7 +32,6 @@ impl TextInput {
 #[component]
 pub fn TextInputRender(props: TextInput) -> Element {
     let question = props.question.clone();
-    let mut done = props.done.clone();
     let on_submit = props.on_submit.clone();
     let input_value = props.input_value.clone();
 
@@ -55,7 +54,6 @@ pub fn TextInputRender(props: TextInput) -> Element {
                 onclick: move |_| {
                     let value = input_value.cloned();
                     on_submit(value);
-                    done.set(true);
                 },
                 "Submit"
             }

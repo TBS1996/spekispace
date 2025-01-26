@@ -2,6 +2,7 @@ use std::{fmt::Debug, sync::Arc};
 
 use dioxus::prelude::*;
 use speki_core::{cardfilter::CardFilter, collection::Collection};
+use tracing::info;
 
 use crate::{
     components::{FilterComp, FilterEditor},
@@ -250,14 +251,20 @@ fn RenderCols(
             button {
                 class: "inline-flex items-center text-white bg-blue-700 border-0 py-1 px-3 focus:outline-none hover:bg-blue-900 rounded text-base mb-5",
                 onclick: move |_| {
+                    let done = Signal::new_in_scope(false, ScopeId::APP);
                     let f = move |name: String| {
                         let col = Collection::new(name);
+                        info!("new collection made!");
                         spawn(async move {
+                            info!("saving it!");
                             APP.read().save_collection(col).await;
+                            done.clone().set(true);
+                            info!("saved it!");
                         });
+                        info!("bye");
                     };
 
-                    let txt = OverlayEnum::Text(TextInput::new("add collection".to_string(), Arc::new(Box::new(f))));
+                    let txt = OverlayEnum::Text(TextInput::new("add collection".to_string(), Arc::new(Box::new(f)), done));
                     overlay.clone().set(Some(txt));
                 },
                 "add collection"
