@@ -1,7 +1,7 @@
 use omtrent::TimeStamp;
 
 use super::*;
-use crate::{attribute::AttributeId, card_provider::CardProvider, App, Attribute};
+use crate::{attribute::AttributeId, audio::AudioId, card_provider::CardProvider, App, Attribute};
 
 pub type CardId = Uuid;
 
@@ -15,6 +15,8 @@ pub struct BaseCard {
     pub dependencies: BTreeSet<CardId>,
     pub last_modified: Duration,
     pub source: ModifiedSource,
+    pub front_audio: Option<AudioId>,
+    pub back_audio: Option<AudioId>,
 }
 
 impl BaseCard {
@@ -33,6 +35,8 @@ impl BaseCard {
             dependencies: Default::default(),
             last_modified: Default::default(),
             source: Default::default(),
+            front_audio: None,
+            back_audio: None,
         }
     }
 }
@@ -46,6 +50,8 @@ impl From<RawCard> for BaseCard {
             last_modified: raw.last_modified,
             deleted: raw.deleted,
             source: raw.source,
+            front_audio: raw.front_audio,
+            back_audio: raw.back_audio,
         }
     }
 }
@@ -60,6 +66,8 @@ impl From<BaseCard> for RawCard {
             last_modified: card.last_modified,
             source: card.source,
             tags: Default::default(),
+            front_audio: card.front_audio,
+            back_audio: card.back_audio,
         }
     }
 }
@@ -144,13 +152,13 @@ impl CardTrait for ClassCard {
 }
 
 /// An unfinished card
-#[derive(Debug, Clone)]
+#[derive(PartialEq, Debug, Clone)]
 pub struct UnfinishedCard {
     pub front: String,
 }
 
 /// Just a normal flashcard
-#[derive(Debug, Clone)]
+#[derive(PartialEq, Debug, Clone)]
 pub struct NormalCard {
     pub front: String,
     pub back: BackSide,
@@ -158,7 +166,7 @@ pub struct NormalCard {
 
 /// A class, which is something that has specific instances of it, but is not a single thing in itself.
 /// A class might also have sub-classes, for example, the class chemical element has a sub-class isotope
-#[derive(Debug, Clone)]
+#[derive(PartialEq, Debug, Clone)]
 pub struct ClassCard {
     pub name: String,
     pub back: BackSide,
@@ -167,7 +175,7 @@ pub struct ClassCard {
 
 /// An attribute describes a specific instance of a class. For example the class Person can have attribute "when was {} born?"
 /// this will be applied to all instances of the class and its subclasses
-#[derive(Debug, Clone)]
+#[derive(PartialEq, Debug, Clone)]
 pub struct AttributeCard {
     pub attribute: AttributeId,
     pub back: BackSide,
@@ -192,7 +200,7 @@ impl AttributeCard {
 /// A specific instance of a class
 /// For example, the instance might be Elvis Presley where the concept would be "Person"
 /// the right answer is to know which class the instance belongs to
-#[derive(Debug, Clone)]
+#[derive(PartialEq, Debug, Clone)]
 pub struct InstanceCard {
     pub name: String,
     pub back: Option<BackSide>,
@@ -214,7 +222,7 @@ pub struct InstanceCard {
 /// 1. It represents a property of an instance or sub-class.
 /// 2. The set of the class it belongs to is large
 /// 3. The property in that set is rare, but not unique
-#[derive(Debug, Clone)]
+#[derive(PartialEq, Debug, Clone)]
 pub struct StatementCard {
     pub front: String,
 }
@@ -226,7 +234,7 @@ impl CardTrait for StatementCard {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(PartialEq, Debug, Clone)]
 pub struct EventCard {
     pub front: String,
     pub start_time: TimeStamp,
@@ -290,7 +298,7 @@ pub trait CardTrait: Debug + Clone {
     async fn get_dependencies(&self) -> BTreeSet<CardId>;
 }
 
-#[derive(Debug, Clone)]
+#[derive(PartialEq, Debug, Clone)]
 pub enum CardType {
     Instance(InstanceCard),
     Normal(NormalCard),
@@ -517,6 +525,10 @@ struct RawCard {
     last_modified: Duration,
     #[serde(default)]
     source: ModifiedSource,
+    #[serde(default)]
+    front_audio: Option<AudioId>,
+    #[serde(default)]
+    back_audio: Option<AudioId>,
 }
 
 impl Item for BaseCard {

@@ -196,14 +196,32 @@ impl CardProvider {
         let raw_cards = self.provider.cards.load_all().await;
         info!("loading reviews");
         let mut reviews = self.provider.reviews.load_all().await;
+        let audios = self.provider.audios.load_all().await;
         let mut metas = self.provider.metadata.load_all().await;
         let fetched = self.time_provider.current_time();
 
         for (id, card) in raw_cards {
+            let front_audio = match card.front_audio {
+                Some(id) => audios.get(&id).cloned(), // cloned not removed cause different cards can use same audio
+                None => None,
+            };
+
+            let back_audio = match card.front_audio {
+                Some(id) => audios.get(&id).cloned(),
+                None => None,
+            };
+
             let rev = reviews.remove(&id).unwrap_or_else(|| History::new(id));
             let meta = metas.remove(&id).unwrap_or_else(|| Metadata::new(id));
-            let card =
-                Card::from_parts(card, rev.clone(), meta, self.clone(), self.recaller.clone());
+            let card = Card::from_parts(
+                card,
+                rev.clone(),
+                meta,
+                self.clone(),
+                self.recaller.clone(),
+                front_audio,
+                back_audio,
+            );
             let card = Arc::new(card);
             self.update_dependents(card.clone()).await;
 
@@ -359,7 +377,24 @@ impl CardProvider {
             .await
             .unwrap_or_else(|| Metadata::new(id));
 
-        let card = Card::from_parts(raw_card, reviews, meta, self.clone(), self.recaller.clone());
+        let front_audio = match raw_card.front_audio {
+            Some(id) => self.provider.audios.load_item(id).await,
+            None => None,
+        };
+        let back_audio = match raw_card.back_audio {
+            Some(id) => self.provider.audios.load_item(id).await,
+            None => None,
+        };
+
+        let card = Card::from_parts(
+            raw_card,
+            reviews,
+            meta,
+            self.clone(),
+            self.recaller.clone(),
+            front_audio,
+            back_audio,
+        );
 
         Some(card)
     }

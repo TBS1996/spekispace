@@ -2,12 +2,12 @@ use std::fmt::Display;
 
 use dioxus::prelude::*;
 use serde::{Deserialize, Serialize};
-use speki_core::card::CType;
+use speki_core::{audio::Audio, card::CType};
 use strum::{EnumIter, IntoEnumIterator};
 use tracing::info;
 
 use crate::{
-    components::{dropdown::DropComponent, DropDownMenu},
+    components::{audioupload::AudioUpload, dropdown::DropComponent, DropDownMenu},
     IS_SHORT,
 };
 
@@ -59,10 +59,15 @@ impl Display for CardTy {
 pub struct FrontPut {
     pub dropdown: DropDownMenu<CardTy>,
     pub text: Signal<String>,
+    pub audio: Signal<Option<Audio>>,
 }
 
 #[component]
-pub fn FrontPutRender(dropdown: DropDownMenu<CardTy>, text: Signal<String>) -> Element {
+pub fn FrontPutRender(
+    dropdown: DropDownMenu<CardTy>,
+    text: Signal<String>,
+    audio: Signal<Option<Audio>>,
+) -> Element {
     let placeholder = if IS_SHORT.cloned() { "Front side" } else { "" };
 
     rsx! {
@@ -88,6 +93,10 @@ pub fn FrontPutRender(dropdown: DropDownMenu<CardTy>, text: Signal<String>) -> E
                     style: "width: 65px;",
                     DropComponent {options: dropdown.options.clone(), selected: dropdown.selected.clone()}
                 }
+
+
+                AudioUpload { audio }
+
             }
         }
     }
@@ -98,6 +107,7 @@ impl FrontPut {
         Self {
             dropdown: DropDownMenu::new(CardTy::iter(), Some(default)),
             text: Signal::new_in_scope(Default::default(), ScopeId(3)),
+            audio: Signal::new_in_scope(Default::default(), ScopeId(3)),
         }
     }
 

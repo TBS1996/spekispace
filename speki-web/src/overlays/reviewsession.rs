@@ -9,6 +9,7 @@ use crate::{
         card_selector::{CardSelector, MyClosure},
         cardviewer::CardViewer,
     },
+    pages::play_audio,
     APP,
 };
 
@@ -62,7 +63,16 @@ fn ReviewButtons(
             if !show_backside() {
                 button {
                     class: "inline-flex items-center text-white bg-gray-800 border-0 py-1 px-3 focus:outline-none hover:bg-gray-700 rounded text-base",
-                    onclick: move |_| show_backside.set(true),
+                    onclick: move |_| {
+
+                        show_backside.set(true);
+
+                if let Some(audio) = card.back_audio.clone() {
+                    play_audio(audio.data, "audio/mpeg");
+                }
+
+
+                    },
                     "show backside"
                 }
             } else {
@@ -106,6 +116,11 @@ pub fn ReviewRender(
             "4" if bck => Recall::Perfect,
             " " => {
                 show_backside.clone().set(true);
+
+                if let Some(audio) = card.back_audio.clone() {
+                    play_audio(audio.data, "audio/mpeg");
+                }
+
                 return;
             }
             _ => return,
@@ -208,6 +223,9 @@ impl ReviewState {
                 match queue.read().last() {
                     Some(id) => {
                         let card = APP.read().load_card(*id).await;
+                        if let Some(audio) = card.front_audio.clone() {
+                            play_audio(audio.data, "audio/mpeg");
+                        }
                         Some(Arc::unwrap_or_clone(card))
                     }
                     None => None,

@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use dioxus::prelude::*;
 use speki_core::{
+    audio::AudioId,
     card::{BaseCard, CardId},
     Card, CardType, ClassCard, InstanceCard, NormalCard, UnfinishedCard,
 };
@@ -13,10 +14,10 @@ use crate::{
         backside::BackPutRender, cardref::CardRefRender, frontside::FrontPutRender,
         graph::GraphRepRender, BackPut, CardRef, CardTy, DropDownMenu, FrontPut, GraphRep,
     },
-    overlays::OverlayEnum,
     overlays::{
         card_selector::{CardSelector, MyClosure},
         yesno::Yesno,
+        OverlayEnum,
     },
     APP, IS_SHORT,
 };
@@ -87,6 +88,8 @@ fn refresh_graph(
 
 pub struct CardRep {
     ty: CardType,
+    front_audio: Option<AudioId>,
+    back_audio: Option<AudioId>,
     deps: Vec<CardId>,
 }
 
@@ -187,6 +190,14 @@ impl CardViewer {
         let front = raw_ty.raw_front();
         let back = raw_ty.raw_back();
         let frnt = FrontPut::new(CardTy::from_ctype(card.get_ty().fieldless()));
+        if let Some(id) = card.base.front_audio {
+            let audio = APP.read().inner().provider.audios.load_item(id).await;
+            frnt.audio.clone().set(audio);
+        }
+        if let Some(id) = card.base.back_audio {
+            let audio = APP.read().inner().provider.audios.load_item(id).await;
+            bck.audio.clone().set(audio);
+        }
         frnt.text.clone().set(front);
 
         bck.text.clone().set(back);
@@ -371,6 +382,8 @@ impl CardViewer {
 
         Some(CardRep {
             ty,
+            front_audio: self.front.audio.cloned().map(|audio| audio.id),
+            back_audio: self.back.audio.cloned().map(|audio| audio.id),
             deps: self.dependencies.cloned(),
         })
     }
@@ -507,11 +520,20 @@ impl CardViewer {
 
                             let id = selveste.old_card.cloned().map(|card|card.id());
                             let mut basecard = BaseCard::new_with_id(id, card.ty);
+                            basecard.front_audio = card.front_audio;
+                            basecard.back_audio = card.back_audio;
 
                             selv.is_done.clone().set(true);
 
                             for dep in card.deps {
                                 basecard.dependencies.insert(dep);
+                            }
+
+                            if let Some(audio) = selv.front.audio.cloned() {
+                                APP.read().inner().provider.audios.save_item(audio).await;
+                            }
+                            if let Some(audio) = selv.back.audio.cloned() {
+                                APP.read().inner().provider.audios.save_item(audio).await;
                             }
 
                             let card = APP.read().inner().card_provider().save_basecard(basecard).await;
@@ -536,7 +558,7 @@ impl CardViewer {
         let is_short = IS_SHORT.cloned();
         let overlay = self.overlay.clone();
         rsx! {
-            FrontPutRender { dropdown: self.front.dropdown.clone(), text: self.front.text.clone() }
+            FrontPutRender { dropdown: self.front.dropdown.clone(), text: self.front.text.clone(), audio: self.front.audio.clone() }
 
             match ty {
                 CardTy::Unfinished => rsx! {},
@@ -547,6 +569,7 @@ impl CardViewer {
                         dropdown: selv.back.dropdown.clone(),
                         ref_card: selv.back.ref_card.clone(),
                         overlay: overlay.clone(),
+                        audio: selv.back.audio.clone(),
                     }
                 },
                 CardTy::Class => rsx! {
@@ -555,6 +578,7 @@ impl CardViewer {
                         dropdown: selv.back.dropdown.clone(),
                         ref_card: selv.back.ref_card.clone(),
                         overlay: overlay.clone(),
+                        audio: selv.back.audio.clone(),
                     }
 
 
@@ -601,6 +625,7 @@ impl CardViewer {
                         dropdown: selv.back.dropdown.clone(),
                         ref_card: selv.back.ref_card.clone(),
                         overlay: overlay.clone(),
+                        audio: selv.back.audio.clone(),
                     }
 
                     if !is_short {
@@ -645,6 +670,7 @@ impl CardViewer {
     fn render_inputs(&self) -> Element {
         info!("render inputs");
         let ty = self.front.dropdown.selected.clone();
+
         rsx! {
             div {
                 { self.input_elements(ty.cloned()) }

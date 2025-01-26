@@ -1,5 +1,6 @@
 use std::{collections::HashMap, fmt::Debug, sync::Arc, time::Duration};
 
+use audio::Audio;
 use card::{BackSide, BaseCard, CardId, RecallRate};
 use card_provider::CardProvider;
 use cardfilter::{CardFilter, FilterItem};
@@ -12,6 +13,7 @@ use speki_dto::{SpekiProvider, TimeProvider};
 use tracing::trace;
 
 mod attribute;
+pub mod audio;
 pub mod card;
 mod card_provider;
 pub mod cardfilter;
@@ -81,6 +83,7 @@ pub struct Provider {
     pub collections: CollectionProvider,
     pub metadata: Arc<Box<dyn SpekiProvider<Metadata>>>,
     pub cardfilter: Arc<Box<dyn SpekiProvider<FilterItem>>>,
+    pub audios: Arc<Box<dyn SpekiProvider<Audio>>>,
 }
 
 pub type Recaller = Arc<Box<dyn RecallCalc + Send>>;
@@ -100,7 +103,7 @@ impl Debug for App {
 }
 
 impl App {
-    pub fn new<A, B, C, D, E, F, G, H>(
+    pub fn new<A, B, C, D, E, F, G, H, I>(
         recall_calc: A,
         time_provider: B,
         card_provider: C,
@@ -109,6 +112,7 @@ impl App {
         collections_provider: F,
         meta_provider: G,
         filter_provider: H,
+        audio_provider: I,
     ) -> Self
     where
         A: RecallCalc + 'static + Send,
@@ -119,6 +123,7 @@ impl App {
         F: SpekiProvider<Collection> + 'static + Send,
         G: SpekiProvider<Metadata> + 'static + Send,
         H: SpekiProvider<FilterItem> + 'static + Send,
+        I: SpekiProvider<Audio> + 'static + Send,
     {
         info!("initialtize app");
 
@@ -134,6 +139,7 @@ impl App {
             },
             metadata: Arc::new(Box::new(meta_provider)),
             cardfilter: Arc::new(Box::new(filter_provider)),
+            audios: Arc::new(Box::new(audio_provider)),
         };
 
         let card_provider =

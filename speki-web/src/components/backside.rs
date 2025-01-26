@@ -2,12 +2,15 @@ use std::fmt::{Debug, Display};
 
 use dioxus::prelude::*;
 use serde::{Deserialize, Serialize};
-use speki_core::card::BackSide;
+use speki_core::{audio::Audio, card::BackSide};
 use strum::{EnumIter, IntoEnumIterator};
 use tracing::info;
 
 use crate::{
-    components::{cardref::CardRefRender, dropdown::DropComponent, CardRef, DropDownMenu},
+    components::{
+        audioupload::AudioUpload, cardref::CardRefRender, dropdown::DropComponent, CardRef,
+        DropDownMenu,
+    },
     overlays::{card_selector::MyClosure, cardviewer::TempNode, OverlayEnum},
     APP, IS_SHORT,
 };
@@ -17,6 +20,7 @@ pub struct BackPut {
     pub text: Signal<String>,
     pub dropdown: DropDownMenu<BackOpts>,
     pub ref_card: CardRef,
+    pub audio: Signal<Option<Audio>>,
 }
 
 #[component]
@@ -25,6 +29,7 @@ pub fn BackPutRender(
     dropdown: DropDownMenu<BackOpts>,
     ref_card: CardRef,
     overlay: Signal<Option<OverlayEnum>>,
+    audio: Signal<Option<Audio>>,
 ) -> Element {
     rsx! {
         div {
@@ -72,6 +77,8 @@ pub fn BackPutRender(
                     style: "width: 65px;",
                     DropComponent {options: dropdown.options.clone(), selected: dropdown.selected.clone()}
                 }
+
+                AudioUpload { audio }
             }
         }
     }
@@ -97,6 +104,7 @@ impl BackPut {
 
         Self {
             text: Signal::new_in_scope(Default::default(), ScopeId(3)),
+            audio: Signal::new_in_scope(Default::default(), ScopeId(3)),
             dropdown: DropDownMenu::new(BackOpts::iter(), Some(backopt)),
             ref_card,
         }

@@ -15,6 +15,7 @@ use tracing::info;
 use uuid::Uuid;
 
 use crate::{
+    audio::Audio,
     card_provider::CardProvider,
     metadata::{IsSuspended, Metadata},
     recall_rate::{History, Recall, Review, SimpleRecall},
@@ -30,6 +31,8 @@ pub use basecard::*;
 #[derive(Clone)]
 pub struct Card {
     id: CardId,
+    pub front_audio: Option<Audio>,
+    pub back_audio: Option<Audio>,
     pub base: BaseCard,
     metadata: Metadata,
     history: History,
@@ -161,6 +164,8 @@ impl Card {
         metadata: Metadata,
         card_provider: CardProvider,
         recaller: Recaller,
+        front_audio: Option<Audio>,
+        back_audio: Option<Audio>,
     ) -> Card {
         let id = base.id;
 
@@ -173,6 +178,8 @@ impl Card {
             history,
             card_provider,
             recaller,
+            front_audio,
+            back_audio,
         }
     }
 
