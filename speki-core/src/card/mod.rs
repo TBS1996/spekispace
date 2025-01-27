@@ -166,7 +166,7 @@ impl Card {
         recaller: Recaller,
         front_audio: Option<Audio>,
         back_audio: Option<Audio>,
-    ) -> Card {
+    ) -> Self {
         let id = base.id;
 
         debug_assert!(id == history.id() && id == metadata.id());

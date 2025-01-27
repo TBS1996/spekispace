@@ -67,9 +67,9 @@ fn ReviewButtons(
 
                         show_backside.set(true);
 
-                if let Some(audio) = card.back_audio.clone() {
-                    play_audio(audio.data, "audio/mpeg");
-                }
+                        if let Some(audio) = card.back_audio.clone() {
+                            play_audio(audio.data, "audio/mpeg");
+                        }
 
 
                     },
@@ -161,6 +161,7 @@ pub fn ReviewRender(
                                 dependencies,
                                 overlay: overlay.clone(),
                                 show_backside: show_backside.cloned(),
+                                queue: queue.clone(),
 
                             }
                         }
@@ -181,11 +182,11 @@ pub fn ReviewRender(
 pub struct ReviewState {
     pub queue: Signal<Vec<CardId>>,
     pub card: Resource<Option<Card>>,
+    pub dependencies: Resource<Vec<(String, Arc<Card>, Signal<Option<OverlayEnum>>)>>,
     pub tot_len: usize,
     pub front: Resource<String>,
     pub back: Resource<String>,
     pub show_backside: Signal<bool>,
-    pub dependencies: Resource<Vec<(String, Arc<Card>, Signal<Option<OverlayEnum>>)>>,
     pub is_done: Memo<bool>,
     pub overlay: Signal<Option<OverlayEnum>>,
 }
@@ -354,6 +355,7 @@ fn RenderDependencies(
     dependencies: Resource<Vec<(String, Arc<Card>, Signal<Option<OverlayEnum>>)>>,
     overlay: Signal<Option<OverlayEnum>>,
     show_backside: bool,
+    queue: Signal<Vec<CardId>>,
 ) -> Element {
     let show_graph = if show_backside {
         "opacity-100 visible"
@@ -384,6 +386,7 @@ fn RenderDependencies(
                                 let mut old_card = currcard.clone();
                                 async move {
                                     old_card.add_dependency(card.id()).await;
+                                    let _ = queue.write();
                                 }
                             });
 
