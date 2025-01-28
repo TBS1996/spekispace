@@ -4,9 +4,9 @@ use dioxus::prelude::*;
 use speki_core::{
     audio::AudioId,
     card::{BaseCard, CardId},
-    Card, CardType, ClassCard, InstanceCard, NormalCard, UnfinishedCard,
+    CardType, ClassCard, InstanceCard, NormalCard, UnfinishedCard,
 };
-use speki_web::{Node, NodeId, NodeMetadata};
+use speki_web::{CardEntry, Node, NodeId, NodeMetadata};
 use tracing::info;
 
 use crate::{
@@ -104,7 +104,7 @@ pub struct CardViewer {
     pub graph: GraphRep,
     pub save_hook: Option<MyClosure>,
     pub is_done: Signal<bool>,
-    pub old_card: Signal<Option<Arc<Card>>>,
+    pub old_card: Signal<Option<CardEntry>>,
     pub old_meta: Signal<Option<NodeMetadata>>,
     pub filter: Option<Callback<CardType, bool>>,
     pub tempnode: TempNode,
@@ -166,7 +166,7 @@ impl CardViewer {
         self
     }
 
-    pub async fn new_from_card(card: Arc<Card>, graph: GraphRep) -> Self {
+    pub async fn new_from_card(card: CardEntry, graph: GraphRep) -> Self {
         let overlay: Signal<Option<OverlayEnum>> =
             Signal::new_in_scope(Default::default(), ScopeId::APP);
         let meta = NodeMetadata::from_card(card.clone(), true).await;
@@ -174,27 +174,27 @@ impl CardViewer {
         let tempnode = TempNode::Old(card.id());
         let filter = Callback::new(move |ty: CardType| ty.is_class());
 
-        let raw_ty = card.base.ty.clone();
+        let raw_ty = card.card.read().base.ty.clone();
         let concept = CardRef::new()
             .with_filter(filter)
             .with_dependents(tempnode.clone())
             .with_allowed(vec![CardTy::Class]);
         if let Some(class) = raw_ty.class() {
             let class = APP.read().load_card(class).await;
-            concept.set_ref(class).await;
+            concept.set_ref(class);
         }
 
         graph.new_set_card(card.clone());
-        let dependencies = card.dependency_ids().await;
+        let dependencies = card.dependencies();
         let bck = BackPut::new(raw_ty.backside()).with_dependents(tempnode.clone());
         let front = raw_ty.raw_front();
         let back = raw_ty.raw_back();
-        let frnt = FrontPut::new(CardTy::from_ctype(card.get_ty().fieldless()));
-        if let Some(id) = card.base.front_audio {
+        let frnt = FrontPut::new(CardTy::from_ctype(card.card.read().get_ty().fieldless()));
+        if let Some(id) = card.card.read().base.front_audio {
             let audio = APP.read().inner().provider.audios.load_item(id).await;
             frnt.audio.clone().set(audio);
         }
-        if let Some(id) = card.base.back_audio {
+        if let Some(id) = card.card.read().base.back_audio {
             let audio = APP.read().inner().provider.audios.load_item(id).await;
             bck.audio.clone().set(audio);
         }
@@ -211,7 +211,7 @@ impl CardViewer {
         let _front = frnt.clone();
         let _graph = graph.clone();
         let _meta = meta.clone();
-        let f = MyClosure::new(move |card: Arc<Card>| {
+        let f = MyClosure::new(move |card: CardEntry| {
             let _front = _front.clone();
             let _graph = _graph.clone();
             let _meta = _meta.clone();
@@ -229,7 +229,7 @@ impl CardViewer {
         let _front = frnt.clone();
         let _graph = graph.clone();
         let _meta = meta.clone();
-        let af = MyClosure::new(move |card: Arc<Card>| {
+        let af = MyClosure::new(move |card: CardEntry| {
             let _graph = _graph.clone();
             let _front = _front.clone();
             let _meta = _meta.clone();
@@ -278,7 +278,7 @@ impl CardViewer {
         let _graph = graph.clone();
         let _front = front.clone();
 
-        let f = MyClosure::new(move |card: Arc<Card>| {
+        let f = MyClosure::new(move |card: CardEntry| {
             info!("ref card set ?");
             let graph = _graph.clone();
             let front = _front.clone();
@@ -290,7 +290,7 @@ impl CardViewer {
 
         let _front = front.clone();
         let _graph = graph.clone();
-        let af = MyClosure::new(move |card: Arc<Card>| {
+        let af = MyClosure::new(move |card: CardEntry| {
             let graph = _graph.clone();
             let front = _front.clone();
             let deps = dependencies.clone();
@@ -445,20 +445,16 @@ impl CardViewer {
             return rsx! {};
         };
 
-        let is_suspended = card.is_suspended();
+        let is_suspended = card.card.read().is_suspended();
         let txt = if is_suspended { "unsuspend" } else { "suspend" };
-        let selv = self.clone();
 
         rsx! {
             button {
                 class: "mt-2 inline-flex items-center text-white bg-gray-800 border-0 py-1 px-3 focus:outline-none hover:bg-gray-700 rounded text-base md:mt-0",
                 onclick: move |_| {
-                    let card = card.clone();
-                    let selv = selv.clone();
+                    let mut card = card.clone();
                     spawn(async move {
-                        let mut card = Arc::unwrap_or_clone(card);
-                        card.set_suspend(!is_suspended).await;
-                        selv.old_card.clone().set(Some(Arc::new(card)));
+                        card.card.write().set_suspend(!is_suspended).await;
                     });
                 },
                 "{txt}"
@@ -477,13 +473,13 @@ impl CardViewer {
                     let selv2 = selv.clone();
 
                     let fun = MyClosure::new(
-                        move |card: Arc<Card>| {
+                        move |card: CardEntry| {
                         selv.dependencies.clone().write().push(card.id());
                         selv.set_graph();
                         let old_card = selv.old_card.cloned();
                         async move {
-                            if let Some(old_card) = old_card {
-                                Arc::unwrap_or_clone(old_card).add_dependency(card.id()).await;
+                            if let Some(mut old_card) = old_card {
+                                old_card.card.write().add_dependency(card.id()).await;
                             }
                         }
                     }
@@ -531,7 +527,6 @@ impl CardViewer {
                     if let Some(card) = selv.to_card() {
                         let selveste = selv.clone();
                         spawn(async move {
-
                             let id = selveste.old_card.cloned().map(|card|card.id());
                             let mut basecard = BaseCard::new_with_id(id, card.ty);
                             basecard.front_audio = card.front_audio;
@@ -550,9 +545,16 @@ impl CardViewer {
                             }
 
                             let card = APP.read().inner().card_provider().save_basecard(basecard).await;
+                            let inner_card = Arc::unwrap_or_clone(card);
+                            let card = CardEntry::new(inner_card.clone());
                             if let Some(hook) = selveste.save_hook.clone() {
                                 hook.call(card).await;
                             }
+                            if let Some(mut card) = selveste.old_card.cloned() {
+                                info!("setting updated card: {:?}", inner_card);
+                                card.card.set(inner_card);
+                            }
+
                             selveste.reset().await;
                             selv.is_done.clone().set(true);
                         });

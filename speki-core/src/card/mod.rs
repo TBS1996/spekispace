@@ -76,12 +76,6 @@ impl std::fmt::Display for Card {
     }
 }
 
-impl AsRef<CardId> for Card {
-    fn as_ref(&self) -> &CardId {
-        &self.id
-    }
-}
-
 impl Card {
     pub fn get_ty(&self) -> CardType {
         self.base.ty.clone()

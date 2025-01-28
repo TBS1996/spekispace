@@ -1,7 +1,4 @@
-use std::sync::Arc;
-
 use dioxus::prelude::*;
-use speki_core::Card;
 use tracing::info;
 
 use crate::{
@@ -41,21 +38,6 @@ pub fn Browse() -> Element {
                 }
             }
          }
-    }
-}
-
-#[derive(Clone)]
-pub struct CardEntry {
-    pub front: String,
-    pub card: Arc<Card>,
-}
-
-impl CardEntry {
-    pub async fn new(card: Arc<Card>) -> Self {
-        Self {
-            front: card.print().await,
-            card,
-        }
     }
 }
 

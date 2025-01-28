@@ -1,21 +1,20 @@
 use std::{future::Future, pin::Pin, sync::Arc};
 
 use dioxus::prelude::*;
-use speki_core::{cardfilter::CardFilter, Card, CardType};
-use speki_web::Node;
+use speki_core::{cardfilter::CardFilter, CardType};
+use speki_web::{CardEntry, Node};
 use tracing::info;
 
 use crate::{
     components::{CardTy, FilterComp, FilterEditor, GraphRep},
     overlays::cardviewer::CardViewer,
-    pages::CardEntry,
     APP,
 };
 
 use super::OverlayEnum;
 
 pub fn overlay_card_viewer(overlay: Signal<Option<OverlayEnum>>) -> MyClosure {
-    MyClosure::new(move |card: Arc<Card>| async move {
+    MyClosure::new(move |card: CardEntry| async move {
         let graph = GraphRep::new().with_hook(overlay_card_viewer(overlay.clone()));
         let viewer = CardViewer::new_from_card(card, graph).await;
         overlay.clone().set(Some(OverlayEnum::CardViewer(viewer)));
@@ -34,7 +33,7 @@ pub struct CardSelector {
     pub dependents: Signal<Vec<Node>>,
     pub allowed_cards: Vec<CardTy>,
     pub filtereditor: FilterEditor,
-    pub filtermemo: Option<Memo<CardFilter>>,
+    pub filtermemo: Memo<Option<CardFilter>>,
     pub overlay: Signal<Option<OverlayEnum>>,
 }
 
@@ -47,11 +46,27 @@ impl Default for CardSelector {
 impl CardSelector {
     pub fn new(with_memo: bool, filter: Option<Callback<CardType, bool>>) -> Self {
         let filtereditor = FilterEditor::new_permissive();
-        let filtermemo = if with_memo {
-            Some(filtereditor.memo())
-        } else {
-            None
-        };
+
+        let filtermemo: Memo<Option<CardFilter>> = ScopeId::APP.in_runtime(|| {
+            let editor = filtereditor.clone();
+            if !with_memo {
+                use_memo(|| None)
+            } else {
+                use_memo(move || {
+                    Some(CardFilter {
+                        recall: editor.recall.get_value(),
+                        rec_recall: editor.rec_recall.get_value(),
+                        stability: editor.stability.get_value(),
+                        rec_stability: editor.rec_stability.get_value(),
+                        finished: editor.finished.get_value(),
+                        suspended: editor.suspended.get_value(),
+                        pending: editor.pending.get_value(),
+                        lapses: editor.lapses.get_value(),
+                    })
+                })
+            }
+        });
+
         let search = Signal::new_in_scope(String::new(), ScopeId::APP);
         let overlay: Signal<Option<OverlayEnum>> =
             Signal::new_in_scope(Default::default(), ScopeId::APP);
@@ -65,28 +80,25 @@ impl CardSelector {
                 for card in cards {
                     if filter
                         .as_ref()
-                        .map(|filter| (filter)(card.get_ty()))
+                        .map(|filter| (filter)(card.card.read().get_ty()))
                         .unwrap_or(true)
                     {
-                        let flag = match filtermemo.clone() {
-                            Some(filter) => filter.cloned().filter(card.clone()).await,
+                        let flag = match filtermemo.cloned() {
+                            Some(filter) => filter.filter(Arc::new(card.card.cloned())).await,
                             None => true,
                         };
 
                         if flag {
-                            if card
-                                .print()
-                                .await
-                                .to_lowercase()
-                                .contains(&search.cloned().to_lowercase())
-                            {
-                                filtered_cards.push(CardEntry::new(card).await);
+                            let front = card.card.read().print().await;
+
+                            if front.contains(&search.cloned().to_lowercase()) {
+                                filtered_cards.push(card);
                             }
                         }
                     }
                 }
 
-                filtered_cards.sort_by_key(|card| card.card.last_modified());
+                filtered_cards.sort_by_key(|card| card.card.read().last_modified());
                 filtered_cards.reverse();
 
                 filtered_cards
@@ -171,14 +183,14 @@ impl PartialEq for CardSelector {
 
 #[derive(Clone)]
 pub struct MyClosure(
-    pub Arc<Box<dyn Fn(Arc<Card>) -> Pin<Box<dyn Future<Output = ()> + 'static>> + 'static>>,
+    pub Arc<Box<dyn Fn(CardEntry) -> Pin<Box<dyn Future<Output = ()> + 'static>> + 'static>>,
 );
 
 // Example usage:
 impl MyClosure {
     pub fn new<F, Fut>(func: F) -> Self
     where
-        F: Fn(Arc<Card>) -> Fut + 'static,
+        F: Fn(CardEntry) -> Fut + 'static,
         Fut: Future<Output = ()> + 'static,
     {
         MyClosure(Arc::new(Box::new(move |card| {
@@ -186,7 +198,7 @@ impl MyClosure {
         })))
     }
 
-    pub async fn call(&self, card: Arc<Card>) {
+    pub async fn call(&self, card: CardEntry) {
         (self.0)(card).await;
     }
 }
@@ -209,7 +221,7 @@ pub fn CardSelectorRender(
     dependents: Signal<Vec<Node>>,
     allowed_cards: Vec<CardTy>,
     filtereditor: FilterEditor,
-    filtermemo: Option<Memo<CardFilter>>,
+    filtermemo: Memo<Option<CardFilter>>,
     overlay: Signal<Option<OverlayEnum>>,
 ) -> Element {
     info!("render cardselector");
@@ -217,7 +229,7 @@ pub fn CardSelectorRender(
         div {
             class: "flex flex-row",
 
-        if filtermemo.is_some() {
+        if filtermemo.read().is_some() {
             FilterComp {editor: filtereditor}
         }
 
@@ -267,7 +279,7 @@ fn NewcardButton(
 
                 let done = done.clone();
                 let closure = closure.clone();
-                let hook = MyClosure::new(move |card: Arc<Card>| {
+                let hook = MyClosure::new(move |card: CardEntry| {
                     let closure = closure.clone();
 
                     async move {
@@ -337,15 +349,15 @@ fn TableRender(
                                     let closure = _closure.clone();
                                     let done = is_done.clone();
                                     spawn(async move {
-                                        closure.call(card.card).await;
+                                        closure.call(card).await;
                                         done.clone().set(true);
                                     });
 
                                 },
 
-                                td { class: "border border-gray-300 px-4 py-2 w-2/3", "{card.front}" }
-                                td { class: "border border-gray-300 px-4 py-2 w-1/12", "{card.card.recall_rate().unwrap_or_default():.2}" }
-                                td { class: "border border-gray-300 px-4 py-2 w-1/12", "{card.card.maybeturity().unwrap_or_default():.1}" }
+                                td { class: "border border-gray-300 px-4 py-2 w-2/3", "{card}" }
+                                td { class: "border border-gray-300 px-4 py-2 w-1/12", "{card.card.read().recall_rate().unwrap_or_default():.2}" }
+                                td { class: "border border-gray-300 px-4 py-2 w-1/12", "{card.card.read().maybeturity().unwrap_or_default():.1}" }
                             }
                         }
                     }

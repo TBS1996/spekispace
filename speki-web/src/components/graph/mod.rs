@@ -8,8 +8,8 @@ use std::{
 
 use digraph::RustGraph;
 use dioxus::prelude::*;
-use speki_core::{card::CardId, Card};
-use speki_web::{Node, NodeMetadata};
+use speki_core::card::CardId;
+use speki_web::{CardEntry, Node, NodeMetadata};
 use tracing::info;
 
 use crate::{overlays::card_selector::MyClosure, utils, APP, ROUTE_CHANGE};
@@ -91,7 +91,7 @@ impl GraphRep {
         );
     }
 
-    pub fn new_set_card(&self, card: Arc<Card>) {
+    pub fn new_set_card(&self, card: CardEntry) {
         self.new_set_card_id(card.id());
     }
 
@@ -197,8 +197,8 @@ pub fn GraphRepRender(
                             let (Some(from), Some(to)) = (from.card_id(), to.card_id()) else {
                                 return;
                             };
-                            let mut first = Arc::unwrap_or_clone(app.load_card(from).await);
-                            first.rm_dependency(to).await;
+                            let mut first = app.load_card(from).await;
+                            first.card.write().rm_dependency(to).await;
 
                             inner.set_origin(Node::Card(from)).await;
                             if is_dom_rendered(&cyto_id) {

@@ -235,7 +235,7 @@ fn RenderCols(
                                 let filter = filter.clone();
                                 spawn(async move {
                                     let col = APP.read().load_collection(col.id).await;
-                                    let cards = col.expand(APP.read().inner().card_provider.clone(), Default::default()).await;
+                                    let cards = col.expand(APP.read().inner().card_provider.clone(), Default::default()).await.into_iter().map(|card|speki_web::CardEntry::new(Arc::unwrap_or_clone(card))).collect();
                                     let session = OverlayEnum::Review(ReviewState::new_with_filter(cards, filter).await);
                                     overlay.clone().set(Some(session));
                                 });

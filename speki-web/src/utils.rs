@@ -12,7 +12,7 @@ use speki_core::{
 };
 use speki_dto::Syncable;
 use speki_provider::{DexieProvider, WasmTime};
-use speki_web::{Node, NodeMetadata};
+use speki_web::{CardEntry, Node, NodeMetadata};
 use tracing::info;
 use wasm_bindgen::prelude::*;
 
@@ -57,15 +57,18 @@ impl App {
         self.0.fill_cache().await;
     }
 
-    pub async fn load_all(&self, filter: Option<CardFilter>) -> Vec<Arc<Card>> {
+    pub async fn load_all(&self, filter: Option<CardFilter>) -> Vec<CardEntry> {
         match filter {
             Some(filter) => self.0.cards_filtered(filter).await,
             None => self.0.load_all_cards().await,
         }
+        .into_iter()
+        .map(|card| CardEntry::new(Arc::unwrap_or_clone(card)))
+        .collect()
     }
 
-    pub async fn load_card(&self, id: CardId) -> Arc<Card> {
-        Arc::new(
+    pub async fn load_card(&self, id: CardId) -> CardEntry {
+        CardEntry::new(
             self.0
                 .load_card(id)
                 .await

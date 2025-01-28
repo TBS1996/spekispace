@@ -1,3 +1,5 @@
+use std::collections::BTreeSet;
+use std::fmt::Display;
 use std::{cell::RefCell, collections::HashMap, sync::Arc};
 
 use dioxus::prelude::*;
@@ -115,6 +117,54 @@ fn cyan_color() -> String {
     String::from("#00FFFF")
 }
 
+#[derive(Clone, Debug)]
+pub struct CardEntry {
+    pub front: Resource<String>,
+    pub dependencies: Resource<BTreeSet<CardId>>,
+    pub card: Signal<Card>,
+}
+
+impl PartialEq for CardEntry {
+    fn eq(&self, other: &Self) -> bool {
+        self.card == other.card
+    }
+}
+
+impl Display for CardEntry {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.front.cloned().unwrap_or_default())
+    }
+}
+
+impl CardEntry {
+    pub fn new(card: Card) -> Self {
+        let card = Signal::new_in_scope(card, ScopeId::APP);
+        let front = ScopeId::APP.in_runtime(|| {
+            let card = card.clone();
+            use_resource(move || async move { card.read().print().await })
+        });
+
+        let dependencies = ScopeId::APP.in_runtime(|| {
+            let card = card.clone();
+            use_resource(move || async move { card.read().dependency_ids().await })
+        });
+
+        Self {
+            front,
+            card,
+            dependencies,
+        }
+    }
+
+    pub fn id(&self) -> CardId {
+        self.card.read().id()
+    }
+
+    pub fn dependencies(&self) -> BTreeSet<CardId> {
+        self.dependencies.cloned().unwrap_or_default()
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NodeMetadata {
     pub id: NodeId,
@@ -125,17 +175,17 @@ pub struct NodeMetadata {
 }
 
 impl NodeMetadata {
-    pub async fn from_card(card: Arc<Card>, is_origin: bool) -> Self {
-        let label = card.print().await;
-        let color = match card.recall_rate() {
+    pub async fn from_card(card: CardEntry, is_origin: bool) -> Self {
+        let label = card.front.cloned().unwrap_or_default();
+        let color = match card.card.read().recall_rate() {
             Some(rate) => rate_to_color(rate as f64 * 100.),
             None => cyan_color(),
         };
 
-        let ty = card.card_type().fieldless();
+        let ty = card.card.read().card_type().fieldless();
 
         Self {
-            id: NodeId::new_from_card(card.id()),
+            id: NodeId::new_from_card(card.card.read().id()),
             label,
             color,
             ty,

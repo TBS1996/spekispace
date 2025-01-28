@@ -99,7 +99,7 @@ pub fn Overender(overlay: Signal<Option<OverlayEnum>>, root: Element) -> Element
                         match elm {
                             OverlayEnum::Review(elm) => rsx!{
                                 ReviewRender {
-                                    front: elm.front.cloned().unwrap_or_default(),
+                                    front: elm.front,
                                     back: elm.back.cloned().unwrap_or_default(),
                                     card: elm.card.cloned().unwrap().unwrap(),
                                     queue: elm.queue.clone(),

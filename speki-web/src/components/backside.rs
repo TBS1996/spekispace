@@ -92,7 +92,7 @@ impl BackPut {
             let refc = ref_card.clone();
             spawn(async move {
                 let card = APP.read().load_card(card).await;
-                refc.set_ref(card).await;
+                refc.set_ref(card);
             });
         }
 

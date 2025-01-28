@@ -1,7 +1,8 @@
-use std::{fmt::Debug, sync::Arc};
+use std::fmt::Debug;
 
 use dioxus::prelude::*;
-use speki_core::{card::CardId, Card, CardType};
+use speki_core::{card::CardId, CardType};
+use speki_web::CardEntry;
 use tracing::info;
 
 use super::CardTy;
@@ -62,7 +63,7 @@ pub fn CardRefRender(
                 readonly: "true",
                 onclick: move |_| {
                     let f = on_select.clone();
-                    let fun = MyClosure::new(move |card: Arc<Card>| {
+                    let fun = MyClosure::new(move |card: CardEntry| {
                         info!("x1");
                         let f = f.clone();
                         async move {
@@ -73,7 +74,7 @@ pub fn CardRefRender(
 
                         let id = card.id();
                         selected_card.clone().set(Some(id));
-                        let display = card.print().await;
+                        let display = card.to_string();
                         card_display.clone().set(display);
                         }
                     });
@@ -168,10 +169,10 @@ impl CardRef {
         self.card.clone()
     }
 
-    pub async fn set_ref(&self, card: Arc<Card>) {
+    pub fn set_ref(&self, card: CardEntry) {
         let id = card.id();
         self.card.clone().set(Some(id));
-        let display = card.print().await;
+        let display = card.to_string();
         self.display.clone().set(display);
     }
 }

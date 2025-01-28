@@ -48,11 +48,11 @@ impl RustGraph {
                 let mut dependents = vec![];
                 let mut dependencies = vec![];
 
-                for dep in card.dependency_ids().await {
+                for dep in card.dependencies() {
                     dependencies.push(Node::Card(dep));
                 }
 
-                for dep in card.dependents().await {
+                for dep in card.card.read().dependents().await {
                     info!("adding dependent to origin: {dep:?}");
                     dependents.push(Node::Card(dep.id()));
                 }
@@ -164,6 +164,8 @@ async fn collect_recursive_dependents(app: App, node: Node) -> Vec<Node> {
             Node::Card(id) => {
                 let card = app.load_card(id).await;
                 let deps: Vec<Node> = card
+                    .card
+                    .read()
                     .all_dependents()
                     .await
                     .into_iter()
@@ -194,6 +196,8 @@ async fn collect_recursive_dependencies(app: App, node: Node) -> Vec<Node> {
             Node::Card(id) => {
                 let card = app.load_card(id).await;
                 let deps: Vec<Node> = card
+                    .card
+                    .read()
                     .all_dependencies()
                     .await
                     .into_iter()

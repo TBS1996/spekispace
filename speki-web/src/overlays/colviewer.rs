@@ -12,6 +12,7 @@ use speki_core::{
     Card,
 };
 use speki_dto::Item;
+use speki_web::CardEntry;
 use std::{fmt::Display, sync::Arc};
 
 /*
@@ -135,7 +136,7 @@ impl ColViewer {
 
         let entries = Signal::new_in_scope(entries, ScopeId::APP);
 
-        let f = MyClosure::new(move |card: Arc<Card>| {
+        let f = MyClosure::new(move |card: CardEntry| {
             let entries = entries.clone();
             async move {
                 let mut inner = entries.cloned();
@@ -154,7 +155,7 @@ impl ColViewer {
             .await
             .with_title("all dependents of...".to_string());
 
-        let f = MyClosure::new(move |card: Arc<Card>| {
+        let f = MyClosure::new(move |card: CardEntry| {
             let entries = entries.clone();
             let mut inner = entries.cloned();
             async move {
@@ -174,7 +175,7 @@ impl ColViewer {
             .await
             .with_title("pick card".to_string());
 
-        let f = MyClosure::new(move |card: Arc<Card>| {
+        let f = MyClosure::new(move |card: CardEntry| {
             let entries = entries.clone();
             async move {
                 let mut inner = entries.cloned();

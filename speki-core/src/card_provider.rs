@@ -331,6 +331,7 @@ impl CardProvider {
     pub async fn save_basecard(&self, card: BaseCard) -> Arc<Card> {
         let id = card.id();
         self.provider.cards.save_item(card).await;
+        self.invalidate_card(id).await;
         self.load(id).await.unwrap()
     }
 

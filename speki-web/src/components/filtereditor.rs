@@ -4,6 +4,7 @@ use dioxus::prelude::*;
 use serde::{Deserialize, Serialize};
 use speki_core::cardfilter::{CardFilter, MyNumOrd, NumOp, NumOrd};
 use strum::EnumIter;
+use tracing::info;
 
 use crate::components::dropdown::DropComponent;
 
@@ -11,15 +12,15 @@ use super::DropDownMenu;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct FilterEditor {
-    filter_name: Signal<String>,
-    rec_recall: FloatEntry,
-    recall: FloatEntry,
-    stability: FloatEntry,
-    rec_stability: FloatEntry,
-    lapses: FloatEntry,
-    finished: BoolEntry,
-    suspended: BoolEntry,
-    pending: BoolEntry,
+    pub filter_name: Signal<String>,
+    pub rec_recall: FloatEntry,
+    pub recall: FloatEntry,
+    pub stability: FloatEntry,
+    pub rec_stability: FloatEntry,
+    pub lapses: FloatEntry,
+    pub finished: BoolEntry,
+    pub suspended: BoolEntry,
+    pub pending: BoolEntry,
 }
 
 impl FilterEditor {
@@ -74,7 +75,7 @@ impl Display for BoolOpt {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-struct BoolEntry {
+pub struct BoolEntry {
     name: Arc<String>,
     opt: DropDownMenu<BoolOpt>,
 }
@@ -93,7 +94,7 @@ impl BoolEntry {
         }
     }
 
-    fn get_value(&self) -> Option<bool> {
+    pub fn get_value(&self) -> Option<bool> {
         match self.opt.selected.cloned() {
             BoolOpt::True => Some(true),
             BoolOpt::False => Some(false),
@@ -103,7 +104,7 @@ impl BoolEntry {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-struct FloatEntry {
+pub struct FloatEntry {
     input: Signal<String>,
     ord: DropDownMenu<NumOrd>,
     name: Arc<String>,
@@ -133,7 +134,7 @@ impl FloatEntry {
         Self::new(name, ord, val)
     }
 
-    fn get_value(&self) -> Option<NumOp> {
+    pub fn get_value(&self) -> Option<NumOp> {
         let input = self.input.cloned();
 
         if input.is_empty() {
@@ -181,15 +182,19 @@ impl FilterEditor {
 
     pub fn memo(&self) -> Memo<CardFilter> {
         let selv = self.clone();
-        Signal::memo(move || CardFilter {
-            recall: selv.recall.get_value(),
-            rec_recall: selv.rec_recall.get_value(),
-            stability: selv.stability.get_value(),
-            rec_stability: selv.rec_stability.get_value(),
-            finished: selv.finished.get_value(),
-            suspended: selv.suspended.get_value(),
-            pending: selv.pending.get_value(),
-            lapses: selv.lapses.get_value(),
+        Signal::memo(move || {
+            info!("cardfilter memo!");
+
+            CardFilter {
+                recall: selv.recall.get_value(),
+                rec_recall: selv.rec_recall.get_value(),
+                stability: selv.stability.get_value(),
+                rec_stability: selv.rec_stability.get_value(),
+                finished: selv.finished.get_value(),
+                suspended: selv.suspended.get_value(),
+                pending: selv.pending.get_value(),
+                lapses: selv.lapses.get_value(),
+            }
         })
     }
 
