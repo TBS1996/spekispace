@@ -22,6 +22,7 @@ fn RecallButton(
     card: CardEntry,
     mut queue: Signal<Vec<CardId>>,
     mut show_backside: Signal<bool>,
+    filter: CardFilter,
 ) -> Element {
     let label = match recall {
         Recall::None => "😡",
@@ -35,12 +36,35 @@ fn RecallButton(
             class: "bg-white mt-6 inline-flex items-center justify-center text-white border-0 py-4 px-6 focus:outline-none hover:bg-gray-700 rounded md:mt-0 text-4xl leading-none",
             onclick: move |_| {
                 let mut card = card.clone();
+                let filter = filter.clone();
                 spawn(async move{
                     info!("do review");
                     card.card.write()
                         .add_review(recall)
                         .await;
-                    queue.write().pop();
+
+
+                    let related = {
+                        let mut dependencies = card.card.read().all_dependencies().await;
+                        let dependents = card.card.read().all_dependents().await;
+                        dependencies.extend(dependents);
+                        dependencies
+                    };
+
+                    let mut new_queue = queue.cloned();
+                    new_queue.pop();
+                    new_queue.retain(|id|!related.contains(id));
+
+                    for id in related {
+                        let card = APP.read().load_card(id).await;
+                        if filter.filter(Arc::new(card.card.cloned())).await {
+                            new_queue.push(id);
+                        }
+                    }
+
+                    queue.set(new_queue);
+
+
                     show_backside.set(false);
                 });
             },
@@ -55,6 +79,7 @@ fn ReviewButtons(
     mut show_backside: Signal<bool>,
     card: CardEntry,
     queue: Signal<Vec<CardId>>,
+    filter: CardFilter,
 ) -> Element {
     rsx! {
         div {
@@ -84,7 +109,8 @@ fn ReviewButtons(
                             recall,
                             card: card.clone(),
                             queue: queue.clone(),
-                            show_backside: show_backside.clone()
+                            show_backside: show_backside.clone(),
+                            filter: filter.clone(),
                         }
                     }
                 }
@@ -100,9 +126,10 @@ pub fn ReviewRender(
     card: CardEntry,
     queue: Signal<Vec<CardId>>,
     show_backside: Signal<bool>,
-    tot: usize,
+    tot: Resource<usize>,
     overlay: Signal<Option<OverlayEnum>>,
     dependencies: Resource<Vec<(CardEntry, Signal<Option<OverlayEnum>>)>>,
+    filter: CardFilter,
 ) -> Element {
     let card2 = card.clone();
     let log_event = move |event: Rc<KeyboardData>| {
@@ -170,7 +197,7 @@ pub fn ReviewRender(
                             class: "flex-none w-full md:w-1/2 p-4 box-border overflow-y-auto overflow-x-hidden order-2 md:order-1",
                             style: "min-height: 0; max-height: 100%;",
                              CardSides {
-                                front, back, queue, card, show_backside
+                                front, back, queue, card, show_backside, filter
                              }
                         }
                     }
@@ -183,12 +210,13 @@ pub struct ReviewState {
     pub queue: Signal<Vec<CardId>>,
     pub card: Resource<Option<CardEntry>>,
     pub dependencies: Resource<Vec<(CardEntry, Signal<Option<OverlayEnum>>)>>,
-    pub tot_len: usize,
+    pub tot_len: Resource<usize>,
     pub front: Resource<String>,
     pub back: Resource<String>,
     pub show_backside: Signal<bool>,
     pub is_done: Memo<bool>,
     pub overlay: Signal<Option<OverlayEnum>>,
+    pub filter: CardFilter,
 }
 
 impl ReviewState {
@@ -201,7 +229,10 @@ impl ReviewState {
             }
         }
 
-        Self::new(filtered)
+        Self {
+            filter,
+            ..Self::new(filtered)
+        }
     }
 
     pub fn new(cards: Vec<CardEntry>) -> Self {
@@ -275,7 +306,8 @@ impl ReviewState {
             })
         });
 
-        let tot_len = queue.read().len();
+        let tot_len =
+            ScopeId::APP.in_runtime(|| use_resource(move || async move { queue.read().len() }));
         Self {
             card,
             tot_len,
@@ -286,6 +318,7 @@ impl ReviewState {
             is_done,
             queue,
             overlay,
+            filter: CardFilter::default(),
         }
     }
 }
@@ -294,9 +327,10 @@ impl ReviewState {
 fn Infobar(
     card: CardEntry,
     overlay: Signal<Option<OverlayEnum>>,
-    tot: usize,
+    tot: Resource<usize>,
     queue: Signal<Vec<CardId>>,
 ) -> Element {
+    let tot = tot.cloned().unwrap_or_default();
     let pos = tot - queue.read().len();
     let card2 = card.clone();
 
@@ -426,6 +460,7 @@ fn CardSides(
     show_backside: Signal<bool>,
     card: CardEntry,
     queue: Signal<Vec<CardId>>,
+    filter: CardFilter,
 ) -> Element {
     let backside_visibility_class = if show_backside() {
         "opacity-100 visible"
@@ -462,6 +497,7 @@ fn CardSides(
                     show_backside,
                     card,
                     queue,
+                    filter,
                 }
             }
         }

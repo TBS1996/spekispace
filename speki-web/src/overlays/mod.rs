@@ -107,6 +107,7 @@ pub fn Overender(overlay: Signal<Option<OverlayEnum>>, root: Element) -> Element
                                     tot: elm.tot_len,
                                     overlay: elm.overlay.clone(),
                                     dependencies:elm.dependencies.clone(),
+                                    filter: elm.filter.clone(),
                                 }
                             },
                             OverlayEnum::Colviewer(elm) => rsx!{
