@@ -106,7 +106,6 @@ pub struct CardViewer {
     pub is_done: Signal<bool>,
     pub old_card: Signal<Option<CardEntry>>,
     pub old_meta: Signal<Option<NodeMetadata>>,
-    pub filter: Option<Callback<CardType, bool>>,
     pub tempnode: TempNode,
     pub allowed_cards: Vec<CardTy>,
     pub overlay: Signal<Option<OverlayEnum>>,
@@ -124,7 +123,6 @@ impl PartialEq for CardViewer {
             && self.is_done == other.is_done
             && self.old_card == other.old_card
             && self.old_meta == other.old_meta
-            && self.filter == other.filter
             && self.tempnode == other.tempnode
             && self.allowed_cards == other.allowed_cards
             && self.overlay == other.overlay
@@ -144,11 +142,6 @@ impl CardViewer {
 
     pub fn with_title(mut self, title: String) -> Self {
         self.title = Some(title);
-        self
-    }
-
-    pub fn with_filter(mut self, filter: Callback<CardType, bool>) -> Self {
-        self.filter = Some(filter);
         self
     }
 
@@ -172,11 +165,9 @@ impl CardViewer {
         let meta = NodeMetadata::from_card(card.clone(), true).await;
 
         let tempnode = TempNode::Old(card.id());
-        let filter = Callback::new(move |ty: CardType| ty.is_class());
 
         let raw_ty = card.card.read().base.ty.clone();
         let concept = CardRef::new()
-            .with_filter(filter)
             .with_dependents(tempnode.clone())
             .with_allowed(vec![CardTy::Class]);
         if let Some(class) = raw_ty.class() {
@@ -257,7 +248,6 @@ impl CardViewer {
             old_card: Signal::new_in_scope(Some(card), ScopeId(3)),
             save_hook: None,
             title: None,
-            filter: None,
             concept: concept.clone(),
             tempnode,
             allowed_cards: vec![],
@@ -311,10 +301,7 @@ impl CardViewer {
             .with_closure(f.clone())
             .with_deselect(af.clone());
 
-        let filter = Callback::new(move |ty: CardType| ty.is_class());
-
         let concept = CardRef::new()
-            .with_filter(filter)
             .with_dependents(tempnode.clone())
             .with_allowed(vec![CardTy::Class])
             .with_closure(f.clone())
@@ -329,11 +316,10 @@ impl CardViewer {
             old_card: Signal::new_in_scope(None, ScopeId(3)),
             save_hook: None,
             title: None,
-            filter: None,
             dependencies,
             dependents,
             tempnode,
-            allowed_cards: vec![],
+            allowed_cards: vec![CardTy::Class],
             old_meta: Signal::new_in_scope(None, ScopeId::APP),
             overlay,
         };
@@ -501,74 +487,6 @@ impl CardViewer {
         }
     }
 
-    fn save_button(&self) -> Element {
-        let selv = self.clone();
-
-        let is_new = self.old_card.as_ref().is_none();
-
-        let enabled = selv.to_card().is_some_and(|card| {
-            self.filter
-                .as_ref()
-                .map(|filter| (filter)(card.ty))
-                .unwrap_or(true)
-        });
-
-        let class = if !enabled {
-            "mt-2 inline-flex items-center text-white bg-gray-400 border-0 py-1 px-3 focus:outline-none cursor-not-allowed opacity-50 rounded text-base md:mt-0"
-        } else {
-            "mt-2 inline-flex items-center text-white bg-gray-800 border-0 py-1 px-3 focus:outline-none hover:bg-gray-700 rounded text-base md:mt-0"
-        };
-
-        rsx! {
-            button {
-                class: "{class}",
-                disabled: !enabled,
-                onclick: move |_| {
-                    if let Some(card) = selv.to_card() {
-                        let selveste = selv.clone();
-                        spawn(async move {
-                            let id = selveste.old_card.cloned().map(|card|card.id());
-                            let mut basecard = BaseCard::new_with_id(id, card.ty);
-                            basecard.front_audio = card.front_audio;
-                            basecard.back_audio = card.back_audio;
-
-
-                            for dep in card.deps {
-                                basecard.dependencies.insert(dep);
-                            }
-
-                            if let Some(audio) = selv.front.audio.cloned() {
-                                APP.read().inner().provider.audios.save_item(audio).await;
-                            }
-                            if let Some(audio) = selv.back.audio.cloned() {
-                                APP.read().inner().provider.audios.save_item(audio).await;
-                            }
-
-                            let card = APP.read().inner().card_provider().save_basecard(basecard).await;
-                            let inner_card = Arc::unwrap_or_clone(card);
-                            let card = CardEntry::new(inner_card.clone());
-                            if let Some(hook) = selveste.save_hook.clone() {
-                                hook.call(card).await;
-                            }
-                            if let Some(mut card) = selveste.old_card.cloned() {
-                                info!("setting updated card: {:?}", inner_card);
-                                card.card.set(inner_card);
-                            }
-
-                            selveste.reset().await;
-                            selv.is_done.clone().set(true);
-                        });
-                    }
-                },
-                if is_new {
-                    "create"
-                } else {
-                    "save"
-                }
-            }
-        }
-    }
-
     fn input_elements(&self, ty: CardTy) -> Element {
         let selv = self.clone();
         let is_short = IS_SHORT.cloned();
@@ -611,7 +529,6 @@ impl CardViewer {
                                 on_select: selv.concept.on_select.clone(),
                                 on_deselect: selv.concept.on_deselect.clone(),
                                 dependent: selv.concept.dependent.clone(),
-                                filter: selv.concept.filter.clone(),
                                 allowed: selv.concept.allowed.clone(),
                                 overlay: overlay.clone(),
                             },
@@ -628,7 +545,6 @@ impl CardViewer {
                                 on_select: selv.concept.on_select.clone(),
                                 on_deselect: selv.concept.on_deselect.clone(),
                                 dependent: selv.concept.dependent.clone(),
-                                filter: selv.concept.filter.clone(),
                                 allowed: selv.concept.allowed.clone(),
                         overlay: overlay.clone(),
                             },
@@ -656,7 +572,6 @@ impl CardViewer {
                                 on_select: selv.concept.on_select.clone(),
                                 on_deselect: selv.concept.on_deselect.clone(),
                                 dependent: selv.concept.dependent.clone(),
-                                filter: selv.concept.filter.clone(),
                                 allowed: selv.concept.allowed.clone(),
                                 overlay: overlay.clone(),
                             },
@@ -672,7 +587,6 @@ impl CardViewer {
                                 on_select: selv.concept.on_select.clone(),
                                 on_deselect: selv.concept.on_deselect.clone(),
                                 dependent: selv.concept.dependent.clone(),
-                                filter: selv.concept.filter.clone(),
                                 allowed: selv.concept.allowed.clone(),
                                 overlay: overlay.clone(),
                             },
@@ -697,7 +611,8 @@ impl CardViewer {
                     {self.suspend()}
                 }
                 { self.add_dep() }
-                { self.save_button() }
+
+                save_button { CardViewer: self.clone() }
             }
         }
     }
@@ -740,3 +655,123 @@ pub fn CardViewerRender(props: CardViewer) -> Element {
         }
     }
 }
+
+#[component]
+fn save_button(CardViewer: CardViewer) -> Element {
+    let selv = CardViewer.clone();
+
+    let is_new = CardViewer.old_card.as_ref().is_none();
+
+    let enabled = selv.to_card().is_some_and(|card| {
+        CardViewer
+            .allowed_cards
+            .contains(&CardTy::from_ctype(card.ty.fieldless()))
+            || CardViewer.allowed_cards.is_empty()
+    });
+
+    let class = if !enabled {
+        "mt-2 inline-flex items-center text-white bg-gray-400 border-0 py-1 px-3 focus:outline-none cursor-not-allowed opacity-50 rounded text-base md:mt-0"
+    } else {
+        "mt-2 inline-flex items-center text-white bg-gray-800 border-0 py-1 px-3 focus:outline-none hover:bg-gray-700 rounded text-base md:mt-0"
+    };
+
+    rsx! {
+        button {
+            class: "{class}",
+            disabled: !enabled,
+            onclick: move |_| {
+                if let Some(card) = selv.to_card() {
+                    let selveste = selv.clone();
+                    spawn(async move {
+                        let id = selveste.old_card.cloned().map(|card|card.id());
+                        let mut basecard = BaseCard::new_with_id(id, card.ty);
+                        basecard.front_audio = card.front_audio;
+                        basecard.back_audio = card.back_audio;
+
+
+                        for dep in card.deps {
+                            basecard.dependencies.insert(dep);
+                        }
+
+                        if let Some(audio) = selv.front.audio.cloned() {
+                            APP.read().inner().provider.audios.save_item(audio).await;
+                        }
+                        if let Some(audio) = selv.back.audio.cloned() {
+                            APP.read().inner().provider.audios.save_item(audio).await;
+                        }
+
+                        let card = APP.read().inner().card_provider().save_basecard(basecard).await;
+                        let inner_card = Arc::unwrap_or_clone(card);
+                        let card = CardEntry::new(inner_card.clone());
+                        if let Some(hook) = selveste.save_hook.clone() {
+                            hook.call(card).await;
+                        }
+                        if let Some(mut card) = selveste.old_card.cloned() {
+                            info!("setting updated card: {:?}", inner_card);
+                            card.card.set(inner_card);
+                        }
+
+                        selveste.reset().await;
+                        selv.is_done.clone().set(true);
+                    });
+                }
+            },
+            if is_new {
+                "create"
+            } else {
+                "save"
+            }
+        }
+    }
+}
+
+/*
+fn to_card(frontside: FrontPut, backside: BackPut, dependencies: ) -> Option<CardRep> {
+    let front = format!("{}", frontside.text.cloned());
+
+    if front.is_empty() {
+        return None;
+    }
+
+    let ty = match frontside.dropdown.selected.cloned() {
+        CardTy::Normal => {
+            let back = backside.to_backside()?;
+
+            if back.is_empty_text() {
+                return None;
+            }
+
+            CardType::Normal(NormalCard { front, back })
+        }
+        CardTy::Class => {
+            let parent_class = selv.concept.selected_card().cloned();
+            let back = backside.to_backside()?;
+
+            CardType::Class(ClassCard {
+                name: front,
+                back,
+                parent_class,
+            })
+        }
+        CardTy::Instance => {
+            let class = selv.concept.selected_card().cloned()?;
+            let back = backside.to_backside();
+
+            CardType::Instance(InstanceCard {
+                name: front,
+                back,
+                class,
+            })
+        }
+        CardTy::Unfinished => CardType::Unfinished(UnfinishedCard { front }),
+    };
+
+    Some(CardRep {
+        ty,
+        front_audio: frontside.audio.cloned().map(|audio| audio.id),
+        back_audio: backside.audio.cloned().map(|audio| audio.id),
+        deps: selv.dependencies.cloned(),
+    })
+}
+
+*/

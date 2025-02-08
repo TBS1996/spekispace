@@ -183,7 +183,6 @@ pub fn UploadRender(props: Uploader) -> Element {
                             on_select: concept.on_select.clone(),
                             on_deselect: concept.on_deselect.clone(),
                             dependent: concept.dependent.clone(),
-                            filter: concept.filter.clone(),
                             allowed: concept.allowed.clone(),
                             overlay: overlay.clone(),
                         },

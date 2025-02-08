@@ -47,7 +47,6 @@ pub fn CardRefRender(
     on_select: Option<MyClosure>,
     on_deselect: Option<MyClosure>,
     dependent: Option<TempNode>,
-    filter: Option<Callback<CardType, bool>>,
     allowed: Vec<CardTy>,
     overlay: Signal<Option<OverlayEnum>>,
 ) -> Element {
@@ -84,10 +83,9 @@ pub fn CardRefRender(
                         .map(|node| vec![node.into()])
                         .unwrap_or_default();
 
-                    let filter = filter.clone();
                     let allowed = allowed.clone();
                     spawn(async move {
-                        let props = CardSelector::ref_picker(fun, dependents, filter)
+                        let props = CardSelector::ref_picker(fun, dependents)
                             .await
                             .with_allowed_cards(allowed);
 
@@ -152,11 +150,6 @@ impl CardRef {
 
     pub fn with_dependents(mut self, deps: TempNode) -> Self {
         self.dependent = Some(deps);
-        self
-    }
-
-    pub fn with_filter(mut self, filter: Callback<CardType, bool>) -> Self {
-        self.filter = Some(filter);
         self
     }
 

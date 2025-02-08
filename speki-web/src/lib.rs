@@ -9,7 +9,6 @@ use speki_core::{App, Card};
 use tracing::info;
 use uuid::Uuid;
 use wasm_bindgen::prelude::*;
-use web_sys::console::info;
 
 #[derive(Clone, Debug)]
 pub enum GraphAction {

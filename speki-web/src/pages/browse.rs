@@ -29,7 +29,6 @@ pub fn Browse() -> Element {
                     cards: browse_state.browse_page.cards.clone(),
                     allow_new: browse_state.browse_page.allow_new.clone(),
                     done: browse_state.browse_page.done.clone(),
-                    filter: browse_state.browse_page.filter.clone(),
                     dependents: browse_state.browse_page.dependents.clone(),
                     allowed_cards: browse_state.browse_page.allowed_cards.clone(),
                     filtereditor: browse_state.browse_page.filtereditor.clone(),
@@ -45,7 +44,7 @@ impl BrowseState {
     pub fn new() -> Self {
         info!("creating browse state!");
 
-        let browse_page = CardSelector::new(true, None).with_title("Browse cards".to_string());
+        let browse_page = CardSelector::new(true, vec![]).with_title("Browse cards".to_string());
 
         Self { browse_page }
     }

@@ -42,7 +42,6 @@ pub fn Add() -> Element {
             is_done: selv.viewer.is_done.clone(),
             old_card: selv.viewer.old_card.clone(),
             old_meta: selv.viewer.old_meta.clone(),
-            filter: selv.viewer.filter.clone(),
             tempnode: selv.viewer.tempnode.clone(),
             allowed_cards: selv.viewer.allowed_cards.clone(),
             overlay: selv.viewer.overlay.clone(),

@@ -65,7 +65,6 @@ pub fn BackPutRender(
                             on_select: ref_card.on_select.clone(),
                             on_deselect: ref_card.on_deselect.clone(),
                             dependent: ref_card.dependent.clone(),
-                            filter: ref_card.filter.clone(),
                             allowed: ref_card.allowed.clone(),
                             overlay,
                         }},

@@ -29,9 +29,8 @@ pub struct CardSelector {
     pub cards: Resource<Vec<CardEntry>>,
     pub allow_new: bool,
     pub done: Signal<bool>,
-    pub filter: Option<Callback<CardType, bool>>,
     pub dependents: Signal<Vec<Node>>,
-    pub allowed_cards: Vec<CardTy>,
+    pub allowed_cards: Signal<Vec<CardTy>>,
     pub filtereditor: FilterEditor,
     pub filtermemo: Memo<Option<CardFilter>>,
     pub overlay: Signal<Option<OverlayEnum>>,
@@ -39,12 +38,14 @@ pub struct CardSelector {
 
 impl Default for CardSelector {
     fn default() -> Self {
-        Self::new(true, None)
+        Self::new(true, vec![])
     }
 }
 
 impl CardSelector {
-    pub fn new(with_memo: bool, filter: Option<Callback<CardType, bool>>) -> Self {
+    pub fn new(with_memo: bool, allowed_cards: Vec<CardTy>) -> Self {
+        let allowed_cards = Signal::new_in_scope(allowed_cards, ScopeId::APP);
+
         let filtereditor = FilterEditor::new_permissive();
 
         let filtermemo: Memo<Option<CardFilter>> = ScopeId::APP.in_runtime(|| {
@@ -71,37 +72,43 @@ impl CardSelector {
         let overlay: Signal<Option<OverlayEnum>> =
             Signal::new_in_scope(Default::default(), ScopeId::APP);
 
+        let allowed = allowed_cards.clone();
         let cards = ScopeId::APP.in_runtime(|| {
-            use_resource(move || async move {
-                let mut filtered_cards: Vec<CardEntry> = vec![];
+            let allowed = allowed.clone();
+            use_resource(move || {
+                let allowed_cards = allowed.clone();
+                async move {
+                    let allowed_cards = allowed_cards.clone();
+                    let mut filtered_cards: Vec<CardEntry> = vec![];
 
-                let cards = APP.cloned().load_all(None).await;
+                    let cards = APP.cloned().load_all(None).await;
 
-                for card in cards {
-                    if filter
-                        .as_ref()
-                        .map(|filter| (filter)(card.card.read().get_ty()))
-                        .unwrap_or(true)
-                    {
-                        let flag = match filtermemo.cloned() {
-                            Some(filter) => filter.filter(Arc::new(card.card.cloned())).await,
-                            None => true,
-                        };
+                    for card in cards {
+                        if allowed_cards.is_empty()
+                            || allowed_cards.read().contains(&CardTy::from_ctype(
+                                card.card.read().get_ty().fieldless(),
+                            ))
+                        {
+                            let flag = match filtermemo.cloned() {
+                                Some(filter) => filter.filter(Arc::new(card.card.cloned())).await,
+                                None => true,
+                            };
 
-                        if flag {
-                            let front = card.card.read().print().await;
+                            if flag {
+                                let front = card.card.read().print().await;
 
-                            if front.contains(&search.cloned().to_lowercase()) {
-                                filtered_cards.push(card);
+                                if front.contains(&search.cloned().to_lowercase()) {
+                                    filtered_cards.push(card);
+                                }
                             }
                         }
                     }
+
+                    filtered_cards.sort_by_key(|card| card.card.read().last_modified());
+                    filtered_cards.reverse();
+
+                    filtered_cards
                 }
-
-                filtered_cards.sort_by_key(|card| card.card.read().last_modified());
-                filtered_cards.reverse();
-
-                filtered_cards
             })
         });
 
@@ -112,35 +119,27 @@ impl CardSelector {
             cards,
             allow_new: false,
             done: Signal::new_in_scope(Default::default(), ScopeId::APP),
-            filter,
             dependents: Signal::new_in_scope(Default::default(), ScopeId::APP),
-            allowed_cards: vec![],
+            allowed_cards,
             filtereditor,
             filtermemo,
             overlay,
         }
     }
 
-    pub async fn ref_picker(
-        fun: MyClosure,
-        dependents: Vec<Node>,
-        filter: Option<Callback<CardType, bool>>,
-    ) -> Self {
+    pub async fn ref_picker(fun: MyClosure, dependents: Vec<Node>) -> Self {
         Self {
             title: "choose reference".to_string(),
             on_card_selected: fun,
             allow_new: true,
             done: Signal::new_in_scope(false, ScopeId(3)),
             dependents: Signal::new_in_scope(dependents, ScopeId(3)),
-            ..Self::new(false, filter)
+            ..Self::new(false, vec![])
         }
     }
 
     pub fn class_picker(f: MyClosure) -> Self {
-        let filter: Callback<CardType, bool> =
-            ScopeId::APP.in_runtime(|| Callback::new(move |ty: CardType| ty.is_class()));
-
-        Self::new(false, Some(filter))
+        Self::new(false, vec![CardTy::Class])
             .with_title("pick class".into())
             .new_on_card_selected(f)
     }
@@ -150,7 +149,7 @@ impl CardSelector {
             title: "set dependency".to_string(),
             on_card_selected: f,
             allow_new: true,
-            ..Self::new(false, None)
+            ..Self::new(false, vec![])
         }
     }
 
@@ -165,7 +164,7 @@ impl CardSelector {
     }
 
     pub fn with_allowed_cards(mut self, deps: Vec<CardTy>) -> Self {
-        self.allowed_cards = deps;
+        self.allowed_cards.set(deps);
         self
     }
 
@@ -217,9 +216,8 @@ pub fn CardSelectorRender(
     cards: Resource<Vec<CardEntry>>,
     allow_new: bool,
     done: Signal<bool>,
-    filter: Option<Callback<CardType, bool>>,
     dependents: Signal<Vec<Node>>,
-    allowed_cards: Vec<CardTy>,
+    allowed_cards: Signal<Vec<CardTy>>,
     filtereditor: FilterEditor,
     filtermemo: Memo<Option<CardFilter>>,
     overlay: Signal<Option<OverlayEnum>>,
@@ -243,7 +241,7 @@ pub fn CardSelectorRender(
 
             div {
                 if allow_new {
-                    NewcardButton { on_card_selected: on_card_selected.clone(), done, overlay, dependents: dependents(), allowed_cards, search, filter }
+                    NewcardButton { on_card_selected: on_card_selected.clone(), done, overlay, dependents: dependents(), allowed_cards: allowed_cards.cloned(), search }
                 }
 
                 input {
@@ -269,7 +267,6 @@ fn NewcardButton(
     dependents: Vec<Node>,
     allowed_cards: Vec<CardTy>,
     search: String,
-    filter: Option<Callback<CardType, bool>>,
 ) -> Element {
     let closure = Arc::new(on_card_selected.clone());
     rsx! {
@@ -288,16 +285,12 @@ fn NewcardButton(
                     }
                 });
 
-                let mut viewer = CardViewer::new()
+                let viewer = CardViewer::new()
                     .with_title("create new card".to_string())
                     .with_hook(hook)
                     .with_dependents(dependents.clone())
                     .with_allowed_cards(allowed_cards.clone())
                     .with_front_text(search.clone());
-
-                if let Some(filter) = filter.clone() {
-                    viewer = viewer.with_filter(filter);
-                }
 
                 viewer.set_graph();
 
