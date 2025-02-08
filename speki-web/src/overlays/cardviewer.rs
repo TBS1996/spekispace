@@ -491,7 +491,7 @@ impl CardViewer {
 
                     spawn(async move {
                         let dependent: Node = selv2.tempnode.clone().into();
-                        let props = CardSelector::dependency_picker(fun).await.with_dependents(vec![dependent]);
+                        let props = CardSelector::dependency_picker(fun).with_dependents(vec![dependent]);
                         overlay.clone().set(Some(OverlayEnum::CardSelector(props)));
                         info!("2 scope is ! {:?}", current_scope_id().unwrap());
                     });

@@ -136,7 +136,7 @@ impl CardSelector {
         }
     }
 
-    pub async fn class_picker(f: MyClosure) -> Self {
+    pub fn class_picker(f: MyClosure) -> Self {
         let filter: Callback<CardType, bool> =
             ScopeId::APP.in_runtime(|| Callback::new(move |ty: CardType| ty.is_class()));
 
@@ -145,7 +145,7 @@ impl CardSelector {
             .new_on_card_selected(f)
     }
 
-    pub async fn dependency_picker(f: MyClosure) -> Self {
+    pub fn dependency_picker(f: MyClosure) -> Self {
         Self {
             title: "set dependency".to_string(),
             on_card_selected: f,

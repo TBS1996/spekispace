@@ -9,6 +9,7 @@ use speki_core::{App, Card};
 use tracing::info;
 use uuid::Uuid;
 use wasm_bindgen::prelude::*;
+use web_sys::console::info;
 
 #[derive(Clone, Debug)]
 pub enum GraphAction {
@@ -132,16 +133,20 @@ impl PartialEq for CardEntry {
 
 impl Display for CardEntry {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.front.cloned().unwrap_or_default())
+        write!(f, "{}", self.front.cloned().unwrap_or("...".to_string()))
     }
 }
 
 impl CardEntry {
     pub fn new(card: Card) -> Self {
         let card = Signal::new_in_scope(card, ScopeId::APP);
+        let thecard = card.clone();
         let front = ScopeId::APP.in_runtime(|| {
-            let card = card.clone();
-            use_resource(move || async move { card.read().print().await })
+            use_resource(move || async move {
+                let card = thecard.clone();
+                info!("front resource!!!!!!!!!!!!!");
+                card.cloned().print().await
+            })
         });
 
         let dependencies = ScopeId::APP.in_runtime(|| {

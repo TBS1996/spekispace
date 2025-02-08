@@ -15,7 +15,9 @@ use card_selector::CardSelectorRender;
 use cardviewer::CardViewerRender;
 use colviewer::ColViewRender;
 use dioxus::prelude::*;
+use itemselector::{ItemSelector, ItemSelectorRender};
 use reviewsession::ReviewRender;
+use speki_core::collection::Collection;
 use std::fmt::Debug;
 use textinput::TextInputRender;
 use yesno::YesnoRender;
@@ -27,6 +29,7 @@ pub enum OverlayEnum {
     Text(TextInput),
     CardViewer(CardViewer),
     CardSelector(CardSelector),
+    ColSelector(ItemSelector<Collection>),
     YesNo(Yesno),
 }
 
@@ -38,6 +41,7 @@ impl OverlayEnum {
             OverlayEnum::Colviewer(elm) => elm.overlay.clone(),
             OverlayEnum::Text(_) => Signal::new_in_scope(Default::default(), ScopeId::APP),
             OverlayEnum::YesNo(_) => Signal::new_in_scope(Default::default(), ScopeId::APP),
+            OverlayEnum::ColSelector(_) => Signal::new_in_scope(Default::default(), ScopeId::APP),
             OverlayEnum::CardViewer(elm) => elm.overlay.clone(),
             OverlayEnum::CardSelector(elm) => elm.overlay.clone(),
         }
@@ -51,6 +55,7 @@ impl OverlayEnum {
             OverlayEnum::CardViewer(elm) => elm.is_done.cloned(),
             OverlayEnum::CardSelector(elm) => elm.done.cloned(),
             OverlayEnum::YesNo(elm) => elm.done.cloned(),
+            OverlayEnum::ColSelector(elm) => elm.done.cloned(),
         }
     }
 }
@@ -64,6 +69,7 @@ impl Debug for OverlayEnum {
             Self::CardViewer(_) => f.debug_tuple("card viewer").finish(),
             Self::CardSelector(_) => f.debug_tuple("card selector").finish(),
             Self::YesNo(_) => f.debug_tuple("yesno").finish(),
+            Self::ColSelector(_) => f.debug_tuple("col selector").finish(),
         }
     }
 }
@@ -97,6 +103,13 @@ pub fn Overender(overlay: Signal<Option<OverlayEnum>>, root: Element) -> Element
                         }
 
                         match elm {
+                            OverlayEnum::ColSelector(elm) => rsx!{
+                                ItemSelectorRender{
+                                    items: elm.items.clone(),
+                                    on_selected: elm.on_selected.clone(),
+                                    done: elm.done.clone(),
+                                }
+                            },
                             OverlayEnum::Review(elm) => rsx!{
                                 ReviewRender {
                                     front: elm.front,
@@ -116,12 +129,8 @@ pub fn Overender(overlay: Signal<Option<OverlayEnum>>, root: Element) -> Element
                                     colname:  elm.colname.clone(),
                                     done:  elm.done.clone(),
                                     entries: elm.entries.clone(),
-                                    cardselector: elm.cardselector.clone(),
-                                    colselector: elm.colselector.clone(),
-                                    instance_selector: elm.instance_selector.clone(),
-                                    dependents_selector: elm.dependents_selector.clone(),
-                                    dynty: elm.dynty.clone(),
                                     overlay: elm.overlay.clone(),
+                                    addnew: elm.addnew.clone(),
                                 }
                             },
                             OverlayEnum::Text(elm) => rsx!{

@@ -4,5 +4,8 @@
     "daisyui": "^4.12.22",
     "firebase": "^11.0.2",
     "isomorphic-git": "^1.27.1"
+  },
+  "devDependencies": {
+    "tailwindcss": "^4.0.3"
   }
 }

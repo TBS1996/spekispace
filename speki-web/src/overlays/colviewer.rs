@@ -1,11 +1,5 @@
 use super::{card_selector::CardSelector, itemselector::ItemSelector, OverlayEnum};
-use crate::{
-    overlays::{
-        card_selector::{CardSelectorRender, MyClosure},
-        itemselector::ItemSelectorRender,
-    },
-    APP,
-};
+use crate::{overlays::card_selector::MyClosure, APP};
 use dioxus::prelude::*;
 use speki_core::{
     collection::{Collection, CollectionId, DynCard},
@@ -14,6 +8,7 @@ use speki_core::{
 use speki_dto::Item;
 use speki_web::CardEntry;
 use std::{fmt::Display, sync::Arc};
+use tracing::info;
 
 /*
 
@@ -55,19 +50,19 @@ impl Display for DynEntry {
 async fn name(dy: DynCard) -> String {
     match dy {
         DynCard::Card(id) => {
-            let card = APP.read().load_card(id).await;
+            let card = APP.read().load_card(id).await.card.read().print().await;
             format!("{card}")
         }
         DynCard::Instances(id) => {
-            let card = APP.read().load_card(id).await;
+            let card = APP.read().load_card(id).await.card.read().print().await;
             format!("instances of {card}")
         }
         DynCard::Dependents(id) => {
-            let card = APP.read().load_card(id).await;
+            let card = APP.read().load_card(id).await.card.read().print().await;
             format!("dependents of {card}")
         }
         DynCard::RecDependents(id) => {
-            let card = APP.read().load_card(id).await;
+            let card = APP.read().load_card(id).await.card.read().print().await;
             format!("rec dependents of {card}")
         }
         DynCard::Collection(id) => {
@@ -89,40 +84,15 @@ impl DynEntry {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
-pub enum DynTab {
-    Card,
-    Instance,
-    RecDependents,
-    Collection,
-}
-
-impl DynTab {
-    fn next(&mut self) {
-        *self = match self {
-            Self::Card => Self::Instance,
-            Self::Instance => Self::RecDependents,
-            Self::RecDependents => Self::Collection,
-            Self::Collection => Self::Card,
-        };
-    }
-}
-
 #[derive(Props, PartialEq, Clone)]
 pub struct ColViewer {
     pub col: Collection,
     pub colname: Signal<String>,
     pub done: Signal<bool>,
     pub entries: Signal<Vec<DynEntry>>,
-    pub cardselector: CardSelector,
-    pub colselector: ItemSelector<Collection>,
-    pub instance_selector: CardSelector,
-    pub dependents_selector: CardSelector,
-    pub dynty: Signal<DynTab>,
     pub overlay: Signal<Option<OverlayEnum>>,
+    pub addnew: Signal<bool>,
 }
-
-use tracing::info;
 
 impl ColViewer {
     pub async fn new(id: CollectionId) -> Self {
@@ -136,97 +106,69 @@ impl ColViewer {
 
         let entries = Signal::new_in_scope(entries, ScopeId::APP);
 
-        let f = MyClosure::new(move |card: CardEntry| {
-            let entries = entries.clone();
-            async move {
-                let mut inner = entries.cloned();
-                let entry = DynEntry::new(DynCard::RecDependents(card.id())).await;
-                let contains = inner.iter().any(|inentry| inentry.dy == entry.dy);
-
-                if !contains {
-                    inner.push(entry);
-                    entries.clone().set(inner);
-                }
-            }
-        });
-        info!("debug 2");
-
-        let depselector = CardSelector::dependency_picker(f)
-            .await
-            .with_title("all dependents of...".to_string());
-
-        let f = MyClosure::new(move |card: CardEntry| {
-            let entries = entries.clone();
-            let mut inner = entries.cloned();
-            async move {
-                let entry = DynEntry::new(DynCard::Card(card.id())).await;
-                let contains = inner.iter().any(|inentry| inentry.dy == entry.dy);
-
-                if !contains {
-                    inner.push(entry);
-                    entries.clone().set(inner);
-                }
-            }
-        });
-
-        info!("debug 3");
-
-        let cardselector = CardSelector::dependency_picker(f)
-            .await
-            .with_title("pick card".to_string());
-
-        let f = MyClosure::new(move |card: CardEntry| {
-            let entries = entries.clone();
-            async move {
-                let mut inner = entries.cloned();
-                let entry = DynEntry::new(DynCard::Instances(card.id())).await;
-                let contains = inner.iter().any(|inentry| inentry.dy == entry.dy);
-
-                if !contains {
-                    inner.push(entry);
-                    entries.clone().set(inner);
-                }
-            }
-        });
-
-        let instance_selector = CardSelector::class_picker(f).await;
-
-        let mut cols = APP.read().load_collections().await;
-        cols.retain(|_col| _col.id != col.id);
-        info!("debug 4");
-
-        let f = Box::new(move |col: Collection| {
-            let entries = entries.clone();
-            spawn(async move {
-                let mut inner = entries.cloned();
-                let entry = DynEntry::new(DynCard::Collection(col.id())).await;
-                let contains = inner.iter().any(|inentry| inentry.dy == entry.dy);
-
-                if !contains {
-                    inner.push(entry);
-                    entries.clone().set(inner);
-                }
-            });
-        });
-
-        let colselector = ItemSelector::new(cols, Arc::new(f));
-        info!("debug 5");
+        info!("debug 6");
 
         let selv = Self {
             col,
             colname,
-            colselector,
             done: Signal::new_in_scope(false, ScopeId::APP),
-            instance_selector,
             entries,
-            cardselector,
-            dependents_selector: depselector,
-            dynty: Signal::new_in_scope(DynTab::Collection, ScopeId::APP),
             overlay: Signal::new_in_scope(None, ScopeId::APP),
+            addnew: Signal::new_in_scope(false, ScopeId::APP),
         };
-        info!("debug 6");
 
         selv
+    }
+}
+
+#[component]
+pub fn ChoiceRender(props: ColViewer) -> Element {
+    let overlay = props.overlay.clone();
+    let addnew = props.addnew;
+    let entries = props.entries.clone();
+    let col_id = props.col.id;
+
+    rsx! {
+
+        div {
+            class: "flex flex-col",
+
+
+        button {
+            onclick: move |_|{
+                addnew.clone().set(false);
+            },
+            "go back"
+        }
+        button {
+            onclick: move |_|{
+                overlay.clone().set(Some(OverlayEnum::CardSelector(entry_selector::card(entries))));
+            },
+            "card"
+        }
+        button {
+            onclick: move |_|{
+                overlay.clone().set(Some(OverlayEnum::CardSelector(entry_selector::instances(entries))));
+            },
+            "instance"
+        }
+        button {
+            onclick: move |_|{
+                overlay.clone().set(Some(OverlayEnum::CardSelector(entry_selector::dependencies(entries))));
+            },
+            "recursive dependents"
+        }
+        button {
+            onclick: move |_|{
+                spawn(async move {
+                    overlay.clone().set(Some(OverlayEnum::ColSelector(entry_selector::collection(entries, col_id).await)));
+                });
+
+            },
+            "collection"
+        }
+
+        }
     }
 }
 
@@ -234,33 +176,15 @@ impl ColViewer {
 pub fn ColViewRender(props: ColViewer) -> Element {
     let mut name = props.colname.clone();
     let cards = props.entries.clone();
-    let selector = props.cardselector.clone();
-    let inselector = props.instance_selector.clone();
-    let depselector = props.dependents_selector.clone();
-    let colselector = props.colselector.clone();
     let selv = props.clone();
     let selv2 = props.clone();
-    let ty = props.dynty.clone();
-    let ty2 = props.dynty.clone();
-    let overlay = props.overlay.clone();
+    let addnew = props.addnew.clone();
+
+    if addnew.cloned() {
+        return ChoiceRender(props);
+    }
 
     rsx! {
-
-        div {
-            h1 {"{ty2:?}"}
-        }
-
-
-        button {
-            class: "inline-flex items-center text-white bg-gray-800 border-0 py-1 px-3 focus:outline-none hover:bg-gray-700 rounded text-base",
-            onclick: move |_| {
-                let mut _ty = ty.cloned();
-                _ty.next();
-                ty.clone().set(_ty);
-            },
-            "change dynty"
-        }
-
         button {
             class: "inline-flex items-center text-white bg-gray-800 border-0 py-1 px-3 focus:outline-none hover:bg-gray-700 rounded text-base",
             onclick: move |_| {
@@ -306,6 +230,16 @@ pub fn ColViewRender(props: ColViewer) -> Element {
                 }
             }
 
+
+            button {
+                onclick: move |_| {
+                    addnew.clone().set(true);
+                },
+
+                "add new"
+
+            }
+
             div {
                 class: "flex flex-row",
                 div {
@@ -330,69 +264,93 @@ pub fn ColViewRender(props: ColViewer) -> Element {
                         }
                     }
                 }
-
-                div {
-                    class: "ml-20",
-
-                    match ty.cloned() {
-                        DynTab::Card => rsx!{
-                            CardSelectorRender {
-                                title: selector.title.clone(),
-                                search: selector.search.clone(),
-                                on_card_selected: selector.on_card_selected.clone(),
-                                cards: selector.cards.clone(),
-                                allow_new: selector.allow_new.clone(),
-                                done: selector.done.clone(),
-                                filter: selector.filter.clone(),
-                                dependents: selector.dependents.clone(),
-                                allowed_cards: selector.allowed_cards.clone(),
-                                filtereditor: selector.filtereditor.clone(),
-                                filtermemo: selector.filtermemo.clone(),
-                                overlay: overlay.clone(),
-                            }
-                        },
-                        DynTab::Instance => rsx!{
-                            CardSelectorRender {
-                                title: inselector.title.clone(),
-                                search: inselector.search.clone(),
-                                on_card_selected: inselector.on_card_selected.clone(),
-                                cards: inselector.cards.clone(),
-                                allow_new: inselector.allow_new.clone(),
-                                done: inselector.done.clone(),
-                                filter: inselector.filter.clone(),
-                                dependents: inselector.dependents.clone(),
-                                allowed_cards: inselector.allowed_cards.clone(),
-                                filtereditor: inselector.filtereditor.clone(),
-                                filtermemo: inselector.filtermemo.clone(),
-                                overlay: overlay.clone(),
-                            }
-                        },
-                        DynTab::RecDependents => rsx!{
-                            CardSelectorRender {
-                                title: depselector.title.clone(),
-                                search: depselector.search.clone(),
-                                on_card_selected: depselector.on_card_selected.clone(),
-                                cards: depselector.cards.clone(),
-                                allow_new: depselector.allow_new.clone(),
-                                done: depselector.done.clone(),
-                                filter: depselector.filter.clone(),
-                                dependents: depselector.dependents.clone(),
-                                allowed_cards: depselector.allowed_cards.clone(),
-                                filtereditor: depselector.filtereditor.clone(),
-                                filtermemo: depselector.filtermemo.clone(),
-                                overlay: overlay.clone(),
-                            }
-                        },
-                        DynTab::Collection => rsx!{
-                            ItemSelectorRender{
-                                items: colselector.items.clone(),
-                                on_selected: colselector.on_selected.clone(),
-                                done: colselector.done.clone(),
-                            }
-                        },
-                    }
-                }
             }
         }
+    }
+}
+
+mod entry_selector {
+    use super::*;
+
+    pub fn dependencies(entries: Signal<Vec<DynEntry>>) -> CardSelector {
+        let f = MyClosure::new(move |card: CardEntry| {
+            let entries = entries.clone();
+            async move {
+                let mut inner = entries.cloned();
+                let entry = DynEntry::new(DynCard::RecDependents(card.id())).await;
+                let contains = inner.iter().any(|inentry| inentry.dy == entry.dy);
+
+                if !contains {
+                    inner.push(entry);
+                    entries.clone().set(inner);
+                }
+            }
+        });
+        info!("debug 2");
+
+        CardSelector::dependency_picker(f).with_title("all dependents of...".to_string())
+    }
+
+    pub fn instances(entries: Signal<Vec<DynEntry>>) -> CardSelector {
+        let f = MyClosure::new(move |card: CardEntry| {
+            let entries = entries.clone();
+            async move {
+                let mut inner = entries.cloned();
+                let entry = DynEntry::new(DynCard::Instances(card.id())).await;
+                let contains = inner.iter().any(|inentry| inentry.dy == entry.dy);
+
+                if !contains {
+                    inner.push(entry);
+                    entries.clone().set(inner);
+                }
+            }
+        });
+
+        CardSelector::class_picker(f)
+    }
+
+    pub async fn collection(
+        entries: Signal<Vec<DynEntry>>,
+        exclude: CollectionId,
+    ) -> ItemSelector<Collection> {
+        let mut cols = APP.read().load_collections().await;
+        cols.retain(|col| col.id != exclude);
+        info!("debug 4");
+
+        let f = Box::new(move |col: Collection| {
+            let entries = entries.clone();
+            spawn(async move {
+                let mut inner = entries.cloned();
+                let entry = DynEntry::new(DynCard::Collection(col.id())).await;
+                let contains = inner.iter().any(|inentry| inentry.dy == entry.dy);
+
+                if !contains {
+                    inner.push(entry);
+                    entries.clone().set(inner);
+                }
+            });
+        });
+
+        ItemSelector::new(cols, Arc::new(f))
+    }
+
+    pub fn card(entries: Signal<Vec<DynEntry>>) -> CardSelector {
+        let f = MyClosure::new(move |card: CardEntry| {
+            let entries = entries.clone();
+            let mut inner = entries.cloned();
+            async move {
+                let entry = DynEntry::new(DynCard::Card(card.id())).await;
+                let contains = inner.iter().any(|inentry| inentry.dy == entry.dy);
+
+                if !contains {
+                    inner.push(entry);
+                    entries.clone().set(inner);
+                }
+            }
+        });
+
+        info!("debug 3");
+
+        CardSelector::dependency_picker(f).with_title("pick card".to_string())
     }
 }

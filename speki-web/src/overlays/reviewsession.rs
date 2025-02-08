@@ -469,7 +469,7 @@ fn RenderDependencies(
                             });
 
                             spawn(async move {
-                                let props = CardSelector::dependency_picker(fun).await;
+                                let props = CardSelector::dependency_picker(fun);
                                 overlay.clone().set(Some(OverlayEnum::CardSelector(props)));
                             });
                         },
