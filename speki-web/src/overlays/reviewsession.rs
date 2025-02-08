@@ -20,7 +20,7 @@ use super::OverlayEnum;
 fn RecallButton(
     recall: Recall,
     card: CardEntry,
-    mut queue: Signal<Vec<CardId>>,
+    mut queue: Signal<Queue>,
     mut show_backside: Signal<bool>,
     filter: CardFilter,
 ) -> Element {
@@ -51,8 +51,8 @@ fn RecallButton(
                         dependencies
                     };
 
-                    let mut new_queue = queue.cloned();
-                    new_queue.pop();
+                    queue.write().next();
+                    let mut new_queue = queue.read().upcoming();
                     new_queue.retain(|id|!related.contains(id));
 
                     for id in related {
@@ -62,7 +62,7 @@ fn RecallButton(
                         }
                     }
 
-                    queue.set(new_queue);
+                    queue.write().set_upcoming(new_queue);
 
 
                     show_backside.set(false);
@@ -78,7 +78,7 @@ fn RecallButton(
 fn ReviewButtons(
     mut show_backside: Signal<bool>,
     card: CardEntry,
-    queue: Signal<Vec<CardId>>,
+    queue: Signal<Queue>,
     filter: CardFilter,
 ) -> Element {
     rsx! {
@@ -124,7 +124,7 @@ pub fn ReviewRender(
     front: Resource<String>,
     back: String,
     card: CardEntry,
-    queue: Signal<Vec<CardId>>,
+    queue: Signal<Queue>,
     show_backside: Signal<bool>,
     tot: Resource<usize>,
     overlay: Signal<Option<OverlayEnum>>,
@@ -152,7 +152,7 @@ pub fn ReviewRender(
             }
             _ => return,
         };
-        queue.clone().write().pop();
+        queue.clone().write().next();
         show_backside.clone().set(false);
         spawn(async move {
             card.card.write().add_review(recall).await;
@@ -206,8 +206,49 @@ pub fn ReviewRender(
 }
 
 #[derive(Clone, Debug)]
+pub struct Queue {
+    passed: Vec<CardId>,
+    upcoming: Vec<CardId>,
+}
+
+impl Queue {
+    fn new(cards: Vec<CardId>) -> Self {
+        Self {
+            passed: vec![],
+            upcoming: cards,
+        }
+    }
+
+    fn set_upcoming(&mut self, cards: Vec<CardId>) {
+        self.upcoming = cards;
+    }
+
+    fn upcoming(&self) -> Vec<CardId> {
+        self.upcoming.clone()
+    }
+
+    fn next(&mut self) {
+        if !self.upcoming.is_empty() {
+            self.passed.push(self.upcoming.remove(0));
+        }
+    }
+
+    fn current(&self) -> Option<CardId> {
+        self.upcoming.first().cloned()
+    }
+
+    fn tot_len(&self) -> usize {
+        self.passed_len() + self.upcoming.len()
+    }
+
+    fn passed_len(&self) -> usize {
+        self.passed.len()
+    }
+}
+
+#[derive(Clone, Debug)]
 pub struct ReviewState {
-    pub queue: Signal<Vec<CardId>>,
+    pub queue: Signal<Queue>,
     pub card: Resource<Option<CardEntry>>,
     pub dependencies: Resource<Vec<(CardEntry, Signal<Option<OverlayEnum>>)>>,
     pub tot_len: Resource<usize>,
@@ -245,16 +286,16 @@ impl ReviewState {
         }
 
         let overlay: Signal<Option<OverlayEnum>> = Signal::new_in_scope(None, ScopeId::APP);
-        let queue: Signal<Vec<CardId>> = Signal::new_in_scope(thecards, ScopeId::APP);
+        let queue: Signal<Queue> = Signal::new_in_scope(Queue::new(thecards), ScopeId::APP);
 
         let is_done: Memo<bool> =
-            ScopeId::APP.in_runtime(|| use_memo(move || queue.read().last().is_none()));
+            ScopeId::APP.in_runtime(|| use_memo(move || queue.read().current().is_none()));
 
         let card = ScopeId::APP.in_runtime(|| {
             use_resource(move || async move {
-                match queue.read().last() {
+                match queue.read().current() {
                     Some(id) => {
-                        let card = APP.read().load_card(*id).await;
+                        let card = APP.read().load_card(id).await;
                         if let Some(audio) = card.card.read().front_audio.clone() {
                             play_audio(audio.data, "audio/mpeg");
                         }
@@ -307,7 +348,7 @@ impl ReviewState {
         });
 
         let tot_len =
-            ScopeId::APP.in_runtime(|| use_resource(move || async move { queue.read().len() }));
+            ScopeId::APP.in_runtime(|| use_resource(move || async move { queue.read().tot_len() }));
         Self {
             card,
             tot_len,
@@ -328,10 +369,10 @@ fn Infobar(
     card: CardEntry,
     overlay: Signal<Option<OverlayEnum>>,
     tot: Resource<usize>,
-    queue: Signal<Vec<CardId>>,
+    queue: Signal<Queue>,
 ) -> Element {
-    let tot = tot.cloned().unwrap_or_default();
-    let pos = tot - queue.read().len();
+    let tot = queue.read().tot_len();
+    let pos = queue.read().passed_len();
     let card2 = card.clone();
 
     rsx! {
@@ -366,7 +407,7 @@ fn Infobar(
 }
 
 #[component]
-fn Suspend(card: CardEntry, mut queue: Signal<Vec<CardId>>) -> Element {
+fn Suspend(card: CardEntry, mut queue: Signal<Queue>) -> Element {
     let is_suspended = card.card.read().is_suspended();
     let txt = if is_suspended { "unsuspend" } else { "suspend" };
 
@@ -378,7 +419,7 @@ fn Suspend(card: CardEntry, mut queue: Signal<Vec<CardId>>) -> Element {
                 spawn(async move {
                     let mut card = card;
                     card.card.write().set_suspend(!is_suspended).await;
-                    queue.write().pop();
+                    queue.write().next();
                 });
             },
             "{txt}"
@@ -392,7 +433,7 @@ fn RenderDependencies(
     dependencies: Resource<Vec<(CardEntry, Signal<Option<OverlayEnum>>)>>,
     overlay: Signal<Option<OverlayEnum>>,
     show_backside: bool,
-    queue: Signal<Vec<CardId>>,
+    queue: Signal<Queue>,
 ) -> Element {
     let show_graph = if show_backside {
         "opacity-100 visible"
@@ -459,7 +500,7 @@ fn CardSides(
     back: String,
     show_backside: Signal<bool>,
     card: CardEntry,
-    queue: Signal<Vec<CardId>>,
+    queue: Signal<Queue>,
     filter: CardFilter,
 ) -> Element {
     let backside_visibility_class = if show_backside() {
