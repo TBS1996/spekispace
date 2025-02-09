@@ -84,6 +84,7 @@ pub enum DynCard {
     Dependents(CardId),
     RecDependents(CardId),
     Collection(CollectionId),
+    Any,
 }
 
 impl DynCard {
@@ -93,6 +94,7 @@ impl DynCard {
         seen_cols: HashSet<CollectionId>,
     ) -> Vec<Arc<Card>> {
         match self {
+            DynCard::Any => provider.load_all().await,
             DynCard::Collection(id) => {
                 let Some(col) = provider.provider.collections.load(*id).await else {
                     return vec![];

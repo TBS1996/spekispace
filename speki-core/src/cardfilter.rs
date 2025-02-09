@@ -58,6 +58,8 @@ struct ItemData {
     source: ModifiedSource,
 }
 
+/// Filter for cards.
+/// Only uses the user-data part of cards, like reviews or custom tags.
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Default)]
 pub struct CardFilter {
     pub recall: Option<NumOp>,

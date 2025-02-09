@@ -10,6 +10,7 @@ use crate::components::dropdown::DropComponent;
 
 use super::DropDownMenu;
 
+/// Editor for creating a [`CardFilter`].
 #[derive(Clone, Debug, PartialEq)]
 pub struct FilterEditor {
     pub filter_name: Signal<String>,

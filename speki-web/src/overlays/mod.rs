@@ -8,7 +8,7 @@ pub mod uploader;
 pub mod yesno;
 
 use crate::overlays::{
-    card_selector::CardSelector, cardviewer::CardViewer, colviewer::ColViewer,
+    card_selector::CardSelector, cardviewer::CardViewer, colviewer::CollectionEditor,
     reviewsession::ReviewState, textinput::TextInput, yesno::Yesno,
 };
 use card_selector::CardSelectorRender;
@@ -25,7 +25,7 @@ use yesno::YesnoRender;
 #[derive(Clone)]
 pub enum OverlayEnum {
     Review(ReviewState),
-    Colviewer(ColViewer),
+    Colviewer(CollectionEditor),
     Text(TextInput),
     CardViewer(CardViewer),
     CardSelector(CardSelector),
@@ -174,6 +174,7 @@ pub fn Overender(overlay: Signal<Option<OverlayEnum>>, root: Element) -> Element
                                     filtereditor: elm.filtereditor.clone(),
                                     filtermemo: elm.filtermemo.clone(),
                                     overlay: elm.overlay.clone(),
+                                    collection: elm.collection,
                                 }
                             },
                         }

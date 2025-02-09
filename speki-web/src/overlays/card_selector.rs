@@ -1,17 +1,16 @@
 use std::{future::Future, pin::Pin, sync::Arc};
 
 use dioxus::prelude::*;
-use speki_core::cardfilter::CardFilter;
+use speki_core::{cardfilter::CardFilter, collection::DynCard};
 use speki_web::{CardEntry, Node};
 use tracing::info;
 
 use crate::{
     components::{CardTy, FilterComp, FilterEditor, GraphRep},
     overlays::cardviewer::CardViewer,
-    APP,
 };
 
-use super::OverlayEnum;
+use super::{colviewer::CollectionEditor, OverlayEnum};
 
 pub fn overlay_card_viewer(overlay: Signal<Option<OverlayEnum>>) -> MyClosure {
     MyClosure::new(move |card: CardEntry| async move {
@@ -34,6 +33,8 @@ pub struct CardSelector {
     pub filtereditor: FilterEditor,
     pub filtermemo: Memo<Option<CardFilter>>,
     pub overlay: Signal<Option<OverlayEnum>>,
+    pub collection: CollectionEditor,
+    pub col_cards: Resource<Vec<CardEntry>>,
 }
 
 impl Default for CardSelector {
@@ -72,16 +73,20 @@ impl CardSelector {
         let overlay: Signal<Option<OverlayEnum>> =
             Signal::new_in_scope(Default::default(), ScopeId::APP);
 
+        let collection = CollectionEditor::new_unsaved();
+        let cards = collection.expanded();
+
         let allowed = allowed_cards.clone();
         let cards = ScopeId::APP.in_runtime(|| {
             let allowed = allowed.clone();
+            let cards = cards.clone();
             use_resource(move || {
                 let allowed_cards = allowed.clone();
                 async move {
                     let allowed_cards = allowed_cards.clone();
                     let mut filtered_cards: Vec<CardEntry> = vec![];
 
-                    let cards = APP.cloned().load_all(None).await;
+                    let cards = cards.cloned().unwrap_or_default();
 
                     for card in cards {
                         if allowed_cards.is_empty()
@@ -112,6 +117,9 @@ impl CardSelector {
             })
         });
 
+        let mut col = collection.clone();
+        spawn(async move { col.push_entry(DynCard::Any).await });
+
         Self {
             title: "select card".to_string(),
             search,
@@ -124,6 +132,8 @@ impl CardSelector {
             filtereditor,
             filtermemo,
             overlay,
+            collection,
+            col_cards: cards,
         }
     }
 
@@ -221,6 +231,7 @@ pub fn CardSelectorRender(
     filtereditor: FilterEditor,
     filtermemo: Memo<Option<CardFilter>>,
     overlay: Signal<Option<OverlayEnum>>,
+    collection: CollectionEditor,
 ) -> Element {
     info!("render cardselector");
     rsx! {

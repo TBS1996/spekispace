@@ -7,7 +7,7 @@ use tracing::info;
 use crate::{
     components::{FilterComp, FilterEditor},
     overlays::{
-        colviewer::ColViewer, reviewsession::ReviewState, textinput::TextInput, Overender,
+        colviewer::CollectionEditor, reviewsession::ReviewState, textinput::TextInput, Overender,
         OverlayEnum,
     },
     APP, IS_SHORT,
@@ -223,7 +223,7 @@ fn RenderCols(
                         button {
                             onclick: move |_|{
                                 spawn(async move {
-                                    let viewer = OverlayEnum::Colviewer(ColViewer::new(col.id).await);
+                                    let viewer = OverlayEnum::Colviewer(CollectionEditor::new(col.id).await);
                                     overlay.clone().set(Some(viewer));
                                 });
                             },

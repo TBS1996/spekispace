@@ -49,6 +49,7 @@ impl Display for DynEntry {
 
 async fn name(dy: DynCard) -> String {
     match dy {
+        DynCard::Any => format!("all cards"),
         DynCard::Card(id) => {
             let card = APP.read().load_card(id).await.card.read().print().await;
             format!("{card}")
@@ -85,8 +86,8 @@ impl DynEntry {
 }
 
 #[derive(Props, PartialEq, Clone)]
-pub struct ColViewer {
-    pub col: Collection,
+pub struct CollectionEditor {
+    pub col: Signal<Collection>,
     pub colname: Signal<String>,
     pub done: Signal<bool>,
     pub entries: Signal<Vec<DynEntry>>,
@@ -94,7 +95,49 @@ pub struct ColViewer {
     pub addnew: Signal<bool>,
 }
 
-impl ColViewer {
+impl CollectionEditor {
+    pub fn new_unsaved() -> Self {
+        Self {
+            col: Signal::new_in_scope(Collection::new("..".to_string()), ScopeId::APP),
+            colname: Signal::new_in_scope("..".to_string(), ScopeId::APP),
+            done: Signal::new_in_scope(false, ScopeId::APP),
+            entries: Signal::new_in_scope(vec![], ScopeId::APP),
+            overlay: Signal::new_in_scope(None, ScopeId::APP),
+            addnew: Signal::new_in_scope(false, ScopeId::APP),
+        }
+    }
+
+    pub async fn push_entry(&mut self, card: DynCard) {
+        self.col.write().dyncards.push(card.clone());
+        let entry = DynEntry::new(card).await;
+        self.entries.write().push(entry);
+    }
+
+    pub fn expanded(&self) -> Resource<Vec<CardEntry>> {
+        let selv = self.clone();
+        ScopeId::APP.in_runtime(|| {
+            let selv = selv.clone();
+            use_resource(move || {
+                let selv = selv.clone();
+
+                async move {
+                    let mut out = vec![];
+                    for card in selv
+                        .col
+                        .read()
+                        .expand(APP.read().inner().card_provider.clone(), Default::default())
+                        .await
+                        .into_iter()
+                    {
+                        out.push(CardEntry::new(Arc::unwrap_or_clone(card)))
+                    }
+
+                    out
+                }
+            })
+        })
+    }
+
     pub async fn new(id: CollectionId) -> Self {
         info!("debug 1");
         let col = APP.read().load_collection(id).await;
@@ -109,7 +152,7 @@ impl ColViewer {
         info!("debug 6");
 
         let selv = Self {
-            col,
+            col: Signal::new_in_scope(col, ScopeId::APP),
             colname,
             done: Signal::new_in_scope(false, ScopeId::APP),
             entries,
@@ -122,11 +165,11 @@ impl ColViewer {
 }
 
 #[component]
-pub fn ChoiceRender(props: ColViewer) -> Element {
+pub fn ChoiceRender(props: CollectionEditor) -> Element {
     let overlay = props.overlay.clone();
     let addnew = props.addnew;
     let entries = props.entries.clone();
-    let col_id = props.col.id;
+    let col_id = props.col.read().id;
 
     rsx! {
 
@@ -173,7 +216,7 @@ pub fn ChoiceRender(props: ColViewer) -> Element {
 }
 
 #[component]
-pub fn ColViewRender(props: ColViewer) -> Element {
+pub fn ColViewRender(props: CollectionEditor) -> Element {
     let mut name = props.colname.clone();
     let cards = props.entries.clone();
     let selv = props.clone();
@@ -193,11 +236,11 @@ pub fn ColViewRender(props: ColViewer) -> Element {
                 let name = selv.colname.cloned();
                 let entries = selv.entries.cloned();
                 let mut col = selv.col.clone();
-                col.name = name;
-                col.dyncards = entries.into_iter().map(|entry|entry.dy).collect();
+                col.write().name = name;
+                col.write().dyncards = entries.into_iter().map(|entry|entry.dy).collect();
 
                 spawn(async move {
-                    APP.read().save_collection(col).await;
+                    APP.read().save_collection(col.cloned()).await;
                     selv.done.clone().set(true);
                 });
 
@@ -212,7 +255,7 @@ pub fn ColViewRender(props: ColViewer) -> Element {
             onclick: move |_| {
                 let selv = selv2.clone();
                 spawn(async move {
-                    APP.read().delete_collection(selv.col.id).await;
+                    APP.read().delete_collection(selv.col.read().id).await;
                     selv.done.clone().set(true);
                 });
 
