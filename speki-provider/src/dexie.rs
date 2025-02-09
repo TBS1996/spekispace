@@ -1,7 +1,9 @@
-use std::{collections::HashMap, time::Duration};
+use std::{
+    collections::{BTreeSet, HashMap},
+    time::Duration,
+};
 
 use async_trait::async_trait;
-use gloo_utils::format::JsValueSerdeExt;
 use js_sys::Promise;
 use serde_json::Value;
 use speki_dto::{Item, ProviderId, Record, SpekiProvider, Syncable, TimeProvider};
@@ -34,6 +36,33 @@ impl DexieProvider {
 
     pub fn set_id(&mut self, id: ProviderId) {
         self.id = Some(id);
+    }
+}
+
+use speki_dto::Indexable;
+
+#[async_trait(?Send)]
+impl<T: Item> Indexable<T> for DexieProvider {
+    async fn load_indices(&self, word: String) -> BTreeSet<Uuid> {
+        info!("loading indices for: {word}");
+        let ty = format!("textindex_{}", T::identifier());
+        let id = JsValue::from_str(&word);
+        let promise = loadRecord(&JsValue::from_str(&ty), &id);
+        let future = wasm_bindgen_futures::JsFuture::from(promise);
+        let jsvalue = future.await.unwrap();
+        let record: Option<Record> = serde_wasm_bindgen::from_value(jsvalue).unwrap_or_default();
+        record
+            .map(|r| serde_json::from_str(&r.content).unwrap())
+            .unwrap_or_default()
+    }
+
+    async fn save_indices(&self, word: String, indices: BTreeSet<Uuid>) {
+        info!("saving indices for: {word}");
+        let ty = format!("textindex_{}", T::identifier());
+        let id = JsValue::from_str(&word);
+        let content = JsValue::from_str(&serde_json::to_string(&indices).unwrap());
+        let last_modified = JsValue::from_str(&0.to_string());
+        saveContent(&JsValue::from_str(&ty), &id, &content, &last_modified);
     }
 }
 

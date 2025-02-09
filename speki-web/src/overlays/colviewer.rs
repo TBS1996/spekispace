@@ -7,7 +7,7 @@ use speki_core::{
 };
 use speki_dto::Item;
 use speki_web::CardEntry;
-use std::{fmt::Display, sync::Arc};
+use std::{collections::BTreeSet, fmt::Display, sync::Arc};
 use tracing::info;
 
 /*
@@ -123,7 +123,7 @@ impl CollectionEditor {
         self.col.write().dyncards.push(card.clone());
     }
 
-    pub fn expanded(&self) -> Resource<Vec<CardEntry>> {
+    pub fn expanded(&self) -> Resource<BTreeSet<CardEntry>> {
         let selv = self.clone();
         ScopeId::APP.in_runtime(|| {
             let selv = selv.clone();
@@ -131,7 +131,7 @@ impl CollectionEditor {
                 let selv = selv.clone();
 
                 async move {
-                    let mut out = vec![];
+                    let mut out = BTreeSet::default();
                     for card in selv
                         .col
                         .read()
@@ -139,7 +139,7 @@ impl CollectionEditor {
                         .await
                         .into_iter()
                     {
-                        out.push(CardEntry::new(Arc::unwrap_or_clone(card)))
+                        out.insert(CardEntry::new(Arc::unwrap_or_clone(card)));
                     }
 
                     out

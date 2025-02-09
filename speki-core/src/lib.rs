@@ -9,7 +9,7 @@ use dioxus_logger::tracing::info;
 use eyre::Result;
 use metadata::Metadata;
 use recall_rate::History;
-use speki_dto::{SpekiProvider, TimeProvider};
+use speki_dto::{Indexable, SpekiProvider, TimeProvider};
 use tracing::trace;
 
 mod attribute;
@@ -19,7 +19,6 @@ mod card_provider;
 pub mod cardfilter;
 pub mod collection;
 mod common;
-pub mod healthcheck;
 pub mod metadata;
 pub mod recall_rate;
 
@@ -77,7 +76,7 @@ impl CollectionProvider {
 
 #[derive(Clone)]
 pub struct Provider {
-    pub cards: Arc<Box<dyn SpekiProvider<BaseCard>>>,
+    pub cards: Arc<Box<dyn Indexable<BaseCard>>>,
     pub reviews: Arc<Box<dyn SpekiProvider<History>>>,
     pub attrs: Arc<Box<dyn SpekiProvider<AttributeDTO>>>,
     pub collections: CollectionProvider,
@@ -117,7 +116,7 @@ impl App {
     where
         A: RecallCalc + 'static + Send,
         B: TimeProvider + 'static + Send,
-        C: SpekiProvider<BaseCard> + 'static + Send,
+        C: Indexable<BaseCard> + 'static + Send,
         D: SpekiProvider<History> + 'static + Send,
         E: SpekiProvider<AttributeDTO> + 'static + Send,
         F: SpekiProvider<Collection> + 'static + Send,
@@ -153,6 +152,10 @@ impl App {
         }
     }
 
+    pub async fn index_all(&self) {
+        self.provider.cards.index_all().await;
+    }
+
     pub fn card_provider(&self) -> CardProvider {
         self.card_provider.clone()
     }
@@ -179,10 +182,6 @@ impl App {
             .await;
 
         self.card_provider.save_card(card).await;
-    }
-
-    pub async fn health_check(&self) {
-        healthcheck::healthcheck(self.card_provider.clone()).await;
     }
 
     pub async fn load_card(&self, id: CardId) -> Option<Card> {

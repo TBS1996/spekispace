@@ -112,13 +112,13 @@ pub fn TheApp() -> Element {
     use_context_provider(ReviewPage::new);
 
     spawn(async move {
-        APP.read().fill_cache().await;
         if let Some(currauth) = firebase::current_sign_in().await {
             *LOGIN_STATE.write() = Some(currauth);
             info!("user logged in!");
         } else {
             info!("no user logged in!");
         }
+        APP.read().fill_cache().await;
     });
 
     rsx! {
@@ -191,6 +191,8 @@ pub enum Route {
     About {},
     #[route("/import")]
     Import {},
+    #[route("/debug")]
+    Debug {},
 }
 
 impl Route {
@@ -202,6 +204,21 @@ impl Route {
             Route::Browse {} => "browse",
             Route::About {} => "about",
             Route::Import {} => "import",
+            Route::Debug {} => "debug",
+        }
+    }
+}
+
+#[component]
+fn Debug() -> Element {
+    rsx! {
+        button {
+            onclick: move |_| {
+                spawn(async move {
+                    APP.read().inner().index_all().await;
+                });
+            },
+            "index!"
         }
     }
 }

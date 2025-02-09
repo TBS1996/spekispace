@@ -124,6 +124,24 @@ pub struct CardEntry {
     pub card: Signal<Card>,
 }
 
+impl Ord for CardEntry {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        let selv = self.card.read().id();
+        let other = other.card.read().id();
+        selv.cmp(&other)
+    }
+}
+
+impl PartialOrd for CardEntry {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        let selv = self.card.read().id();
+        let other = other.card.read().id();
+        selv.partial_cmp(&other)
+    }
+}
+
+impl Eq for CardEntry {}
+
 impl PartialEq for CardEntry {
     fn eq(&self, other: &Self) -> bool {
         self.card == other.card

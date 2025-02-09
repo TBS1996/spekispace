@@ -536,6 +536,15 @@ impl Item for BaseCard {
         self.last_modified
     }
 
+    fn as_string(&self) -> String {
+        let mut s = String::new();
+        let raw: RawCard = self.clone().into();
+        s.push_str(&raw.data.front.unwrap_or_default());
+        s.push_str(" ");
+        s.push_str(&raw.data.back.map(|b| b.to_string()).unwrap_or_default());
+        s.to_lowercase()
+    }
+
     fn set_last_modified(&mut self, time: Duration) {
         self.last_modified = time;
     }

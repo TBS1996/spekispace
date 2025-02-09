@@ -330,7 +330,7 @@ impl CardProvider {
 
     pub async fn save_basecard(&self, card: BaseCard) -> Arc<Card> {
         let id = card.id();
-        self.provider.cards.save_item(card).await;
+        self.provider.cards.update_item(card).await;
         self.invalidate_card(id).await;
         self.load(id).await.unwrap()
     }
@@ -338,7 +338,7 @@ impl CardProvider {
     pub async fn save_card(&self, card: Card) {
         self.update_cache(Arc::new(card.clone()));
         self.provider.metadata.save_item(card.meta()).await;
-        self.provider.cards.save_item(card.base).await;
+        self.provider.cards.update_item(card.base).await;
     }
 
     pub fn time_provider(&self) -> TimeGetter {

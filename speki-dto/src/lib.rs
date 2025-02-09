@@ -1,5 +1,5 @@
 use std::{
-    collections::{HashMap, HashSet},
+    collections::{BTreeSet, HashMap, HashSet},
     fmt::Debug,
     time::Duration,
 };
@@ -43,6 +43,17 @@ pub trait Item: Serialize + DeserializeOwned + Sized + Send + Clone + Debug + 's
     fn set_last_modified(&mut self, time: Duration);
     fn last_modified(&self) -> Duration;
     fn id(&self) -> Uuid;
+
+    fn as_string(&self) -> String {
+        format!("{:?}", self).to_lowercase()
+    }
+
+    fn indices(&self) -> Vec<String> {
+        self.as_string()
+            .split_whitespace()
+            .map(String::from)
+            .collect()
+    }
 
     fn serialize(&self) -> String {
         toml::to_string(self).unwrap()
@@ -306,6 +317,52 @@ pub trait Syncable<T: Item>: Sync + SpekiProvider<T> {
         .await;
 
         info!("finished sync of: {ty} between {left_id} and {right_id}");
+    }
+}
+
+#[async_trait::async_trait(?Send)]
+pub trait Indexable<T: Item>: SpekiProvider<T> {
+    async fn load_indices(&self, word: String) -> BTreeSet<Uuid>;
+    async fn save_indices(&self, word: String, indices: BTreeSet<Uuid>);
+
+    async fn save_index(&self, word: String, id: Uuid) {
+        let mut indices = self.load_indices(word.clone()).await;
+        indices.insert(id);
+        self.save_indices(word, indices).await;
+    }
+
+    async fn delete_index(&self, word: String, id: Uuid) {
+        let mut indices = self.load_indices(word.clone()).await;
+        indices.remove(&id);
+        self.save_indices(word, indices).await;
+    }
+
+    async fn index_all(&self) {
+        for item in self.load_all().await.values() {
+            info!("indexing id: {}", item.id());
+            for index in item.indices() {
+                self.save_index(index, item.id()).await;
+            }
+        }
+    }
+
+    async fn update_item(&self, item: T) {
+        info!("updating!!!!!!!!!!!!!!");
+        let old_indices = self
+            .load_item(item.id())
+            .await
+            .map(|item| item.indices())
+            .unwrap_or_default();
+
+        for word in old_indices {
+            self.delete_index(word, item.id()).await;
+        }
+
+        for word in item.indices() {
+            self.save_index(word, item.id()).await;
+        }
+
+        self.save_item(item).await;
     }
 }
 

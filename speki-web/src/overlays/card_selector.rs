@@ -1,4 +1,4 @@
-use std::{future::Future, pin::Pin, sync::Arc};
+use std::{collections::BTreeSet, future::Future, pin::Pin, sync::Arc};
 
 use dioxus::prelude::*;
 use speki_core::{cardfilter::CardFilter, collection::DynCard};
@@ -8,6 +8,7 @@ use tracing::info;
 use crate::{
     components::{CardTy, FilterComp, FilterEditor, GraphRep},
     overlays::{cardviewer::CardViewer, colviewer::ColViewRender},
+    APP,
 };
 
 use super::{colviewer::CollectionEditor, OverlayEnum};
@@ -34,7 +35,7 @@ pub struct CardSelector {
     pub filtermemo: Memo<Option<CardFilter>>,
     pub overlay: Signal<Option<OverlayEnum>>,
     pub collection: CollectionEditor,
-    pub col_cards: Resource<Vec<CardEntry>>,
+    pub col_cards: Resource<BTreeSet<CardEntry>>,
 }
 
 impl Default for CardSelector {
@@ -74,21 +75,44 @@ impl CardSelector {
             Signal::new_in_scope(Default::default(), ScopeId::APP);
 
         let collection = CollectionEditor::new_unsaved();
-        let cards = collection.expanded();
+        let col_cards = collection.expanded();
 
         let allowed = allowed_cards.clone();
         let cards = ScopeId::APP.in_runtime(|| {
             let allowed = allowed.clone();
-            let cards = cards.clone();
+            let cards = col_cards.clone();
             use_resource(move || {
                 let allowed_cards = allowed.clone();
                 async move {
                     let allowed_cards = allowed_cards.clone();
-                    let mut filtered_cards: Vec<CardEntry> = vec![];
+                    let mut filtered_cards: Vec<CardEntry> = Default::default();
 
                     let cards = cards.cloned().unwrap_or_default();
 
+                    let mut matching_cards = BTreeSet::default();
+                    let indexer = APP.read().inner().provider.cards.clone();
+                    let mut flag = false;
+                    for word in search.cloned().to_lowercase().split_whitespace() {
+                        let indices = indexer.load_indices(word.to_string()).await;
+                        info!("ids for {word}: {:?}", indices);
+                        if !flag {
+                            matching_cards = indices;
+                            flag = true;
+                        } else {
+                            matching_cards =
+                                matching_cards.intersection(&indices).cloned().collect();
+                        }
+                    }
+
                     for card in cards {
+                        if filtered_cards.len() > 100 {
+                            break;
+                        }
+
+                        if !matching_cards.contains(&card.id()) && !search.read().is_empty() {
+                            continue;
+                        };
+
                         if allowed_cards.is_empty()
                             || allowed_cards.read().contains(&CardTy::from_ctype(
                                 card.card.read().get_ty().fieldless(),
@@ -100,11 +124,7 @@ impl CardSelector {
                             };
 
                             if flag {
-                                let front = card.card.read().print().await;
-
-                                if front.contains(&search.cloned().to_lowercase()) {
-                                    filtered_cards.push(card);
-                                }
+                                filtered_cards.push(card);
                             }
                         }
                     }
@@ -134,7 +154,7 @@ impl CardSelector {
             filtermemo,
             overlay,
             collection,
-            col_cards: cards,
+            col_cards,
         }
     }
 
