@@ -1,7 +1,7 @@
 use std::{future::Future, pin::Pin, sync::Arc};
 
 use dioxus::prelude::*;
-use speki_core::{cardfilter::CardFilter, CardType};
+use speki_core::cardfilter::CardFilter;
 use speki_web::{CardEntry, Node};
 use tracing::info;
 
@@ -127,7 +127,7 @@ impl CardSelector {
         }
     }
 
-    pub async fn ref_picker(fun: MyClosure, dependents: Vec<Node>) -> Self {
+    pub fn ref_picker(fun: MyClosure, dependents: Vec<Node>) -> Self {
         Self {
             title: "choose reference".to_string(),
             on_card_selected: fun,
@@ -286,7 +286,6 @@ fn NewcardButton(
                 });
 
                 let viewer = CardViewer::new()
-                    .with_title("create new card".to_string())
                     .with_hook(hook)
                     .with_dependents(dependents.clone())
                     .with_allowed_cards(allowed_cards.clone())

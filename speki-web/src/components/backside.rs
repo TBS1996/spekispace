@@ -15,6 +15,9 @@ use crate::{
     APP, IS_SHORT,
 };
 
+/// Component to create the backside of a card
+///
+/// backside can be either text or a reference to another card
 #[derive(PartialEq, Clone)]
 pub struct BackPut {
     pub text: Signal<String>,
@@ -109,13 +112,13 @@ impl BackPut {
         }
     }
 
-    pub fn with_deselect(mut self, f: MyClosure) -> Self {
-        self.ref_card = self.ref_card.with_closure(f);
+    pub fn on_deselect(mut self, f: MyClosure) -> Self {
+        self.ref_card = self.ref_card.on_deselect(f);
         self
     }
 
-    pub fn with_closure(mut self, f: MyClosure) -> Self {
-        self.ref_card = self.ref_card.with_closure(f);
+    pub fn on_select(mut self, f: MyClosure) -> Self {
+        self.ref_card = self.ref_card.on_select(f);
         self
     }
 

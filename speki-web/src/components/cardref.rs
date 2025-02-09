@@ -84,13 +84,10 @@ pub fn CardRefRender(
                         .unwrap_or_default();
 
                     let allowed = allowed.clone();
-                    spawn(async move {
                         let props = CardSelector::ref_picker(fun, dependents)
-                            .await
                             .with_allowed_cards(allowed);
 
                         overlay.clone().set(Some(OverlayEnum::CardSelector(props)));
-                    });
                 },
             }
             if is_selected {
@@ -133,12 +130,12 @@ impl CardRef {
         }
     }
 
-    pub fn with_deselect(mut self, f: MyClosure) -> Self {
-        self.on_select = Some(f);
+    pub fn on_deselect(mut self, f: MyClosure) -> Self {
+        self.on_deselect = Some(f);
         self
     }
 
-    pub fn with_closure(mut self, f: MyClosure) -> Self {
+    pub fn on_select(mut self, f: MyClosure) -> Self {
         self.on_select = Some(f);
         self
     }
