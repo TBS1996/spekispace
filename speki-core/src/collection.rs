@@ -42,6 +42,16 @@ impl Collection {
         }
     }
 
+    pub fn remove_dyn(&mut self, card: DynCard) {
+        self.dyncards.retain(|entry| entry != &card);
+    }
+
+    pub fn insert_dyn(&mut self, card: DynCard) {
+        if !self.dyncards.contains(&card) {
+            self.dyncards.push(card);
+        }
+    }
+
     #[async_recursion(?Send)]
     pub async fn expand(
         &self,

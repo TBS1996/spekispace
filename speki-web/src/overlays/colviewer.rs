@@ -90,27 +90,37 @@ pub struct CollectionEditor {
     pub col: Signal<Collection>,
     pub colname: Signal<String>,
     pub done: Signal<bool>,
-    pub entries: Signal<Vec<DynEntry>>,
+    pub entries: Resource<Vec<DynEntry>>,
     pub overlay: Signal<Option<OverlayEnum>>,
     pub addnew: Signal<bool>,
 }
 
 impl CollectionEditor {
     pub fn new_unsaved() -> Self {
+        let col = Signal::new_in_scope(Collection::new("..".to_string()), ScopeId::APP);
+        let entries = ScopeId::APP.in_runtime(move || {
+            let col = col.clone();
+            use_resource(move || async move {
+                let mut out = vec![];
+                for card in col.read().dyncards.clone().into_iter() {
+                    out.push(DynEntry::new(card).await);
+                }
+                out
+            })
+        });
         Self {
-            col: Signal::new_in_scope(Collection::new("..".to_string()), ScopeId::APP),
+            col,
             colname: Signal::new_in_scope("..".to_string(), ScopeId::APP),
             done: Signal::new_in_scope(false, ScopeId::APP),
-            entries: Signal::new_in_scope(vec![], ScopeId::APP),
+            entries,
             overlay: Signal::new_in_scope(None, ScopeId::APP),
             addnew: Signal::new_in_scope(false, ScopeId::APP),
         }
     }
 
-    pub async fn push_entry(&mut self, card: DynCard) {
+    pub fn push_entry(&mut self, card: DynCard) {
+        info!("pushing entry... {:?}", card);
         self.col.write().dyncards.push(card.clone());
-        let entry = DynEntry::new(card).await;
-        self.entries.write().push(entry);
     }
 
     pub fn expanded(&self) -> Resource<Vec<CardEntry>> {
@@ -147,12 +157,22 @@ impl CollectionEditor {
             entries.push(DynEntry::new(dy).await);
         }
 
-        let entries = Signal::new_in_scope(entries, ScopeId::APP);
+        let col = Signal::new_in_scope(col, ScopeId::APP);
+        let entries = ScopeId::APP.in_runtime(move || {
+            let col = col.clone();
+            use_resource(move || async move {
+                let mut out = vec![];
+                for card in col.read().dyncards.clone().into_iter() {
+                    out.push(DynEntry::new(card).await);
+                }
+                out
+            })
+        });
 
         info!("debug 6");
 
         let selv = Self {
-            col: Signal::new_in_scope(col, ScopeId::APP),
+            col,
             colname,
             done: Signal::new_in_scope(false, ScopeId::APP),
             entries,
@@ -168,8 +188,7 @@ impl CollectionEditor {
 pub fn ChoiceRender(props: CollectionEditor) -> Element {
     let overlay = props.overlay.clone();
     let addnew = props.addnew;
-    let entries = props.entries.clone();
-    let col_id = props.col.read().id;
+    let col = props.col.clone();
 
     rsx! {
 
@@ -183,28 +202,36 @@ pub fn ChoiceRender(props: CollectionEditor) -> Element {
             },
             "go back"
         }
+
         button {
             onclick: move |_|{
-                overlay.clone().set(Some(OverlayEnum::CardSelector(entry_selector::card(entries))));
+                col.clone().write().insert_dyn(DynCard::Any);
+            },
+            "any"
+        }
+
+        button {
+            onclick: move |_|{
+                overlay.clone().set(Some(OverlayEnum::CardSelector(entry_selector::card(col))));
             },
             "card"
         }
         button {
             onclick: move |_|{
-                overlay.clone().set(Some(OverlayEnum::CardSelector(entry_selector::instances(entries))));
+                overlay.clone().set(Some(OverlayEnum::CardSelector(entry_selector::instances(col))));
             },
             "instance"
         }
         button {
             onclick: move |_|{
-                overlay.clone().set(Some(OverlayEnum::CardSelector(entry_selector::dependencies(entries))));
+                overlay.clone().set(Some(OverlayEnum::CardSelector(entry_selector::dependencies(col))));
             },
             "recursive dependents"
         }
         button {
             onclick: move |_|{
                 spawn(async move {
-                    overlay.clone().set(Some(OverlayEnum::ColSelector(entry_selector::collection(entries, col_id).await)));
+                    overlay.clone().set(Some(OverlayEnum::ColSelector(entry_selector::collection(col).await)));
                 });
 
             },
@@ -217,8 +244,9 @@ pub fn ChoiceRender(props: CollectionEditor) -> Element {
 
 #[component]
 pub fn ColViewRender(props: CollectionEditor) -> Element {
+    let mut col = props.col.clone();
     let mut name = props.colname.clone();
-    let cards = props.entries.clone();
+    let cards = props.entries.cloned().unwrap_or_default();
     let selv = props.clone();
     let selv2 = props.clone();
     let addnew = props.addnew.clone();
@@ -234,10 +262,8 @@ pub fn ColViewRender(props: CollectionEditor) -> Element {
                 let selv = selv.clone();
 
                 let name = selv.colname.cloned();
-                let entries = selv.entries.cloned();
                 let mut col = selv.col.clone();
                 col.write().name = name;
-                col.write().dyncards = entries.into_iter().map(|entry|entry.dy).collect();
 
                 spawn(async move {
                     APP.read().save_collection(col.cloned()).await;
@@ -286,15 +312,13 @@ pub fn ColViewRender(props: CollectionEditor) -> Element {
             div {
                 class: "flex flex-row",
                 div {
-                    for card in cards.read().clone() {
+                    for card in cards.clone() {
                         div {
                             class: "flex flex-row mb-2",
 
                             button {
                                 onclick: move |_| {
-                                    let mut inner = cards.cloned();
-                                    inner.retain(|entry|entry.dy != card.dy);
-                                    cards.clone().set(inner);
+                                    col.write().remove_dyn(card.dy.clone());
                                 },
 
                                 "❌"
@@ -315,81 +339,46 @@ pub fn ColViewRender(props: CollectionEditor) -> Element {
 mod entry_selector {
     use super::*;
 
-    pub fn dependencies(entries: Signal<Vec<DynEntry>>) -> CardSelector {
+    pub fn dependencies(col: Signal<Collection>) -> CardSelector {
         let f = MyClosure::new(move |card: CardEntry| {
-            let entries = entries.clone();
-            async move {
-                let mut inner = entries.cloned();
-                let entry = DynEntry::new(DynCard::RecDependents(card.id())).await;
-                let contains = inner.iter().any(|inentry| inentry.dy == entry.dy);
-
-                if !contains {
-                    inner.push(entry);
-                    entries.clone().set(inner);
-                }
-            }
+            let mut col = col.clone();
+            col.write().insert_dyn(DynCard::RecDependents(card.id()));
+            async move {}
         });
+
         info!("debug 2");
 
         CardSelector::dependency_picker(f).with_title("all dependents of...".to_string())
     }
 
-    pub fn instances(entries: Signal<Vec<DynEntry>>) -> CardSelector {
+    pub fn instances(col: Signal<Collection>) -> CardSelector {
         let f = MyClosure::new(move |card: CardEntry| {
-            let entries = entries.clone();
-            async move {
-                let mut inner = entries.cloned();
-                let entry = DynEntry::new(DynCard::Instances(card.id())).await;
-                let contains = inner.iter().any(|inentry| inentry.dy == entry.dy);
-
-                if !contains {
-                    inner.push(entry);
-                    entries.clone().set(inner);
-                }
-            }
+            let mut col = col.clone();
+            col.write().insert_dyn(DynCard::Instances(card.id()));
+            async move {}
         });
 
         CardSelector::class_picker(f)
     }
 
-    pub async fn collection(
-        entries: Signal<Vec<DynEntry>>,
-        exclude: CollectionId,
-    ) -> ItemSelector<Collection> {
+    pub async fn collection(col: Signal<Collection>) -> ItemSelector<Collection> {
         let mut cols = APP.read().load_collections().await;
-        cols.retain(|col| col.id != exclude);
+        cols.retain(|_col| _col.id != col.read().id());
         info!("debug 4");
 
-        let f = Box::new(move |col: Collection| {
-            let entries = entries.clone();
-            spawn(async move {
-                let mut inner = entries.cloned();
-                let entry = DynEntry::new(DynCard::Collection(col.id())).await;
-                let contains = inner.iter().any(|inentry| inentry.dy == entry.dy);
-
-                if !contains {
-                    inner.push(entry);
-                    entries.clone().set(inner);
-                }
-            });
+        let f = Box::new(move |chosen_col: Collection| {
+            let mut col = col.clone();
+            col.write().insert_dyn(DynCard::Collection(chosen_col.id));
         });
 
         ItemSelector::new(cols, Arc::new(f))
     }
 
-    pub fn card(entries: Signal<Vec<DynEntry>>) -> CardSelector {
+    pub fn card(col: Signal<Collection>) -> CardSelector {
         let f = MyClosure::new(move |card: CardEntry| {
-            let entries = entries.clone();
-            let mut inner = entries.cloned();
-            async move {
-                let entry = DynEntry::new(DynCard::Card(card.id())).await;
-                let contains = inner.iter().any(|inentry| inentry.dy == entry.dy);
-
-                if !contains {
-                    inner.push(entry);
-                    entries.clone().set(inner);
-                }
-            }
+            let mut col = col.clone();
+            col.write().insert_dyn(DynCard::Card(card.id()));
+            async move {}
         });
 
         info!("debug 3");

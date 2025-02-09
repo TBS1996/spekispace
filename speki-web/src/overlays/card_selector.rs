@@ -7,7 +7,7 @@ use tracing::info;
 
 use crate::{
     components::{CardTy, FilterComp, FilterEditor, GraphRep},
-    overlays::cardviewer::CardViewer,
+    overlays::{cardviewer::CardViewer, colviewer::ColViewRender},
 };
 
 use super::{colviewer::CollectionEditor, OverlayEnum};
@@ -118,8 +118,9 @@ impl CardSelector {
         });
 
         let mut col = collection.clone();
-        spawn(async move { col.push_entry(DynCard::Any).await });
+        col.push_entry(DynCard::Any);
 
+        info!("creating cardselector");
         Self {
             title: "select card".to_string(),
             search,
@@ -238,8 +239,20 @@ pub fn CardSelectorRender(
         div {
             class: "flex flex-row",
 
-        if filtermemo.read().is_some() {
-            FilterComp {editor: filtereditor}
+        div {
+            class: "flex flex-col",
+            if filtermemo.read().is_some() {
+                FilterComp {editor: filtereditor}
+            }
+
+            ColViewRender {
+                col: collection.col,
+                colname: collection.colname,
+                done: collection.done,
+                entries: collection.entries,
+                overlay: overlay.clone(),
+                addnew: collection.addnew,
+            }
         }
 
         div {
