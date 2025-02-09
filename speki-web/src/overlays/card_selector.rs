@@ -1,9 +1,15 @@
-use std::{collections::BTreeSet, future::Future, pin::Pin, sync::Arc};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    future::Future,
+    pin::Pin,
+    sync::Arc,
+};
 
 use dioxus::prelude::*;
 use speki_core::{cardfilter::CardFilter, collection::DynCard};
 use speki_web::{CardEntry, Node};
 use tracing::info;
+use uuid::Uuid;
 
 use crate::{
     components::{CardTy, FilterComp, FilterEditor, GraphRep},
@@ -88,30 +94,35 @@ impl CardSelector {
                     let mut filtered_cards: Vec<CardEntry> = Default::default();
 
                     let cards = cards.cloned().unwrap_or_default();
+                    let mut thecards = BTreeMap::default();
 
-                    let mut matching_cards = BTreeSet::default();
+                    for card in cards {
+                        thecards.insert(card.id(), card);
+                    }
+
+                    let mut cards = thecards;
+
+                    let mut matching_cards: BTreeMap<Uuid, u32> = BTreeMap::new();
                     let indexer = APP.read().inner().provider.cards.clone();
-                    let mut flag = false;
-                    for word in search.cloned().to_lowercase().split_whitespace() {
+
+                    for word in bigrams(&search.cloned().to_lowercase()) {
                         let indices = indexer.load_indices(word.to_string()).await;
-                        info!("ids for {word}: {:?}", indices);
-                        if !flag {
-                            matching_cards = indices;
-                            flag = true;
-                        } else {
-                            matching_cards =
-                                matching_cards.intersection(&indices).cloned().collect();
+
+                        for id in indices {
+                            if cards.contains_key(&id) {
+                                *matching_cards.entry(id).or_insert(0) += 1;
+                            }
                         }
                     }
 
-                    for card in cards {
+                    let mut sorted_cards: Vec<_> = matching_cards.into_iter().collect();
+                    sorted_cards.sort_by(|a, b| b.1.cmp(&a.1));
+
+                    for card in sorted_cards {
+                        let card = cards.remove(&card.0).unwrap();
                         if filtered_cards.len() > 100 {
                             break;
                         }
-
-                        if !matching_cards.contains(&card.id()) && !search.read().is_empty() {
-                            continue;
-                        };
 
                         if allowed_cards.is_empty()
                             || allowed_cards.read().contains(&CardTy::from_ctype(
@@ -129,8 +140,8 @@ impl CardSelector {
                         }
                     }
 
-                    filtered_cards.sort_by_key(|card| card.card.read().last_modified());
-                    filtered_cards.reverse();
+                    //                    filtered_cards.sort_by_key(|card| card.card.read().last_modified());
+                    //                    filtered_cards.reverse();
 
                     filtered_cards
                 }
@@ -400,4 +411,12 @@ fn TableRender(
                 }
             }
     }
+}
+
+fn bigrams(text: &str) -> Vec<String> {
+    text.chars()
+        .collect::<Vec<_>>()
+        .windows(2)
+        .map(|w| w.iter().collect())
+        .collect()
 }

@@ -50,8 +50,10 @@ pub trait Item: Serialize + DeserializeOwned + Sized + Send + Clone + Debug + 's
 
     fn indices(&self) -> Vec<String> {
         self.as_string()
-            .split_whitespace()
-            .map(String::from)
+            .chars()
+            .collect::<Vec<_>>()
+            .windows(2)
+            .map(|w| w.iter().collect())
             .collect()
     }
 
