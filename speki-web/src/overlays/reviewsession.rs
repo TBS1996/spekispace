@@ -94,7 +94,7 @@ fn ReviewButtons(
 
                         if let Some(audio) = card.card.read().back_audio.clone() {
                             play_audio(audio.data, "audio/mpeg");
-                        }
+                    }
 
 
                     },
@@ -229,6 +229,14 @@ impl Queue {
 
     fn next(&mut self) {
         if !self.upcoming.is_empty() {
+            let id = self.current().unwrap();
+            spawn(async move {
+                let card = APP.read().load_card(id).await;
+                if let Some(audio) = card.clone().card.read().front_audio.clone() {
+                    play_audio(audio.data, "audio/mpeg");
+                }
+            });
+
             self.passed.push(self.upcoming.remove(0));
         }
     }
@@ -296,9 +304,6 @@ impl ReviewState {
                 match queue.read().current() {
                     Some(id) => {
                         let card = APP.read().load_card(id).await;
-                        if let Some(audio) = card.card.read().front_audio.clone() {
-                            play_audio(audio.data, "audio/mpeg");
-                        }
                         Some(card)
                     }
                     None => None,
