@@ -67,6 +67,10 @@ impl App {
         .collect()
     }
 
+    pub async fn try_load_card(&self, id: CardId) -> Option<CardEntry> {
+        self.0.load_card(id).await.map(CardEntry::new)
+    }
+
     pub async fn load_card(&self, id: CardId) -> CardEntry {
         CardEntry::new(
             self.0

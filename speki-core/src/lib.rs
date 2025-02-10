@@ -46,19 +46,7 @@ impl CollectionProvider {
     }
 
     pub async fn load(&self, id: CollectionId) -> Option<Collection> {
-        if let Some(mut col) = self.inner.load_item(id).await {
-            let mut dyns = vec![];
-            for d in col.dyncards.clone() {
-                if let DynCard::Collection(id) = d.clone() {
-                    if self.inner.load_item(id).await.is_some() {
-                        dyns.push(d);
-                    }
-                } else {
-                    dyns.push(d);
-                }
-            }
-
-            col.dyncards = dyns;
+        if let Some(col) = self.inner.load_item(id).await {
             Some(col)
         } else {
             None

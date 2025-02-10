@@ -68,10 +68,10 @@ pub trait Item: Serialize + DeserializeOwned + Sized + Send + Clone + Debug + 's
             return item;
         } else {
             let x = toml::from_str::<Self>(&s);
-            dbg!(
+            tracing::trace!(
                 "{}",
                 format!(
-                    "unable to deserialize item of type {}: with id: {_id}:  {x:?} input: {s}",
+                    "unable to toml deserialize item of type {}: with id: {_id}:  {x:?} input: {s}",
                     Self::identifier()
                 )
             );
@@ -81,10 +81,10 @@ pub trait Item: Serialize + DeserializeOwned + Sized + Send + Clone + Debug + 's
             return item;
         } else {
             let x = serde_json::from_str::<Self>(&s);
-            dbg!(
+            tracing::trace!(
                 "{}",
                 format!(
-                    "unable to deserialize item of type {}: with id: {_id}:  {x:?} input: {s}",
+                    "unable to serde deserialize item of type {}: with id: {_id}:  {x:?} input: {s}",
                     Self::identifier()
                 )
             );
@@ -97,7 +97,10 @@ pub trait Item: Serialize + DeserializeOwned + Sized + Send + Clone + Debug + 's
             );
         }
 
-        Self::PreviousVersion::item_deserialize(_id, s).into()
+        let item: Self = Self::PreviousVersion::item_deserialize(_id, s).into();
+        info!("serializing item!!");
+        <Self as Item>::serialize(&item);
+        item
     }
 
     fn identifier() -> &'static str;
@@ -408,17 +411,8 @@ pub trait SpekiProvider<T: Item>: Sync {
 
     async fn load_item(&self, id: Uuid) -> Option<T> {
         let record = self.load_record(id).await?;
-        match toml::from_str::<T>(&record.content) {
-            Ok(item) => (!item.deleted()).then_some(item),
-            Err(e) => {
-                tracing::error!(
-                    "error deserializing {:?} with id {}: {e:?}",
-                    T::identifier(),
-                    id
-                );
-                None
-            }
-        }
+        let item = T::item_deserialize(id, record.content);
+        (!item.deleted()).then_some(item)
     }
 
     /// Must not include deleted items.

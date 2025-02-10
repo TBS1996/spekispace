@@ -1,17 +1,17 @@
-use super::{card_selector::CardSelector, itemselector::ItemSelector, OverlayEnum};
+use super::{
+    card_selector::{CardSelector, MaybeEntry},
+    itemselector::ItemSelector,
+    OverlayEnum,
+};
 use crate::{overlays::card_selector::MyClosure, APP};
 use dioxus::prelude::*;
 use speki_core::{
-    collection::{Collection, CollectionId, DynCard},
+    collection::{Collection, CollectionId, DynCard, MaybeCard, MaybeDyn},
     Card,
 };
 use speki_dto::Item;
 use speki_web::CardEntry;
-use std::{
-    collections::{BTreeMap, BTreeSet},
-    fmt::Display,
-    sync::Arc,
-};
+use std::{collections::BTreeMap, fmt::Display, sync::Arc};
 use tracing::info;
 use uuid::Uuid;
 
@@ -37,13 +37,13 @@ other is the various dynamic things like, choose dependents of cards, choose oth
 #[derive(Clone, Eq, PartialEq)]
 pub struct DynEntry {
     name: String,
-    dy: DynCard,
-    cards: Vec<Arc<Card>>,
+    dy: MaybeDyn,
+    cards: Vec<MaybeCard>,
 }
 
 impl Display for DynEntry {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        if let DynCard::Card(_) = &self.dy {
+        if let MaybeDyn::Dyn(DynCard::Card(_)) = &self.dy {
             write!(f, "{}", &self.name)
         } else {
             let qty = self.cards.len();
@@ -52,7 +52,14 @@ impl Display for DynEntry {
     }
 }
 
-async fn name(dy: DynCard) -> String {
+async fn name(dy: MaybeDyn) -> String {
+    let dy = match dy {
+        MaybeDyn::Collection(id) => {
+            return APP.read().load_collection(id).await.name;
+        }
+        MaybeDyn::Dyn(dy) => dy,
+    };
+
     match dy {
         DynCard::Any => format!("all cards"),
         DynCard::Card(id) => {
@@ -71,20 +78,16 @@ async fn name(dy: DynCard) -> String {
             let card = APP.read().load_card(id).await.card.read().print().await;
             format!("rec dependents of {card}")
         }
-        DynCard::Collection(id) => {
-            let col = APP.read().load_collection(id).await;
-            format!("collection: {col}")
-        }
     }
 }
 
 impl DynEntry {
-    async fn new(dy: DynCard) -> Self {
+    async fn new(dy: MaybeDyn) -> Self {
         let provider = APP.read().inner().card_provider();
 
         let name = name(dy.clone()).await;
 
-        let cards = dy.evaluate(provider, Default::default()).await;
+        let cards = dy.evaluate(provider).await;
 
         Self { name, dy, cards }
     }
@@ -123,12 +126,13 @@ impl CollectionEditor {
         }
     }
 
-    pub fn push_entry(&mut self, card: DynCard) {
+    pub fn push_entry(&mut self, card: MaybeDyn) {
         info!("pushing entry... {:?}", card);
         self.col.write().dyncards.push(card.clone());
     }
 
-    pub fn expanded(&self) -> Resource<BTreeMap<Uuid, CardEntry>> {
+    pub fn expanded(&self) -> Resource<BTreeMap<Uuid, MaybeEntry>> {
+        info!("lets expand!");
         let selv = self.clone();
         ScopeId::APP.in_runtime(|| {
             let selv = selv.clone();
@@ -140,11 +144,19 @@ impl CollectionEditor {
                     for card in selv
                         .col
                         .read()
-                        .expand(APP.read().inner().card_provider.clone(), Default::default())
+                        .expand_nodeps(APP.read().inner().card_provider.clone())
                         .await
                         .into_iter()
                     {
-                        out.insert(card.id(), CardEntry::new(Arc::unwrap_or_clone(card)));
+                        let id = card.id();
+                        let entry = match card {
+                            MaybeCard::Id(id) => MaybeEntry::new(id),
+                            MaybeCard::Card(card) => {
+                                MaybeEntry::from_card(Arc::unwrap_or_clone(card))
+                            }
+                        };
+
+                        out.insert(id, entry);
                     }
 
                     out
@@ -210,7 +222,7 @@ pub fn ChoiceRender(props: CollectionEditor) -> Element {
 
         button {
             onclick: move |_|{
-                col.clone().write().insert_dyn(DynCard::Any);
+                col.clone().write().insert_dyn(MaybeDyn::Dyn(DynCard::Any));
             },
             "any"
         }
@@ -347,7 +359,8 @@ mod entry_selector {
     pub fn dependencies(col: Signal<Collection>) -> CardSelector {
         let f = MyClosure::new(move |card: CardEntry| {
             let mut col = col.clone();
-            col.write().insert_dyn(DynCard::RecDependents(card.id()));
+            col.write()
+                .insert_dyn(MaybeDyn::Dyn(DynCard::RecDependents(card.id())));
             async move {}
         });
 
@@ -359,7 +372,8 @@ mod entry_selector {
     pub fn instances(col: Signal<Collection>) -> CardSelector {
         let f = MyClosure::new(move |card: CardEntry| {
             let mut col = col.clone();
-            col.write().insert_dyn(DynCard::Instances(card.id()));
+            col.write()
+                .insert_dyn(MaybeDyn::Dyn(DynCard::Instances(card.id())));
             async move {}
         });
 
@@ -373,7 +387,7 @@ mod entry_selector {
 
         let f = Box::new(move |chosen_col: Collection| {
             let mut col = col.clone();
-            col.write().insert_dyn(DynCard::Collection(chosen_col.id));
+            col.write().insert_dyn(MaybeDyn::Collection(chosen_col.id));
         });
 
         ItemSelector::new(cols, Arc::new(f))
@@ -382,7 +396,8 @@ mod entry_selector {
     pub fn card(col: Signal<Collection>) -> CardSelector {
         let f = MyClosure::new(move |card: CardEntry| {
             let mut col = col.clone();
-            col.write().insert_dyn(DynCard::Card(card.id()));
+            col.write()
+                .insert_dyn(MaybeDyn::Dyn(DynCard::Card(card.id())));
             async move {}
         });
 

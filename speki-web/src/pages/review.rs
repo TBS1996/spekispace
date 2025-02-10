@@ -156,10 +156,7 @@ impl RecallDist {
     async fn new(col: Collection) -> Self {
         let mut selv = Self::default();
 
-        for card in col
-            .expand(APP.read().inner().card_provider(), Default::default())
-            .await
-        {
+        for card in col.expand(APP.read().inner().card_provider()).await {
             *match card.recall_rate() {
                 Some(rate) => {
                     if rate < 0.05 {
@@ -235,7 +232,7 @@ fn RenderCols(
                                 let filter = filter.clone();
                                 spawn(async move {
                                     let col = APP.read().load_collection(col.id).await;
-                                    let cards = col.expand(APP.read().inner().card_provider.clone(), Default::default()).await.into_iter().map(|card|speki_web::CardEntry::new(Arc::unwrap_or_clone(card))).collect();
+                                    let cards = col.expand(APP.read().inner().card_provider.clone()).await.into_iter().map(|card|speki_web::CardEntry::new(Arc::unwrap_or_clone(card))).collect();
                                     let session = OverlayEnum::Review(ReviewState::new_with_filter(cards, filter).await);
                                     overlay.clone().set(Some(session));
                                 });
