@@ -206,6 +206,8 @@ pub struct FilterItem {
 }
 
 impl Item for FilterItem {
+    type PreviousVersion = Self;
+
     fn deleted(&self) -> bool {
         self.deleted
     }

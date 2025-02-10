@@ -29,6 +29,8 @@ impl Metadata {
 }
 
 impl Item for Metadata {
+    type PreviousVersion = Self;
+
     fn deleted(&self) -> bool {
         false
     }

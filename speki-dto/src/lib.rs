@@ -37,6 +37,8 @@ pub enum ModifiedSource {
 }
 
 pub trait Item: Serialize + DeserializeOwned + Sized + Send + Clone + Debug + 'static {
+    type PreviousVersion: Item + Into<Self>;
+
     fn deleted(&self) -> bool;
     fn set_delete(&mut self);
 
@@ -61,7 +63,7 @@ pub trait Item: Serialize + DeserializeOwned + Sized + Send + Clone + Debug + 's
         toml::to_string(self).unwrap()
     }
 
-    fn deserialize(_id: Uuid, s: String) -> Self {
+    fn item_deserialize(_id: Uuid, s: String) -> Self {
         if let Ok(item) = toml::from_str(&s) {
             return item;
         } else {
@@ -78,8 +80,8 @@ pub trait Item: Serialize + DeserializeOwned + Sized + Send + Clone + Debug + 's
         if let Ok(item) = serde_json::from_str(&s) {
             return item;
         } else {
-            let x = toml::from_str::<Self>(&s);
-            panic!(
+            let x = serde_json::from_str::<Self>(&s);
+            dbg!(
                 "{}",
                 format!(
                     "unable to deserialize item of type {}: with id: {_id}:  {x:?} input: {s}",
@@ -87,6 +89,15 @@ pub trait Item: Serialize + DeserializeOwned + Sized + Send + Clone + Debug + 's
                 )
             );
         };
+
+        if std::any::TypeId::of::<Self>() == std::any::TypeId::of::<Self::PreviousVersion>() {
+            panic!(
+                "Unable to deserialize item of type {}: Input: {s}",
+                Self::identifier()
+            );
+        }
+
+        Self::PreviousVersion::item_deserialize(_id, s).into()
     }
 
     fn identifier() -> &'static str;
@@ -417,7 +428,7 @@ pub trait SpekiProvider<T: Item>: Sync {
         let mut outmap = HashMap::new();
 
         for (key, val) in map {
-            let val = <T as Item>::deserialize(key, val.content);
+            let val = <T as Item>::item_deserialize(key, val.content);
             if !val.deleted() {
                 outmap.insert(key, val);
             }
@@ -431,7 +442,7 @@ pub trait SpekiProvider<T: Item>: Sync {
         let mut outmap = HashMap::new();
 
         for (key, val) in map {
-            let val = <T as Item>::deserialize(key, val.content);
+            let val = <T as Item>::item_deserialize(key, val.content);
             outmap.insert(key, val);
         }
         outmap

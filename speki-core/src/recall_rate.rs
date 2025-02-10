@@ -176,6 +176,8 @@ pub struct Review {
 }
 
 impl Item for History {
+    type PreviousVersion = Self;
+
     fn last_modified(&self) -> Duration {
         self.reviews
             .iter()
@@ -237,7 +239,7 @@ impl Item for History {
 
     fn set_delete(&mut self) {}
 
-    fn deserialize(id: Uuid, s: String) -> Self {
+    fn item_deserialize(id: Uuid, s: String) -> Self {
         if let Ok(history) = toml::from_str(&s) {
             history
         } else if let Ok(history) = serde_json::from_str(&s) {

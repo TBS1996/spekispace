@@ -29,6 +29,8 @@ impl Audio {
 pub type AudioId = Uuid;
 
 impl Item for Audio {
+    type PreviousVersion = Self;
+
     fn deleted(&self) -> bool {
         self.deleted
     }

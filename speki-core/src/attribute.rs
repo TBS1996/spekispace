@@ -120,6 +120,8 @@ pub struct AttributeDTO {
 pub type AttributeId = Uuid;
 
 impl Item for AttributeDTO {
+    type PreviousVersion = Self;
+
     fn last_modified(&self) -> Duration {
         self.last_modified
     }

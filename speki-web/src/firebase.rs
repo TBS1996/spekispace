@@ -102,7 +102,7 @@ impl<T: Item> Syncable<T> for FirestoreProvider {
         let mut outmap = HashMap::default();
 
         for (key, val) in records.into_iter() {
-            let item: T = <T as Item>::deserialize(key, val.content);
+            let item: T = <T as Item>::item_deserialize(key, val.content);
             outmap.insert(key, item);
         }
 

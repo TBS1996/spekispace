@@ -151,6 +151,8 @@ impl DynCard {
 }
 
 impl Item for Collection {
+    type PreviousVersion = Self;
+
     fn deleted(&self) -> bool {
         self.deleted
     }

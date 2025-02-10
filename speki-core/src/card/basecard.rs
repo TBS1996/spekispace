@@ -532,6 +532,8 @@ struct RawCard {
 }
 
 impl Item for BaseCard {
+    type PreviousVersion = Self;
+
     fn last_modified(&self) -> Duration {
         self.last_modified
     }
