@@ -108,6 +108,25 @@ impl CardSelector {
                     let mut sorted_cards: Vec<_> = matching_cards.into_iter().collect();
                     sorted_cards.sort_by(|a, b| b.1.cmp(&a.1));
 
+                    if search.read().is_empty() {
+                        sorted_cards = cards.iter().take(100).map(|id| (*id.0, 0)).collect();
+                    } else if search.read().chars().count() == 1 {
+                        let mut sorted = vec![];
+                        let searched = search.cloned().to_lowercase();
+                        for card in cards.iter() {
+                            if sorted.len() > 100 {
+                                break;
+                            }
+                            if let Some(s) = card.1.front.as_ref() {
+                                if s.to_lowercase().contains(&searched) {
+                                    sorted.push((*card.0, 0));
+                                }
+                            }
+                        }
+
+                        sorted_cards = sorted;
+                    }
+
                     for card in sorted_cards {
                         let card = cards.get(&card.0).unwrap();
                         if filtered_cards.len() > 100 {
@@ -129,9 +148,6 @@ impl CardSelector {
                             }
                         }
                     }
-
-                    //                    filtered_cards.sort_by_key(|card| card.card.read().last_modified());
-                    //                    filtered_cards.reverse();
 
                     filtered_cards
                 }
