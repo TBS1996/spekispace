@@ -1,5 +1,5 @@
 use std::{
-    collections::{BTreeSet, HashMap, HashSet},
+    collections::{BTreeMap, BTreeSet, HashMap, HashSet},
     fmt::Debug,
     time::Duration,
 };
@@ -340,12 +340,21 @@ pub trait Indexable<T: Item>: SpekiProvider<T> {
     }
 
     async fn index_all(&self) {
+        info!("indexing all!");
+        let mut indices: BTreeMap<String, BTreeSet<Uuid>> = BTreeMap::default();
+
         for item in self.load_all().await.values() {
             info!("indexing id: {}", item.id());
             for index in item.indices() {
-                self.save_index(index, item.id()).await;
+                indices.entry(index).or_default().insert(item.id());
             }
         }
+
+        for (word, indices) in indices {
+            self.save_indices(word, indices).await;
+        }
+
+        info!("done indexing!");
     }
 
     async fn update_item(&self, item: T) {

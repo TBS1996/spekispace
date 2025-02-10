@@ -117,13 +117,6 @@ fn cyan_color() -> String {
     String::from("#00FFFF")
 }
 
-enum Inner {
-    Uinit(CardId),
-    Init(CardEntry),
-}
-
-struct LazyCard(Arc<std::sync::RwLock<Inner>>);
-
 #[derive(Clone, Debug)]
 pub struct CardEntry {
     pub front: Resource<String>,
