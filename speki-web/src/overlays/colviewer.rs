@@ -131,7 +131,7 @@ impl CollectionEditor {
         self.col.write().dyncards.push(card.clone());
     }
 
-    pub fn expanded(&self) -> Resource<BTreeMap<Uuid, MaybeEntry>> {
+    pub fn expanded(&self) -> Resource<BTreeMap<Uuid, Signal<MaybeEntry>>> {
         info!("lets expand!");
         let selv = self.clone();
         ScopeId::APP.in_runtime(|| {
@@ -150,13 +150,13 @@ impl CollectionEditor {
                     {
                         let id = card.id();
                         let entry = match card {
-                            MaybeCard::Id(id) => MaybeEntry::new(id),
+                            MaybeCard::Id(id) => MaybeEntry::No(id),
                             MaybeCard::Card(card) => {
-                                MaybeEntry::from_card(Arc::unwrap_or_clone(card))
+                                MaybeEntry::Yes(CardEntry::new(Arc::unwrap_or_clone(card)))
                             }
                         };
 
-                        out.insert(id, entry);
+                        out.insert(id, Signal::new_in_scope(entry, ScopeId::APP));
                     }
 
                     out

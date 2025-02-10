@@ -28,77 +28,20 @@ pub fn overlay_card_viewer(overlay: Signal<Option<OverlayEnum>>) -> MyClosure {
 }
 
 #[derive(Clone)]
-pub struct MaybeEntry {
-    front: Resource<String>,
-    card: Signal<MaybeCard>,
-}
-
-impl Display for MaybeEntry {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        self.init();
-        write!(f, "{}", self.front.cloned().unwrap_or_default())
-    }
+pub enum MaybeEntry {
+    Yes(CardEntry),
+    No(CardId),
 }
 
 impl MaybeEntry {
-    pub fn from_card(card: Card) -> Self {
-        let card = Signal::new_in_scope(
-            MaybeCard::Yes(Signal::new_in_scope(card, ScopeId::APP)),
-            ScopeId::APP,
-        );
-
-        let front = ScopeId::APP.in_runtime(move || {
-            let card = card.clone();
-
-            use_resource(move || async move {
-                match *card.read() {
-                    MaybeCard::No(id) => id.to_string(),
-                    MaybeCard::Yes(ref card) => card.read().print().await,
-                }
-            })
-        });
-
-        Self { front, card }
-    }
-
-    pub fn new(id: CardId) -> Self {
-        let card = Signal::new_in_scope(MaybeCard::No(id), ScopeId::APP);
-
-        let front = ScopeId::APP.in_runtime(move || {
-            let card = card.clone();
-
-            use_resource(move || async move {
-                match *card.read() {
-                    MaybeCard::No(id) => id.to_string(),
-                    MaybeCard::Yes(ref card) => card.read().print().await,
-                }
-            })
-        });
-
-        Self { front, card }
-    }
-
-    pub fn init(&self) {
-        let id = match self.card.cloned() {
-            MaybeCard::Yes(_) => return,
-            MaybeCard::No(id) => id,
+    pub async fn entry(&mut self) -> Option<CardEntry> {
+        let id = match self {
+            Self::Yes(card) => return Some(card.clone()),
+            Self::No(id) => id,
         };
 
-        let card = self.card.clone();
-        spawn(async move {
-            let thecard = APP.read().load_card(id).await.card;
-            card.clone().set(MaybeCard::Yes(thecard.clone()));
-        });
-    }
-
-    pub async fn card(&self) -> Option<Signal<Card>> {
-        let id = match self.card.cloned() {
-            MaybeCard::Yes(card) => return Some(card),
-            MaybeCard::No(id) => id,
-        };
-
-        let card = APP.read().try_load_card(id).await?.card;
-        self.card.clone().set(MaybeCard::Yes(card.clone()));
+        let card = APP.read().try_load_card(*id).await?;
+        *self = Self::Yes(card.clone());
         Some(card)
     }
 }
@@ -114,7 +57,6 @@ pub struct CardSelector {
     pub title: String,
     pub search: Signal<String>,
     pub on_card_selected: MyClosure,
-    pub cards: Resource<Vec<CardEntry>>,
     pub allow_new: bool,
     pub done: Signal<bool>,
     pub dependents: Signal<Vec<Node>>,
@@ -123,7 +65,8 @@ pub struct CardSelector {
     pub filtermemo: Memo<Option<CardFilter>>,
     pub overlay: Signal<Option<OverlayEnum>>,
     pub collection: CollectionEditor,
-    pub col_cards: Resource<BTreeMap<Uuid, MaybeEntry>>,
+    pub cards: Resource<Vec<CardEntry>>,
+    pub col_cards: Resource<BTreeMap<Uuid, Signal<MaybeEntry>>>,
 }
 
 impl Default for CardSelector {
@@ -204,10 +147,14 @@ impl CardSelector {
                         let mut sorted = vec![];
                         let searched = search.cloned().to_lowercase();
                         for card in cards.iter() {
+                            let Some(entry) = card.1.write_silent().entry().await else {
+                                continue;
+                            };
+
                             if sorted.len() > 100 {
                                 break;
                             }
-                            if let Some(s) = card.1.front.as_ref() {
+                            if let Some(s) = entry.front.cloned().map(|s| s.to_lowercase()) {
                                 if s.to_lowercase().contains(&searched) {
                                     sorted.push((*card.0, 0));
                                 }
@@ -219,7 +166,7 @@ impl CardSelector {
 
                     for card in sorted_cards {
                         let entry = cards.get(&card.0).unwrap();
-                        let Some(card) = entry.card().await else {
+                        let Some(card) = entry.write_silent().entry().await else {
                             continue;
                         };
 
@@ -228,18 +175,17 @@ impl CardSelector {
                         }
 
                         if allowed_cards.is_empty()
-                            || allowed_cards
-                                .read()
-                                .contains(&CardTy::from_ctype(card.read().get_ty().fieldless()))
+                            || allowed_cards.read().contains(&CardTy::from_ctype(
+                                card.card.read().get_ty().fieldless(),
+                            ))
                         {
                             let flag = match filtermemo.cloned() {
-                                Some(filter) => filter.filter(Arc::new(card.cloned())).await,
+                                Some(filter) => filter.filter(Arc::new(card.card.cloned())).await,
                                 None => true,
                             };
 
                             if flag {
-                                let entry = CardEntry::new(card.cloned());
-                                filtered_cards.push(entry);
+                                filtered_cards.push(card);
                             }
                         }
                     }
@@ -499,7 +445,6 @@ fn TableRender(
                                         closure.call(card).await;
                                         done.clone().set(true);
                                     });
-
                                 },
 
                                 td { class: "border border-gray-300 px-4 py-2 w-2/3", "{card}" }
