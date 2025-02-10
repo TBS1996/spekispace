@@ -1,9 +1,4 @@
-use std::{
-    collections::{BTreeMap, BTreeSet},
-    future::Future,
-    pin::Pin,
-    sync::Arc,
-};
+use std::{collections::BTreeMap, future::Future, pin::Pin, sync::Arc};
 
 use dioxus::prelude::*;
 use speki_core::{cardfilter::CardFilter, collection::DynCard};
@@ -41,7 +36,7 @@ pub struct CardSelector {
     pub filtermemo: Memo<Option<CardFilter>>,
     pub overlay: Signal<Option<OverlayEnum>>,
     pub collection: CollectionEditor,
-    pub col_cards: Resource<BTreeSet<CardEntry>>,
+    pub col_cards: Resource<BTreeMap<Uuid, CardEntry>>,
 }
 
 impl Default for CardSelector {
@@ -93,14 +88,9 @@ impl CardSelector {
                     let allowed_cards = allowed_cards.clone();
                     let mut filtered_cards: Vec<CardEntry> = Default::default();
 
-                    let cards = cards.cloned().unwrap_or_default();
-                    let mut thecards = BTreeMap::default();
-
-                    for card in cards {
-                        thecards.insert(card.id(), card);
-                    }
-
-                    let mut cards = thecards;
+                    let Some(cards) = cards.as_ref() else {
+                        return filtered_cards;
+                    };
 
                     let mut matching_cards: BTreeMap<Uuid, u32> = BTreeMap::new();
                     let indexer = APP.read().inner().provider.cards.clone();
@@ -119,7 +109,7 @@ impl CardSelector {
                     sorted_cards.sort_by(|a, b| b.1.cmp(&a.1));
 
                     for card in sorted_cards {
-                        let card = cards.remove(&card.0).unwrap();
+                        let card = cards.get(&card.0).unwrap();
                         if filtered_cards.len() > 100 {
                             break;
                         }
@@ -135,7 +125,7 @@ impl CardSelector {
                             };
 
                             if flag {
-                                filtered_cards.push(card);
+                                filtered_cards.push(card.clone());
                             }
                         }
                     }

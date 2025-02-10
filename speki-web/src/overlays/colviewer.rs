@@ -7,8 +7,13 @@ use speki_core::{
 };
 use speki_dto::Item;
 use speki_web::CardEntry;
-use std::{collections::BTreeSet, fmt::Display, sync::Arc};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    fmt::Display,
+    sync::Arc,
+};
 use tracing::info;
+use uuid::Uuid;
 
 /*
 
@@ -123,7 +128,7 @@ impl CollectionEditor {
         self.col.write().dyncards.push(card.clone());
     }
 
-    pub fn expanded(&self) -> Resource<BTreeSet<CardEntry>> {
+    pub fn expanded(&self) -> Resource<BTreeMap<Uuid, CardEntry>> {
         let selv = self.clone();
         ScopeId::APP.in_runtime(|| {
             let selv = selv.clone();
@@ -131,7 +136,7 @@ impl CollectionEditor {
                 let selv = selv.clone();
 
                 async move {
-                    let mut out = BTreeSet::default();
+                    let mut out = BTreeMap::default();
                     for card in selv
                         .col
                         .read()
@@ -139,7 +144,7 @@ impl CollectionEditor {
                         .await
                         .into_iter()
                     {
-                        out.insert(CardEntry::new(Arc::unwrap_or_clone(card)));
+                        out.insert(card.id(), CardEntry::new(Arc::unwrap_or_clone(card)));
                     }
 
                     out
