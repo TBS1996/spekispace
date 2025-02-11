@@ -1,5 +1,5 @@
 use std::{
-    collections::{BTreeSet, HashMap, HashSet},
+    collections::{BTreeMap, BTreeSet, HashMap, HashSet},
     fmt::Debug,
     future::Future,
     pin::Pin,
@@ -10,6 +10,7 @@ use std::{
 use dioxus_logger::tracing::{info, trace};
 use eyre::Result;
 use speki_dto::Item;
+use uuid::Uuid;
 
 use crate::{
     card::{BaseCard, CardId, RecallRate},
@@ -29,6 +30,7 @@ pub struct CardProvider {
     time_provider: TimeGetter,
     recaller: Recaller,
     check_modified: bool,
+    indices: Arc<RwLock<BTreeMap<String, BTreeSet<Uuid>>>>,
 }
 
 impl Debug for CardProvider {
@@ -61,6 +63,16 @@ impl CardProvider {
         }
 
         info!("done invalidating card with deps");
+    }
+
+    pub async fn get_indices(&self, word: String) -> BTreeSet<Uuid> {
+        if let Some(set) = self.indices.read().unwrap().get(&word) {
+            return set.clone();
+        }
+
+        let set = self.provider.cards.load_indices(word.clone()).await;
+        self.indices.write().unwrap().insert(word, set.clone());
+        set
     }
 
     pub async fn invalidate_card(&self, id: CardId) {
@@ -357,6 +369,7 @@ impl CardProvider {
             provider,
             recaller,
             check_modified: false,
+            indices: Default::default(),
         }
     }
 
