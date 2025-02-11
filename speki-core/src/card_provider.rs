@@ -385,8 +385,21 @@ impl CardProvider {
             bigrams
         }
 
+        let mut futs = vec![];
+
         for bigram in generate_ascii_bigrams() {
-            self.get_indices(bigram).await;
+            let fut = async move {
+                (
+                    bigram.clone(),
+                    self.provider.cards.load_indices(bigram.clone()).await,
+                )
+            };
+            futs.push(fut);
+        }
+
+        let mut guard = self.indices.write().unwrap();
+        for (word, set) in futures::future::join_all(futs).await {
+            guard.insert(word, set);
         }
     }
 
