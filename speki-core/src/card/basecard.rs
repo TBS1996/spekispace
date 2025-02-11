@@ -531,6 +531,10 @@ struct RawCard {
     back_audio: Option<AudioId>,
 }
 
+pub fn normalize_string(str: &str) -> String {
+    deunicode::deunicode(str).to_lowercase()
+}
+
 impl Item for BaseCard {
     type PreviousVersion = Self;
 
@@ -544,7 +548,7 @@ impl Item for BaseCard {
         s.push_str(&raw.data.front.unwrap_or_default());
         s.push_str(" ");
         s.push_str(&raw.data.back.map(|b| b.to_string()).unwrap_or_default());
-        s.to_lowercase()
+        normalize_string(&s)
     }
 
     fn set_last_modified(&mut self, time: Duration) {

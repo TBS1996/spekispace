@@ -22,6 +22,7 @@ tracing-subscriber.workspace = true
 async-recursion.workspace = true
 
 async-trait.workspace = true
+deunicode = "1.6.0"
 
 [dependencies.gkquad]
 version = "0.0.4"

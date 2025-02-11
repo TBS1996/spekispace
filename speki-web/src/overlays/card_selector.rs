@@ -2,7 +2,7 @@ use std::{collections::BTreeMap, fmt::Display, future::Future, pin::Pin, sync::A
 
 use dioxus::prelude::*;
 use speki_core::{
-    card::CardId,
+    card::{normalize_string, CardId},
     cardfilter::CardFilter,
     collection::{DynCard, MaybeDyn},
     Card,
@@ -127,8 +127,9 @@ impl CardSelector {
 
                     let mut matching_cards: BTreeMap<Uuid, u32> = BTreeMap::new();
                     let indexer = APP.read().inner().provider.cards.clone();
+                    let search = normalize_string(&search.cloned());
 
-                    for word in bigrams(&search.cloned().to_lowercase()) {
+                    for word in bigrams(&search) {
                         let indices = indexer.load_indices(word.to_string()).await;
 
                         for id in indices {
@@ -141,11 +142,10 @@ impl CardSelector {
                     let mut sorted_cards: Vec<_> = matching_cards.into_iter().collect();
                     sorted_cards.sort_by(|a, b| b.1.cmp(&a.1));
 
-                    if search.read().is_empty() {
+                    if search.is_empty() {
                         sorted_cards = cards.iter().take(100).map(|id| (*id.0, 0)).collect();
-                    } else if search.read().chars().count() == 1 {
+                    } else if search.chars().count() == 1 {
                         let mut sorted = vec![];
-                        let searched = search.cloned().to_lowercase();
                         for card in cards.iter() {
                             let Some(entry) = card.1.write_silent().entry().await else {
                                 continue;
@@ -155,7 +155,7 @@ impl CardSelector {
                                 break;
                             }
                             if let Some(s) = entry.front.cloned().map(|s| s.to_lowercase()) {
-                                if s.to_lowercase().contains(&searched) {
+                                if s.to_lowercase().contains(&search) {
                                     sorted.push((*card.0, 0));
                                 }
                             }

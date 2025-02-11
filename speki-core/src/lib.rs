@@ -4,7 +4,7 @@ use audio::Audio;
 use card::{BackSide, BaseCard, CardId, RecallRate};
 use card_provider::CardProvider;
 use cardfilter::{CardFilter, FilterItem};
-use collection::{Collection, CollectionId, DynCard};
+use collection::{Collection, CollectionId};
 use dioxus_logger::tracing::info;
 use eyre::Result;
 use metadata::Metadata;
