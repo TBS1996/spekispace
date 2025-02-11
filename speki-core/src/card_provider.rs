@@ -372,6 +372,24 @@ impl CardProvider {
         }
     }
 
+    pub async fn cache_ascii_indices(&self) {
+        fn generate_ascii_bigrams() -> Vec<String> {
+            let mut bigrams = Vec::with_capacity(26 * 26);
+
+            for first in b'a'..=b'z' {
+                for second in b'a'..=b'z' {
+                    bigrams.push(format!("{}{}", first as char, second as char));
+                }
+            }
+
+            bigrams
+        }
+
+        for bigram in generate_ascii_bigrams() {
+            self.get_indices(bigram).await;
+        }
+    }
+
     pub fn time_provider(&self) -> TimeGetter {
         self.time_provider.clone()
     }
