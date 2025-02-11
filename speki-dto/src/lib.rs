@@ -372,7 +372,6 @@ pub trait Indexable<T: Item>: SpekiProvider<T> {
     }
 
     async fn update_item(&self, item: T) {
-        info!("updating!!!!!!!!!!!!!!");
         let old_indices = self
             .load_item(item.id())
             .await

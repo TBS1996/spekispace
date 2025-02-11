@@ -348,9 +348,28 @@ impl CardProvider {
     }
 
     pub async fn save_card(&self, card: Card) {
+        let id = card.id();
         self.update_cache(Arc::new(card.clone()));
         self.provider.metadata.save_item(card.meta()).await;
+        let mut invalidated_indices = BTreeSet::new();
+
+        if let Some(old_base) = self.provider.cards.load_item(card.id()).await {
+            for idx in old_base.indices() {
+                invalidated_indices.insert(idx);
+            }
+        }
+
         self.provider.cards.update_item(card.base).await;
+
+        if let Some(new_base) = self.provider.cards.load_item(id).await {
+            for idx in new_base.indices() {
+                invalidated_indices.insert(idx);
+            }
+        }
+
+        for idx in invalidated_indices {
+            self.indices.write().unwrap().remove(&idx);
+        }
     }
 
     pub fn time_provider(&self) -> TimeGetter {
