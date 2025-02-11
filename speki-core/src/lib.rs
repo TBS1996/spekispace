@@ -154,7 +154,9 @@ impl App {
         self.card_provider.fill_cache().await;
         let elapsed = self.time_provider.current_time() - start;
         info!("cache filled in {:.4} seconds!", elapsed.as_secs_f32());
+    }
 
+    pub async fn fill_index_cache(&self) {
         info!("filling ascii bigram indices");
         let start = self.time_provider.current_time();
         self.card_provider.cache_ascii_indices().await;

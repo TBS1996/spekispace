@@ -54,7 +54,7 @@ impl App {
     }
 
     pub async fn fill_cache(&self) {
-        self.0.fill_cache().await;
+        self.0.fill_index_cache().await;
     }
 
     pub async fn load_all(&self, filter: Option<CardFilter>) -> Vec<CardEntry> {

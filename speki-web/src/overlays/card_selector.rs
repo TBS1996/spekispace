@@ -102,6 +102,9 @@ impl CardSelector {
         });
 
         let search = Signal::new_in_scope(String::new(), ScopeId::APP);
+        let normalized_search =
+            ScopeId::APP.in_runtime(move || use_memo(move || normalize_string(&search.read())));
+
         let overlay: Signal<Option<OverlayEnum>> =
             Signal::new_in_scope(Default::default(), ScopeId::APP);
 
@@ -112,8 +115,11 @@ impl CardSelector {
         let cards = ScopeId::APP.in_runtime(|| {
             let allowed = allowed.clone();
             let cards = col_cards.clone();
+            let search = normalized_search.clone();
             use_resource(move || {
                 let allowed_cards = allowed.clone();
+                let search = search.cloned();
+
                 async move {
                     let allowed_cards = allowed_cards.clone();
                     let mut filtered_cards: Vec<CardEntry> = Default::default();
@@ -127,9 +133,8 @@ impl CardSelector {
 
                     let mut matching_cards: BTreeMap<Uuid, u32> = BTreeMap::new();
                     let indexer = APP.read().inner().provider.cards.clone();
-                    let search = normalize_string(&search.cloned());
 
-                    for word in bigrams(&search) {
+                    for word in bigrams(search.as_ref()) {
                         let indices = indexer.load_indices(word.to_string()).await;
 
                         for id in indices {
