@@ -1,4 +1,4 @@
-use std::{collections::HashMap, fmt::Debug, sync::Arc, time::Duration};
+use std::{collections::{BTreeMap, BTreeSet, HashMap}, fmt::Debug, sync::{Arc, RwLock}, time::Duration};
 
 use audio::Audio;
 use card::{BackSide, BaseCard, CardId, RecallRate};
@@ -10,7 +10,7 @@ use dioxus_logger::tracing::info;
 use eyre::Result;
 use metadata::Metadata;
 use recall_rate::History;
-use speki_dto::{Indexable, SpekiProvider, TimeProvider};
+use speki_dto::{Indexable, Item, Record, SpekiProvider, TimeProvider};
 use tracing::trace;
 
 mod attribute;
@@ -32,6 +32,7 @@ pub use card::{
 pub use common::current_time;
 pub use omtrent::TimeStamp;
 pub use recall_rate::SimpleRecall;
+use uuid::Uuid;
 
 pub trait RecallCalc {
     fn recall_rate(&self, reviews: &History, current_unix: Duration) -> Option<RecallRate>;
@@ -74,6 +75,134 @@ pub struct Provider {
     pub cardfilter: Arc<Box<dyn SpekiProvider<FilterItem>>>,
     pub audios: Arc<Box<dyn SpekiProvider<Audio>>>,
     pub dependents: Arc<Box<dyn SpekiProvider<Dependents>>>,
+}
+
+
+#[derive(Clone)]
+pub struct MemIndex{
+    provider: Arc<Box<dyn Indexable<BaseCard> + Send >>, 
+    indices: Arc<RwLock<BTreeMap<String, BTreeSet<Uuid>>>>,
+}
+
+impl MemIndex {
+    pub fn new(provider: Arc<Box<dyn Indexable<BaseCard> + Send >>) -> Self {
+        Self {
+            provider,
+            indices: Default::default(),
+        }
+    }
+}
+
+
+#[async_trait::async_trait(?Send)]
+impl<T: Item + Send + Sync + 'static> SpekiProvider<T> for MemIndex {
+
+    async fn load_record(&self, id: Uuid) -> Option<Record> {self.provider.load_record(id).await}
+    async fn load_all_records(&self) -> HashMap<Uuid, Record> {
+        self.provider.load_all_records().await
+    }
+    async fn save_record(&self, record: Record) {
+        self.provider.save_record(record).await
+    }
+    async fn current_time(&self) -> Duration {
+        self.provider.current_time().await
+    }
+}
+
+
+#[async_trait::async_trait(?Send)]
+impl<T: Item + Send + Sync + 'static> Indexable<T> for MemIndex{
+    async fn load_indices(&self, word: String) -> BTreeSet<Uuid> {
+        if let Some(indices) = self.indices.read().unwrap().get(&word) {
+            return indices.clone();
+        }
+
+        let indices = self.provider.load_indices(word.clone()).await;
+        self.indices.write().unwrap().insert(word, indices.clone());
+        indices
+
+    }
+
+    async fn save_indices(&self, word: String, indices: BTreeSet<Uuid>){
+        self.indices.write().unwrap().insert(word.clone(), indices.clone());
+        self.provider.save_indices(word, indices).await;
+    }
+}
+
+
+#[derive(Clone)]
+pub struct MemProvider<T: Item + Send + 'static>{
+    provider: Arc<Box<dyn SpekiProvider<T> + Send >>, 
+    cache: Arc<RwLock<BTreeMap<Uuid, T>>>,
+}
+
+impl<T: Item + Send + 'static> MemProvider<T> {
+    pub fn new(provider: Arc<Box<dyn SpekiProvider<T> + Send >>) -> Self {
+        Self {
+            provider,
+            cache: Default::default(),
+        }
+    }
+}
+
+#[async_trait::async_trait(?Send)]
+impl<T: Item + Send + Sync + 'static> SpekiProvider<T> for MemProvider<T> {
+    async fn current_time(&self) -> Duration {
+        self.provider.current_time().await
+    }
+
+    async fn load_record(&self, id: Uuid) -> Option<Record> {
+        trace!("mem load record: {id}");
+        self.provider.load_record(id).await
+    }
+
+    async fn load_all_records(&self) -> HashMap<Uuid, Record> {
+        trace!("ty: {} loading all records", T::identifier());
+        self.provider.load_all_records().await
+    }
+
+    async fn save_record(&self, record: Record) {
+        trace!("ty: {} save record", T::identifier());
+        self.provider.save_record(record).await;
+    }
+
+    async fn save_records(&self, records: Vec<Record>) {
+        for record in records {
+            self.save_record(record).await;
+        }
+    }
+
+    async fn load_ids(&self) -> Vec<Uuid> {
+        trace!("ty: {} loading ids", T::identifier());
+        self.load_all_records().await.into_keys().collect()
+    }
+
+    async fn load_item(&self, id: Uuid) -> Option<T> {
+        trace!("ty: {} loading id {id}", T::identifier());
+        if let Some(item) = self.cache.read().unwrap().get(&id).cloned() {
+        trace!("ty: {} loading id {id} cache hit", T::identifier());
+            return Some(item);
+        };
+        trace!("ty: {} loading id {id} cache miss", T::identifier());
+
+        if let Some(item) = self.provider.load_item(id).await {
+            trace!("ty: {} loading id {id} loaded item from inner provider", T::identifier());
+            self.cache.write().unwrap().insert(id, item.clone());
+            Some(item)
+        } else {
+            trace!("ty: {} loading id {id} did not load item from inner provider", T::identifier());
+            None
+        }
+
+    }
+
+    async fn save_item(&self, mut item: T) {
+        item.set_last_modified(self.current_time().await);
+        item.set_local_source();
+        self.cache.write().unwrap().insert(item.id(), item.clone());
+        let record: Record = item.into();
+        self.save_record(record).await;
+    }
 }
 
 pub type Recaller = Arc<Box<dyn RecallCalc + Send>>;
@@ -123,16 +252,16 @@ impl App {
         let recaller: Recaller = Arc::new(Box::new(recall_calc));
 
         let provider = Provider {
-            cards: Arc::new(Box::new(card_provider)),
-            reviews: Arc::new(Box::new(history_provider)),
-            attrs: Arc::new(Box::new(attr_provider)),
+            cards: Arc::new(Box::new(MemIndex::new(Arc::new(Box::new(card_provider))))),
+            reviews: Arc::new(Box::new(MemProvider::new(Arc::new(Box::new(history_provider))))),
+            attrs: Arc::new(Box::new(MemProvider::new(Arc::new(Box::new(attr_provider))))),
             collections: CollectionProvider {
-                inner: Arc::new(Box::new(collections_provider)),
+                inner: Arc::new(Box::new(MemProvider::new(Arc::new(Box::new(collections_provider))))),
             },
-            metadata: Arc::new(Box::new(meta_provider)),
-            cardfilter: Arc::new(Box::new(filter_provider)),
-            audios: Arc::new(Box::new(audio_provider)),
-            dependents: Arc::new(Box::new(dependents_provider)),
+            metadata: Arc::new(Box::new(MemProvider::new(Arc::new(Box::new(meta_provider))))),
+            cardfilter: Arc::new(Box::new(MemProvider::new(Arc::new(Box::new(filter_provider))))),
+            audios: Arc::new(Box::new(MemProvider::new(Arc::new(Box::new(audio_provider))))),
+            dependents: Arc::new(Box::new(MemProvider::new(Arc::new(Box::new(dependents_provider))))),
         };
 
         let card_provider =
