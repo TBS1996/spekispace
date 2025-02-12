@@ -5,6 +5,7 @@ use card::{BackSide, BaseCard, CardId, RecallRate};
 use card_provider::CardProvider;
 use cardfilter::{CardFilter, FilterItem};
 use collection::{Collection, CollectionId};
+use dependents::Dependents;
 use dioxus_logger::tracing::info;
 use eyre::Result;
 use metadata::Metadata;
@@ -21,6 +22,7 @@ pub mod collection;
 mod common;
 pub mod metadata;
 pub mod recall_rate;
+pub mod dependents;
 
 pub use attribute::{Attribute, AttributeDTO, AttributeId};
 pub use card::{
@@ -71,6 +73,7 @@ pub struct Provider {
     pub metadata: Arc<Box<dyn SpekiProvider<Metadata>>>,
     pub cardfilter: Arc<Box<dyn SpekiProvider<FilterItem>>>,
     pub audios: Arc<Box<dyn SpekiProvider<Audio>>>,
+    pub dependents: Arc<Box<dyn SpekiProvider<Dependents>>>,
 }
 
 pub type Recaller = Arc<Box<dyn RecallCalc + Send>>;
@@ -90,7 +93,7 @@ impl Debug for App {
 }
 
 impl App {
-    pub fn new<A, B, C, D, E, F, G, H, I>(
+    pub fn new<A, B, C, D, E, F, G, H, I, J>(
         recall_calc: A,
         time_provider: B,
         card_provider: C,
@@ -100,6 +103,7 @@ impl App {
         meta_provider: G,
         filter_provider: H,
         audio_provider: I,
+        dependents_provider: J,
     ) -> Self
     where
         A: RecallCalc + 'static + Send,
@@ -111,6 +115,7 @@ impl App {
         G: SpekiProvider<Metadata> + 'static + Send,
         H: SpekiProvider<FilterItem> + 'static + Send,
         I: SpekiProvider<Audio> + 'static + Send,
+        J: SpekiProvider<Dependents> + 'static + Send,
     {
         info!("initialtize app");
 
@@ -127,6 +132,7 @@ impl App {
             metadata: Arc::new(Box::new(meta_provider)),
             cardfilter: Arc::new(Box::new(filter_provider)),
             audios: Arc::new(Box::new(audio_provider)),
+            dependents: Arc::new(Box::new(dependents_provider)),
         };
 
         let card_provider =
@@ -142,6 +148,7 @@ impl App {
 
     pub async fn index_all(&self) {
         self.provider.cards.index_all().await;
+        self.card_provider.fill_dependents().await;
     }
 
     pub fn card_provider(&self) -> CardProvider {

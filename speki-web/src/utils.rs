@@ -37,6 +37,7 @@ impl App {
             DexieProvider::new(),
             DexieProvider::new(),
             DexieProvider::new(),
+            DexieProvider::new(),
         )))
     }
 

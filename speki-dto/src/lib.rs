@@ -40,6 +40,7 @@ pub trait Item: Serialize + DeserializeOwned + Sized + Send + Clone + Debug + 's
     type PreviousVersion: Item + Into<Self>;
 
     fn deleted(&self) -> bool;
+
     fn set_delete(&mut self);
 
     fn set_last_modified(&mut self, time: Duration);

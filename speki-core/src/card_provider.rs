@@ -13,10 +13,7 @@ use speki_dto::Item;
 use uuid::Uuid;
 
 use crate::{
-    card::{BaseCard, CardId, RecallRate},
-    metadata::Metadata,
-    recall_rate::History,
-    Card, Provider, Recaller, TimeGetter,
+    card::{BaseCard, CardId, RecallRate}, dependents::{self, Dependents}, metadata::Metadata, recall_rate::History, Card, Provider, Recaller, TimeGetter
 };
 
 /// Card cache
@@ -31,6 +28,7 @@ pub struct CardProvider {
     recaller: Recaller,
     check_modified: bool,
     indices: Arc<RwLock<BTreeMap<String, BTreeSet<Uuid>>>>,
+    dependents: Arc<RwLock<BTreeMap<CardId, BTreeSet<CardId>>>>,
 }
 
 impl Debug for CardProvider {
@@ -79,7 +77,7 @@ impl CardProvider {
         info!("invalidating card: {id}");
         let mut guard = self.inner.write().unwrap();
 
-        let Some(card) = guard.cards.remove(&id) else {
+        let Some(_) = guard.cards.remove(&id) else {
             info!("oops no card");
             return;
         };
@@ -89,34 +87,9 @@ impl CardProvider {
 
         drop(guard);
 
-        for dependency in card.card.dependency_ids().await {
-            let dependent = card.card.id();
-            self.rm_dependent(dependency, dependent);
-        }
         info!("done invalidating");
     }
 
-    pub fn rm_dependent(&self, dependency: CardId, dependent: CardId) -> bool {
-        info!("rm dependent!!");
-        let mut guard = self.inner.write().unwrap();
-        let res = guard
-            .dependents
-            .entry(dependency)
-            .or_default()
-            .remove(&dependent);
-        info!("dependent rmed");
-        res
-    }
-
-    pub fn set_dependent(&self, dependency: CardId, dependent: CardId) -> bool {
-        self.inner
-            .write()
-            .unwrap()
-            .dependents
-            .entry(dependency)
-            .or_default()
-            .insert(dependent)
-    }
 
     pub async fn remove_card(&self, card_id: CardId) {
         info!("cardprovider removing card: {card_id}");
@@ -129,19 +102,18 @@ impl CardProvider {
             card.rm_dependency(card_id).await;
         }
 
-        let (card, _revs, _deps) = self.remove_entry(card_id);
+        let (card, _revs) = self.remove_entry(card_id);
         let card = Arc::unwrap_or_clone(card.unwrap().card);
         self.provider.cards.delete_item(card.base).await;
         info!("done removing i guess");
     }
 
-    fn remove_entry(&self, id: CardId) -> (Option<CardCache>, Option<RevCache>, Option<DepCache>) {
+    fn remove_entry(&self, id: CardId) -> (Option<CardCache>, Option<RevCache>) {
         info!("removing entry");
         let mut guard = self.inner.write().unwrap();
         let card = guard.cards.remove(&id);
         let rev = guard.reviews.remove(&id);
-        let deps = guard.dependents.remove(&id);
-        (card, rev, deps)
+        (card, rev)
     }
 
     pub fn min_rec_recall_rate(
@@ -235,7 +207,6 @@ impl CardProvider {
                 back_audio,
             );
             let card = Arc::new(card);
-            self.update_dependents(card.clone()).await;
 
             let reventry = RevCache {
                 fetched,
@@ -294,23 +265,69 @@ impl CardProvider {
 
     pub async fn dependents(&self, id: CardId) -> BTreeSet<Arc<Card>> {
         trace!("dependents of: {}", id);
-        let mut out = BTreeSet::default();
-        let deps = self
-            .inner
-            .read()
-            .unwrap()
-            .dependents
-            .get(&id)
-            .cloned()
-            .unwrap_or_default();
 
-        for dep in deps {
-            if let Some(card) = self.load(dep).await {
-                out.insert(card);
+        let depguard = self.dependents.read().unwrap();
+
+        if let Some(deps) = depguard.get(&id) {
+            let mut cards = BTreeSet::default();
+            for dep in deps {
+                cards.insert(self.load(*dep).await.unwrap());
+            }
+
+            return cards;
+        }
+
+        drop(depguard);
+
+        if let Some(deps) = self.provider.dependents.load_item(id).await {
+            let mut cards = BTreeSet::default();
+            let mut ids = BTreeSet::default();
+            for dep in deps.deps {
+                ids.insert(dep);
+                cards.insert(self.load(dep).await.unwrap());
+            }
+
+            self.dependents.write().unwrap().insert(id, ids);
+
+            return cards;
+
+        }
+
+        self.fill_dependents().await;
+
+
+        let deps = if let Some(deps) = self.provider.dependents.load_item(id).await  {
+            deps
+        } else {
+            Dependents::new(id, Default::default(), self.time_provider.current_time())
+        };
+
+        let mut cards = BTreeSet::default();
+        for dep in deps.deps {
+            cards.insert(self.load(dep).await.unwrap());
+        }
+
+        cards
+    }
+
+    pub async fn fill_dependents(&self) {
+        info!("filling all dependents cache");
+
+        let current_time = self.time_provider.current_time();
+        let cards = self.load_all().await;
+        let mut deps: BTreeMap<CardId, BTreeSet<CardId>> = BTreeMap::default();
+
+        for card in cards {
+            for dependency in card.dependency_ids().await {
+                deps.entry(dependency).or_default().insert(card.id());
             }
         }
 
-        out
+        for (id, deps) in deps {
+            let dependents = Dependents::new(id, deps, current_time);
+            self.provider.dependents.save_item(dependents).await;
+        }
+        info!("done filling all dependents cache");
     }
 
     pub async fn load(&self, id: CardId) -> Option<Arc<Card>> {
@@ -340,7 +357,47 @@ impl CardProvider {
         self.provider.reviews.save_item(reviews).await;
     }
 
+    pub async fn fooupdate_dependents(&self, card: CardId, old_dependencies: BTreeSet<CardId>, new_dependencies: BTreeSet<CardId>) {
+        let removed_dependencies = old_dependencies.difference(&new_dependencies);
+        let added_dependencies = new_dependencies.difference(&old_dependencies);
+
+        for dependency in removed_dependencies {
+            let mut dependents = if let Some(deps) = self.provider.dependents.load_item(*dependency).await  {
+                deps
+            } else {
+                Dependents::new(*dependency, Default::default(), self.time_provider.current_time())
+            };
+
+            dependents.deps.remove(&card);
+            self.provider.dependents.save_item(dependents).await;
+        }
+
+        for dependency in added_dependencies {
+            let mut dependents = if let Some(deps) = self.provider.dependents.load_item(*dependency).await  {
+                deps
+            } else {
+                Dependents::new(*dependency, Default::default(), self.time_provider.current_time())
+            };
+
+            dependents.deps.contains(&card);
+            dependents.deps.insert(card);
+            self.provider.dependents.save_item(dependents).await;
+        }
+    }
+
     pub async fn save_basecard(&self, card: BaseCard) -> Arc<Card> {
+        let new_dependencies = card.dependencies().await;
+        let old_dependencies  = {
+            if let Some(card)= 
+            self.provider.cards.load_item(card.id).await {
+                card.dependencies().await
+            } else {
+                Default::default()
+            }
+        };
+
+        self.fooupdate_dependents(card.id, old_dependencies, new_dependencies).await;
+
         let id = card.id();
         self.provider.cards.update_item(card).await;
         self.invalidate_card(id).await;
@@ -359,6 +416,7 @@ impl CardProvider {
             }
         }
 
+        self.save_basecard(card.base.clone()).await;
         self.provider.cards.update_item(card.base).await;
 
         if let Some(new_base) = self.provider.cards.load_item(id).await {
@@ -412,7 +470,6 @@ impl CardProvider {
             inner: Arc::new(RwLock::new(Inner {
                 cards: Default::default(),
                 reviews: Default::default(),
-                dependents: Default::default(),
                 metadata: Default::default(),
             })),
             time_provider,
@@ -420,6 +477,7 @@ impl CardProvider {
             recaller,
             check_modified: false,
             indices: Default::default(),
+            dependents: Default::default(),
         }
     }
 
@@ -492,14 +550,6 @@ impl CardProvider {
         }
     }
 
-    async fn update_dependents(&self, card: Arc<Card>) {
-        trace!("updating cache dependents");
-        let mut guard = self.inner.write().unwrap();
-        for dep in card.dependency_ids().await {
-            guard.dependents.entry(dep).or_default().insert(card.id());
-        }
-    }
-
     async fn load_cached_entry(&self, id: CardId) -> Option<CardCache> {
         trace!("attempting cache load for card: {}", id);
         let guard = self.inner.read().unwrap();
@@ -556,7 +606,6 @@ impl CardProvider {
     async fn fresh_load(&self, id: CardId) -> Option<Arc<Card>> {
         let uncached = self.load_uncached(id).await?;
         let uncached = Arc::new(uncached);
-        self.update_dependents(uncached.clone()).await;
         self.update_cache(uncached.clone());
         Some(uncached)
     }
@@ -565,7 +614,6 @@ impl CardProvider {
 struct Inner {
     cards: HashMap<CardId, CardCache>,
     reviews: HashMap<CardId, RevCache>,
-    dependents: HashMap<CardId, HashSet<CardId>>,
     metadata: HashMap<CardId, Metadata>,
 }
 
@@ -581,4 +629,3 @@ struct RevCache {
     review: History,
 }
 
-type DepCache = HashSet<CardId>;

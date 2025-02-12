@@ -39,6 +39,13 @@ impl BaseCard {
             back_audio: None,
         }
     }
+
+    /// Returns all dependencies of the card
+    pub async fn dependencies(&self) -> BTreeSet<CardId> {
+        let mut deps = self.dependencies.clone();
+        deps.extend(self.ty.get_dependencies().await);
+        deps
+    }
 }
 
 impl From<RawCard> for BaseCard {
