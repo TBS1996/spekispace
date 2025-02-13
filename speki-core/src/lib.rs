@@ -1,4 +1,4 @@
-use std::{collections::{BTreeMap, BTreeSet, HashMap}, fmt::Debug, sync::{Arc, RwLock}, time::Duration};
+use std::{collections::{BTreeMap, HashMap}, fmt::Debug, sync::{Arc, RwLock}, time::Duration};
 
 use audio::Audio;
 use card::{BackSide, BaseCard, CardId, RecallRate};
@@ -8,6 +8,7 @@ use collection::{Collection, CollectionId};
 use dependents::Dependents;
 use dioxus_logger::tracing::info;
 use eyre::Result;
+use index::Index;
 use metadata::Metadata;
 use recall_rate::History;
 use speki_dto::{Indexable, Item, Record, SpekiProvider, TimeProvider};
@@ -23,6 +24,7 @@ mod common;
 pub mod metadata;
 pub mod recall_rate;
 pub mod dependents;
+pub mod index;
 
 pub use attribute::{Attribute, AttributeDTO, AttributeId};
 pub use card::{
@@ -32,7 +34,6 @@ pub use card::{
 pub use common::current_time;
 pub use omtrent::TimeStamp;
 pub use recall_rate::SimpleRecall;
-use uuid::Uuid;
 
 pub trait RecallCalc {
     fn recall_rate(&self, reviews: &History, current_unix: Duration) -> Option<RecallRate>;
@@ -67,7 +68,7 @@ impl CollectionProvider {
 
 #[derive(Clone)]
 pub struct Provider {
-    pub cards: Arc<Box<dyn Indexable<BaseCard>>>,
+    pub cards: Arc<Box<dyn SpekiProvider<BaseCard>>>,
     pub reviews: Arc<Box<dyn SpekiProvider<History>>>,
     pub attrs: Arc<Box<dyn SpekiProvider<AttributeDTO>>>,
     pub collections: CollectionProvider,
@@ -75,65 +76,13 @@ pub struct Provider {
     pub cardfilter: Arc<Box<dyn SpekiProvider<FilterItem>>>,
     pub audios: Arc<Box<dyn SpekiProvider<Audio>>>,
     pub dependents: Arc<Box<dyn SpekiProvider<Dependents>>>,
+    pub indices: Arc<Box<dyn SpekiProvider<Index>>>,
 }
-
-
-#[derive(Clone)]
-pub struct MemIndex{
-    provider: Arc<Box<dyn Indexable<BaseCard> + Send >>, 
-    indices: Arc<RwLock<BTreeMap<String, BTreeSet<Uuid>>>>,
-}
-
-impl MemIndex {
-    pub fn new(provider: Arc<Box<dyn Indexable<BaseCard> + Send >>) -> Self {
-        Self {
-            provider,
-            indices: Default::default(),
-        }
-    }
-}
-
-
-#[async_trait::async_trait(?Send)]
-impl<T: Item + Send + Sync + 'static> SpekiProvider<T> for MemIndex {
-
-    async fn load_record(&self, id: Uuid) -> Option<Record> {self.provider.load_record(id).await}
-    async fn load_all_records(&self) -> HashMap<Uuid, Record> {
-        self.provider.load_all_records().await
-    }
-    async fn save_record(&self, record: Record) {
-        self.provider.save_record(record).await
-    }
-    async fn current_time(&self) -> Duration {
-        self.provider.current_time().await
-    }
-}
-
-
-#[async_trait::async_trait(?Send)]
-impl<T: Item + Send + Sync + 'static> Indexable<T> for MemIndex{
-    async fn load_indices(&self, word: String) -> BTreeSet<Uuid> {
-        if let Some(indices) = self.indices.read().unwrap().get(&word) {
-            return indices.clone();
-        }
-
-        let indices = self.provider.load_indices(word.clone()).await;
-        self.indices.write().unwrap().insert(word, indices.clone());
-        indices
-
-    }
-
-    async fn save_indices(&self, word: String, indices: BTreeSet<Uuid>){
-        self.indices.write().unwrap().insert(word.clone(), indices.clone());
-        self.provider.save_indices(word, indices).await;
-    }
-}
-
 
 #[derive(Clone)]
 pub struct MemProvider<T: Item + Send + 'static>{
     provider: Arc<Box<dyn SpekiProvider<T> + Send >>, 
-    cache: Arc<RwLock<BTreeMap<Uuid, T>>>,
+    cache: Arc<RwLock<BTreeMap<T::Key, T>>>,
 }
 
 impl<T: Item + Send + 'static> MemProvider<T> {
@@ -151,12 +100,12 @@ impl<T: Item + Send + Sync + 'static> SpekiProvider<T> for MemProvider<T> {
         self.provider.current_time().await
     }
 
-    async fn load_record(&self, id: Uuid) -> Option<Record> {
-        trace!("mem load record: {id}");
+    async fn load_record(&self, id: T::Key) -> Option<Record> {
+        trace!("mem load record: {id:?}");
         self.provider.load_record(id).await
     }
 
-    async fn load_all_records(&self) -> HashMap<Uuid, Record> {
+    async fn load_all_records(&self) -> HashMap<T::Key, Record> {
         trace!("ty: {} loading all records", T::identifier());
         self.provider.load_all_records().await
     }
@@ -172,25 +121,25 @@ impl<T: Item + Send + Sync + 'static> SpekiProvider<T> for MemProvider<T> {
         }
     }
 
-    async fn load_ids(&self) -> Vec<Uuid> {
+    async fn load_ids(&self) -> Vec<T::Key> {
         trace!("ty: {} loading ids", T::identifier());
         self.load_all_records().await.into_keys().collect()
     }
 
-    async fn load_item(&self, id: Uuid) -> Option<T> {
-        trace!("ty: {} loading id {id}", T::identifier());
+    async fn load_item(&self, id: T::Key) -> Option<T> {
+        trace!("ty: {} loading id {id:?}", T::identifier());
         if let Some(item) = self.cache.read().unwrap().get(&id).cloned() {
-        trace!("ty: {} loading id {id} cache hit", T::identifier());
+        trace!("ty: {} loading id {id:?} cache hit", T::identifier());
             return Some(item);
         };
-        trace!("ty: {} loading id {id} cache miss", T::identifier());
+        trace!("ty: {} loading id {id:?} cache miss", T::identifier());
 
         if let Some(item) = self.provider.load_item(id).await {
-            trace!("ty: {} loading id {id} loaded item from inner provider", T::identifier());
+            trace!("ty: {} loading id {id:?} loaded item from inner provider", T::identifier());
             self.cache.write().unwrap().insert(id, item.clone());
             Some(item)
         } else {
-            trace!("ty: {} loading id {id} did not load item from inner provider", T::identifier());
+            trace!("ty: {} loading id {id:?} did not load item from inner provider", T::identifier());
             None
         }
 
@@ -222,7 +171,7 @@ impl Debug for App {
 }
 
 impl App {
-    pub fn new<A, B, C, D, E, F, G, H, I, J>(
+    pub fn new<A, B, C, D, E, F, G, H, I, J, K>(
         recall_calc: A,
         time_provider: B,
         card_provider: C,
@@ -233,6 +182,7 @@ impl App {
         filter_provider: H,
         audio_provider: I,
         dependents_provider: J,
+        index_provider: K,
     ) -> Self
     where
         A: RecallCalc + 'static + Send,
@@ -245,6 +195,7 @@ impl App {
         H: SpekiProvider<FilterItem> + 'static + Send,
         I: SpekiProvider<Audio> + 'static + Send,
         J: SpekiProvider<Dependents> + 'static + Send,
+        K: SpekiProvider<Index> + 'static + Send,
     {
         info!("initialtize app");
 
@@ -252,7 +203,7 @@ impl App {
         let recaller: Recaller = Arc::new(Box::new(recall_calc));
 
         let provider = Provider {
-            cards: Arc::new(Box::new(MemIndex::new(Arc::new(Box::new(card_provider))))),
+            cards: Arc::new(Box::new(MemProvider::new(Arc::new(Box::new(card_provider))))),
             reviews: Arc::new(Box::new(MemProvider::new(Arc::new(Box::new(history_provider))))),
             attrs: Arc::new(Box::new(MemProvider::new(Arc::new(Box::new(attr_provider))))),
             collections: CollectionProvider {
@@ -262,6 +213,7 @@ impl App {
             cardfilter: Arc::new(Box::new(MemProvider::new(Arc::new(Box::new(filter_provider))))),
             audios: Arc::new(Box::new(MemProvider::new(Arc::new(Box::new(audio_provider))))),
             dependents: Arc::new(Box::new(MemProvider::new(Arc::new(Box::new(dependents_provider))))),
+            indices: Arc::new(Box::new(MemProvider::new(Arc::new(Box::new(index_provider))))),
         };
 
         let card_provider =
@@ -276,7 +228,7 @@ impl App {
     }
 
     pub async fn index_all(&self) {
-        self.provider.cards.index_all().await;
+        //self.provider.cards.index_all().await;
         self.card_provider.fill_dependents().await;
     }
 
@@ -287,7 +239,6 @@ impl App {
     pub async fn fill_cache(&self) {
         info!("filling cache");
         let start = self.time_provider.current_time();
-        self.card_provider.fill_cache().await;
         let elapsed = self.time_provider.current_time() - start;
         info!("cache filled in {:.4} seconds!", elapsed.as_secs_f32());
     }
@@ -295,7 +246,7 @@ impl App {
     pub async fn fill_index_cache(&self) {
         info!("filling ascii bigram indices");
         let start = self.time_provider.current_time();
-        self.card_provider.cache_ascii_indices().await;
+        //self.card_provider.cache_ascii_indices().await;
         let elapsed = self.time_provider.current_time() - start;
         info!(
             "ascii bigram indices filled in {:.4} seconds!",
@@ -307,18 +258,6 @@ impl App {
         self.card_provider.load_all().await
     }
 
-    pub async fn save_card_not_reviews(&self, card: Card) {
-        self.card_provider.save_card(card).await;
-    }
-
-    pub async fn save_card(&self, card: Card) {
-        self.card_provider
-            .save_reviews(card.history().clone())
-            .await;
-
-        self.card_provider.save_card(card).await;
-    }
-
     pub async fn load_card(&self, id: CardId) -> Option<Card> {
         trace!("loading card: {id}");
         let card = self.card_provider.load(id).await;
@@ -328,12 +267,6 @@ impl App {
 
     pub async fn load_cards(&self) -> Vec<CardId> {
         self.card_provider.load_all_card_ids().await
-    }
-
-    pub async fn load_and_persist(&self) {
-        for card in self.load_all_cards().await {
-            Arc::unwrap_or_clone(card).persist().await;
-        }
     }
 
     pub async fn cards_filtered(&self, filter: CardFilter) -> Vec<Arc<Card>> {
@@ -454,7 +387,7 @@ mod graphviz {
             match card.recall_rate() {
                 Some(rate) => {
                     let recall_rate = rate * 100.;
-                    let maturity = card.maybeturity().unwrap_or_default();
+                    let maturity = card.maturity().unwrap_or_default();
                     dot.push_str(&format!(
                         "    \"{}\" [label=\"{} ({:.0}%/{:.0}d)\", style=filled, fillcolor=\"{}\"];\n",
                         card.id(),
@@ -475,7 +408,7 @@ mod graphviz {
             }
 
             // Create edges for dependencies, also enclosing IDs in quotes
-            for child_id in card.dependency_ids().await {
+            for child_id in card.dependencies().await {
                 relations.insert(format!("    \"{}\" -> \"{}\";\n", card.id(), child_id));
             }
         }

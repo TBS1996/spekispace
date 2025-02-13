@@ -100,11 +100,25 @@ impl Card {
     }
 
     pub async fn dependents(&self) -> BTreeSet<Arc<Self>> {
-        self.card_provider.dependents(self.id).await
+
+        let mut cards = BTreeSet::default();
+        for card in 
+        self.card_provider.dependents(self.id).await {
+            let card = self.card_provider.load(card).await.unwrap(); 
+            cards.insert(card);
+            
+        }
+        cards
     }
 
     pub fn meta(&self) -> Metadata {
         self.metadata.clone()
+    }
+
+    /// Replaces current self with what's in card provider cache.
+    async fn refresh(&mut self) {
+        self.card_provider.invalidate_card(self.id);
+        *self = Arc::unwrap_or_clone(self.card_provider.load(self.id).await.unwrap());
     }
 
     pub async fn add_review(&mut self, recall: Recall) {
@@ -115,17 +129,8 @@ impl Card {
         };
 
         self.history.push(review);
-        self.card_provider.save_reviews(self.history.clone()).await;
-
-        self.history = self
-            .card_provider
-            .provider
-            .reviews
-            .load_item(self.id)
-            .await
-            .unwrap();
-
-        self.card_provider.invalidate_card_and_deps(self.id()).await;
+        self.card_provider.providers.reviews.save_item(self.history.clone()).await;
+        self.refresh().await;
     }
 
     pub fn time_provider(&self) -> TimeGetter {
@@ -217,11 +222,12 @@ impl Card {
     pub async fn set_ref(mut self, reff: CardId) -> Card {
         let backside = BackSide::Card(reff);
         self.base.ty = self.base.ty.set_backside(backside);
-        self.persist().await;
+        self.card_provider.save_basecard(self.base.clone()).await;
+        self.refresh().await;
         self
     }
 
-    pub async fn rm_dependency(&mut self, dependency: CardId) -> bool {
+    pub async fn rm_dependency(&mut self, dependency: CardId){
         info!(
             "for removal, dependent: {}, -- dependency: {}",
             self.id(),
@@ -231,13 +237,13 @@ impl Card {
 
         if !res {
             info!("no dep to remove");
-            return false;
+            return;
         }
 
         info!("dep was there: {res}");
         self.base.ty.remove_dep(dependency);
-        self.persist().await;
-        true
+        self.card_provider.save_basecard(self.base.clone()).await;
+        self.refresh().await;
     }
 
     pub async fn add_dependency(&mut self, dependency: CardId) {
@@ -247,25 +253,18 @@ impl Card {
             return;
         }
 
-        if self.all_dependents().await.contains(&dependency) {
+        if self.recursive_dependents().await.contains(&dependency) {
             tracing::warn!("failed to insert dependency due to cycle!");
             return;
         }
 
         self.base.dependencies.insert(dependency);
-        self.persist().await;
+        self.card_provider.save_basecard(self.base.clone()).await;
+        self.refresh().await;
     }
 
     pub fn back_side(&self) -> Option<&BackSide> {
-        match self.card_type() {
-            CardType::Instance(instance) => instance.back.as_ref(),
-            CardType::Attribute(card) => Some(&card.back),
-            CardType::Normal(card) => Some(&card.back),
-            CardType::Class(card) => Some(&card.back),
-            CardType::Unfinished(_) => None?,
-            CardType::Statement(_) => None?,
-            CardType::Event(_) => None?,
-        }
+        self.base.back_side()
     }
 
     pub async fn delete_card(self) {
@@ -274,22 +273,12 @@ impl Card {
 
     pub async fn into_type(mut self, data: impl Into<CardType>) -> Self {
         self.base.ty = data.into();
-        self.persist().await;
+        self.card_provider.save_basecard(self.base.clone()).await;
+        self.refresh().await;
         self
     }
 
-    // Call this function every time card is mutated.
-    pub async fn persist(&mut self) {
-        info!("persisting card: {}", self.id);
-
-        let id = self.id;
-        self.card_provider.invalidate_card_and_deps(self.id()).await;
-        self.card_provider.save_card(self.clone()).await;
-        *self = Arc::unwrap_or_clone(self.card_provider.load(id).await.unwrap());
-        info!("done persisting card: {}", self.id);
-    }
-
-    pub async fn all_dependents(&self) -> Vec<CardId> {
+    pub async fn recursive_dependents(&self) -> Vec<CardId> {
         info!("getting dependents of: {}", self.id);
         let mut deps = vec![];
         let mut stack = vec![self.id()];
@@ -309,7 +298,7 @@ impl Card {
         deps
     }
 
-    pub async fn all_dependencies(&self) -> Vec<CardId> {
+    pub async fn recursive_dependencies(&self) -> Vec<CardId> {
         tracing::trace!("getting dependencies of: {}", self.id);
         let mut deps = vec![];
         let mut stack = vec![self.id()];
@@ -323,7 +312,7 @@ impl Card {
                 deps.push(id);
             }
 
-            for dep in card.dependency_ids().await {
+            for dep in card.dependencies().await {
                 stack.push(dep);
             }
         }
@@ -333,10 +322,14 @@ impl Card {
 
     pub async fn min_rec_recall_rate(&self) -> RecallRate {
         tracing::trace!("min rec recall of {}", self.id);
-        self.card_provider
-            .min_rec_recall_rate(self.id)
-            .await
-            .unwrap()
+        let mut min_recall: RecallRate = 1.0;
+
+        for card in self.recursive_dependencies().await {
+            let card = self.card_provider.load(card).await.unwrap();
+            min_recall = min_recall.min(card.recall_rate().unwrap_or_default());
+        }
+
+        min_recall
     }
 
     pub async fn display_backside(&self) -> Option<String> {
@@ -384,7 +377,7 @@ impl Card {
         self.recaller.recall_rate(&self.history, now)
     }
 
-    pub fn maybeturity(&self) -> Option<f32> {
+    pub fn maturity(&self) -> Option<f32> {
         use gkquad::single::integral;
 
         let now = self.current_time();
@@ -401,23 +394,6 @@ impl Card {
         Some(result as f32)
     }
 
-    pub fn maturity(&self) -> f32 {
-        use gkquad::single::integral;
-
-        let now = self.current_time();
-        let result = integral(
-            |x: f64| {
-                self.recall_rate_at(now + Duration::from_secs_f64(x * 86400.))
-                    .unwrap_or_default() as f64
-            },
-            0.0..1000.,
-        )
-        .estimate()
-        .unwrap();
-
-        result as f32
-    }
-
     pub async fn print(&self) -> String {
         self.base.ty.display_front(&self.card_provider).await
     }
@@ -432,7 +408,8 @@ impl Card {
 
     pub async fn set_suspend(&mut self, suspend: bool) {
         self.metadata.suspended = IsSuspended::from(suspend);
-        self.persist().await;
+        self.card_provider.invalidate_card(self.id);
+        self.refresh().await;
     }
 
     pub fn time_since_last_review(&self) -> Option<Duration> {
@@ -443,7 +420,7 @@ impl Card {
         self.id
     }
 
-    pub async fn dependency_ids(&self) -> BTreeSet<CardId> {
+    pub async fn dependencies(&self) -> BTreeSet<CardId> {
         self.base.dependencies().await
     }
 

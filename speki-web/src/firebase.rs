@@ -7,7 +7,6 @@ use serde_json::Value;
 use speki_dto::{Item, ProviderId, Record, SpekiProvider, Syncable, TimeProvider};
 use speki_provider::WasmTime;
 use tracing::info;
-use uuid::Uuid;
 use wasm_bindgen::prelude::*;
 
 use crate::LOGIN_STATE;
@@ -91,18 +90,18 @@ impl<T: Item> Syncable<T> for FirestoreProvider {
         Duration::from_secs_f32(timestamp)
     }
 
-    async fn load_all_after(&self, not_before: Duration) -> HashMap<Uuid, T> {
+    async fn load_all_after(&self, not_before: Duration) -> HashMap<T::Key, T> {
         let ty = T::identifier();
         let not_before = JsValue::from_f64(not_before.as_secs_f64());
         let promise = loadAllRecords(&self.user_id(), &JsValue::from_str(ty), &not_before);
         let future = wasm_bindgen_futures::JsFuture::from(promise);
         let jsvalue = future.await.unwrap();
-        let records: HashMap<Uuid, Record> = serde_wasm_bindgen::from_value(jsvalue).unwrap();
+        let records: HashMap<T::Key, Record> = serde_wasm_bindgen::from_value(jsvalue).unwrap();
 
         let mut outmap = HashMap::default();
 
         for (key, val) in records.into_iter() {
-            let item: T = <T as Item>::item_deserialize(key, val.content);
+            let item: T = <T as Item>::item_deserialize(val.content);
             outmap.insert(key, item);
         }
 
@@ -116,7 +115,7 @@ impl<T: Item> SpekiProvider<T> for FirestoreProvider {
         self.time.current_time()
     }
 
-    async fn load_record(&self, id: Uuid) -> Option<Record> {
+    async fn load_record(&self, id: T::Key) -> Option<Record> {
         let ty = T::identifier();
         let id = JsValue::from_str(&id.to_string());
         let promise = loadRecord(&self.user_id(), &JsValue::from_str(ty), &id);
@@ -126,13 +125,13 @@ impl<T: Item> SpekiProvider<T> for FirestoreProvider {
         record
     }
 
-    async fn load_all_records(&self) -> HashMap<Uuid, Record> {
+    async fn load_all_records(&self) -> HashMap<T::Key, Record> {
         let ty = T::identifier();
         let not_before = JsValue::from_f64(Duration::default().as_secs_f64());
         let promise = loadAllRecords(&self.user_id(), &JsValue::from_str(ty), &not_before);
         let future = wasm_bindgen_futures::JsFuture::from(promise);
         let jsvalue = future.await.unwrap();
-        let records: HashMap<Uuid, Record> = serde_wasm_bindgen::from_value(jsvalue).unwrap();
+        let records: HashMap<T::Key, Record> = serde_wasm_bindgen::from_value(jsvalue).unwrap();
         records
     }
 

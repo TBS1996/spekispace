@@ -121,6 +121,7 @@ pub type AttributeId = Uuid;
 
 impl Item for AttributeDTO {
     type PreviousVersion = Self;
+    type Key = AttributeId;
 
     fn last_modified(&self) -> Duration {
         self.last_modified

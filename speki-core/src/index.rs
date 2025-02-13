@@ -6,30 +6,44 @@ use speki_dto::{Item, ModifiedSource};
 
 use crate::card::CardId;
 
+#[derive(Clone, Copy, PartialEq, PartialOrd, Debug, Serialize, Deserialize, Hash, Ord, Eq)]
+pub struct Bigram([char;2]);
+
+impl Bigram {
+    pub fn new(a: char, b: char) -> Self {
+        Self([a, b])
+    }
+}
+
+impl ToString for Bigram{
+    fn to_string(&self) -> String {
+        serde_json::to_string(&self.0).unwrap()
+    }
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct Dependents {
-    id: CardId,
+pub struct Index {
+    id: Bigram,
     pub deps: BTreeSet<CardId>,
     source: ModifiedSource,
-    deleted: bool,
     last_modified: Duration,
 }
 
-impl Dependents {
-    pub fn new(card: CardId, deps: BTreeSet<CardId>, current_time: Duration) -> Self {
+impl Index {
+    pub fn new(id: Bigram, deps: BTreeSet<CardId>, current_time: Duration) -> Self {
         Self {
-            id: card,
+            id,
             deps,
             source: Default::default(),
-            deleted: false,
             last_modified: current_time,
         }
     }
 }
 
 
-impl Item for Dependents {
-    type PreviousVersion = Dependents;
+impl Item for Index {
+    type PreviousVersion = Index;
+    type Key = Bigram;
 
     fn deleted(&self) -> bool {
         false
@@ -47,7 +61,7 @@ impl Item for Dependents {
         self.last_modified
     }
 
-    fn id(&self) -> uuid::Uuid {
+    fn id(&self) -> Self::Key{
         self.id
     }
 

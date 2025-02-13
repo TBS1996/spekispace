@@ -110,7 +110,7 @@ impl<T: Item> SpekiProvider<T> for DexieProvider {
         self.time.current_time()
     }
 
-    async fn load_record(&self, id: Uuid) -> Option<Record> {
+    async fn load_record(&self, id: T::Key) -> Option<Record> {
         let ty = T::identifier();
         let id = JsValue::from_str(&id.to_string());
         let promise = loadRecord(&JsValue::from_str(ty), &id);
@@ -119,13 +119,13 @@ impl<T: Item> SpekiProvider<T> for DexieProvider {
         serde_wasm_bindgen::from_value(jsvalue).unwrap()
     }
 
-    async fn load_all_records(&self) -> HashMap<Uuid, Record> {
+    async fn load_all_records(&self) -> HashMap<T::Key, Record> {
         let ty = T::identifier();
         info!("from dexie loading all {ty:?}");
         let promise = loadAllRecords(&JsValue::from_str(ty));
         let future = wasm_bindgen_futures::JsFuture::from(promise);
         let jsvalue = future.await.unwrap();
-        let map: HashMap<Uuid, Record> = serde_wasm_bindgen::from_value(jsvalue).unwrap();
+        let map: HashMap<T::Key, Record> = serde_wasm_bindgen::from_value(jsvalue).unwrap();
         info!("from dexie loaded {:?} {:?}", map.len(), ty);
         map
     }
@@ -138,8 +138,8 @@ impl<T: Item> SpekiProvider<T> for DexieProvider {
         saveContent(&JsValue::from_str(ty), &id, &content, &last_modified);
     }
 
-    async fn load_ids(&self) -> Vec<Uuid> {
-        load_ids(T::identifier()).await.into_iter().collect()
+    async fn load_ids(&self) -> Vec<T::Key> {
+        load_ids(T::identifier()).await.into_iter().map(|k|serde_json::from_str(&k.to_string()).unwrap()).collect()
     }
 }
 

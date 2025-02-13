@@ -2,6 +2,7 @@ use std::{collections::BTreeSet, time::Duration};
 
 use serde::{Deserialize, Serialize};
 use speki_dto::{Item, ModifiedSource};
+use uuid::Uuid;
 
 use crate::card::CardId;
 
@@ -30,6 +31,7 @@ impl Dependents {
 
 impl Item for Dependents {
     type PreviousVersion = Dependents;
+    type Key = Uuid;
 
     fn deleted(&self) -> bool {
         false

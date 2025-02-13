@@ -5,10 +5,7 @@ use super::{
 };
 use crate::{overlays::card_selector::MyClosure, APP};
 use dioxus::prelude::*;
-use speki_core::{
-    collection::{Collection, CollectionId, DynCard, MaybeCard, MaybeDyn},
-    Card,
-};
+use speki_core::collection::{Collection, CollectionId, DynCard, MaybeCard, MaybeDyn};
 use speki_dto::Item;
 use speki_web::CardEntry;
 use std::{collections::BTreeMap, fmt::Display, sync::Arc};

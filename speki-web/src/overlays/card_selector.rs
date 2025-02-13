@@ -1,11 +1,8 @@
-use std::{collections::BTreeMap, fmt::Display, future::Future, pin::Pin, sync::Arc};
+use std::{collections::BTreeMap, future::Future, pin::Pin, sync::Arc};
 
 use dioxus::prelude::*;
 use speki_core::{
-    card::{normalize_string, CardId},
-    cardfilter::CardFilter,
-    collection::{DynCard, MaybeDyn},
-    Card,
+    card::{normalize_string, CardId}, cardfilter::CardFilter, collection::{DynCard, MaybeDyn}, index::Bigram
 };
 use speki_web::{CardEntry, Node};
 use tracing::info;
@@ -44,12 +41,6 @@ impl MaybeEntry {
         *self = Self::Yes(card.clone());
         Some(card)
     }
-}
-
-#[derive(Clone)]
-enum MaybeCard {
-    No(CardId),
-    Yes(Signal<Card>),
 }
 
 #[derive(Props, Clone)]
@@ -132,10 +123,10 @@ impl CardSelector {
                     info!("so many cards! {}", cards.len());
 
                     let mut matching_cards: BTreeMap<Uuid, u32> = BTreeMap::new();
-                    let indexer = APP.read().inner().provider.cards.clone();
+                    let providers = APP.read().inner().provider.clone();
 
-                    for word in bigrams(search.as_ref()) {
-                        let indices = indexer.load_indices(word.to_string()).await;
+                    for bigram in bigrams(search.as_ref()) {
+                        let indices = providers.indices.load_item(bigram).await.map(|i|i.deps).unwrap_or_default();
 
                         for id in indices {
                             if cards.contains_key(&id) {
@@ -454,7 +445,7 @@ fn TableRender(
 
                                 td { class: "border border-gray-300 px-4 py-2 w-2/3", "{card}" }
                                 td { class: "border border-gray-300 px-4 py-2 w-1/12", "{card.card.read().recall_rate().unwrap_or_default():.2}" }
-                                td { class: "border border-gray-300 px-4 py-2 w-1/12", "{card.card.read().maybeturity().unwrap_or_default():.1}" }
+                                td { class: "border border-gray-300 px-4 py-2 w-1/12", "{card.card.read().maturity().unwrap_or_default():.1}" }
                             }
                         }
                     }
@@ -463,10 +454,10 @@ fn TableRender(
     }
 }
 
-fn bigrams(text: &str) -> Vec<String> {
+fn bigrams(text: &str) -> Vec<Bigram> {
     text.chars()
         .collect::<Vec<_>>()
         .windows(2)
-        .map(|w| w.iter().collect())
+        .map(|w| Bigram::new(w[0], w[1]))
         .collect()
 }

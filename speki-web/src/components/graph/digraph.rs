@@ -166,7 +166,7 @@ async fn collect_recursive_dependents(app: App, node: Node) -> Vec<Node> {
                 let deps: Vec<Node> = card
                     .card
                     .read()
-                    .all_dependents()
+                    .recursive_dependents()
                     .await
                     .into_iter()
                     .map(Node::Card)
@@ -198,7 +198,7 @@ async fn collect_recursive_dependencies(app: App, node: Node) -> Vec<Node> {
                 let deps: Vec<Node> = card
                     .card
                     .read()
-                    .all_dependencies()
+                    .recursive_dependencies()
                     .await
                     .into_iter()
                     .map(Node::Card)

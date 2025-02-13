@@ -84,14 +84,14 @@ impl Collection {
                         warn!("unable to find card with id: {}", id);
                         continue;
                     };
-                    for dep in card.all_dependencies().await {
+                    for dep in card.recursive_dependencies().await {
                         let dep = provider.load(dep).await.unwrap();
                         out.insert(dep);
                     }
                     out.insert(card);
                 }
                 MaybeCard::Card(card) => {
-                    for dep in card.all_dependencies().await {
+                    for dep in card.recursive_dependencies().await {
                         let dep = provider.load(dep).await.unwrap();
                         out.insert(dep);
                     }
@@ -121,7 +121,7 @@ impl MaybeDyn {
             MaybeDyn::Dyn(card) => vec![*card],
             MaybeDyn::Collection(id) => {
                 seen_cols.insert(*id);
-                let Some(col) = provider.provider.collections.load(*id).await else {
+                let Some(col) = provider.providers.collections.load(*id).await else {
                     return vec![];
                 };
 
@@ -203,7 +203,7 @@ impl DynCard {
                 .collect(),
 
             DynCard::RecDependents(id) => {
-                let ids = provider.load(*id).await.unwrap().all_dependents().await;
+                let ids = provider.load(*id).await.unwrap().recursive_dependents().await;
                 let mut out = vec![];
 
                 for id in ids {
@@ -219,6 +219,7 @@ impl DynCard {
 
 impl Item for Collection {
     type PreviousVersion = prev::CollectionV1;
+    type Key = Uuid;
 
     fn deleted(&self) -> bool {
         self.deleted
@@ -311,6 +312,7 @@ mod prev {
 
     impl Item for CollectionV1 {
         type PreviousVersion = Self;
+        type Key = Uuid;
 
         fn deleted(&self) -> bool {
             self.deleted

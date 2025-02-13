@@ -177,6 +177,7 @@ pub struct Review {
 
 impl Item for History {
     type PreviousVersion = Self;
+    type Key = CardId;
 
     fn last_modified(&self) -> Duration {
         self.reviews
@@ -239,17 +240,13 @@ impl Item for History {
 
     fn set_delete(&mut self) {}
 
-    fn item_deserialize(id: Uuid, s: String) -> Self {
+    fn item_deserialize(s: String) -> Self {
         if let Ok(history) = toml::from_str(&s) {
             history
         } else if let Ok(history) = serde_json::from_str(&s) {
             history
         } else {
-            History {
-                id,
-                reviews: legacy_parse_history(s),
-                source: Default::default(),
-            }
+            panic!("failed to deserialize reviews: {s}");
         }
     }
 }
@@ -293,22 +290,4 @@ impl std::str::FromStr for Recall {
             _ => Err(()),
         }
     }
-}
-
-fn legacy_parse_history(s: String) -> Vec<Review> {
-    let mut reviews = vec![];
-    for line in s.lines() {
-        let (timestamp, grade) = line.split_once(' ').unwrap();
-        let timestamp = Duration::from_secs(timestamp.parse().unwrap());
-        let grade = Recall::from_str(grade).unwrap();
-        let review = Review {
-            timestamp,
-            grade,
-            time_spent: Duration::default(),
-        };
-        reviews.push(review);
-    }
-
-    reviews.sort_by_key(|r| r.timestamp);
-    reviews
 }

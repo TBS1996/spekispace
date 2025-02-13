@@ -1,7 +1,7 @@
 use omtrent::TimeStamp;
 
 use super::*;
-use crate::{attribute::AttributeId, audio::AudioId, card_provider::CardProvider, App, Attribute};
+use crate::{attribute::AttributeId, audio::AudioId, card_provider::CardProvider, index::Bigram, App, Attribute};
 
 pub type CardId = Uuid;
 
@@ -22,6 +22,38 @@ pub struct BaseCard {
 impl BaseCard {
     pub fn new(ty: impl Into<CardType>) -> Self {
         Self::new_with_id(CardId::new_v4(), ty)
+    }
+
+
+    pub fn back_side(&self) -> Option<&BackSide> {
+        match &self.ty {
+            CardType::Instance(instance) => instance.back.as_ref(),
+            CardType::Attribute(card) => Some(&card.back),
+            CardType::Normal(card) => Some(&card.back),
+            CardType::Class(card) => Some(&card.back),
+            CardType::Unfinished(_) => None?,
+            CardType::Statement(_) => None?,
+            CardType::Event(_) => None?,
+        }
+    }
+
+    pub async fn bigrams(&self, provider: &CardProvider) -> Vec<Bigram> {
+        let mut bigrams = vec![];
+
+
+    for bigram in self.ty.display_front(provider).await
+            .chars()
+            .collect::<Vec<_>>()
+            .windows(2)
+            .map(|w| Bigram::new(w[0], w[1]))
+            .collect::<Vec<Bigram>>() {
+                bigrams.push(bigram);
+
+            }
+
+
+            bigrams
+
     }
 
     pub fn new_with_id(id: impl Into<Option<CardId>>, ty: impl Into<CardType>) -> Self {
@@ -192,7 +224,7 @@ pub struct AttributeCard {
 impl AttributeCard {
     pub async fn display_front(&self, provider: &CardProvider) -> String {
         provider
-            .provider
+            .providers
             .attrs
             .load_item(self.attribute)
             .await
@@ -544,6 +576,7 @@ pub fn normalize_string(str: &str) -> String {
 
 impl Item for BaseCard {
     type PreviousVersion = Self;
+    type Key = CardId;
 
     fn last_modified(&self) -> Duration {
         self.last_modified

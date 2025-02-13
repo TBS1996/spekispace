@@ -30,6 +30,7 @@ pub type AudioId = Uuid;
 
 impl Item for Audio {
     type PreviousVersion = Self;
+    type Key = AudioId;
 
     fn deleted(&self) -> bool {
         self.deleted

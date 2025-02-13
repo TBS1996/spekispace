@@ -168,7 +168,7 @@ impl CardEntry {
 
         let dependencies = ScopeId::APP.in_runtime(|| {
             let card = card.clone();
-            use_resource(move || async move { card.read().dependency_ids().await })
+            use_resource(move || async move { card.read().dependencies().await })
         });
 
         Self {
@@ -247,7 +247,7 @@ impl Node {
                 .load_card(*id)
                 .await
                 .unwrap()
-                .dependency_ids()
+                .dependencies()
                 .await
                 .into_iter()
                 .map(|id| NodeId::Card(id))

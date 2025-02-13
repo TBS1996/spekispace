@@ -30,6 +30,7 @@ impl Metadata {
 
 impl Item for Metadata {
     type PreviousVersion = Self;
+    type Key = Uuid;
 
     fn deleted(&self) -> bool {
         false

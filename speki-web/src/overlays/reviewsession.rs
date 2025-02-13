@@ -45,8 +45,8 @@ fn RecallButton(
 
 
                     let related = {
-                        let mut dependencies = card.card.read().all_dependencies().await;
-                        let dependents = card.card.read().all_dependents().await;
+                        let mut dependencies = card.card.read().recursive_dependencies().await;
+                        let dependents = card.card.read().recursive_dependents().await;
                         dependencies.extend(dependents);
                         dependencies
                     };

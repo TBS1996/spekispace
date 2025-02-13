@@ -1,7 +1,5 @@
 use std::{
-    collections::{BTreeMap, BTreeSet, HashMap, HashSet},
-    fmt::Debug,
-    time::Duration,
+    collections::{BTreeMap, BTreeSet, HashMap, HashSet}, fmt::Debug, hash::Hash, time::Duration
 };
 
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
@@ -38,6 +36,7 @@ pub enum ModifiedSource {
 
 pub trait Item: Serialize + DeserializeOwned + Sized + Send + Clone + Debug + 'static {
     type PreviousVersion: Item + Into<Self>;
+    type Key: Copy + Ord + PartialOrd + Debug + Send + Sync + Hash + Eq + ToString + for<'de> Deserialize<'de>;
 
     fn deleted(&self) -> bool;
 
@@ -45,7 +44,7 @@ pub trait Item: Serialize + DeserializeOwned + Sized + Send + Clone + Debug + 's
 
     fn set_last_modified(&mut self, time: Duration);
     fn last_modified(&self) -> Duration;
-    fn id(&self) -> Uuid;
+    fn id(&self) -> Self::Key;
 
     fn as_string(&self) -> String {
         format!("{:?}", self).to_lowercase()
@@ -64,7 +63,7 @@ pub trait Item: Serialize + DeserializeOwned + Sized + Send + Clone + Debug + 's
         toml::to_string(self).unwrap()
     }
 
-    fn item_deserialize(_id: Uuid, s: String) -> Self {
+    fn item_deserialize(s: String) -> Self {
         if let Ok(item) = toml::from_str(&s) {
             return item;
         } else {
@@ -72,7 +71,7 @@ pub trait Item: Serialize + DeserializeOwned + Sized + Send + Clone + Debug + 's
             tracing::trace!(
                 "{}",
                 format!(
-                    "unable to toml deserialize item of type {}: with id: {_id}:  {x:?} input: {s}",
+                    "unable to toml deserialize item of type {}: {x:?} input: {s}",
                     Self::identifier()
                 )
             );
@@ -85,7 +84,7 @@ pub trait Item: Serialize + DeserializeOwned + Sized + Send + Clone + Debug + 's
             tracing::trace!(
                 "{}",
                 format!(
-                    "unable to serde deserialize item of type {}: with id: {_id}:  {x:?} input: {s}",
+                    "unable to serde deserialize item of type {}:  {x:?} input: {s}",
                     Self::identifier()
                 )
             );
@@ -98,10 +97,8 @@ pub trait Item: Serialize + DeserializeOwned + Sized + Send + Clone + Debug + 's
             );
         }
 
-        let item: Self = Self::PreviousVersion::item_deserialize(_id, s).into();
-        info!("serializing item!!");
-        <Self as Item>::serialize(&item);
-        item
+        
+        Self::PreviousVersion::item_deserialize(s).into()
     }
 
     fn identifier() -> &'static str;
@@ -199,7 +196,7 @@ pub trait Syncable<T: Item>: Sync + SpekiProvider<T> {
     async fn update_sync_info(&self, other: ProviderId, now: Duration);
     async fn last_sync(&self, other: ProviderId) -> Duration;
 
-    async fn load_new(&self, other_id: ProviderId) -> HashMap<Uuid, T> {
+    async fn load_new(&self, other_id: ProviderId) -> HashMap<T::Key, T> {
         let last_sync = self.last_sync(other_id).await;
         let new_items = self.load_all_after(last_sync).await;
         info!(
@@ -212,7 +209,7 @@ pub trait Syncable<T: Item>: Sync + SpekiProvider<T> {
         new_items
     }
 
-    async fn load_all_after(&self, not_before: Duration) -> HashMap<Uuid, T> {
+    async fn load_all_after(&self, not_before: Duration) -> HashMap<T::Key, T> {
         let mut map = self.load_all_with_deleted().await;
 
         info!(
@@ -277,7 +274,7 @@ pub trait Syncable<T: Item>: Sync + SpekiProvider<T> {
             let (mut new_from_left, mut new_from_right) =
                 join(left.load_new(right_id), right.load_new(left_id)).await;
 
-            let ids: HashSet<Uuid> = new_from_left
+            let ids: HashSet<T::Key> = new_from_left
                 .keys()
                 .chain(new_from_right.keys())
                 .cloned()
@@ -359,9 +356,9 @@ pub trait Indexable<T: Item>: SpekiProvider<T> {
         let mut indices: BTreeMap<String, BTreeSet<Uuid>> = BTreeMap::default();
 
         for item in self.load_all().await.values() {
-            info!("indexing id: {}", item.id());
+            info!("indexing id: {}", item.id().to_string());
             for index in item.indices() {
-                indices.entry(index).or_default().insert(item.id());
+                indices.entry(index).or_default().insert(item.id().to_string().parse().unwrap());
             }
         }
 
@@ -380,11 +377,11 @@ pub trait Indexable<T: Item>: SpekiProvider<T> {
             .unwrap_or_default();
 
         for word in old_indices {
-            self.delete_index(word, item.id()).await;
+            self.delete_index(word, item.id().to_string().parse().unwrap()).await;
         }
 
         for word in item.indices() {
-            self.save_index(word, item.id()).await;
+            self.save_index(word, item.id().to_string().parse().unwrap()).await;
         }
 
         self.save_item(item).await;
@@ -393,8 +390,8 @@ pub trait Indexable<T: Item>: SpekiProvider<T> {
 
 #[async_trait::async_trait(?Send)]
 pub trait SpekiProvider<T: Item>: Sync {
-    async fn load_record(&self, id: Uuid) -> Option<Record>;
-    async fn load_all_records(&self) -> HashMap<Uuid, Record>;
+    async fn load_record(&self, id: T::Key) -> Option<Record>;
+    async fn load_all_records(&self) -> HashMap<T::Key, Record>;
     async fn save_record(&self, record: Record);
 
     async fn current_time(&self) -> Duration;
@@ -405,24 +402,24 @@ pub trait SpekiProvider<T: Item>: Sync {
         }
     }
 
-    async fn load_ids(&self) -> Vec<Uuid> {
+    async fn load_ids(&self) -> Vec<T::Key> {
         self.load_all_records().await.into_keys().collect()
     }
 
-    async fn load_item(&self, id: Uuid) -> Option<T> {
+    async fn load_item(&self, id: T::Key) -> Option<T> {
         let record = self.load_record(id).await?;
-        let item = T::item_deserialize(id, record.content);
+        let item = T::item_deserialize(record.content);
         (!item.deleted()).then_some(item)
     }
 
     /// Must not include deleted items.
-    async fn load_all(&self) -> HashMap<Uuid, T> {
+    async fn load_all(&self) -> HashMap<T::Key, T> {
         info!("loading all for: {:?}", T::identifier());
         let map = self.load_all_records().await;
         let mut outmap = HashMap::new();
 
         for (key, val) in map {
-            let val = <T as Item>::item_deserialize(key, val.content);
+            let val = <T as Item>::item_deserialize(val.content);
             if !val.deleted() {
                 outmap.insert(key, val);
             }
@@ -430,13 +427,13 @@ pub trait SpekiProvider<T: Item>: Sync {
         outmap
     }
 
-    async fn load_all_with_deleted(&self) -> HashMap<Uuid, T> {
+    async fn load_all_with_deleted(&self) -> HashMap<T::Key, T> {
         info!("loading all for: {:?}", T::identifier());
         let map = self.load_all_records().await;
         let mut outmap = HashMap::new();
 
         for (key, val) in map {
-            let val = <T as Item>::item_deserialize(key, val.content);
+            let val = <T as Item>::item_deserialize(val.content);
             outmap.insert(key, val);
         }
         outmap

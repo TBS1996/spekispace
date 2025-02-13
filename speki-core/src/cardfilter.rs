@@ -108,7 +108,7 @@ impl CardFilter {
         }
 
         if let Some(NumOp { ord, num }) = stability {
-            let stability = card.maybeturity().unwrap_or_default();
+            let stability = card.maturity().unwrap_or_default();
 
             match ord {
                 MyNumOrd::Equal => {
@@ -207,6 +207,7 @@ pub struct FilterItem {
 
 impl Item for FilterItem {
     type PreviousVersion = Self;
+    type Key = Uuid;
 
     fn deleted(&self) -> bool {
         self.deleted

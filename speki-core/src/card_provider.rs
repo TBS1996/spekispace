@@ -1,34 +1,22 @@
 use std::{
-    collections::{BTreeMap, BTreeSet, HashMap, HashSet},
+    collections::{BTreeMap, BTreeSet, HashMap},
     fmt::Debug,
-    future::Future,
-    pin::Pin,
     sync::{Arc, RwLock},
-    time::Duration,
 };
 
 use dioxus_logger::tracing::{info, trace};
-use eyre::Result;
-use speki_dto::Item;
-use uuid::Uuid;
+use tracing::warn;
 
 use crate::{
-    card::{BaseCard, CardId, RecallRate}, dependents::{self, Dependents}, metadata::Metadata, recall_rate::History, Card, Provider, Recaller, TimeGetter
+    card::{BaseCard, CardId}, dependents::Dependents, index::Index, metadata::Metadata, recall_rate::History, Card, Provider, Recaller, TimeGetter
 };
 
-/// Card cache
-///
-/// Has basically two functions. One is caching stuff in-memory so it'll be faster to load cards.
-/// The other is to
 #[derive(Clone)]
 pub struct CardProvider {
-    inner: Arc<RwLock<Inner>>,
-    pub provider: Provider,
+    cards: Arc<RwLock<HashMap<CardId, Arc<Card>>>>,
+    pub providers: Provider,
     time_provider: TimeGetter,
     recaller: Recaller,
-    check_modified: bool,
-    indices: Arc<RwLock<BTreeMap<String, BTreeSet<Uuid>>>>,
-    dependents: Arc<RwLock<BTreeMap<CardId, BTreeSet<CardId>>>>,
 }
 
 impl Debug for CardProvider {
@@ -40,193 +28,82 @@ impl Debug for CardProvider {
 }
 
 impl CardProvider {
-    /// Removes a card from the cache, along with all its dependents and dependencies
-    ///
-    /// This is because certain properties are cached based on dependencies, so when a card in cache is no longer valid,
-    /// the dependencies/dependents are also no longer guaranteed to be valid.
-    /// For example, when you make a review, it'll change the recall rate of the given card, but it'll also change the min_rec_recall_rate of
-    /// all its dependents, which we store in the cache.
-    pub async fn invalidate_card_and_deps(&self, id: CardId) {
-        info!("invalidating card with deps: {id}");
-        let card = self.load(id).await.unwrap();
-
-        self.invalidate_card(id).await;
-
-        for dep in card.all_dependents().await {
-            self.invalidate_card(dep).await;
-        }
-
-        for dep in card.all_dependencies().await {
-            self.invalidate_card(dep).await;
-        }
-
-        info!("done invalidating card with deps");
-    }
-
-    pub async fn get_indices(&self, word: String) -> BTreeSet<Uuid> {
-        if let Some(set) = self.indices.read().unwrap().get(&word) {
-            return set.clone();
-        }
-
-        let set = self.provider.cards.load_indices(word.clone()).await;
-        self.indices.write().unwrap().insert(word, set.clone());
-        set
-    }
-
-    pub async fn invalidate_card(&self, id: CardId) {
-        info!("invalidating card: {id}");
-        let mut guard = self.inner.write().unwrap();
-
-        let Some(_) = guard.cards.remove(&id) else {
-            info!("oops no card");
-            return;
-        };
-
-        guard.metadata.remove(&id);
-        guard.reviews.remove(&id);
-
-        drop(guard);
-
-        info!("done invalidating");
-    }
-
-
     pub async fn remove_card(&self, card_id: CardId) {
-        info!("cardprovider removing card: {card_id}");
-        let _ = self.load(card_id).await; // ensure card is in cache first.
-
-        // Other cards may depend on this now-deleted card, so we loop through them all to remove their dependency on it (if any).
+        let card = self.providers.cards.load_item(card_id).await.unwrap();
         for card in self.load_all().await {
             info!("removing dependency for {}", card.id());
             let mut card = Arc::unwrap_or_clone(card);
             card.rm_dependency(card_id).await;
         }
 
-        let (card, _revs) = self.remove_entry(card_id);
-        let card = Arc::unwrap_or_clone(card.unwrap().card);
-        self.provider.cards.delete_item(card.base).await;
+        self.providers.cards.delete_item(card).await;
         info!("done removing i guess");
     }
 
-    fn remove_entry(&self, id: CardId) -> (Option<CardCache>, Option<RevCache>) {
-        info!("removing entry");
-        let mut guard = self.inner.write().unwrap();
-        let card = guard.cards.remove(&id);
-        let rev = guard.reviews.remove(&id);
-        (card, rev)
-    }
-
-    pub fn min_rec_recall_rate(
-        &self,
-        id: CardId,
-    ) -> Pin<Box<dyn Future<Output = Result<RecallRate>> + '_>> {
-        Box::pin(async move {
-            trace!("card: {id} starting min rec recall calculation");
-            let Some(card) = self.load(id).await else {
-                eyre::bail!("couldnt find card: {id}");
-            };
-
-            let entry = self.load_cached_entry(id).await.unwrap();
-            let recall_rate = card.recall_rate().unwrap_or_default();
-
-            if let Some(recall) = entry.min_rec_recall {
-                trace!("card: {id}: cached min rec recall: {recall}");
-                return Ok(recall);
-            }
-
-            let dependencies = card.dependency_ids().await;
-
-            if dependencies.is_empty() {
-                trace!("card: {id}: no dependencies!");
-                self.update_min_rec_recall(id, 1.0);
-                Ok(recall_rate)
-            } else {
-                trace!("card: {id} traversing dependencies first: {dependencies:?}");
-                let mut min_recall: RecallRate = 1.0;
-
-                for dep in dependencies {
-                    let rec = self.min_rec_recall_rate(dep).await?;
-                    let Some(dep_rec) = self.load(dep).await else {
-                        continue;
-                    };
-                    let dep_rec = dep_rec.recall_rate().unwrap_or_default();
-                    min_recall = min_recall.min(rec);
-                    min_recall = min_recall.min(dep_rec);
-                    trace!("card: {id}: min recall updated: {min_recall}");
-                }
-
-                self.update_min_rec_recall(id, min_recall);
-                trace!("card: {id}: new min rec recall: {min_recall}");
-                Ok(min_recall)
-            }
-        })
-    }
-
-    fn update_min_rec_recall(&self, id: CardId, cached_recall: RecallRate) {
-        trace!("card: {id}: caching min rec recall: {cached_recall}");
-        let mut guard = self.inner.write().unwrap();
-        guard.cards.get_mut(&id).unwrap().min_rec_recall = Some(cached_recall);
-    }
-
     pub async fn load_all_card_ids(&self) -> Vec<CardId> {
-        self.provider.cards.load_ids().await
+        self.providers.cards.load_ids().await
     }
 
-    pub async fn fill_cache(&self) {
-        info!("1");
-        let mut cards: HashMap<CardId, CardCache> = Default::default();
-        let mut rev_caches: HashMap<CardId, RevCache> = Default::default();
-        info!("loading cards");
-        let raw_cards = self.provider.cards.load_all().await;
-        info!("loading reviews");
-        let mut reviews = self.provider.reviews.load_all().await;
-        let audios = self.provider.audios.load_all().await;
-        let mut metas = self.provider.metadata.load_all().await;
-        let fetched = self.time_provider.current_time();
+    async fn refresh_cache(&self) {
+        info!("starting cache refresh... might take a while..");
+        let cards = self.providers.cards.load_all().await;
 
-        for (id, card) in raw_cards {
-            let front_audio = match card.front_audio {
-                Some(id) => audios.get(&id).cloned(), // cloned not removed cause different cards can use same audio
-                None => None,
-            };
-
-            let back_audio = match card.front_audio {
-                Some(id) => audios.get(&id).cloned(),
-                None => None,
-            };
-
-            let rev = reviews.remove(&id).unwrap_or_else(|| History::new(id));
-            let meta = metas.remove(&id).unwrap_or_else(|| Metadata::new(id));
-            let card = Card::from_parts(
-                card,
-                rev.clone(),
-                meta,
-                self.clone(),
-                self.recaller.clone(),
-                front_audio,
-                back_audio,
-            );
-            let card = Arc::new(card);
-
-            let reventry = RevCache {
-                fetched,
-                review: rev,
-            };
-
-            let entry = CardCache {
-                fetched,
-                card,
-                min_rec_recall: None,
-            };
-
-            rev_caches.insert(entry.card.id(), reventry);
-            cards.insert(entry.card.id(), entry);
+        for (_, card) in &cards {
+            for bigram in card.bigrams(self).await {
+                let mut indices = match self.providers.indices.load_item(bigram).await {
+                    Some(idx) => idx,
+                    None => Index::new(bigram, Default::default(), self.time_provider.current_time()),
+                };
+                indices.deps.insert(card.id);
+                self.providers.indices.save_item(indices).await;
+            }
         }
 
-        let mut guard = self.inner.write().unwrap();
-        guard.cards = cards;
-        guard.reviews = rev_caches;
+        for (_, card) in &cards {
+            for dependency in card.dependencies().await {
+                let mut indices = match self.providers.dependents.load_item(dependency).await {
+                    Some(idx) => idx,
+                    None => Dependents::new(dependency, Default::default(), self.time_provider.current_time()),
+                };
+                indices.deps.insert(card.id);
+                self.providers.dependents.save_item(indices).await;
+            }
+        }
+        info!("done with cache refresh!");
     }
+
+    /// Checks that cache of given card is solid.
+    async fn check_cache(&self, id: CardId) -> bool {
+        let base_card = self.providers.cards.load_item(id).await.unwrap();
+
+        for dependency in base_card.dependencies().await {
+            match self.providers.dependents.load_item(dependency).await {
+                Some(dependents) => {
+                    if !dependents.deps.contains(&id) {
+                        warn!("card: {} has {} as dependency but it was not present in the dependents cache", id, dependency);
+                        return false;
+                    }
+                },
+                None => return false,
+            }
+
+        }
+
+        for bigram in base_card.bigrams(&self.clone()).await {
+            match self.providers.indices.load_item(bigram).await {
+                Some(indices) => {
+                    if !indices.deps.contains(&id) {
+                        warn!("card: {} has {:?} bigram but it was not present in the indices", id, bigram);
+                        return false;
+                    }
+                },
+                None => return false,
+            }
+        }
+
+        true
+    }
+
 
     pub async fn filtered_load<F, Fut>(&self, filter: F) -> Vec<Arc<Card>>
     where
@@ -263,51 +140,9 @@ impl CardProvider {
         self.filtered_load(filter).await
     }
 
-    pub async fn dependents(&self, id: CardId) -> BTreeSet<Arc<Card>> {
+    pub async fn dependents(&self, id: CardId) -> BTreeSet<CardId> {
         trace!("dependents of: {}", id);
-
-        let depguard = self.dependents.read().unwrap();
-
-        if let Some(deps) = depguard.get(&id) {
-            let mut cards = BTreeSet::default();
-            for dep in deps {
-                cards.insert(self.load(*dep).await.unwrap());
-            }
-
-            return cards;
-        }
-
-        drop(depguard);
-
-        if let Some(deps) = self.provider.dependents.load_item(id).await {
-            let mut cards = BTreeSet::default();
-            let mut ids = BTreeSet::default();
-            for dep in deps.deps {
-                ids.insert(dep);
-                cards.insert(self.load(dep).await.unwrap());
-            }
-
-            self.dependents.write().unwrap().insert(id, ids);
-
-            return cards;
-
-        }
-
-        self.fill_dependents().await;
-
-
-        let deps = if let Some(deps) = self.provider.dependents.load_item(id).await  {
-            deps
-        } else {
-            Dependents::new(id, Default::default(), self.time_provider.current_time())
-        };
-
-        let mut cards = BTreeSet::default();
-        for dep in deps.deps {
-            cards.insert(self.load(dep).await.unwrap());
-        }
-
-        cards
+        self.providers.dependents.load_item(id).await.map(|x|x.deps).unwrap_or_default()
     }
 
     pub async fn fill_dependents(&self) {
@@ -318,147 +153,131 @@ impl CardProvider {
         let mut deps: BTreeMap<CardId, BTreeSet<CardId>> = BTreeMap::default();
 
         for card in cards {
-            for dependency in card.dependency_ids().await {
+            for dependency in card.dependencies().await {
                 deps.entry(dependency).or_default().insert(card.id());
             }
         }
 
         for (id, deps) in deps {
             let dependents = Dependents::new(id, deps, current_time);
-            self.provider.dependents.save_item(dependents).await;
+            self.providers.dependents.save_item(dependents).await;
         }
         info!("done filling all dependents cache");
     }
 
     pub async fn load(&self, id: CardId) -> Option<Arc<Card>> {
-        trace!("loading card for id: {}", id);
-        if let (Some(card), Some(_), Some(_)) = (
-            self.load_cached_card(id).await,
-            self.load_cached_reviews(id).await,
-            self.load_cached_meta(id).await,
-        ) {
-            trace!("cache hit for id: {}", id);
-            Some(card)
-        } else {
-            trace!("cache miss for id: {}", id);
-            self.fresh_load(id).await
+        if let Some(card) = self.cards.read().unwrap().get(&id).cloned() {
+            if !self.check_cache(id).await {
+                self.refresh_cache().await;
+            }
+            return Some(card);
+        }
+
+        let base = self.providers.cards.load_item(id).await?;
+        let history = match self.providers.reviews.load_item(id).await {
+            Some(revs) => revs,
+            None => History::new(id),
+        };
+        let metadata = match self.providers.metadata.load_item(id).await {
+            Some(meta) => meta,
+            None => Metadata::new(id),
+        };
+        
+        let front_audio = match base.front_audio {
+            Some(audio) => Some(self.providers.audios.load_item(audio).await.unwrap()),
+            None => None,
+        };
+        let back_audio = match base.back_audio {
+            Some(audio) => Some(self.providers.audios.load_item(audio).await.unwrap()),
+            None => None,
+        };
+
+
+        let card = Arc::new(Card::from_parts(base, history, metadata, self.clone(), self.recaller.clone(), front_audio, back_audio));
+
+        self.cards.write().unwrap().insert(id, card.clone());
+
+        if !self.check_cache(id).await {
+            self.refresh_cache().await;
+        }
+
+        Some(card)
+    }
+
+    pub async fn update_indices(&self, old_card: Option<&BaseCard>, new_card: &BaseCard) {
+        let id = new_card.id;
+
+        let old_indices = match old_card {
+            Some(card) => card.bigrams(&self.clone()).await,
+            None => Default::default(),
+        };
+
+        for idx in old_indices{
+            if let Some(mut index) = self.providers.indices.load_item(idx).await {
+                index.deps.remove(&id);
+                self.providers.indices.save_item(index).await;
+            }
+        }
+
+
+        for idx in new_card.bigrams(&self.clone()).await {
+            if let Some(mut index) = self.providers.indices.load_item(idx).await {
+                index.deps.insert(id);
+                self.providers.indices.save_item(index).await;
+            }
         }
     }
 
-    pub async fn load_reviews(&self, id: CardId) -> History {
-        self.provider
-            .reviews
-            .load_item(id)
-            .await
-            .unwrap_or_else(|| History::new(id))
-    }
+    pub async fn update_dependents(&self, old_card: Option<&BaseCard>, new_card: &BaseCard) {
+        let id = new_card.id;
 
-    pub async fn save_reviews(&self, reviews: History) {
-        self.provider.reviews.save_item(reviews).await;
-    }
-
-    pub async fn fooupdate_dependents(&self, card: CardId, old_dependencies: BTreeSet<CardId>, new_dependencies: BTreeSet<CardId>) {
-        let removed_dependencies = old_dependencies.difference(&new_dependencies);
-        let added_dependencies = new_dependencies.difference(&old_dependencies);
-
-        for dependency in removed_dependencies {
-            let mut dependents = if let Some(deps) = self.provider.dependents.load_item(*dependency).await  {
-                deps
-            } else {
-                Dependents::new(*dependency, Default::default(), self.time_provider.current_time())
-            };
-
-            dependents.deps.remove(&card);
-            self.provider.dependents.save_item(dependents).await;
-        }
-
-        for dependency in added_dependencies {
-            let mut dependents = if let Some(deps) = self.provider.dependents.load_item(*dependency).await  {
-                deps
-            } else {
-                Dependents::new(*dependency, Default::default(), self.time_provider.current_time())
-            };
-
-            dependents.deps.contains(&card);
-            dependents.deps.insert(card);
-            self.provider.dependents.save_item(dependents).await;
-        }
-    }
-
-    pub async fn save_basecard(&self, card: BaseCard) -> Arc<Card> {
-        let new_dependencies = card.dependencies().await;
+        let new_dependencies = new_card.dependencies().await;
         let old_dependencies  = {
             if let Some(card)= 
-            self.provider.cards.load_item(card.id).await {
+            old_card {
                 card.dependencies().await
             } else {
                 Default::default()
             }
         };
 
-        self.fooupdate_dependents(card.id, old_dependencies, new_dependencies).await;
+        let removed_dependencies = old_dependencies.difference(&new_dependencies);
+        let added_dependencies = new_dependencies.difference(&old_dependencies);
 
-        let id = card.id();
-        self.provider.cards.update_item(card).await;
-        self.invalidate_card(id).await;
-        self.load(id).await.unwrap()
-    }
-
-    pub async fn save_card(&self, card: Card) {
-        let id = card.id();
-        self.update_cache(Arc::new(card.clone()));
-        self.provider.metadata.save_item(card.meta()).await;
-        let mut invalidated_indices = BTreeSet::new();
-
-        if let Some(old_base) = self.provider.cards.load_item(card.id()).await {
-            for idx in old_base.indices() {
-                invalidated_indices.insert(idx);
-            }
-        }
-
-        self.save_basecard(card.base.clone()).await;
-        self.provider.cards.update_item(card.base).await;
-
-        if let Some(new_base) = self.provider.cards.load_item(id).await {
-            for idx in new_base.indices() {
-                invalidated_indices.insert(idx);
-            }
-        }
-
-        for idx in invalidated_indices {
-            self.indices.write().unwrap().remove(&idx);
-        }
-    }
-
-    pub async fn cache_ascii_indices(&self) {
-        fn generate_ascii_bigrams() -> Vec<String> {
-            let mut bigrams = Vec::with_capacity(26 * 26);
-
-            for first in b'a'..=b'z' {
-                for second in b'a'..=b'z' {
-                    bigrams.push(format!("{}{}", first as char, second as char));
-                }
-            }
-
-            bigrams
-        }
-
-        let mut futs = vec![];
-
-        for bigram in generate_ascii_bigrams() {
-            let fut = async move {
-                (
-                    bigram.clone(),
-                    self.provider.cards.load_indices(bigram.clone()).await,
-                )
+        for dependency in removed_dependencies {
+            let mut dependents = if let Some(deps) = self.providers.dependents.load_item(*dependency).await  {
+                deps
+            } else {
+                Dependents::new(*dependency, Default::default(), self.time_provider.current_time())
             };
-            futs.push(fut);
+
+            dependents.deps.remove(&id);
+            self.providers.dependents.save_item(dependents).await;
         }
 
-        let mut guard = self.indices.write().unwrap();
-        for (word, set) in futures::future::join_all(futs).await {
-            guard.insert(word, set);
+        for dependency in added_dependencies {
+            let mut dependents = if let Some(deps) = self.providers.dependents.load_item(*dependency).await  {
+                deps
+            } else {
+                Dependents::new(*dependency, Default::default(), self.time_provider.current_time())
+            };
+
+            dependents.deps.contains(&id);
+            dependents.deps.insert(id);
+            self.providers.dependents.save_item(dependents).await;
         }
+    }
+
+    pub fn invalidate_card(&self, id: CardId) -> Option<Arc<Card>>{
+        self.cards.write().unwrap().remove(&id)
+    }
+
+    pub async fn save_basecard(&self, new_card: BaseCard) -> Arc<Card> {
+        let old_card = self.providers.cards.load_item(new_card.id).await;
+        self.update_dependents(old_card.as_ref(), &new_card).await;
+        self.update_indices(old_card.as_ref(), &new_card).await;
+        self.invalidate_card(new_card.id);
+        self.load(new_card.id).await.unwrap()
     }
 
     pub fn time_provider(&self) -> TimeGetter {
@@ -467,165 +286,10 @@ impl CardProvider {
 
     pub fn new(provider: Provider, time_provider: TimeGetter, recaller: Recaller) -> Self {
         Self {
-            inner: Arc::new(RwLock::new(Inner {
-                cards: Default::default(),
-                reviews: Default::default(),
-                metadata: Default::default(),
-            })),
+            cards: Default::default(),
             time_provider,
-            provider,
+            providers: provider,
             recaller,
-            check_modified: false,
-            indices: Default::default(),
-            dependents: Default::default(),
         }
     }
-
-    async fn load_uncached(&self, id: CardId) -> Option<Card> {
-        trace!("load uncached");
-        let raw_card = self.provider.cards.load_item(id).await?;
-
-        let reviews = self
-            .provider
-            .reviews
-            .load_item(id)
-            .await
-            .unwrap_or_else(|| History::new(id));
-
-        let meta = self
-            .provider
-            .metadata
-            .load_item(id)
-            .await
-            .unwrap_or_else(|| Metadata::new(id));
-
-        let front_audio = match raw_card.front_audio {
-            Some(id) => self.provider.audios.load_item(id).await,
-            None => None,
-        };
-        let back_audio = match raw_card.back_audio {
-            Some(id) => self.provider.audios.load_item(id).await,
-            None => None,
-        };
-
-        let card = Card::from_parts(
-            raw_card,
-            reviews,
-            meta,
-            self.clone(),
-            self.recaller.clone(),
-            front_audio,
-            back_audio,
-        );
-
-        Some(card)
-    }
-
-    async fn load_cached_meta(&self, id: CardId) -> Option<Metadata> {
-        self.inner.read().unwrap().metadata.get(&id).cloned()
-    }
-
-    async fn load_cached_reviews(&self, id: CardId) -> Option<History> {
-        trace!("attempting review cache load for: {}", id);
-        let guard = self.inner.read().unwrap();
-        let cached = match guard.reviews.get(&id) {
-            Some(cached) => cached,
-            None => {
-                trace!("cache miss for review: {}", id);
-                return None;
-            }
-        };
-
-        if self.check_modified {
-            let last_modified = cached.review.last_modified();
-            if last_modified > cached.fetched {
-                trace!("review cache outdated for card: {}", id);
-                None
-            } else {
-                trace!("successfully retrieved review cache for card: {}", id);
-                Some(cached.review.clone())
-            }
-        } else {
-            Some(cached.review.clone())
-        }
-    }
-
-    async fn load_cached_entry(&self, id: CardId) -> Option<CardCache> {
-        trace!("attempting cache load for card: {}", id);
-        let guard = self.inner.read().unwrap();
-        trace!("cache size: {}", guard.cards.len());
-        match guard.cards.get(&id) {
-            Some(cached) => Some((*cached).clone()),
-            None => {
-                trace!("cache miss for card: {}", id);
-                None
-            }
-        }
-    }
-
-    async fn load_cached_card(&self, id: CardId) -> Option<Arc<Card>> {
-        let cached = self.load_cached_entry(id).await?;
-
-        if self.check_modified {
-            let last_modified = cached.card.last_modified();
-            if last_modified > cached.fetched {
-                info!("cache outdated for card: {}", id);
-                None
-            } else {
-                info!("successfully retrieved cache for card: {}", id);
-                Some(cached.card.clone())
-            }
-        } else {
-            Some(cached.card.clone())
-        }
-    }
-
-    fn update_cache(&self, card: Arc<Card>) {
-        trace!("updating cache for card: {}", card.id());
-        let now = self.time_provider.current_time();
-        let mut guard = self.inner.write().unwrap();
-        let id = card.id();
-
-        let cached_meta = card.meta();
-
-        let cached_reviews = RevCache {
-            fetched: now,
-            review: card.history().clone(),
-        };
-        let cached_card = CardCache {
-            fetched: now,
-            card,
-            min_rec_recall: None,
-        };
-
-        guard.cards.insert(id, cached_card);
-        guard.reviews.insert(id, cached_reviews);
-        guard.metadata.insert(id, cached_meta);
-    }
-
-    async fn fresh_load(&self, id: CardId) -> Option<Arc<Card>> {
-        let uncached = self.load_uncached(id).await?;
-        let uncached = Arc::new(uncached);
-        self.update_cache(uncached.clone());
-        Some(uncached)
-    }
 }
-
-struct Inner {
-    cards: HashMap<CardId, CardCache>,
-    reviews: HashMap<CardId, RevCache>,
-    metadata: HashMap<CardId, Metadata>,
-}
-
-#[derive(Clone, Debug)]
-struct CardCache {
-    fetched: Duration,
-    card: Arc<Card>,
-    min_rec_recall: Option<RecallRate>,
-}
-
-struct RevCache {
-    fetched: Duration,
-    review: History,
-}
-
