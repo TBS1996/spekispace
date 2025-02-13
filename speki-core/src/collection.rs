@@ -8,7 +8,7 @@ use std::{
 use async_recursion::async_recursion;
 use serde::{Deserialize, Serialize};
 use speki_dto::{Item, ModifiedSource};
-use tracing::{info, warn};
+use tracing::{error, info, warn};
 use uuid::Uuid;
 
 use crate::{card::CardId, card_provider::CardProvider, Card};
@@ -181,7 +181,10 @@ impl DynCard {
                 .collect(),
             DynCard::Card(id) => vec![MaybeCard::Id(*id)],
             DynCard::Instances(id) => {
-                let card = provider.load(*id).await.unwrap();
+                let Some(card) = provider.load(*id).await else {
+                    error!("failed to load card with id: {id}");
+                    return vec![];
+                };
                 let mut output = vec![];
 
                 for card in card.dependents().await {
