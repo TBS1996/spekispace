@@ -126,7 +126,7 @@ impl CardSelector {
                     let providers = APP.read().inner().provider.clone();
 
                     for bigram in bigrams(search.as_ref()) {
-                        let indices = providers.indices.load_item(bigram).await.map(|i|i.deps).unwrap_or_default();
+                        let indices = providers.indices.load(bigram).await;
 
                         for id in indices {
                             if cards.contains_key(&id) {

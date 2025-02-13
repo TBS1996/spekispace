@@ -1,10 +1,67 @@
 
-use std::{collections::BTreeSet, time::Duration};
+use std::{collections::BTreeSet, sync::Arc, time::Duration};
 
 use serde::{Deserialize, Serialize};
-use speki_dto::{Item, ModifiedSource};
+use speki_dto::{Item, ModifiedSource, SpekiProvider};
 
-use crate::card::CardId;
+use crate::{card::{BaseCard, CardId}, card_provider::CardProvider};
+
+#[derive(Clone)]
+pub struct IndexProvider {
+    inner: Arc<Box<dyn SpekiProvider<Index>>>,
+}
+
+impl IndexProvider {
+
+    pub fn new(inner: Arc<Box<dyn SpekiProvider<Index>>>) -> Self {
+        Self {
+            inner
+        }
+    }
+
+    pub async fn load(&self, bigram: Bigram) -> BTreeSet<CardId>{
+        self.inner.load_item(bigram).await.map(|i|i.deps).unwrap_or_default()
+    }
+
+    pub async fn refresh(&self, provider: &CardProvider, cards: impl IntoIterator<Item=&BaseCard>) {
+        for card in cards {
+            for bigram in card.bigrams(provider).await {
+                let mut indices = match self.inner.load_item(bigram).await {
+                    Some(idx) => idx,
+                    None => Index::new(bigram, Default::default(), Default::default()),
+                };
+                indices.deps.insert(card.id);
+                self.inner.save_item(indices).await;
+            }
+        }
+    }
+
+
+    pub async fn update(&self, provider: &CardProvider, old_card: Option<&BaseCard>, new_card: &BaseCard) {
+        let id = new_card.id;
+
+        let old_indices = match old_card {
+            Some(card) => card.bigrams(provider).await,
+            None => Default::default(),
+        };
+
+        for idx in old_indices{
+            if let Some(mut index) = self.inner.load_item(idx).await {
+                index.deps.remove(&id);
+                self.inner.save_item(index).await;
+            }
+        }
+
+
+        for idx in new_card.bigrams(provider).await {
+            if let Some(mut index) = self.inner.load_item(idx).await {
+                index.deps.insert(id);
+                self.inner.save_item(index).await;
+            }
+        }
+    }
+}
+
 
 #[derive(Clone, Copy, PartialEq, PartialOrd, Debug, Serialize, Deserialize, Hash, Ord, Eq)]
 pub struct Bigram([char;2]);

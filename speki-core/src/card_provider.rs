@@ -1,5 +1,5 @@
 use std::{
-    collections::{BTreeMap, BTreeSet, HashMap},
+    collections::{BTreeSet, HashMap},
     fmt::Debug,
     sync::{Arc, RwLock},
 };
@@ -8,7 +8,7 @@ use dioxus_logger::tracing::{info, trace};
 use tracing::warn;
 
 use crate::{
-    card::{BaseCard, CardId}, dependents::Dependents, index::Index, metadata::Metadata, recall_rate::History, Card, Provider, Recaller, TimeGetter
+    card::{BaseCard, CardId}, metadata::Metadata, recall_rate::History, Card, Provider, Recaller, TimeGetter
 };
 
 #[derive(Clone)]
@@ -44,31 +44,13 @@ impl CardProvider {
         self.providers.cards.load_ids().await
     }
 
-    async fn refresh_cache(&self) {
+    pub async fn refresh_cache(&self) {
         info!("starting cache refresh... might take a while..");
         let cards = self.providers.cards.load_all().await;
 
-        for (_, card) in &cards {
-            for bigram in card.bigrams(self).await {
-                let mut indices = match self.providers.indices.load_item(bigram).await {
-                    Some(idx) => idx,
-                    None => Index::new(bigram, Default::default(), self.time_provider.current_time()),
-                };
-                indices.deps.insert(card.id);
-                self.providers.indices.save_item(indices).await;
-            }
-        }
+        self.providers.indices.refresh(self, cards.values()).await;
+        self.providers.dependents.refresh(cards.values()).await;
 
-        for (_, card) in &cards {
-            for dependency in card.dependencies().await {
-                let mut indices = match self.providers.dependents.load_item(dependency).await {
-                    Some(idx) => idx,
-                    None => Dependents::new(dependency, Default::default(), self.time_provider.current_time()),
-                };
-                indices.deps.insert(card.id);
-                self.providers.dependents.save_item(indices).await;
-            }
-        }
         info!("done with cache refresh!");
     }
 
@@ -77,27 +59,16 @@ impl CardProvider {
         let base_card = self.providers.cards.load_item(id).await.unwrap();
 
         for dependency in base_card.dependencies().await {
-            match self.providers.dependents.load_item(dependency).await {
-                Some(dependents) => {
-                    if !dependents.deps.contains(&id) {
-                        warn!("card: {} has {} as dependency but it was not present in the dependents cache", id, dependency);
-                        return false;
-                    }
-                },
-                None => return false,
+            if !self.providers.dependents.load(dependency).await.contains(&id) {
+                warn!("card: {} has {} as dependency but it was not present in the dependents cache", id, dependency);
+                return false;
             }
-
         }
 
         for bigram in base_card.bigrams(&self.clone()).await {
-            match self.providers.indices.load_item(bigram).await {
-                Some(indices) => {
-                    if !indices.deps.contains(&id) {
-                        warn!("card: {} has {:?} bigram but it was not present in the indices", id, bigram);
-                        return false;
-                    }
-                },
-                None => return false,
+            if !self.providers.indices.load(bigram).await.contains(&id) {
+                warn!("card: {} has {:?} bigram but it was not present in the indices", id, bigram);
+                return false;
             }
         }
 
@@ -142,28 +113,9 @@ impl CardProvider {
 
     pub async fn dependents(&self, id: CardId) -> BTreeSet<CardId> {
         trace!("dependents of: {}", id);
-        self.providers.dependents.load_item(id).await.map(|x|x.deps).unwrap_or_default()
+        self.providers.dependents.load(id).await
     }
 
-    pub async fn fill_dependents(&self) {
-        info!("filling all dependents cache");
-
-        let current_time = self.time_provider.current_time();
-        let cards = self.load_all().await;
-        let mut deps: BTreeMap<CardId, BTreeSet<CardId>> = BTreeMap::default();
-
-        for card in cards {
-            for dependency in card.dependencies().await {
-                deps.entry(dependency).or_default().insert(card.id());
-            }
-        }
-
-        for (id, deps) in deps {
-            let dependents = Dependents::new(id, deps, current_time);
-            self.providers.dependents.save_item(dependents).await;
-        }
-        info!("done filling all dependents cache");
-    }
 
     pub async fn load(&self, id: CardId) -> Option<Arc<Card>> {
         if let Some(card) = self.cards.read().unwrap().get(&id).cloned() {
@@ -204,69 +156,6 @@ impl CardProvider {
         Some(card)
     }
 
-    pub async fn update_indices(&self, old_card: Option<&BaseCard>, new_card: &BaseCard) {
-        let id = new_card.id;
-
-        let old_indices = match old_card {
-            Some(card) => card.bigrams(&self.clone()).await,
-            None => Default::default(),
-        };
-
-        for idx in old_indices{
-            if let Some(mut index) = self.providers.indices.load_item(idx).await {
-                index.deps.remove(&id);
-                self.providers.indices.save_item(index).await;
-            }
-        }
-
-
-        for idx in new_card.bigrams(&self.clone()).await {
-            if let Some(mut index) = self.providers.indices.load_item(idx).await {
-                index.deps.insert(id);
-                self.providers.indices.save_item(index).await;
-            }
-        }
-    }
-
-    pub async fn update_dependents(&self, old_card: Option<&BaseCard>, new_card: &BaseCard) {
-        let id = new_card.id;
-
-        let new_dependencies = new_card.dependencies().await;
-        let old_dependencies  = {
-            if let Some(card)= 
-            old_card {
-                card.dependencies().await
-            } else {
-                Default::default()
-            }
-        };
-
-        let removed_dependencies = old_dependencies.difference(&new_dependencies);
-        let added_dependencies = new_dependencies.difference(&old_dependencies);
-
-        for dependency in removed_dependencies {
-            let mut dependents = if let Some(deps) = self.providers.dependents.load_item(*dependency).await  {
-                deps
-            } else {
-                Dependents::new(*dependency, Default::default(), self.time_provider.current_time())
-            };
-
-            dependents.deps.remove(&id);
-            self.providers.dependents.save_item(dependents).await;
-        }
-
-        for dependency in added_dependencies {
-            let mut dependents = if let Some(deps) = self.providers.dependents.load_item(*dependency).await  {
-                deps
-            } else {
-                Dependents::new(*dependency, Default::default(), self.time_provider.current_time())
-            };
-
-            dependents.deps.contains(&id);
-            dependents.deps.insert(id);
-            self.providers.dependents.save_item(dependents).await;
-        }
-    }
 
     pub fn invalidate_card(&self, id: CardId) -> Option<Arc<Card>>{
         self.cards.write().unwrap().remove(&id)
@@ -274,8 +163,8 @@ impl CardProvider {
 
     pub async fn save_basecard(&self, new_card: BaseCard) -> Arc<Card> {
         let old_card = self.providers.cards.load_item(new_card.id).await;
-        self.update_dependents(old_card.as_ref(), &new_card).await;
-        self.update_indices(old_card.as_ref(), &new_card).await;
+        self.providers.dependents.update(old_card.as_ref(), &new_card).await;
+        self.providers.indices.update(self, old_card.as_ref(), &new_card).await;
         self.invalidate_card(new_card.id);
         self.load(new_card.id).await.unwrap()
     }

@@ -5,10 +5,10 @@ use card::{BackSide, BaseCard, CardId, RecallRate};
 use card_provider::CardProvider;
 use cardfilter::{CardFilter, FilterItem};
 use collection::{Collection, CollectionId};
-use dependents::Dependents;
+use dependents::{Dependents, DependentsProvider};
 use dioxus_logger::tracing::info;
 use eyre::Result;
-use index::Index;
+use index::{Index, IndexProvider};
 use metadata::Metadata;
 use recall_rate::History;
 use speki_dto::{Indexable, Item, Record, SpekiProvider, TimeProvider};
@@ -41,10 +41,15 @@ pub trait RecallCalc {
 
 #[derive(Clone)]
 pub struct CollectionProvider {
-    inner: Arc<Box<dyn SpekiProvider<Collection>>>,
+   inner: Arc<Box<dyn SpekiProvider<Collection>>>,
 }
 
 impl CollectionProvider {
+    pub fn new(inner: Arc<Box<dyn SpekiProvider<Collection>>>) -> Self {
+        Self {
+            inner
+        }
+    }
     pub async fn save(&self, collection: Collection) {
         self.inner.save_item(collection).await
     }
@@ -75,8 +80,8 @@ pub struct Provider {
     pub metadata: Arc<Box<dyn SpekiProvider<Metadata>>>,
     pub cardfilter: Arc<Box<dyn SpekiProvider<FilterItem>>>,
     pub audios: Arc<Box<dyn SpekiProvider<Audio>>>,
-    pub dependents: Arc<Box<dyn SpekiProvider<Dependents>>>,
-    pub indices: Arc<Box<dyn SpekiProvider<Index>>>,
+    pub dependents: DependentsProvider,
+    pub indices: IndexProvider,
 }
 
 #[derive(Clone)]
@@ -212,8 +217,9 @@ impl App {
             metadata: Arc::new(Box::new(MemProvider::new(Arc::new(Box::new(meta_provider))))),
             cardfilter: Arc::new(Box::new(MemProvider::new(Arc::new(Box::new(filter_provider))))),
             audios: Arc::new(Box::new(MemProvider::new(Arc::new(Box::new(audio_provider))))),
-            dependents: Arc::new(Box::new(MemProvider::new(Arc::new(Box::new(dependents_provider))))),
-            indices: Arc::new(Box::new(MemProvider::new(Arc::new(Box::new(index_provider))))),
+            dependents: DependentsProvider::new(Arc::new(Box::new(MemProvider::new(Arc::new(Box::new(dependents_provider)))))),
+            indices: IndexProvider::new(Arc::new(Box::new(MemProvider::new(Arc::new(Box::new(index_provider)))))),
+            
         };
 
         let card_provider =
@@ -229,7 +235,7 @@ impl App {
 
     pub async fn index_all(&self) {
         //self.provider.cards.index_all().await;
-        self.card_provider.fill_dependents().await;
+        self.card_provider.refresh_cache().await;
     }
 
     pub fn card_provider(&self) -> CardProvider {
