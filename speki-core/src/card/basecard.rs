@@ -40,28 +40,23 @@ impl BaseCard {
     pub async fn bigrams(&self, provider: &CardProvider) -> Vec<Bigram> {
         let mut bigrams = vec![];
 
-
-    for bigram in self.ty.display_front(provider).await
+        for bigram in self.ty.display_front(provider).await
             .chars()
             .collect::<Vec<_>>()
             .windows(2)
             .map(|w| Bigram::new(w[0], w[1]))
             .collect::<Vec<Bigram>>() {
                 bigrams.push(bigram);
-
-            }
-
-
+        }
             bigrams
+        }
 
-    }
+        pub fn new_with_id(id: impl Into<Option<CardId>>, ty: impl Into<CardType>) -> Self {
+            let id: Option<CardId> = id.into();
+            let id = id.unwrap_or_else(|| CardId::new_v4());
 
-    pub fn new_with_id(id: impl Into<Option<CardId>>, ty: impl Into<CardType>) -> Self {
-        let id: Option<CardId> = id.into();
-        let id = id.unwrap_or_else(|| CardId::new_v4());
-
-        Self {
-            id,
+            Self {
+                id,
             ty: ty.into(),
             deleted: false,
             dependencies: Default::default(),

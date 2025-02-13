@@ -1,5 +1,5 @@
 
-use std::{collections::BTreeSet, sync::Arc, time::Duration};
+use std::{collections::{BTreeMap, BTreeSet}, sync::Arc, time::Duration};
 
 use serde::{Deserialize, Serialize};
 use speki_dto::{Item, ModifiedSource, SpekiProvider};
@@ -12,7 +12,6 @@ pub struct IndexProvider {
 }
 
 impl IndexProvider {
-
     pub fn new(inner: Arc<Box<dyn SpekiProvider<Index>>>) -> Self {
         Self {
             inner
@@ -24,15 +23,16 @@ impl IndexProvider {
     }
 
     pub async fn refresh(&self, provider: &CardProvider, cards: impl IntoIterator<Item=&BaseCard>) {
+        let mut indices: BTreeMap<Bigram, BTreeSet<CardId>> = Default::default();
+
         for card in cards {
             for bigram in card.bigrams(provider).await {
-                let mut indices = match self.inner.load_item(bigram).await {
-                    Some(idx) => idx,
-                    None => Index::new(bigram, Default::default(), Default::default()),
-                };
-                indices.deps.insert(card.id);
-                self.inner.save_item(indices).await;
+                indices.entry(bigram).or_default().insert(card.id);
             }
+        }
+
+        for (bigram, indices) in indices {
+            self.inner.save_item(Index::new(bigram, indices, Default::default())).await;
         }
     }
 
@@ -123,7 +123,7 @@ impl Item for Index {
     }
 
     fn identifier() -> &'static str {
-        "dependents"
+        "indices"
     }
 
     fn source(&self) -> ModifiedSource {

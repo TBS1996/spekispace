@@ -162,11 +162,13 @@ impl CardProvider {
     }
 
     pub async fn save_basecard(&self, new_card: BaseCard) -> Arc<Card> {
-        let old_card = self.providers.cards.load_item(new_card.id).await;
+        let id = new_card.id;
+        let old_card = self.providers.cards.load_item(id).await;
         self.providers.dependents.update(old_card.as_ref(), &new_card).await;
         self.providers.indices.update(self, old_card.as_ref(), &new_card).await;
-        self.invalidate_card(new_card.id);
-        self.load(new_card.id).await.unwrap()
+        self.providers.cards.save_item(new_card).await;
+        self.invalidate_card(id);
+        self.load(id).await.unwrap()
     }
 
     pub fn time_provider(&self) -> TimeGetter {
