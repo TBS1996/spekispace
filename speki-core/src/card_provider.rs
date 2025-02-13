@@ -5,7 +5,6 @@ use std::{
 };
 
 use dioxus_logger::tracing::{info, trace};
-use tracing::warn;
 
 use crate::{
     card::{BaseCard, CardId}, metadata::Metadata, recall_rate::History, Card, Provider, Recaller, TimeGetter
@@ -54,27 +53,25 @@ impl CardProvider {
         info!("done with cache refresh!");
     }
 
-    /// Checks that cache of given card is solid.
-    async fn check_cache(&self, id: CardId) -> bool {
+    async fn validate_cache(&self, id: CardId) {
         let base_card = self.providers.cards.load_item(id).await.unwrap();
+        let mut cards: HashMap<CardId, BaseCard> = Default::default();
 
-        for dependency in base_card.dependencies().await {
-            if !self.providers.dependents.load(dependency).await.contains(&id) {
-                warn!("card: {} has {} as dependency but it was not present in the dependents cache", id, dependency);
-                return false;
-            }
+        if !self.providers.dependents.check(&base_card).await {
+            cards = self.providers.cards.load_all().await;
+            self.providers.dependents.refresh(cards.values()).await;
         }
 
-        for bigram in base_card.bigrams(&self.clone()).await {
-            if !self.providers.indices.load(bigram).await.contains(&id) {
-                warn!("card: {} has {:?} bigram but it was not present in the indices", id, bigram);
-                return false;
+
+        if !self.providers.indices.check(self, &base_card).await {
+            if cards.is_empty() {
+                cards = self.providers.cards.load_all().await;
             }
+
+            self.providers.indices.refresh(self, cards.values()).await;
         }
 
-        true
     }
-
 
     pub async fn filtered_load<F, Fut>(&self, filter: F) -> Vec<Arc<Card>>
     where
@@ -119,9 +116,7 @@ impl CardProvider {
 
     pub async fn load(&self, id: CardId) -> Option<Arc<Card>> {
         if let Some(card) = self.cards.read().unwrap().get(&id).cloned() {
-            if !self.check_cache(id).await {
-                self.refresh_cache().await;
-            }
+            self.validate_cache(id).await;
             return Some(card);
         }
 
@@ -149,10 +144,7 @@ impl CardProvider {
 
         self.cards.write().unwrap().insert(id, card.clone());
 
-        if !self.check_cache(id).await {
-            self.refresh_cache().await;
-        }
-
+        self.validate_cache(id).await;
         Some(card)
     }
 

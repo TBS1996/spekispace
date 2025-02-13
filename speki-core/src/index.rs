@@ -3,6 +3,7 @@ use std::{collections::{BTreeMap, BTreeSet}, sync::Arc, time::Duration};
 
 use serde::{Deserialize, Serialize};
 use speki_dto::{Item, ModifiedSource, SpekiProvider};
+use tracing::info;
 
 use crate::{card::{BaseCard, CardId}, card_provider::CardProvider};
 
@@ -22,7 +23,19 @@ impl IndexProvider {
         self.inner.load_item(bigram).await.map(|i|i.deps).unwrap_or_default()
     }
 
+    pub async fn check(&self, provider: &CardProvider, card: &BaseCard) -> bool{
+        for bigram in card.bigrams(provider).await {
+            if !self.load(bigram).await.contains(&card.id) {
+                tracing::warn!("card: {} has {:?} bigram but it was not present in the indices", card.id, bigram);
+                return false;
+            }
+        }
+
+        true
+    }
+
     pub async fn refresh(&self, provider: &CardProvider, cards: impl IntoIterator<Item=&BaseCard>) {
+        info!("refreshing indices..");
         let mut indices: BTreeMap<Bigram, BTreeSet<CardId>> = Default::default();
 
         for card in cards {
@@ -34,6 +47,8 @@ impl IndexProvider {
         for (bigram, indices) in indices {
             self.inner.save_item(Index::new(bigram, indices, Default::default())).await;
         }
+
+        info!("done refreshing indices..");
     }
 
 

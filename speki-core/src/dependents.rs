@@ -1,8 +1,9 @@
 use std::{collections::{BTreeMap, BTreeSet}, sync::Arc, time::Duration};
 
+use futures::future::join_all;
 use serde::{Deserialize, Serialize};
 use speki_dto::{Item, ModifiedSource, SpekiProvider};
-use tracing::info;
+use tracing::{info, warn};
 use uuid::Uuid;
 
 use crate::card::{BaseCard, CardId};
@@ -30,6 +31,16 @@ impl DependentsProvider {
         }
     }
 
+    pub async fn check(&self, card: &BaseCard) -> bool {
+        for dependency in card.dependencies().await {
+            if !self.load(dependency).await.contains(&card.id){
+                warn!("card: {} has {} as dependency but it was not present in the dependents cache", card.id, dependency);
+                return false;
+            }
+        }
+        true
+    }
+
     pub async fn refresh(&self, cards: impl IntoIterator<Item = &BaseCard>) {
         info!("filling all dependents cache");
 
@@ -41,10 +52,15 @@ impl DependentsProvider {
             }
         }
 
+        let mut futs = vec![];
+
         for (id, deps) in deps {
             let dependents = Dependents::new(id, deps, Default::default());
-            self.inner.save_item(dependents).await;
+            futs.push(async move {self.inner.save_item(dependents).await});
         }
+
+        join_all(futs).await;
+
         info!("done filling all dependents cache");
     }
 
