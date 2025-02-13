@@ -42,3 +42,8 @@ async-recursion.workspace = true
 
 speki-dto = { path = "../speki-dto" }
 speki-core = { path = "../speki-core" }
+
+
+[features]
+desktop = ["dioxus/desktop"]
+

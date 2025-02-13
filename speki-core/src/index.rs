@@ -37,20 +37,16 @@ impl IndexProvider {
     pub async fn refresh(&self, provider: &CardProvider, cards: impl IntoIterator<Item=&BaseCard>) {
         info!("refreshing indices..");
         let mut indices: BTreeMap<Bigram, BTreeSet<CardId>> = Default::default();
-
         for card in cards {
             for bigram in card.bigrams(provider).await {
                 indices.entry(bigram).or_default().insert(card.id);
             }
         }
-
         for (bigram, indices) in indices {
             self.inner.save_item(Index::new(bigram, indices, Default::default())).await;
         }
-
         info!("done refreshing indices..");
     }
-
 
     pub async fn update(&self, provider: &CardProvider, old_card: Option<&BaseCard>, new_card: &BaseCard) {
         let id = new_card.id;

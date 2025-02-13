@@ -81,6 +81,7 @@ export async function loadRecord(typeName, id) {
 export async function loadAllRecords(typeName) {
     const db = getDexieInstance(typeName);
     const records = await db.records.toArray();
+    console.log(`heyy found ${records.length} ids of type ${typeName}`);
 
     return records.reduce((map, record) => {
         map[record.id] = {
@@ -96,6 +97,7 @@ export async function loadAllRecords(typeName) {
 export async function loadAllIds(typeName) {
     const db = getDexieInstance(typeName);
     const records = await db.records.toArray();
+    console.log(`Found ${records.length} ids of type ${typeName}`);
     return records.map((record) => record.id);
 }
 

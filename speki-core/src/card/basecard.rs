@@ -48,15 +48,16 @@ impl BaseCard {
             .collect::<Vec<Bigram>>() {
                 bigrams.push(bigram);
         }
-            bigrams
-        }
 
-        pub fn new_with_id(id: impl Into<Option<CardId>>, ty: impl Into<CardType>) -> Self {
-            let id: Option<CardId> = id.into();
-            let id = id.unwrap_or_else(|| CardId::new_v4());
+        bigrams
+    }
 
-            Self {
-                id,
+    pub fn new_with_id(id: impl Into<Option<CardId>>, ty: impl Into<CardType>) -> Self {
+        let id: Option<CardId> = id.into();
+        let id = id.unwrap_or_else(|| CardId::new_v4());
+
+        Self {
+            id,
             ty: ty.into(),
             deleted: false,
             dependencies: Default::default(),
@@ -218,6 +219,7 @@ pub struct AttributeCard {
 
 impl AttributeCard {
     pub async fn display_front(&self, provider: &CardProvider) -> String {
+        return String::from("attribute card!");
         provider
             .providers
             .attrs

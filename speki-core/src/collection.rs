@@ -195,18 +195,25 @@ impl DynCard {
 
                 output
             }
-            DynCard::Dependents(id) => provider
+            DynCard::Dependents(id) => 
+            {
+
+            match provider
                 .load(*id)
                 .await
-                .unwrap()
-                .dependents()
-                .await
-                .into_iter()
-                .map(MaybeCard::Card)
-                .collect(),
+                {
+                    Some(card) => card.dependents().await.into_iter().map(|x|MaybeCard::Card(x)).collect(),
+                    None =>  vec![],
+                }
+
+            }
+            
 
             DynCard::RecDependents(id) => {
-                let ids = provider.load(*id).await.unwrap().recursive_dependents().await;
+                let ids = match provider.load(*id).await {
+                    Some(x) => x.recursive_dependents().await,
+                    None => return vec![],
+                };
                 let mut out = vec![];
 
                 for id in ids {
