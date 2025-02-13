@@ -16,6 +16,7 @@ pub struct CardProvider {
     pub providers: Provider,
     time_provider: TimeGetter,
     recaller: Recaller,
+    validate: bool,
 }
 
 impl Debug for CardProvider {
@@ -116,7 +117,10 @@ impl CardProvider {
 
     pub async fn load(&self, id: CardId) -> Option<Arc<Card>> {
         if let Some(card) = self.cards.read().unwrap().get(&id).cloned() {
-            self.validate_cache(id).await;
+            if self.validate {
+                self.validate_cache(id).await;
+            }
+
             return Some(card);
         }
 
@@ -144,7 +148,10 @@ impl CardProvider {
 
         self.cards.write().unwrap().insert(id, card.clone());
 
-        self.validate_cache(id).await;
+        if self.validate {
+            self.validate_cache(id).await;
+        }
+
         Some(card)
     }
 
@@ -173,6 +180,7 @@ impl CardProvider {
             time_provider,
             providers: provider,
             recaller,
+            validate: false,
         }
     }
 }
