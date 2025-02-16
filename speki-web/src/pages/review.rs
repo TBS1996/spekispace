@@ -1,17 +1,18 @@
 use std::{fmt::Debug, sync::Arc};
 
 use dioxus::prelude::*;
-use speki_core::{cardfilter::CardFilter, collection::Collection};
+use speki_core::{cardfilter::CardFilter, collection::{Collection, DynCard}};
 use tracing::info;
 
 use crate::{
     components::{FilterComp, FilterEditor},
     overlays::{
-        colviewer::CollectionEditor, reviewsession::ReviewState, textinput::TextInput, Overender,
+        colviewer::CollectionEditor, reviewsession::{ReviewSession, ReviewState}, textinput::TextInput, Overender,
         OverlayEnum,
     },
     APP, IS_SHORT,
 };
+
 
 #[derive(Clone)]
 pub struct ReviewPage {
@@ -204,8 +205,8 @@ fn RenderCols(
                 onclick: move |_| {
                     let filter = filter.clone();
                     spawn(async move {
-                        let cards = APP.read().load_all(Some(filter)).await;
-                        let revses = OverlayEnum::Review(ReviewState::new(cards));
+                        let session = ReviewSession::new(vec![DynCard::Any], filter).await;
+                        let revses = OverlayEnum::Review(ReviewState::new(session));
                         overlay.clone().set(Some(revses));
                     });
                 },
@@ -232,7 +233,11 @@ fn RenderCols(
                                 let filter = filter.clone();
                                 spawn(async move {
                                     let col = APP.read().load_collection(col.id).await;
-                                    let cards = col.expand(APP.read().inner().card_provider.clone()).await.into_iter().map(|card|speki_web::CardEntry::new(Arc::unwrap_or_clone(card))).collect();
+                                    let provider = APP.read().inner().card_provider.clone();
+                                    let mut cards = vec![];
+                                    for card in col.dyncards {
+                                        cards.extend(card.expand(provider.clone(), Default::default()).await);
+                                    }
                                     let session = OverlayEnum::Review(ReviewState::new_with_filter(cards, filter).await);
                                     overlay.clone().set(Some(session));
                                 });

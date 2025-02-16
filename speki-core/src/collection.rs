@@ -1,8 +1,5 @@
 use std::{
-    collections::{BTreeSet, HashSet},
-    fmt::Display,
-    sync::Arc,
-    time::Duration,
+    cmp::Ordering, collections::{BTreeSet, HashSet}, fmt::Display, sync::Arc, time::Duration
 };
 
 use async_recursion::async_recursion;
@@ -112,7 +109,7 @@ pub enum MaybeDyn {
 
 impl MaybeDyn {
     #[async_recursion(?Send)]
-    async fn expand(
+pub    async fn expand(
         &self,
         provider: CardProvider,
         mut seen_cols: HashSet<CollectionId>,
@@ -146,7 +143,7 @@ impl MaybeDyn {
     }
 }
 
-#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub enum MaybeCard {
     Id(CardId),
     Card(Arc<Card>),
@@ -158,6 +155,18 @@ impl MaybeCard {
             Self::Id(id) => *id,
             Self::Card(ref card) => card.id(),
         }
+    }
+}
+
+impl Ord for MaybeCard {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.id().cmp(&other.id())
+    }
+}
+
+impl PartialOrd for MaybeCard {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
     }
 }
 

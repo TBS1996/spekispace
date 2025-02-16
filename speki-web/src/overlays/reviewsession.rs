@@ -1,8 +1,8 @@
 use dioxus::prelude::*;
 use speki_web::CardEntry;
-use std::{rc::Rc, sync::Arc};
+use std::{collections::BTreeSet, rc::Rc, sync::Arc};
 
-use speki_core::{card::CardId, cardfilter::CardFilter, recall_rate::Recall};
+use speki_core::{card::CardId, cardfilter::CardFilter, collection::{DynCard, MaybeCard}, recall_rate::Recall};
 use tracing::info;
 
 use crate::{
@@ -22,7 +22,7 @@ fn RecallButton(
     card: CardEntry,
     mut queue: Signal<Queue>,
     mut show_backside: Signal<bool>,
-    filter: CardFilter,
+    session: ReviewSession,
 ) -> Element {
     let label = match recall {
         Recall::None => "😡",
@@ -36,7 +36,7 @@ fn RecallButton(
             class: "bg-white mt-6 inline-flex items-center justify-center text-white border-0 py-4 px-6 focus:outline-none hover:bg-gray-700 rounded md:mt-0 text-4xl leading-none",
             onclick: move |_| {
                 let mut card = card.clone();
-                let filter = filter.clone();
+                let session = session.clone();
                 spawn(async move{
                     info!("do review");
                     card.card.write()
@@ -56,9 +56,11 @@ fn RecallButton(
                     new_queue.retain(|id|!related.contains(id));
 
                     for id in related {
-                        let card = APP.read().load_card(id).await;
-                        if filter.filter(Arc::new(card.card.cloned())).await {
-                            new_queue.push(id);
+                        if session.thecards.contains(&MaybeCard::Id(id)) {
+                            let card = APP.read().load_card(id).await;
+                            if session.filter.filter(Arc::new(card.card.cloned())).await {
+                                new_queue.push(id);
+                            }
                         }
                     }
 
@@ -79,7 +81,7 @@ fn ReviewButtons(
     mut show_backside: Signal<bool>,
     card: CardEntry,
     queue: Signal<Queue>,
-    filter: CardFilter,
+    session: ReviewSession,
 ) -> Element {
     rsx! {
         div {
@@ -110,12 +112,45 @@ fn ReviewButtons(
                             card: card.clone(),
                             queue: queue.clone(),
                             show_backside: show_backside.clone(),
-                            filter: filter.clone(),
+                            session: session.clone(),
                         }
                     }
                 }
             }
         }
+    }
+}
+
+
+#[derive(Clone, PartialEq, Debug)]
+pub struct ReviewSession {
+    cards: Vec<DynCard>,
+    filter: CardFilter,
+    thecards: BTreeSet<MaybeCard>,
+}
+
+impl ReviewSession {
+    pub async fn new(cards: Vec<DynCard>, filter: CardFilter) -> Self {
+        let mut selv = Self {
+            cards,
+            filter,
+            thecards: Default::default(),
+        };
+        let thecards = selv.expand().await;
+        selv.thecards = thecards;
+        selv
+    }
+
+    pub async fn expand(&self) -> BTreeSet<MaybeCard> {
+        let provider = APP.read().inner().card_provider();
+        let mut out: BTreeSet<MaybeCard> = Default::default();
+
+        for card in &self.cards {
+            let cards = card.evaluate(provider.clone()).await;
+            out.extend(cards);
+        }
+
+        out
     }
 }
 
@@ -129,7 +164,7 @@ pub fn ReviewRender(
     tot: Resource<usize>,
     overlay: Signal<Option<OverlayEnum>>,
     dependencies: Resource<Vec<(CardEntry, Signal<Option<OverlayEnum>>)>>,
-    filter: CardFilter,
+    session: ReviewSession,
 ) -> Element {
     let card2 = card.clone();
     let log_event = move |event: Rc<KeyboardData>| {
@@ -197,7 +232,7 @@ pub fn ReviewRender(
                             class: "flex-none w-full md:w-1/2 p-4 box-border overflow-y-auto overflow-x-hidden order-2 md:order-1",
                             style: "min-height: 0; max-height: 100%;",
                              CardSides {
-                                front, back, queue, card, show_backside, filter
+                                front, back, queue, card, show_backside, session
                              }
                         }
                     }
@@ -265,33 +300,24 @@ pub struct ReviewState {
     pub show_backside: Signal<bool>,
     pub is_done: Memo<bool>,
     pub overlay: Signal<Option<OverlayEnum>>,
-    pub filter: CardFilter,
+    pub session: ReviewSession,
 }
 
 impl ReviewState {
-    pub async fn new_with_filter(cards: Vec<CardEntry>, filter: CardFilter) -> Self {
-        let mut filtered = vec![];
-
-        for card in cards {
-            if filter.filter(Arc::new(card.card.cloned())).await {
-                filtered.push(card);
-            }
-        }
-
-        Self {
-            filter,
-            ..Self::new(filtered)
-        }
+    pub async fn new_with_filter(cards: Vec<DynCard>, filter: CardFilter) -> Self {
+        let session = ReviewSession::new(cards, filter).await;
+        Self::new(session)
     }
 
-    pub fn new(cards: Vec<CardEntry>) -> Self {
-        info!("start review for {} cards", cards.len());
+    pub fn new(session: ReviewSession) -> Self {
+        info!("start review for {} cards", session.thecards.len());
 
         let mut thecards = vec![];
 
-        for card in cards {
+        for card in &session.thecards {
             thecards.push(card.id());
         }
+
 
         let overlay: Signal<Option<OverlayEnum>> = Signal::new_in_scope(None, ScopeId::APP);
         let queue: Signal<Queue> = Signal::new_in_scope(Queue::new(thecards), ScopeId::APP);
@@ -364,7 +390,7 @@ impl ReviewState {
             is_done,
             queue,
             overlay,
-            filter: CardFilter::default(),
+            session,
         }
     }
 }
@@ -506,7 +532,7 @@ fn CardSides(
     show_backside: Signal<bool>,
     card: CardEntry,
     queue: Signal<Queue>,
-    filter: CardFilter,
+    session: ReviewSession,
 ) -> Element {
     let backside_visibility_class = if show_backside() {
         "opacity-100 visible"
@@ -543,7 +569,7 @@ fn CardSides(
                     show_backside,
                     card,
                     queue,
-                    filter,
+                    session,
                 }
             }
         }
