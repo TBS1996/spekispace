@@ -219,14 +219,18 @@ pub struct AttributeCard {
 
 impl AttributeCard {
     pub async fn display_front(&self, provider: &CardProvider) -> String {
-        return String::from("attribute card!");
-        provider
+     let attr =    provider
             .providers
             .attrs
             .load_item(self.attribute)
             .await
-            .map(|dto| Attribute::from_dto(dto, provider.clone()))
-            .unwrap()
+            .map(|dto| Attribute::from_dto(dto, provider.clone()));
+
+        let Some(attr) = attr else {
+            return format!("attribute not found ? {}", self.attribute);
+        };
+
+            attr
             .name(self.instance)
             .await
             .unwrap_or_else(|| "oops, instance is deleted".to_string())
