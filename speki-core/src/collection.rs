@@ -64,8 +64,17 @@ impl Collection {
         let mut out: BTreeSet<Arc<Card>> = BTreeSet::default();
         let mut cards: Vec<MaybeCard> = Default::default();
 
+        let mut futs = vec![];
+
         for card in &self.dyncards {
-            cards.extend(card.evaluate(provider.clone()).await);
+            let xprovider = provider.clone();
+            futs.push(async move {
+                card.evaluate(xprovider).await
+            });
+        }
+
+        for x in futures::future::join_all(futs).await {
+            cards.extend(x);
         }
 
         info!(
@@ -74,27 +83,42 @@ impl Collection {
             cards.len()
         );
 
+        let mut futs = vec![];
+
         for card in cards {
-            match card {
-                MaybeCard::Id(id) => {
-                    let Some(card) = provider.load(id).await else {
-                        warn!("unable to find card with id: {}", id);
-                        continue;
-                    };
-                    for dep in card.recursive_dependencies().await {
-                        let dep = provider.load(dep).await.unwrap();
-                        out.insert(dep);
+            let provider = provider.clone();
+            let fut = async move {
+                let mut out = vec![];
+
+                match card {
+                    MaybeCard::Id(id) => {
+                        let Some(card) = provider.load(id).await else {
+                            warn!("unable to find card with id: {}", id);
+                            return out;
+                        };
+                        for dep in card.recursive_dependencies().await {
+                            let dep = provider.load(dep).await.unwrap();
+                            out.push(dep);
+                        }
+                        out.push(card);
+                        return out;
                     }
-                    out.insert(card);
-                }
-                MaybeCard::Card(card) => {
-                    for dep in card.recursive_dependencies().await {
-                        let dep = provider.load(dep).await.unwrap();
-                        out.insert(dep);
+                    MaybeCard::Card(card) => {
+                        for dep in card.recursive_dependencies().await {
+                            let dep = provider.load(dep).await.unwrap();
+                            out.push(dep);
+                        }
+                        out.push(card);
+                        return out;
                     }
-                    out.insert(card);
                 }
-            }
+            };
+
+            futs.push(fut);
+        }
+
+        for cards in futures::future::join_all(futs).await{
+            out.extend(cards);
         }
 
         out.into_iter().collect()
@@ -109,7 +133,7 @@ pub enum MaybeDyn {
 
 impl MaybeDyn {
     #[async_recursion(?Send)]
-pub    async fn expand(
+    pub async fn expand(
         &self,
         provider: CardProvider,
         mut seen_cols: HashSet<CollectionId>,

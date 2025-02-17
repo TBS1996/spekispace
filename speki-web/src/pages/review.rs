@@ -46,10 +46,21 @@ impl ReviewPage {
 
             let mut out = vec![];
 
+            let mut futs = vec![];
+
             for col in _cols {
-                let dist = RecallDist::new(col.clone()).await;
+                futs.push(
+                    async move {
+                        let dist = RecallDist::new(col.clone()).await;
+                        (col, dist)
+                    }
+                );
+            }
+
+            for (col, dist) in futures::future::join_all(futs).await{
                 out.push((col, dist));
             }
+
             cols.clone().set(out);
         });
 
