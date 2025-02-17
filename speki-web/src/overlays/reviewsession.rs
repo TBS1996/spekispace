@@ -57,9 +57,10 @@ fn RecallButton(
 
                     for id in related {
                         if session.thecards.contains(&MaybeCard::Id(id)) {
-                            let card = APP.read().load_card(id).await;
-                            if session.filter.filter(Arc::new(card.card.cloned())).await {
-                                new_queue.push(id);
+                            if let Some(card) = APP.read().try_load_card(id).await {
+                                if session.filter.filter(Arc::new(card.card.cloned())).await {
+                                    new_queue.push(id);
+                                }
                             }
                         }
                     }
@@ -266,9 +267,10 @@ impl Queue {
         if !self.upcoming.is_empty() {
             let id = self.current().unwrap();
             spawn(async move {
-                let card = APP.read().load_card(id).await;
-                if let Some(audio) = card.clone().card.read().front_audio.clone() {
-                    play_audio(audio.data, "audio/mpeg");
+                if let Some(card) = APP.read().try_load_card(id).await {
+                    if let Some(audio) = card.clone().card.read().front_audio.clone() {
+                        play_audio(audio.data, "audio/mpeg");
+                    }
                 }
             });
 
@@ -329,8 +331,7 @@ impl ReviewState {
             use_resource(move || async move {
                 match queue.read().current() {
                     Some(id) => {
-                        let card = APP.read().load_card(id).await;
-                        Some(card)
+                        APP.read().try_load_card(id).await
                     }
                     None => None,
                 }
@@ -344,8 +345,9 @@ impl ReviewState {
                         let mut deps: Vec<(CardEntry, Signal<Option<OverlayEnum>>)> = vec![];
 
                         for dep in &card.dependencies() {
-                            let dep = APP.read().load_card(*dep).await;
-                            deps.push((dep, overlay.clone()));
+                            if let Some(dep) = APP.read().try_load_card(*dep).await{
+                                deps.push((dep, overlay.clone()));
+                            }
                         }
                         deps
                     } else {
