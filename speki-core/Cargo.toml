@@ -20,8 +20,9 @@ dioxus-logger.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
 async-recursion.workspace = true
-
+async-once-cell.workspace = true
 async-trait.workspace = true
+wasm-bindgen-futures.workspace = true
 deunicode = "1.6.0"
 
 [dependencies.gkquad]

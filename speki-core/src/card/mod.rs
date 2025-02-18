@@ -10,7 +10,7 @@ use std::{
 use futures::executor::block_on;
 use serde::{ser::SerializeSeq, Deserialize, Deserializer, Serialize};
 use serde_json::Value;
-use speki_dto::{Item, ModifiedSource};
+use speki_dto::{Item, LazyItem, ModifiedSource};
 use tracing::info;
 use uuid::Uuid;
 
@@ -34,7 +34,7 @@ pub struct Card {
     pub front_audio: Option<Audio>,
     pub back_audio: Option<Audio>,
     pub base: BaseCard,
-    metadata: Metadata,
+    metadata: LazyItem<Metadata>,
     history: History,
     card_provider: CardProvider,
     recaller: Recaller,
@@ -111,10 +111,6 @@ impl Card {
         cards
     }
 
-    pub fn meta(&self) -> Metadata {
-        self.metadata.clone()
-    }
-
     /// Replaces current self with what's in card provider cache.
     async fn refresh(&mut self) {
         self.card_provider.invalidate_card(self.id);
@@ -157,7 +153,7 @@ impl Card {
         self.history.lapses_since(day, current_time)
     }
 
-    pub fn from_parts(
+    pub async fn from_parts(
         base: BaseCard,
         history: History,
         metadata: Metadata,
@@ -173,7 +169,7 @@ impl Card {
         Self {
             id,
             base,
-            metadata,
+            metadata: LazyItem::new_with_value(metadata, card_provider.providers.metadata.clone()).await,
             history,
             card_provider,
             recaller,
@@ -403,11 +399,11 @@ impl Card {
     }
 
     pub fn is_suspended(&self) -> bool {
-        self.metadata.suspended.is_suspended()
+        futures::executor::block_on(self.metadata.read()).suspended.is_suspended()
     }
 
     pub async fn set_suspend(&mut self, suspend: bool) {
-        self.metadata.suspended = IsSuspended::from(suspend);
+        self.metadata.write().await.suspended = IsSuspended::from(suspend);
         self.card_provider.invalidate_card(self.id);
         self.refresh().await;
     }

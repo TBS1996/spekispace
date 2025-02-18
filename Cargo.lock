@@ -98,6 +98,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "async-once-cell"
+version = "0.5.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4288f83726785267c6f2ef073a3d83dc3f9b81464e9f99898240cced85fce35a"
+
+[[package]]
 name = "async-process"
 version = "2.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4080,6 +4086,7 @@ dependencies = [
 name = "speki-core"
 version = "0.1.10"
 dependencies = [
+ "async-once-cell",
  "async-recursion",
  "async-trait",
  "deunicode",
@@ -4095,12 +4102,14 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "uuid",
+ "wasm-bindgen-futures",
 ]
 
 [[package]]
 name = "speki-dto"
 version = "0.1.0"
 dependencies = [
+ "async-once-cell",
  "async-trait",
  "futures",
  "serde",
@@ -4108,6 +4117,7 @@ dependencies = [
  "toml",
  "tracing",
  "uuid",
+ "wasm-bindgen-futures",
 ]
 
 [[package]]
@@ -5021,7 +5031,7 @@ version = "0.1.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf221c93e13a30d793f7645a0e7762c55d169dbb0a49671918a2319d289b10bb"
 dependencies = [
- "windows-sys 0.48.0",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]

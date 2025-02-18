@@ -138,13 +138,14 @@ impl CardProvider {
             Some(audio) => Some(self.providers.audios.load_item(audio).await.unwrap()),
             None => None,
         };
+
         let back_audio = match base.back_audio {
             Some(audio) => Some(self.providers.audios.load_item(audio).await.unwrap()),
             None => None,
         };
 
 
-        let card = Arc::new(Card::from_parts(base, history, metadata, self.clone(), self.recaller.clone(), front_audio, back_audio));
+        let card = Arc::new(Card::from_parts(base, history, metadata, self.clone(), self.recaller.clone(), front_audio, back_audio).await);
 
         self.cards.write().unwrap().insert(id, card.clone());
 

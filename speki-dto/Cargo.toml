@@ -11,3 +11,5 @@ async-trait.workspace = true
 toml.workspace = true
 tracing.workspace = true
 futures.workspace = true
+async-once-cell.workspace = true
+wasm-bindgen-futures.workspace = true

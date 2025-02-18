@@ -1,5 +1,5 @@
 use std::{
-    collections::{BTreeMap, BTreeSet, HashMap, HashSet}, fmt::Debug, hash::Hash, time::Duration
+    collections::{BTreeMap, BTreeSet, HashMap, HashSet}, fmt::Debug, hash::Hash, ops::{Deref, DerefMut}, sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard}, time::Duration
 };
 
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
@@ -33,6 +33,115 @@ pub enum ModifiedSource {
         inserted: Duration,
     },
 }
+
+#[derive(Clone)]
+pub struct LazyItem<A: Item> {
+    key: A::Key,
+    provider: Arc<Box<dyn SpekiProvider<A>>>,
+    item: Arc<async_once_cell::OnceCell<Option<Arc<RwLock<A>>>>>,
+}
+
+pub struct LazyWriteGuard<'a, A: Item>{
+    guard: RwLockWriteGuard<'a, A>,
+    provider: Arc<Box<dyn SpekiProvider<A>>>,
+}
+
+impl<A: Item> Drop for LazyWriteGuard<'_, A> {
+    fn drop(&mut self) {
+        let provider = self.provider.clone();
+        let item: A = self.guard.clone();
+        wasm_bindgen_futures::spawn_local(async move{
+            provider.save_item(item).await;
+        });
+    }
+}
+
+impl<A: Item> Deref for LazyWriteGuard<'_, A> {
+    type Target = A;
+
+    fn deref(&self) -> &Self::Target {
+        &self.guard
+    }
+}
+
+
+impl<A: Item> DerefMut for LazyWriteGuard<'_, A> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.guard
+    }
+}
+
+impl<A: Item> LazyItem<A> {
+    pub fn new(key: A::Key, provider: Arc<Box<dyn SpekiProvider<A>>>) -> Self {
+        Self {
+            key,
+            provider,
+            item: Default::default(),
+        }
+    }
+
+
+    pub async fn new_with_value(item: A, provider: Arc<Box<dyn SpekiProvider<A>>>) -> Self {
+        let key = item.id();
+        provider.save_item(item).await;
+        Self::new(key, provider)
+    }
+
+
+    async fn try_get(&self) -> Option<&Arc<RwLock<A>>> {
+        self.item.get_or_init(async {
+            match self.provider.load_item(self.key).await {
+                Some(item) => Some(Arc::new(RwLock::new(item))),
+                None => None,
+            }
+        }).await.as_ref()
+    }
+
+
+    pub async fn try_write(&self) -> Option<LazyWriteGuard<A>> {
+        let guard = self.try_get().await?.write().unwrap();
+
+        Some(LazyWriteGuard {
+            guard,
+            provider: self.provider.clone(),
+        })
+    }
+
+    pub async fn try_read(&self) -> Option<RwLockReadGuard<A>> {
+        Some(self.try_get().await?.read().unwrap())
+    }
+
+    pub async fn write(&self) -> LazyWriteGuard<A> {
+        self.try_write().await.unwrap()
+    }
+
+
+    pub async fn write_or_init<F: FnOnce() -> A>(&self, f: F) -> LazyWriteGuard<A> {
+        if let Some(guard) = self.try_write().await {
+            return guard;
+        }
+
+        self.item.get_or_init(async {Some(Arc::new(RwLock::new(f())))}).await;
+        self.write().await
+    }
+
+
+    pub async fn read_or_init<F: FnOnce() -> A>(&self, f: F) -> RwLockReadGuard<A> {
+        if let Some(guard) = self.try_read().await {
+            return guard;
+        }
+
+        self.item.get_or_init(async {Some(Arc::new(RwLock::new(f())))}).await;
+        self.read().await
+    }
+
+
+    pub async fn read(&self) -> RwLockReadGuard<A> {
+        self.try_read().await.unwrap()
+    }
+}
+
+
 
 pub trait Item: Serialize + DeserializeOwned + Sized + Send + Clone + Debug + 'static {
     type PreviousVersion: Item + Into<Self>;
