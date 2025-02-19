@@ -34,7 +34,7 @@ pub fn AudioUpload(audio: Signal<Option<Audio>>) -> Element {
                     rsx! {
                     button {
                         onclick: move |_| {
-                            play_audio(aud.data.clone(), "audio/mpeg");
+                            play_audio(&aud.data, "audio/mpeg");
                         },
                         "play"
                     }

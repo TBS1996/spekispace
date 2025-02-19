@@ -15,7 +15,7 @@ use tracing::info;
 use uuid::Uuid;
 
 use crate::{
-    audio::Audio,
+    audio::{Audio, AudioId},
     card_provider::CardProvider,
     metadata::{IsSuspended, Metadata},
     recall_rate::{History, Recall, Review, SimpleRecall},
@@ -31,9 +31,9 @@ pub use basecard::*;
 #[derive(Clone)]
 pub struct Card {
     id: CardId,
-    pub front_audio: Option<Audio>,
-    pub back_audio: Option<Audio>,
-    pub base: BaseCard,
+    front_audio: Option<Audio>,
+    back_audio: Option<Audio>,
+    base: BaseCard,
     metadata: LazyItem<Metadata>,
     history: History,
     card_provider: CardProvider,
@@ -77,6 +77,22 @@ impl std::fmt::Display for Card {
 }
 
 impl Card {
+    pub fn front_audio(&self) -> Option<&Audio> {
+        self.front_audio.as_ref()
+    }
+
+    pub fn back_audio(&self) -> Option<&Audio> {
+        self.back_audio.as_ref()
+    }
+
+    pub fn front_audio_id(&self) -> Option<AudioId> {
+        self.base.front_audio
+    }
+
+    pub fn back_audio_id(&self) -> Option<AudioId> {
+        self.base.back_audio
+    }
+    
     pub fn get_ty(&self) -> CardType {
         self.base.ty.clone()
     }

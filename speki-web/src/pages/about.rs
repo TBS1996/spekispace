@@ -10,7 +10,7 @@ pub fn About() -> Element {
 
 use web_sys::{Blob, BlobPropertyBag, HtmlAudioElement, Url};
 
-pub fn play_audio(audio_data: Vec<u8>, mime_type: &str) {
+pub fn play_audio(audio_data: &Vec<u8>, mime_type: &str) {
     // Log the MIME type and data size
     info!("Audio data size: {}", audio_data.len());
     info!("MIME type: {}", mime_type);
@@ -19,7 +19,7 @@ pub fn play_audio(audio_data: Vec<u8>, mime_type: &str) {
 
     let array = js_sys::Array::new();
     let uint8arr =
-        js_sys::Uint8Array::new(&unsafe { js_sys::Uint8Array::view(&audio_data) }.into());
+        js_sys::Uint8Array::new(&unsafe { js_sys::Uint8Array::view(audio_data) }.into());
     array.push(&uint8arr.buffer());
 
     // Create a Blob with the specified MIME type

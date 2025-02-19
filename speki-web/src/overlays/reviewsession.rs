@@ -95,8 +95,8 @@ fn ReviewButtons(
 
                         show_backside.set(true);
 
-                        if let Some(audio) = card.card.read().back_audio.clone() {
-                            play_audio(audio.data, "audio/mpeg");
+                        if let Some(audio) = card.card.read().back_audio() {
+                            play_audio(&audio.data, "audio/mpeg");
                     }
 
 
@@ -180,8 +180,8 @@ pub fn ReviewRender(
             " " => {
                 show_backside.clone().set(true);
 
-                if let Some(audio) = card.card.read().back_audio.clone() {
-                    play_audio(audio.data, "audio/mpeg");
+                if let Some(audio) = card.card.read().back_audio() {
+                    play_audio(&audio.data, "audio/mpeg");
                 }
 
                 return;
@@ -268,8 +268,8 @@ impl Queue {
             let id = self.current().unwrap();
             spawn(async move {
                 if let Some(card) = APP.read().try_load_card(id).await {
-                    if let Some(audio) = card.clone().card.read().front_audio.clone() {
-                        play_audio(audio.data, "audio/mpeg");
+                    if let Some(audio) = card.clone().card.read().front_audio() {
+                        play_audio(&audio.data, "audio/mpeg");
                     }
                 }
             });
