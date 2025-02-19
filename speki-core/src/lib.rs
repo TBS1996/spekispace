@@ -25,6 +25,7 @@ pub mod metadata;
 pub mod recall_rate;
 pub mod dependents;
 pub mod index;
+pub mod ledger;
 
 pub use attribute::{Attribute, AttributeDTO, AttributeId};
 pub use card::{
