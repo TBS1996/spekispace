@@ -6,7 +6,7 @@ use crate::{attribute::AttributeId, audio::AudioId, card_provider::CardProvider,
 pub type CardId = Uuid;
 
 /// Represents the card without userdata, the part that can be freely shared among different users.
-#[derive(Clone, Serialize, Deserialize, Debug)]
+#[derive(Clone, Serialize, Deserialize, Debug, Hash)]
 #[serde(from = "RawCard", into = "RawCard")]
 pub struct BaseCard {
     pub id: CardId,
@@ -187,13 +187,13 @@ impl CardTrait for ClassCard {
 }
 
 /// An unfinished card
-#[derive(PartialEq, Debug, Clone)]
+#[derive(PartialEq, Debug, Clone, Hash)]
 pub struct UnfinishedCard {
     pub front: String,
 }
 
 /// Just a normal flashcard
-#[derive(PartialEq, Debug, Clone)]
+#[derive(PartialEq, Debug, Clone, Hash)]
 pub struct NormalCard {
     pub front: String,
     pub back: BackSide,
@@ -201,7 +201,7 @@ pub struct NormalCard {
 
 /// A class, which is something that has specific instances of it, but is not a single thing in itself.
 /// A class might also have sub-classes, for example, the class chemical element has a sub-class isotope
-#[derive(PartialEq, Debug, Clone)]
+#[derive(PartialEq, Debug, Clone, Hash)]
 pub struct ClassCard {
     pub name: String,
     pub back: BackSide,
@@ -210,7 +210,7 @@ pub struct ClassCard {
 
 /// An attribute describes a specific instance of a class. For example the class Person can have attribute "when was {} born?"
 /// this will be applied to all instances of the class and its subclasses
-#[derive(PartialEq, Debug, Clone)]
+#[derive(PartialEq, Debug, Clone, Hash)]
 pub struct AttributeCard {
     pub attribute: AttributeId,
     pub back: BackSide,
@@ -240,7 +240,7 @@ impl AttributeCard {
 /// A specific instance of a class
 /// For example, the instance might be Elvis Presley where the concept would be "Person"
 /// the right answer is to know which class the instance belongs to
-#[derive(PartialEq, Debug, Clone)]
+#[derive(PartialEq, Debug, Clone, Hash)]
 pub struct InstanceCard {
     pub name: String,
     pub back: Option<BackSide>,
@@ -262,7 +262,7 @@ pub struct InstanceCard {
 /// 1. It represents a property of an instance or sub-class.
 /// 2. The set of the class it belongs to is large
 /// 3. The property in that set is rare, but not unique
-#[derive(PartialEq, Debug, Clone)]
+#[derive(PartialEq, Debug, Clone, Hash)]
 pub struct StatementCard {
     pub front: String,
 }
@@ -274,7 +274,7 @@ impl CardTrait for StatementCard {
     }
 }
 
-#[derive(PartialEq, Debug, Clone)]
+#[derive(PartialEq, Debug, Clone, Hash)]
 pub struct EventCard {
     pub front: String,
     pub start_time: TimeStamp,
@@ -338,7 +338,7 @@ pub trait CardTrait: Debug + Clone {
     async fn get_dependencies(&self) -> BTreeSet<CardId>;
 }
 
-#[derive(PartialEq, Debug, Clone)]
+#[derive(PartialEq, Debug, Clone, Hash)]
 pub enum CardType {
     Instance(InstanceCard),
     Normal(NormalCard),

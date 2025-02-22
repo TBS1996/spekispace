@@ -19,7 +19,7 @@ impl Display for Collection {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Hash)]
 pub struct Collection {
     pub id: CollectionId,
     pub name: String,
@@ -126,7 +126,7 @@ impl Collection {
     }
 }
 
-#[derive(Eq, Clone, Copy, Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Eq, Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Hash)]
 pub enum MaybeDyn {
     Collection(CollectionId),
     Dyn(DynCard),
@@ -195,7 +195,7 @@ impl PartialOrd for MaybeCard {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, Eq, PartialEq, Copy)]
+#[derive(Serialize, Deserialize, Debug, Clone, Eq, PartialEq, Copy, Hash)]
 pub enum DynCard {
     Card(CardId),
     Instances(CardId),
@@ -303,7 +303,7 @@ mod prev {
 
     use super::*;
 
-    #[derive(Serialize, Deserialize, Debug, Clone, Eq, PartialEq, Copy)]
+    #[derive(Serialize, Deserialize, Debug, Clone, Eq, PartialEq, Copy, Hash)]
     pub enum DynCard {
         Card(CardId),
         Instances(CardId),
@@ -326,7 +326,7 @@ mod prev {
         }
     }
 
-    #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+    #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Hash)]
     pub struct CollectionV1 {
         pub id: CollectionId,
         pub name: String,

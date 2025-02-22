@@ -5,7 +5,7 @@ use serde::Serialize;
 use speki_dto::{Item, ModifiedSource};
 use uuid::Uuid;
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, Hash)]
 pub struct Audio {
     pub id: Uuid,
     pub data: Vec<u8>,

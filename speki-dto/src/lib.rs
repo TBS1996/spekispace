@@ -1,5 +1,5 @@
 use std::{
-    collections::{BTreeMap, BTreeSet, HashMap, HashSet}, fmt::Debug, hash::Hash, ops::{Deref, DerefMut}, sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard}, time::Duration
+    collections::{BTreeMap, BTreeSet, HashMap, HashSet}, fmt::Debug, hash::{DefaultHasher, Hasher}, ops::{Deref, DerefMut}, sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard}, time::Duration
 };
 
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
@@ -41,7 +41,7 @@ pub enum ModifiedSource {
 
 
 
-pub trait Item: Serialize + DeserializeOwned + Sized + Send + Clone + Debug + 'static {
+pub trait Item: Serialize + DeserializeOwned + Sized + Send + Clone + Debug + Hash + 'static {
     type PreviousVersion: Item + Into<Self>;
     type Key: Copy + Ord + PartialOrd + Debug + Send + Sync + Hash + Eq + ToString + for<'de> Deserialize<'de>;
 
@@ -395,6 +395,15 @@ pub trait Indexable<T: Item>: SpekiProvider<T> {
     }
 }
 
+type Hashed = String;
+use std::hash::Hash;
+
+fn get_hash<T: Hash>(item: &T) -> Hashed {
+    let mut hasher = DefaultHasher::new();
+    item.hash(&mut hasher);
+    format!("{:x}", hasher.finish()) 
+}
+
 #[async_trait::async_trait(?Send)]
 pub trait SpekiProvider<T: Item>: Sync {
     async fn load_record(&self, id: T::Key) -> Option<Record>;
@@ -417,6 +426,12 @@ pub trait SpekiProvider<T: Item>: Sync {
         let record = self.load_record(id).await?;
         let item = T::item_deserialize(record.content);
         (!item.deleted()).then_some(item)
+    }
+
+    async fn hash(&self) -> Hashed {
+        let mut state: Vec<(T::Key, T)> = self.load_all().await.into_iter().map(|(key, val)|(key, val)).collect();
+        state.sort_by_key(|x|x.0);
+        get_hash(&state)
     }
 
     /// Must not include deleted items.

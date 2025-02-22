@@ -14,7 +14,7 @@ pub enum NumOrd {
     Any,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Hash)]
 pub enum MyNumOrd {
     Equal,
     Greater,
@@ -35,6 +35,17 @@ impl From<MyNumOrd> for NumOrd {
 pub struct NumOp {
     pub num: f32,
     pub ord: MyNumOrd,
+}
+
+use std::hash::{Hash, Hasher};
+
+impl Hash for NumOp {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        // f32 doesn't implement Hash by default because of NaN and other edge cases.
+        // Here, we simply hash the underlying bit representation.
+        self.num.to_bits().hash(state);
+        self.ord.hash(state);
+    }
 }
 
 impl Display for NumOrd {
@@ -60,7 +71,7 @@ struct ItemData {
 
 /// Filter for cards.
 /// Only uses the user-data part of cards, like reviews or custom tags.
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Default)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Default, Hash)]
 pub struct CardFilter {
     pub recall: Option<NumOp>,
     pub rec_recall: Option<NumOp>,
@@ -195,7 +206,7 @@ impl CardFilter {
     }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, Hash)]
 pub struct FilterItem {
     last_modified: Duration,
     name: String,

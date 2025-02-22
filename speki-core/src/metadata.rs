@@ -9,7 +9,7 @@ use uuid::Uuid;
 
 use crate::card::CardId;
 
-#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize, Hash)]
 pub struct Metadata {
     pub suspended: IsSuspended,
     last_modified: Duration,

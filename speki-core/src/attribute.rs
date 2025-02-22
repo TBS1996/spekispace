@@ -103,7 +103,7 @@ impl Attribute {
     */
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Hash)]
 pub struct AttributeDTO {
     pub pattern: String,
     pub id: AttributeId,

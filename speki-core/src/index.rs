@@ -89,7 +89,7 @@ impl ToString for Bigram{
     }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, Hash)]
 pub struct Index {
     id: Bigram,
     pub deps: BTreeSet<CardId>,

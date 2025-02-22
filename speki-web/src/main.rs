@@ -215,6 +215,15 @@ fn Debug() -> Element {
         button {
             onclick: move |_| {
                 spawn(async move {
+                    let hash = APP.read().inner().provider.cards.hash().await;
+                    info!("hash of cards:<{}>", hash);
+                });
+            },
+            "card hash"
+        }
+        button {
+            onclick: move |_| {
+                spawn(async move {
                     APP.read().inner().index_all().await;
                 });
             },

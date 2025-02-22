@@ -98,7 +98,7 @@ impl DependentsProvider {
 
 
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, Hash)]
 pub struct Dependents {
     id: CardId,
     pub deps: BTreeSet<CardId>,
