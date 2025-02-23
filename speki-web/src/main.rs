@@ -212,14 +212,46 @@ impl Route {
 #[component]
 fn Debug() -> Element {
     rsx! {
+        div {
+            class: "flex flex-col",
+
         button {
             onclick: move |_| {
                 spawn(async move {
+                    APP.read().inner().provider.cards.reset_ledger().await
+                });
+            },
+            "clear card ledger!"
+        }
+
+        button {
+            onclick: move |_| {
+                spawn(async move {
+                    APP.read().inner().provider.cards.run_ledger().await;
+                });
+            },
+            "get hash of derived state from card ledger, not saved"
+        }
+
+
+        button {
+            onclick: move |_| {
+                spawn(async move {
+                    APP.read().inner().provider.check_decompose_lol().await;
+                });
+            },
+            "check derived events from all cards re-assemble to same card"
+        }
+
+        button {
+            onclick: move |_| {
+                spawn(async move {
+
                     let hash = APP.read().inner().provider.cards.hash().await;
                     info!("hash of cards:<{}>", hash);
                 });
             },
-            "card hash"
+            "hash of current cards state"
         }
         button {
             onclick: move |_| {
@@ -229,5 +261,10 @@ fn Debug() -> Element {
             },
             "index!"
         }
+
+
     }
+
+
+        }
 }

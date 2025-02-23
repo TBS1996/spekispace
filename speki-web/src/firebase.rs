@@ -181,7 +181,7 @@ impl<T: Item> SpekiProvider<T> for FirestoreProvider {
         saveContents(&user_id, &table, &js_records_value);
     }
 
-    async fn save_record(&self, record: Record) {
+    async fn save_record_in(&self, space: &str, record: Record) {
         SpekiProvider::<T>::save_records(self, vec![record]).await;
     }
 }

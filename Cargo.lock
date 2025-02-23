@@ -3054,6 +3054,9 @@ dependencies = [
 [[package]]
 name = "omtrent"
 version = "0.1.0"
+dependencies = [
+ "serde",
+]
 
 [[package]]
 name = "once_cell"
@@ -4128,6 +4131,7 @@ dependencies = [
  "dirs",
  "gloo-utils",
  "js-sys",
+ "once_cell",
  "rayon",
  "serde",
  "serde-wasm-bindgen 0.6.5",

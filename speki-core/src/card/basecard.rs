@@ -1,12 +1,13 @@
 use omtrent::TimeStamp;
+use speki_dto::{LedgerProvider, Record, RunLedger, SpekiProvider};
 
 use super::*;
-use crate::{attribute::AttributeId, audio::AudioId, card_provider::CardProvider, index::Bigram, App, Attribute};
+use crate::{attribute::AttributeId, audio::AudioId, card_provider::CardProvider, index::Bigram, ledger::CardEvent, App, Attribute};
 
 pub type CardId = Uuid;
 
 /// Represents the card without userdata, the part that can be freely shared among different users.
-#[derive(Clone, Serialize, Deserialize, Debug, Hash)]
+#[derive(Clone, Serialize, Deserialize, Debug, Hash, PartialEq)]
 #[serde(from = "RawCard", into = "RawCard")]
 pub struct BaseCard {
     pub id: CardId,
@@ -187,13 +188,13 @@ impl CardTrait for ClassCard {
 }
 
 /// An unfinished card
-#[derive(PartialEq, Debug, Clone, Hash)]
+#[derive(PartialEq, Debug, Clone, Serialize, Deserialize, Hash)]
 pub struct UnfinishedCard {
     pub front: String,
 }
 
 /// Just a normal flashcard
-#[derive(PartialEq, Debug, Clone, Hash)]
+#[derive(PartialEq, Debug, Clone, Serialize, Deserialize, Hash)]
 pub struct NormalCard {
     pub front: String,
     pub back: BackSide,
@@ -201,7 +202,7 @@ pub struct NormalCard {
 
 /// A class, which is something that has specific instances of it, but is not a single thing in itself.
 /// A class might also have sub-classes, for example, the class chemical element has a sub-class isotope
-#[derive(PartialEq, Debug, Clone, Hash)]
+#[derive(PartialEq, Debug, Clone, Serialize, Deserialize, Hash)]
 pub struct ClassCard {
     pub name: String,
     pub back: BackSide,
@@ -210,7 +211,7 @@ pub struct ClassCard {
 
 /// An attribute describes a specific instance of a class. For example the class Person can have attribute "when was {} born?"
 /// this will be applied to all instances of the class and its subclasses
-#[derive(PartialEq, Debug, Clone, Hash)]
+#[derive(PartialEq, Debug, Clone, Serialize, Deserialize, Hash)]
 pub struct AttributeCard {
     pub attribute: AttributeId,
     pub back: BackSide,
@@ -240,7 +241,7 @@ impl AttributeCard {
 /// A specific instance of a class
 /// For example, the instance might be Elvis Presley where the concept would be "Person"
 /// the right answer is to know which class the instance belongs to
-#[derive(PartialEq, Debug, Clone, Hash)]
+#[derive(PartialEq, Debug, Clone, Serialize, Deserialize, Hash)]
 pub struct InstanceCard {
     pub name: String,
     pub back: Option<BackSide>,
@@ -262,7 +263,7 @@ pub struct InstanceCard {
 /// 1. It represents a property of an instance or sub-class.
 /// 2. The set of the class it belongs to is large
 /// 3. The property in that set is rare, but not unique
-#[derive(PartialEq, Debug, Clone, Hash)]
+#[derive(PartialEq, Debug, Clone, Serialize, Deserialize, Hash)]
 pub struct StatementCard {
     pub front: String,
 }
@@ -274,7 +275,7 @@ impl CardTrait for StatementCard {
     }
 }
 
-#[derive(PartialEq, Debug, Clone, Hash)]
+#[derive(PartialEq, Debug, Clone, Serialize, Deserialize, Hash)]
 pub struct EventCard {
     pub front: String,
     pub start_time: TimeStamp,
@@ -338,7 +339,7 @@ pub trait CardTrait: Debug + Clone {
     async fn get_dependencies(&self) -> BTreeSet<CardId>;
 }
 
-#[derive(PartialEq, Debug, Clone, Hash)]
+#[derive(PartialEq, Debug, Clone, Serialize, Deserialize, Hash)]
 pub enum CardType {
     Instance(InstanceCard),
     Normal(NormalCard),
@@ -573,6 +574,86 @@ struct RawCard {
 
 pub fn normalize_string(str: &str) -> String {
     deunicode::deunicode(str).to_lowercase()
+}
+
+impl RunLedger<CardEvent> for BaseCard {
+    fn run_event(selv: Option<Self>, event: CardEvent) -> (Self, Vec<CardEvent>) {
+        let id = event.id;
+
+        match event.action {
+            CardAction::SetFrontAudio { audio } => {
+                let mut base = selv.unwrap();
+                base.front_audio = audio;
+                (base, vec![])
+            },
+            CardAction::SetBackAudio { audio } => {
+                let mut base = selv.unwrap();
+                base.back_audio = audio;
+                (base, vec![])
+            },
+            CardAction::UpsertCard { ty } => {
+                (BaseCard::new_with_id(id, ty), vec![])
+            },
+            CardAction::DeleteCard => {
+                /* 
+                let mut events = vec![];
+                let mut base = selv.unwrap();
+                base.set_delete();
+
+                for dependent in &base.dependents {
+                    let action = CardAction::RemoveDependency { dependency: id };
+                    let event = CardEvent {
+                        action,
+                        id: *dependent,
+                    };
+                    events.push(event);
+
+                }
+                */
+
+                let mut events = vec![];
+                let mut base = selv.unwrap();
+
+                (base, events)
+
+            },
+            CardAction::AddDependent { dependent } => {
+                let mut base = selv.unwrap();
+                //base.dependents.insert(dependent);
+                (base, vec![])
+            },
+            CardAction::RemoveDependent { dependent } => {
+                let mut base = selv.unwrap();
+                //base.dependents.remove(&dependent);
+                (base, vec![])
+            },
+            CardAction::AddDependency { dependency } => {
+                let mut base = selv.unwrap();
+                base.dependencies.insert(dependency);
+                let event = CardEvent {
+                    action: CardAction::AddDependent { dependent: id },
+                    id: dependency,
+                };
+                (base, vec![event])
+            },
+            CardAction::RemoveDependency { dependency } => {
+                let mut base = selv.unwrap();
+                base.dependencies.remove(&dependency);
+                base.ty.remove_dep(dependency);
+                let event = CardEvent {
+                    action: CardAction::RemoveDependent { dependent: id },
+                    id: dependency,
+                };
+                (base, vec![event])
+            },
+            CardAction::SetBackRef { reff } => {
+                let backside = BackSide::Card(reff);
+                let mut base = selv.unwrap();
+                base.ty = base.ty.set_backside(backside);
+                (base, vec![])
+            },
+        }
+    }
 }
 
 impl Item for BaseCard {
@@ -889,3 +970,6 @@ fn from_any(ty: CardType) -> RawType {
 
     raw
 }
+
+
+use serde::{de::DeserializeOwned, Deserialize, Serialize};

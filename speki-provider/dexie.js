@@ -22,6 +22,18 @@ function getDexieInstance(typeName) {
     return dexieInstances[typeName];
 }
 
+export async function clearSpace(typeName) {
+    const db = getDexieInstance(typeName);
+    await db.records.clear();  
+    const remainingRecords = await db.records.toArray();
+    if (!(remainingRecords.length === 0)) {
+        console.error(`❌ Error: dexie_${typeName} is NOT empty after clearing!`, remainingRecords);
+    } else {
+        console.log(`Cleared all data from dexie_${typeName}`);
+    }
+}
+
+
 function ensureUnixSeconds(timestamp) {
     const TooBig = 173426346900;
     if (timestamp == null) return null;

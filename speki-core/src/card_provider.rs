@@ -7,7 +7,7 @@ use std::{
 use dioxus_logger::tracing::{info, trace};
 
 use crate::{
-    card::{BaseCard, CardId}, metadata::Metadata, recall_rate::History, Card, Provider, Recaller, TimeGetter
+    card::{BaseCard, CardId}, ledger::{CardAction, CardEvent}, metadata::Metadata, recall_rate::History, Card, Provider, Recaller, TimeGetter
 };
 
 #[derive(Clone)]
@@ -29,18 +29,12 @@ impl Debug for CardProvider {
 
 impl CardProvider {
     pub async fn remove_card(&self, card_id: CardId) {
-        let card = self.providers.cards.load_item(card_id).await.unwrap();
-        for card in self.load_all().await {
-            info!("removing dependency for {}", card.id());
-            let mut card = Arc::unwrap_or_clone(card);
-            card.rm_dependency(card_id).await;
-        }
-
-        self.providers.cards.delete_item(card).await;
-        info!("done removing i guess");
+        let event = CardEvent::new(card_id, CardAction::DeleteCard);
+        self.providers.run_event(event).await;
     }
 
     pub async fn load_all_card_ids(&self) -> Vec<CardId> {
+        info!("x1");
         self.providers.cards.load_ids().await
     }
 
@@ -71,7 +65,6 @@ impl CardProvider {
 
             self.providers.indices.refresh(self, cards.values()).await;
         }
-
     }
 
     pub async fn filtered_load<F, Fut>(&self, filter: F) -> Vec<Arc<Card>>
@@ -159,16 +152,6 @@ impl CardProvider {
 
     pub fn invalidate_card(&self, id: CardId) -> Option<Arc<Card>>{
         self.cards.write().unwrap().remove(&id)
-    }
-
-    pub async fn save_basecard(&self, new_card: BaseCard) -> Arc<Card> {
-        let id = new_card.id;
-        let old_card = self.providers.cards.load_item(id).await;
-        self.providers.dependents.update(old_card.as_ref(), &new_card).await;
-        self.providers.indices.update(self, old_card.as_ref(), &new_card).await;
-        self.providers.cards.save_item(new_card).await;
-        self.invalidate_card(id);
-        self.load(id).await.unwrap()
     }
 
     pub fn time_provider(&self) -> TimeGetter {

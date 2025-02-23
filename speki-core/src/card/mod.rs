@@ -15,11 +15,7 @@ use tracing::info;
 use uuid::Uuid;
 
 use crate::{
-    audio::{Audio, AudioId},
-    card_provider::CardProvider,
-    metadata::{IsSuspended, Metadata},
-    recall_rate::{History, Recall, Review, SimpleRecall},
-    RecallCalc, Recaller, TimeGetter,
+    audio::{Audio, AudioId}, card_provider::CardProvider, ledger::{CardAction, CardEvent, HistoryEvent, MetaEvent}, metadata::{IsSuspended, Metadata}, recall_rate::{History, Recall, Review, SimpleRecall}, RecallCalc, Recaller, TimeGetter
 };
 
 pub type RecallRate = f32;
@@ -122,7 +118,6 @@ impl Card {
         self.card_provider.dependents(self.id).await {
             let card = self.card_provider.load(card).await.unwrap(); 
             cards.insert(card);
-            
         }
         cards
     }
@@ -140,8 +135,9 @@ impl Card {
             time_spent: Default::default(),
         };
 
-        self.history.push(review);
-        self.card_provider.providers.reviews.save_item(self.history.clone()).await;
+        self.history.push(review.clone());
+        let event = HistoryEvent::Review { id: self.id, review };
+        self.card_provider.providers.run_event(event).await;
         self.refresh().await;
     }
 
@@ -234,7 +230,9 @@ impl Card {
     pub async fn set_ref(mut self, reff: CardId) -> Card {
         let backside = BackSide::Card(reff);
         self.base.ty = self.base.ty.set_backside(backside);
-        self.card_provider.save_basecard(self.base.clone()).await;
+        let action = CardAction::SetBackRef { reff };
+        let event = CardEvent::new(self.id, action);
+        self.card_provider.providers.run_event(event).await;
         self.refresh().await;
         self
     }
@@ -254,24 +252,17 @@ impl Card {
 
         info!("dep was there: {res}");
         self.base.ty.remove_dep(dependency);
-        self.card_provider.save_basecard(self.base.clone()).await;
+        let action = CardAction::RemoveDependency {dependency };
+        let event = CardEvent::new(self.id, action);
+        self.card_provider.providers.run_event(event).await;
         self.refresh().await;
     }
 
     pub async fn add_dependency(&mut self, dependency: CardId) {
-        info!("for card: {} inserting dependency: {}", self.id, dependency);
-        if self.id() == dependency {
-            info!("not adding dep cause theyre the same lol");
-            return;
-        }
-
-        if self.recursive_dependents().await.contains(&dependency) {
-            tracing::warn!("failed to insert dependency due to cycle!");
-            return;
-        }
-
         self.base.dependencies.insert(dependency);
-        self.card_provider.save_basecard(self.base.clone()).await;
+        let action = CardAction::AddDependency { dependency };
+        let event = CardEvent::new(self.id, action);
+        self.card_provider.providers.run_event(event).await;
         self.refresh().await;
     }
 
@@ -285,7 +276,9 @@ impl Card {
 
     pub async fn into_type(mut self, data: impl Into<CardType>) -> Self {
         self.base.ty = data.into();
-        self.card_provider.save_basecard(self.base.clone()).await;
+        let action = CardAction::UpsertCard { ty: self.base.ty.clone() };
+        let event = CardEvent::new(self.id, action);
+        self.card_provider.providers.run_event(event).await;
         self.refresh().await;
         self
     }
@@ -419,6 +412,8 @@ impl Card {
     }
 
     pub async fn set_suspend(&mut self, suspend: bool) {
+        let event = MetaEvent::SetSuspend { id: self.id, status: suspend };
+        self.card_provider.providers.run_event(event).await;
         self.metadata.write().await.suspended = IsSuspended::from(suspend);
         self.card_provider.invalidate_card(self.id);
         self.refresh().await;

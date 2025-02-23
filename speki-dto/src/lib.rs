@@ -1,5 +1,5 @@
 use std::{
-    collections::{BTreeMap, BTreeSet, HashMap, HashSet}, fmt::Debug, hash::{DefaultHasher, Hasher}, ops::{Deref, DerefMut}, sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard}, time::Duration
+    collections::{BTreeMap, BTreeSet, HashMap, HashSet, VecDeque}, fmt::Debug, hash::{DefaultHasher, Hash, Hasher}, marker::PhantomData, ops::{Deref, DerefMut}, sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard}, time::Duration
 };
 
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
@@ -395,8 +395,36 @@ pub trait Indexable<T: Item>: SpekiProvider<T> {
     }
 }
 
-type Hashed = String;
-use std::hash::Hash;
+#[derive(Clone)]
+pub struct LedgerEntry<T: Item, E: LedgerEvent<T> + Serialize + DeserializeOwned> {
+    pub timestamp: Duration,
+    pub event: E,
+    _marker: PhantomData<T>, 
+}
+
+impl<T: Item, E: LedgerEvent<T> + Serialize + DeserializeOwned> LedgerEntry<T, E>{
+    pub fn new(timestamp: Duration, event: E) -> Self {
+        Self {
+            timestamp, event,
+            _marker: PhantomData,
+        }
+    }
+}
+
+/// Represents a single event in the ledger.
+pub trait LedgerEvent<T: Item>: Debug{
+    fn id(&self) -> T::Key;
+}
+
+/// Represents how a ledger mutates or creates an item.
+pub trait RunLedger<L: LedgerEvent<Self> + Debug>: Item {
+    /// Event should modify item or create new one. 
+    /// It's optional cause if it's a create new event then the item won't already exist.
+    /// an event might trigger more events. For example deleting an item might trigger to 
+    fn run_event(selv: Option<Self>, event: L) -> (Self, Vec<L>);
+}
+
+pub type Hashed = String;
 
 fn get_hash<T: Hash>(item: &T) -> Hashed {
     let mut hasher = DefaultHasher::new();
@@ -405,10 +433,68 @@ fn get_hash<T: Hash>(item: &T) -> Hashed {
 }
 
 #[async_trait::async_trait(?Send)]
+pub trait LedgerProvider<T: Item + Hash + RunLedger<L>, L: LedgerEvent<T> + Serialize + DeserializeOwned + Clone + 'static>: SpekiProvider<T> {
+    async fn load_ledger(&self) -> Vec<L>;
+
+    fn space_id(&self) -> String {
+        format!("{}_ledger", T::identifier())
+    }
+
+    /// Clear the storage area so we can re-run everything.
+    async fn reset_space(&self);
+
+    async fn reset_ledger(&self) {
+
+    }
+
+    async fn run_event(&self, event: L) {
+        info!("running event: {event:?}");
+        let mut events = VecDeque::from([event]);
+        while let Some(event) = events.pop_front() {
+            let item = self.load_item(event.id()).await;
+            let (new_item, new_events) = T::run_event(item, event);
+            self.save_item(new_item).await;
+            events.extend(new_events);
+        }
+    }
+
+    async fn save_and_run(&self, event: L, now: Duration) {
+        self.run_event(event.clone()).await;
+        let entry: LedgerEntry<T, L> = LedgerEntry::new(now, event);
+        self.save_ledger(entry).await;
+    }
+
+    async fn run_ledger(&self) -> Hashed {
+        self.reset_space().await;
+        let ledger = self.load_ledger().await;
+        info!("length of ledger: {}", ledger.len());
+        for event in ledger {
+            self.run_event(event).await;
+        }
+
+        let mut state: Vec<(T::Key, T)>  = self.load_all().await.into_iter().map(|(key, val)|(key, val)).collect();
+
+        for (_, val) in state.iter_mut() {
+            val.set_local_source();
+            val.set_last_modified(Default::default());
+        }
+
+        state.sort_by_key(|k|k.0);
+        get_hash(&state)
+    }
+
+    async fn save_ledger(&self, event: LedgerEntry<T, L>);
+}
+
+#[async_trait::async_trait(?Send)]
 pub trait SpekiProvider<T: Item>: Sync {
     async fn load_record(&self, id: T::Key) -> Option<Record>;
     async fn load_all_records(&self) -> HashMap<T::Key, Record>;
-    async fn save_record(&self, record: Record);
+
+    async fn save_record(&self, record: Record) {
+        self.save_record_in(T::identifier(), record).await
+    }
+    async fn save_record_in(&self, space: &str, record: Record);
 
     async fn current_time(&self) -> Duration;
 
@@ -430,6 +516,15 @@ pub trait SpekiProvider<T: Item>: Sync {
 
     async fn hash(&self) -> Hashed {
         let mut state: Vec<(T::Key, T)> = self.load_all().await.into_iter().map(|(key, val)|(key, val)).collect();
+
+
+        for (_, val) in state.iter_mut() {
+            val.set_local_source();
+            val.set_last_modified(Default::default());
+        }
+
+
+
         state.sort_by_key(|x|x.0);
         get_hash(&state)
     }

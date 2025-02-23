@@ -3,6 +3,8 @@ use std::{
     fmt::{Display, Formatter},
 };
 
+use serde::{Deserialize, Serialize};
+
 pub enum Precision {
     Millenium,
     Century,
@@ -14,7 +16,7 @@ pub enum Precision {
     Minute,
 }
 
-#[derive(Default, PartialOrd, Eq, Hash, PartialEq, Debug, Clone)]
+#[derive(Default, PartialOrd, Eq, Hash, PartialEq, Debug, Clone, Serialize, Deserialize)]
 pub struct TimeStamp {
     millenium: u32,
     century: Option<u32>,

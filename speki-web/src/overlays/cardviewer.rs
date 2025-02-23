@@ -2,9 +2,7 @@ use std::sync::Arc;
 
 use dioxus::prelude::*;
 use speki_core::{
-    audio::AudioId,
-    card::{BaseCard, CardId},
-    CardType, ClassCard, InstanceCard, NormalCard, UnfinishedCard,
+    audio::AudioId, card::CardId, ledger::{CardAction, CardEvent}, CardType, ClassCard, InstanceCard, NormalCard, UnfinishedCard
 };
 use speki_web::{CardEntry, Node, NodeId, NodeMetadata};
 use tracing::info;
@@ -689,14 +687,17 @@ fn save_button(CardViewer: CardViewer) -> Element {
                 if let Some(card) = selv.editor.clone().into_cardrep() {
                     let selveste = selv.clone();
                     spawn(async move {
-                        let id = selveste.old_card.cloned().map(|card|card.id());
-                        let mut basecard = BaseCard::new_with_id(id, card.ty);
-                        basecard.front_audio = card.front_audio;
-                        basecard.back_audio = card.back_audio;
+                        use speki_core::ledger::Event as LedgerEvent;
 
+                        let mut events: Vec<LedgerEvent> = vec![];
+
+                        let id = selveste.old_card.cloned().map(|card|card.id()).unwrap_or_else(CardId::new_v4);
+                        events.push(CardEvent::new(id, CardAction::UpsertCard{ty: card.ty}).into());
+                        events.push(CardEvent::new(id, CardAction::SetFrontAudio {audio: card.front_audio}).into());
+                        events.push(CardEvent::new(id, CardAction::SetBackAudio { audio: card.back_audio}).into());
 
                         for dep in card.deps {
-                            basecard.dependencies.insert(dep);
+                            events.push(CardEvent::new(id, CardAction::AddDependency{ dependency: dep}).into());
                         }
 
                         if let Some(audio) = selv.editor.front.audio.cloned() {
@@ -706,7 +707,11 @@ fn save_button(CardViewer: CardViewer) -> Element {
                             APP.read().inner().provider.audios.save_item(audio).await;
                         }
 
-                        let card = APP.read().inner().card_provider().save_basecard(basecard).await;
+                        for event in events {
+                            APP.read().inner().provider.run_event(event).await;
+                        }
+
+                        let card = APP.read().inner().card_provider().load(id).await.unwrap();
                         let inner_card = Arc::unwrap_or_clone(card);
                         let card = CardEntry::new(inner_card.clone());
                         if let Some(hook) = selveste.save_hook.clone() {

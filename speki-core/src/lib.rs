@@ -9,9 +9,11 @@ use dependents::{Dependents, DependentsProvider};
 use dioxus_logger::tracing::info;
 use eyre::Result;
 use index::{Index, IndexProvider};
+use ledger::{check_compose, decompose, CardAction, CardEvent, Event, HistoryEvent, MetaEvent};
 use metadata::Metadata;
 use recall_rate::History;
-use speki_dto::{Indexable, Item, Record, SpekiProvider, TimeProvider};
+use serde::{de::DeserializeOwned, Serialize};
+use speki_dto::{Item, LedgerEntry, LedgerEvent, LedgerProvider, Record, RunLedger, SpekiProvider, TimeProvider};
 use tracing::trace;
 
 mod attribute;
@@ -74,7 +76,7 @@ impl CollectionProvider {
 
 #[derive(Clone)]
 pub struct Provider {
-    pub cards: Arc<Box<dyn SpekiProvider<BaseCard>>>,
+    pub cards: Arc<Box<dyn LedgerProvider<BaseCard, CardEvent>>>,
     pub reviews: Arc<Box<dyn SpekiProvider<History>>>,
     pub attrs: Arc<Box<dyn SpekiProvider<AttributeDTO>>>,
     pub collections: CollectionProvider,
@@ -83,6 +85,71 @@ pub struct Provider {
     pub audios: Arc<Box<dyn SpekiProvider<Audio>>>,
     pub dependents: DependentsProvider,
     pub indices: IndexProvider,
+    pub time: TimeGetter,
+}
+
+impl Provider {
+    async fn run_card_event(&self, event: CardEvent) {
+        self.cards.save_and_run(event, self.time.current_time()).await;
+    }
+
+    pub async fn check_decompose_lol(&self) {
+        for (_, card) in self.cards.load_all().await{
+            check_compose(card);
+        }
+    }
+
+    pub async fn decompose_save_card_ledger(&self) {}
+
+    pub async fn derive_card_ledger_from_state(&self) -> Vec<CardEvent>{
+        let mut actions: Vec<CardEvent> = vec![];
+
+        for (_, card) in self.cards.load_all().await {
+            for action in decompose(&card) {
+                actions.push(action);
+            }
+        }
+
+        for i in 0..actions.len() {
+            if matches!(&actions[i].action, CardAction::UpsertCard {..}) {
+                let action = actions.remove(i);
+                actions.insert(0, action);
+            }
+        }
+
+        actions
+    }
+
+    pub async fn run_event(&self, event: impl Into<Event>) {
+        match event.into() {
+            Event::Meta(event) => self.run_meta_event(event).await,
+            Event::History(event) => self.run_history_event(event).await,
+            Event::Card(event) => self.run_card_event(event).await,
+        }
+    }
+
+    async fn run_history_event(&self, event: HistoryEvent) {
+        match event {
+            HistoryEvent::Review { id, review } => {
+                let mut history = match self.reviews.load_item(id).await {
+                    Some(history) => history,
+                    None => History::new(id),
+                };
+                history.push(review);
+                self.reviews.save_item(history).await;
+            },
+        }
+    }
+
+    async fn run_meta_event(&self, event: MetaEvent) {
+        match event {
+            MetaEvent::SetSuspend{ id, status } => {
+                let mut meta = self.metadata.load_item(id).await.unwrap();
+                meta.suspended = status.into();
+                self.metadata.save_item(meta).await;
+            },
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -116,9 +183,9 @@ impl<T: Item + Send + Sync + 'static> SpekiProvider<T> for MemProvider<T> {
         self.provider.load_all_records().await
     }
 
-    async fn save_record(&self, record: Record) {
-        trace!("ty: {} save record", T::identifier());
-        self.provider.save_record(record).await;
+    async fn save_record_in(&self, space: &str, record: Record) {
+        trace!("ty: {} save record", space);
+        self.provider.save_record_in(space, record).await;
     }
 
     async fn save_records(&self, records: Vec<Record>) {
@@ -160,8 +227,82 @@ impl<T: Item + Send + Sync + 'static> SpekiProvider<T> for MemProvider<T> {
     }
 }
 
+
+#[derive(Clone)]
+pub struct PureMem<T: Item + Send + 'static, E: LedgerEvent<T> + Serialize + DeserializeOwned + Clone + 'static>{
+    time: TimeGetter,
+    cache: Arc<RwLock<HashMap<T::Key, Record>>>,
+    ledger: Arc<RwLock<HashMap<u64, LedgerEntry<T, E>>>>,
+}
+
+impl<T: Item + Send + 'static, E: LedgerEvent<T> + Serialize + DeserializeOwned + Clone + 'static> PureMem<T, E> {
+    pub fn new(time: TimeGetter) -> Self {
+        Self {
+            time,
+            cache: Default::default(),
+            ledger: Default::default(),
+        }
+    }
+
+}
+
+#[async_trait::async_trait(?Send)]
+impl<T: Item + Send + Sync + 'static, E: LedgerEvent<T> + Serialize + DeserializeOwned + Clone + Send + Sync + 'static> SpekiProvider<T> for PureMem<T, E> {
+    async fn current_time(&self) -> Duration {
+        self.time.current_time()
+    }
+
+    async fn load_record(&self, id: T::Key) -> Option<Record> {
+        trace!("mem load record: {id:?}");
+        self.cache.read().unwrap().get(&id).cloned()
+    }
+
+    async fn load_all_records(&self) -> HashMap<T::Key, Record> {
+        trace!("ty: {} loading all records", T::identifier());
+        self.cache.read().unwrap().clone()
+    }
+
+    async fn save_record_in(&self, _space: &str, record: Record) {
+        let key = format!("\"{}\"", &record.id);
+        let key: T::Key = serde_json::from_str(&key).unwrap();
+        self.cache.write().unwrap().insert(key, record);
+    }
+}
+
+
+#[async_trait::async_trait(?Send)]
+impl<T: Item + std::hash::Hash + Send + Sync + RunLedger<E>, E: LedgerEvent<T> + Serialize + DeserializeOwned + Clone + Send + Sync + 'static> LedgerProvider<T, E> for PureMem<T, E>{
+    async fn load_ledger(&self) -> Vec<E>{
+        let map = self.ledger.read().unwrap().clone();
+
+        let mut foo: Vec<LedgerEntry<T, E>> = vec![];
+
+        for (_, value) in map.iter(){
+            foo.push(value.clone());
+        }
+
+        foo.sort_by_key(|k|k.timestamp);
+        foo.into_iter().map(|e| e.event).collect()
+    }
+
+    /// Clear the storage area so we can re-run everything.
+    async fn reset_space(&self) {
+        self.cache.write().unwrap().clear();
+    }
+
+    async fn reset_ledger(&self) {
+        self.ledger.write().unwrap().clear();
+    }
+
+
+    async fn save_ledger(&self, event: LedgerEntry<T, E>) {
+        self.ledger.write().unwrap().insert(event.timestamp.as_micros() as u64, event);
+    }
+}
+
+
 pub type Recaller = Arc<Box<dyn RecallCalc + Send>>;
-pub type TimeGetter = Arc<Box<dyn TimeProvider + Send>>;
+pub type TimeGetter = Arc<Box<dyn TimeProvider + Send + Sync>>;
 
 pub struct App {
     pub provider: Provider,
@@ -192,8 +333,8 @@ impl App {
     ) -> Self
     where
         A: RecallCalc + 'static + Send,
-        B: TimeProvider + 'static + Send,
-        C: Indexable<BaseCard> + 'static + Send,
+        B: TimeProvider + 'static + Send + Sync,
+        C: LedgerProvider<BaseCard, CardEvent> + 'static + Send,
         D: SpekiProvider<History> + 'static + Send,
         E: SpekiProvider<AttributeDTO> + 'static + Send,
         F: SpekiProvider<Collection> + 'static + Send,
@@ -209,7 +350,7 @@ impl App {
         let recaller: Recaller = Arc::new(Box::new(recall_calc));
 
         let provider = Provider {
-            cards: Arc::new(Box::new(MemProvider::new(Arc::new(Box::new(card_provider))))),
+            cards: Arc::new(Box::new(card_provider)),
             reviews: Arc::new(Box::new(MemProvider::new(Arc::new(Box::new(history_provider))))),
             attrs: Arc::new(Box::new(MemProvider::new(Arc::new(Box::new(attr_provider))))),
             collections: CollectionProvider {
@@ -220,6 +361,7 @@ impl App {
             audios: Arc::new(Box::new(MemProvider::new(Arc::new(Box::new(audio_provider))))),
             dependents: DependentsProvider::new(Arc::new(Box::new(MemProvider::new(Arc::new(Box::new(dependents_provider)))))),
             indices: IndexProvider::new(Arc::new(Box::new(MemProvider::new(Arc::new(Box::new(index_provider)))))),
+            time: time_provider.clone(),
             
         };
 
@@ -233,6 +375,7 @@ impl App {
             recaller,
         }
     }
+
 
     pub async fn index_all(&self) {
         //self.provider.cards.index_all().await;
@@ -301,8 +444,15 @@ impl App {
             parent_class,
         };
 
-        let base = BaseCard::new(data);
-        self.card_provider().save_basecard(base).await.id()
+        let id = CardId::new_v4();
+
+        let action = CardAction::UpsertCard { ty: data.into() };
+        let event = CardEvent {
+            action, id
+        };
+
+        self.provider.run_event(event).await;
+        id
     }
 
     pub async fn add_instance(
@@ -317,28 +467,35 @@ impl App {
             back,
             class,
         };
-        let base = BaseCard::new(data);
-        self.card_provider().save_basecard(base).await.id()
+        let id = CardId::new_v4();
+        let event = CardEvent::new(id, CardAction::UpsertCard { ty: data.into() });
+        self.provider.run_event(event).await;
+        id
     }
 
     pub async fn add_card_with_id(&self, front: String, back: impl Into<BackSide>, id: CardId) {
         let back = back.into();
         let data = NormalCard { front, back };
-        let card = BaseCard::new_with_id(id, data);
-        self.provider.cards.save_item(card).await;
+        let event = CardEvent::new(id, CardAction::UpsertCard { ty: data.into() });
+        self.provider.run_event(event).await;
     }
 
     pub async fn add_card(&self, front: String, back: impl Into<BackSide>) -> CardId {
         let back = back.into();
         let data = NormalCard { front, back };
-        let base = BaseCard::new(data);
-        self.card_provider().save_basecard(base).await.id()
+
+        let id = CardId::new_v4();
+        let event = CardEvent::new(id, CardAction::UpsertCard { ty: data.into() });
+        self.provider.run_event(event).await;
+        id
     }
 
     pub async fn add_unfinished(&self, front: String) -> CardId {
         let data = UnfinishedCard { front };
-        let base = BaseCard::new(data);
-        self.card_provider().save_basecard(base).await.id()
+        let id = CardId::new_v4();
+        let event = CardEvent::new(id, CardAction::UpsertCard { ty: data.into() });
+        self.provider.run_event(event).await;
+        id
     }
 
     pub async fn set_class(&self, card_id: CardId, class: CardId) -> Result<()> {

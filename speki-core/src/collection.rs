@@ -1,13 +1,12 @@
 use std::{
-    cmp::Ordering, collections::{BTreeSet, HashSet}, fmt::Display, ops::{Deref, DerefMut}, sync::{Arc, RwLockReadGuard, RwLockWriteGuard}, time::Duration
+    cmp::Ordering, collections::{BTreeSet, HashSet}, fmt::Display, sync::Arc, time::Duration
 };
 
 use async_recursion::async_recursion;
 use serde::{Deserialize, Serialize};
-use speki_dto::{Item, ModifiedSource, SpekiProvider};
+use speki_dto::{Item, ModifiedSource};
 use tracing::{error, info, warn};
 use uuid::Uuid;
-use std::sync::RwLock;
 
 use crate::{card::CardId, card_provider::CardProvider, Card};
 
