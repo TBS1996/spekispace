@@ -211,28 +211,52 @@ impl Route {
 
 #[component]
 fn Debug() -> Element {
+
+    let hash = use_resource(move  || async move {
+        let hash = APP.read().inner().provider.cards.hash().await;
+        hash
+    });
+
+    let mut hash2 = hash.clone();
+    let mut hash3 = hash.clone();
+
+
     rsx! {
         div {
             class: "flex flex-col",
 
+
+            {hash}
+
         button {
             onclick: move |_| {
                 spawn(async move {
-                    APP.read().inner().provider.cards.reset_ledger().await
+                    APP.read().inner().provider.cards.clear_ledger().await
                 });
             },
-            "clear card ledger!"
+            "clear ledgers!"
+        }
+
+
+        button {
+            onclick: move |_| {
+                spawn(async move {
+                    APP.read().inner().provider.cards.clear_state().await;
+                    hash2.restart();
+                });
+            },
+            "clear state!"
         }
 
         button {
             onclick: move |_| {
                 spawn(async move {
-                    APP.read().inner().provider.cards.run_ledger().await;
+                    APP.read().inner().provider.cards.recompute_state_from_ledger().await;
+                    hash3.restart();
                 });
             },
-            "get hash of derived state from card ledger, not saved"
+            "recompute state"
         }
-
 
         button {
             onclick: move |_| {
@@ -261,8 +285,6 @@ fn Debug() -> Element {
             },
             "index!"
         }
-
-
     }
 
 

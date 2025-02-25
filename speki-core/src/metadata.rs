@@ -4,17 +4,15 @@ use serde::{
     de::{self, Deserializer},
     Deserialize, Serialize,
 };
-use speki_dto::{Item, ModifiedSource};
+use speki_dto::{RunLedger};
 use uuid::Uuid;
 
-use crate::card::CardId;
+use crate::{card::CardId, ledger::{MetaAction, MetaEvent}};
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize, Hash)]
 pub struct Metadata {
     pub suspended: IsSuspended,
-    last_modified: Duration,
     id: Uuid,
-    source: ModifiedSource,
 }
 
 impl Metadata {
@@ -22,46 +20,42 @@ impl Metadata {
         Self {
             id,
             suspended: Default::default(),
-            last_modified: Default::default(),
-            source: Default::default(),
         }
     }
 }
 
-impl Item for Metadata {
-    type PreviousVersion = Self;
-    type Key = Uuid;
+impl RunLedger<MetaEvent> for Metadata {
+    fn run_event(mut self, event: MetaEvent) -> Self {
+        match event.action {
+            crate::ledger::MetaAction::Suspend(flag) => self.suspended = flag.into(),
+        }
 
-    fn deleted(&self) -> bool {
-        false
+        self
     }
 
-    fn set_delete(&mut self) {
-        panic!("metadata shouldn't get deleted")
-    }
+    fn derive_events(&self) -> Vec<MetaEvent> {
+        let mut actions: Vec<MetaEvent> = vec![];
 
-    fn set_last_modified(&mut self, time: Duration) {
-        self.last_modified = time;
-    }
+        if self.suspended.is_suspended() {
+            actions.push(MetaEvent {
+                id: self.id,
+                action: MetaAction::Suspend(true)
+            });
+        }
 
-    fn last_modified(&self) -> Duration {
-        self.last_modified
+        actions
     }
-
-    fn id(&self) -> uuid::Uuid {
-        self.id
+    
+    fn new_default(id: String) -> Self {
+        Self::new(id.parse().unwrap())
     }
-
+    
+    fn item_id(&self) -> String {
+        self.id.to_string()
+    }
+    
     fn identifier() -> &'static str {
         "metadata"
-    }
-
-    fn source(&self) -> speki_dto::ModifiedSource {
-        self.source
-    }
-
-    fn set_source(&mut self, source: speki_dto::ModifiedSource) {
-        self.source = source;
     }
 }
 

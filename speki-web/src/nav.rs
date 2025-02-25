@@ -1,6 +1,5 @@
 use dioxus::prelude::*;
 
-use crate::utils::sync;
 use crate::{firebase, LOGIN_STATE};
 use crate::{Route, CURRENT_ROUTE};
 
@@ -72,7 +71,7 @@ pub fn nav() -> Element {
                                             onclick: move|_| {
                                                 let user = user.clone();
                                                 spawn(async move {
-                                                    sync(user).await;
+                                                    todo!()
                                                 });
                                             },
                                             { image("sync.svg", 34, SYNCING.cloned()) }

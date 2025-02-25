@@ -1,32 +1,26 @@
-use std::{collections::{BTreeMap, HashMap}, fmt::Debug, sync::{Arc, RwLock}, time::Duration};
-
-use audio::Audio;
-use card::{BackSide, BaseCard, CardId, RecallRate};
+use std::{collections::{HashMap, HashSet}, fmt::Debug, hash, sync::{Arc, RwLock}, time::Duration};
+use card::{BackSide, BaseCard, CType, CardId, RecallRate};
 use card_provider::CardProvider;
-use cardfilter::{CardFilter, FilterItem};
+use cardfilter::{CardFilter};
 use collection::{Collection, CollectionId};
-use dependents::{Dependents, DependentsProvider};
 use dioxus_logger::tracing::info;
 use eyre::Result;
-use index::{Index, IndexProvider};
-use ledger::{check_compose, decompose, CardAction, CardEvent, Event, HistoryEvent, MetaEvent};
+use ledger::{check_compose, decompose, CardAction, CardEvent, CollectionEvent, Event, MetaEvent};
 use metadata::Metadata;
-use recall_rate::History;
+use recall_rate::{History, ReviewEvent};
 use serde::{de::DeserializeOwned, Serialize};
-use speki_dto::{Item, LedgerEntry, LedgerEvent, LedgerProvider, Record, RunLedger, SpekiProvider, TimeProvider};
+use speki_dto::{LedgerEntry, LedgerEvent, RunLedger, SpekiProvider, TimeProvider};
 use tracing::trace;
 
-mod attribute;
+pub mod attribute;
 pub mod audio;
 pub mod card;
-mod card_provider;
+pub mod card_provider;
 pub mod cardfilter;
 pub mod collection;
 mod common;
 pub mod metadata;
 pub mod recall_rate;
-pub mod dependents;
-pub mod index;
 pub mod ledger;
 
 pub use attribute::{Attribute, AttributeDTO, AttributeId};
@@ -38,17 +32,47 @@ pub use common::current_time;
 pub use omtrent::TimeStamp;
 pub use recall_rate::SimpleRecall;
 
+
+#[derive(Clone, PartialEq, PartialOrd, Hash, Eq, Debug)]
+pub enum CacheKey {
+    Dependent(CardId),
+    Bigram([char;2]),
+    Suspended(bool),
+    CardType(CType),
+    Instance(CardId),
+    BackRef(CardId),
+    SubClass(CardId),
+    AttrId(AttributeId),
+    AttrClass(CardId),
+}
+
+impl CacheKey {
+    pub fn to_string(&self) -> String {
+        match self {
+            CacheKey::Dependent(id) => format!("dependents:{id}"),
+            CacheKey::Bigram([a, b]) => format!("bigram:{a}{b}"),
+            CacheKey::Suspended(flag) => format!("suspended:{flag}"),
+            CacheKey::CardType(cty) => format!("type:{:?}", cty),
+            CacheKey::Instance(id) => format!("instance:{id}"),
+            CacheKey::BackRef(id) => format!("backref:{id}"),
+            CacheKey::SubClass(id) => format!("subclass:{id}"),
+            CacheKey::AttrId(id) => format!("attrid:{id}"),
+            CacheKey::AttrClass(id) => format!("attrclass:{id}"),
+        }
+    }
+}
+
 pub trait RecallCalc {
     fn recall_rate(&self, reviews: &History, current_unix: Duration) -> Option<RecallRate>;
 }
 
 #[derive(Clone)]
 pub struct CollectionProvider {
-   inner: Arc<Box<dyn SpekiProvider<Collection>>>,
+   inner: Arc<Box<dyn SpekiProvider<Collection, CollectionEvent>>>,
 }
 
 impl CollectionProvider {
-    pub fn new(inner: Arc<Box<dyn SpekiProvider<Collection>>>) -> Self {
+    pub fn new(inner: Arc<Box<dyn SpekiProvider<Collection, CollectionEvent>>>) -> Self {
         Self {
             inner
         }
@@ -58,7 +82,7 @@ impl CollectionProvider {
     }
 
     pub async fn load(&self, id: CollectionId) -> Option<Collection> {
-        if let Some(col) = self.inner.load_item(id).await {
+        if let Some(col) = self.inner.load_item(&id.to_string()).await {
             Some(col)
         } else {
             None
@@ -66,25 +90,16 @@ impl CollectionProvider {
     }
 
     pub async fn load_all(&self) -> HashMap<CollectionId, Collection> {
-        self.inner.load_all().await
-    }
-
-    pub async fn delete(&self, item: Collection) {
-        self.inner.delete_item(item).await
+        self.inner.load_all().await.into_iter().map(|(key, val)| (key.parse().unwrap(), val)).collect()
     }
 }
 
 #[derive(Clone)]
 pub struct Provider {
-    pub cards: Arc<Box<dyn LedgerProvider<BaseCard, CardEvent>>>,
-    pub reviews: Arc<Box<dyn SpekiProvider<History>>>,
-    pub attrs: Arc<Box<dyn SpekiProvider<AttributeDTO>>>,
+    pub cards: Arc<Box<dyn SpekiProvider<BaseCard, CardEvent>>>,
+    pub reviews: Arc<Box<dyn SpekiProvider<History, ReviewEvent>>>,
     pub collections: CollectionProvider,
-    pub metadata: Arc<Box<dyn SpekiProvider<Metadata>>>,
-    pub cardfilter: Arc<Box<dyn SpekiProvider<FilterItem>>>,
-    pub audios: Arc<Box<dyn SpekiProvider<Audio>>>,
-    pub dependents: DependentsProvider,
-    pub indices: IndexProvider,
+    pub metadata: Arc<Box<dyn SpekiProvider<Metadata, MetaEvent>>>,
     pub time: TimeGetter,
 }
 
@@ -125,157 +140,74 @@ impl Provider {
             Event::Meta(event) => self.run_meta_event(event).await,
             Event::History(event) => self.run_history_event(event).await,
             Event::Card(event) => self.run_card_event(event).await,
+            Event::Collection(col) => self.collections.inner.save_and_run(col, self.time.current_time()).await,
         }
     }
 
-    async fn run_history_event(&self, event: HistoryEvent) {
-        match event {
-            HistoryEvent::Review { id, review } => {
-                let mut history = match self.reviews.load_item(id).await {
-                    Some(history) => history,
-                    None => History::new(id),
-                };
-                history.push(review);
-                self.reviews.save_item(history).await;
-            },
-        }
+    async fn run_history_event(&self, event: ReviewEvent) {
+        let time = event.timestamp;
+        self.reviews.save_and_run(event, time).await;
     }
 
     async fn run_meta_event(&self, event: MetaEvent) {
-        match event {
-            MetaEvent::SetSuspend{ id, status } => {
-                let mut meta = self.metadata.load_item(id).await.unwrap();
-                meta.suspended = status.into();
-                self.metadata.save_item(meta).await;
-            },
-        }
-    }
-}
-
-#[derive(Clone)]
-pub struct MemProvider<T: Item + Send + 'static>{
-    provider: Arc<Box<dyn SpekiProvider<T> + Send >>, 
-    cache: Arc<RwLock<BTreeMap<T::Key, T>>>,
-}
-
-impl<T: Item + Send + 'static> MemProvider<T> {
-    pub fn new(provider: Arc<Box<dyn SpekiProvider<T> + Send >>) -> Self {
-        Self {
-            provider,
-            cache: Default::default(),
-        }
-    }
-}
-
-#[async_trait::async_trait(?Send)]
-impl<T: Item + Send + Sync + 'static> SpekiProvider<T> for MemProvider<T> {
-    async fn current_time(&self) -> Duration {
-        self.provider.current_time().await
-    }
-
-    async fn load_record(&self, id: T::Key) -> Option<Record> {
-        trace!("mem load record: {id:?}");
-        self.provider.load_record(id).await
-    }
-
-    async fn load_all_records(&self) -> HashMap<T::Key, Record> {
-        trace!("ty: {} loading all records", T::identifier());
-        self.provider.load_all_records().await
-    }
-
-    async fn save_record_in(&self, space: &str, record: Record) {
-        trace!("ty: {} save record", space);
-        self.provider.save_record_in(space, record).await;
-    }
-
-    async fn save_records(&self, records: Vec<Record>) {
-        for record in records {
-            self.save_record(record).await;
-        }
-    }
-
-    async fn load_ids(&self) -> Vec<T::Key> {
-        trace!("ty: {} loading ids", T::identifier());
-        self.load_all_records().await.into_keys().collect()
-    }
-
-    async fn load_item(&self, id: T::Key) -> Option<T> {
-        trace!("ty: {} loading id {id:?}", T::identifier());
-        if let Some(item) = self.cache.read().unwrap().get(&id).cloned() {
-        trace!("ty: {} loading id {id:?} cache hit", T::identifier());
-            return Some(item);
-        };
-        trace!("ty: {} loading id {id:?} cache miss", T::identifier());
-
-        if let Some(item) = self.provider.load_item(id).await {
-            trace!("ty: {} loading id {id:?} loaded item from inner provider", T::identifier());
-            self.cache.write().unwrap().insert(id, item.clone());
-            Some(item)
-        } else {
-            trace!("ty: {} loading id {id:?} did not load item from inner provider", T::identifier());
-            None
-        }
-
-    }
-
-    async fn save_item(&self, mut item: T) {
-        item.set_last_modified(self.current_time().await);
-        item.set_local_source();
-        self.cache.write().unwrap().insert(item.id(), item.clone());
-        let record: Record = item.into();
-        self.save_record(record).await;
+        self.metadata.save_and_run(event, self.time.current_time()).await;
     }
 }
 
 
 #[derive(Clone)]
-pub struct PureMem<T: Item + Send + 'static, E: LedgerEvent<T> + Serialize + DeserializeOwned + Clone + 'static>{
+pub struct PureMem<L: LedgerEvent>{
     time: TimeGetter,
-    cache: Arc<RwLock<HashMap<T::Key, Record>>>,
-    ledger: Arc<RwLock<HashMap<u64, LedgerEntry<T, E>>>>,
+    state: Arc<RwLock<HashMap<String, String>>>,
+    ledger: Arc<RwLock<HashMap<u64, LedgerEntry<L>>>>,
+    cache: Arc<RwLock<HashMap<String, HashSet<String>>>>,
 }
 
-impl<T: Item + Send + 'static, E: LedgerEvent<T> + Serialize + DeserializeOwned + Clone + 'static> PureMem<T, E> {
+impl<E: LedgerEvent + Serialize + DeserializeOwned + Clone + 'static> PureMem<E> {
     pub fn new(time: TimeGetter) -> Self {
         Self {
             time,
-            cache: Default::default(),
+            state: Default::default(),
             ledger: Default::default(),
+            cache: Default::default(),
         }
     }
-
 }
 
+
 #[async_trait::async_trait(?Send)]
-impl<T: Item + Send + Sync + 'static, E: LedgerEvent<T> + Serialize + DeserializeOwned + Clone + Send + Sync + 'static> SpekiProvider<T> for PureMem<T, E> {
-    async fn current_time(&self) -> Duration {
+impl<T: RunLedger<L>, L: LedgerEvent> SpekiProvider<T, L> for PureMem<L>{
+    async fn load_content(&self, space: &str, id: &str) -> Option<String>{todo!()}
+    async fn load_all_contents(&self) -> HashMap<String, String>{todo!()}
+
+    async fn save_content(&self, space: &str, id: String, record: String){
+        self.state.write().unwrap().insert(id, record);
+    }
+
+    async fn save_cache(&self, key: String, ids: HashSet<String>) {
+        self.cache.write().unwrap().insert(key, ids);
+    }
+
+    async fn load_cache(&self, key: &str) -> HashSet<String>{
+        self.cache.read().unwrap().get(key).cloned().unwrap_or_default()
+    }
+
+
+    async fn current_time(&self) -> Duration{
         self.time.current_time()
     }
-
-    async fn load_record(&self, id: T::Key) -> Option<Record> {
-        trace!("mem load record: {id:?}");
-        self.cache.read().unwrap().get(&id).cloned()
+    /// Clear the storage area so we can re-run everything.
+    async fn clear_space(&self, space: &str){todo!()}
+    async fn clear_state(&self) {
+        self.state.write().unwrap().clear();
     }
-
-    async fn load_all_records(&self) -> HashMap<T::Key, Record> {
-        trace!("ty: {} loading all records", T::identifier());
-        self.cache.read().unwrap().clone()
+    async fn clear_ledger(&self) {
+        self.ledger.write().unwrap().clear();
     }
-
-    async fn save_record_in(&self, _space: &str, record: Record) {
-        let key = format!("\"{}\"", &record.id);
-        let key: T::Key = serde_json::from_str(&key).unwrap();
-        self.cache.write().unwrap().insert(key, record);
-    }
-}
-
-
-#[async_trait::async_trait(?Send)]
-impl<T: Item + std::hash::Hash + Send + Sync + RunLedger<E>, E: LedgerEvent<T> + Serialize + DeserializeOwned + Clone + Send + Sync + 'static> LedgerProvider<T, E> for PureMem<T, E>{
-    async fn load_ledger(&self) -> Vec<E>{
+    async fn load_ledger(&self) -> Vec<L>{
         let map = self.ledger.read().unwrap().clone();
 
-        let mut foo: Vec<LedgerEntry<T, E>> = vec![];
+        let mut foo: Vec<LedgerEntry<L>> = vec![];
 
         for (_, value) in map.iter(){
             foo.push(value.clone());
@@ -285,17 +217,7 @@ impl<T: Item + std::hash::Hash + Send + Sync + RunLedger<E>, E: LedgerEvent<T> +
         foo.into_iter().map(|e| e.event).collect()
     }
 
-    /// Clear the storage area so we can re-run everything.
-    async fn reset_space(&self) {
-        self.cache.write().unwrap().clear();
-    }
-
-    async fn reset_ledger(&self) {
-        self.ledger.write().unwrap().clear();
-    }
-
-
-    async fn save_ledger(&self, event: LedgerEntry<T, E>) {
+    async fn save_ledger(&self, event: LedgerEntry<L>){
         self.ledger.write().unwrap().insert(event.timestamp.as_micros() as u64, event);
     }
 }
@@ -318,31 +240,21 @@ impl Debug for App {
 }
 
 impl App {
-    pub fn new<A, B, C, D, E, F, G, H, I, J, K>(
+    pub fn new<A, B, C, D, E, F>(
         recall_calc: A,
         time_provider: B,
         card_provider: C,
         history_provider: D,
-        attr_provider: E,
-        collections_provider: F,
-        meta_provider: G,
-        filter_provider: H,
-        audio_provider: I,
-        dependents_provider: J,
-        index_provider: K,
+        collections_provider: E,
+        meta_provider: F,
     ) -> Self
     where
         A: RecallCalc + 'static + Send,
         B: TimeProvider + 'static + Send + Sync,
-        C: LedgerProvider<BaseCard, CardEvent> + 'static + Send,
-        D: SpekiProvider<History> + 'static + Send,
-        E: SpekiProvider<AttributeDTO> + 'static + Send,
-        F: SpekiProvider<Collection> + 'static + Send,
-        G: SpekiProvider<Metadata> + 'static + Send,
-        H: SpekiProvider<FilterItem> + 'static + Send,
-        I: SpekiProvider<Audio> + 'static + Send,
-        J: SpekiProvider<Dependents> + 'static + Send,
-        K: SpekiProvider<Index> + 'static + Send,
+        C: SpekiProvider<BaseCard, CardEvent> + 'static + Send,
+        D: SpekiProvider<History, ReviewEvent> + 'static + Send,
+        E: SpekiProvider<Collection, CollectionEvent> + 'static + Send,
+        F: SpekiProvider<Metadata, MetaEvent> + 'static + Send,
     {
         info!("initialtize app");
 
@@ -351,16 +263,11 @@ impl App {
 
         let provider = Provider {
             cards: Arc::new(Box::new(card_provider)),
-            reviews: Arc::new(Box::new(MemProvider::new(Arc::new(Box::new(history_provider))))),
-            attrs: Arc::new(Box::new(MemProvider::new(Arc::new(Box::new(attr_provider))))),
+            reviews: Arc::new(Box::new(history_provider)),
             collections: CollectionProvider {
-                inner: Arc::new(Box::new(MemProvider::new(Arc::new(Box::new(collections_provider))))),
+                inner: Arc::new(Box::new(collections_provider)),
             },
-            metadata: Arc::new(Box::new(MemProvider::new(Arc::new(Box::new(meta_provider))))),
-            cardfilter: Arc::new(Box::new(MemProvider::new(Arc::new(Box::new(filter_provider))))),
-            audios: Arc::new(Box::new(MemProvider::new(Arc::new(Box::new(audio_provider))))),
-            dependents: DependentsProvider::new(Arc::new(Box::new(MemProvider::new(Arc::new(Box::new(dependents_provider)))))),
-            indices: IndexProvider::new(Arc::new(Box::new(MemProvider::new(Arc::new(Box::new(index_provider)))))),
+            metadata: Arc::new(Box::new(meta_provider)),
             time: time_provider.clone(),
             
         };
@@ -379,7 +286,6 @@ impl App {
 
     pub async fn index_all(&self) {
         //self.provider.cards.index_all().await;
-        self.card_provider.refresh_cache().await;
     }
 
     pub fn card_provider(&self) -> CardProvider {
@@ -599,4 +505,16 @@ mod graphviz {
     fn yellow_color() -> String {
         String::from("#FFFF00")
     }
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn app() -> App {
+        //  App::new(recall_calc, time_provider, PureMem, history_provider, collections_provider, meta_provider)
+        todo!()
+    }
+
 }

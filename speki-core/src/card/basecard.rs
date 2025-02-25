@@ -1,8 +1,9 @@
+use std::collections::HashSet;
 use omtrent::TimeStamp;
-use speki_dto::{LedgerProvider, Record, RunLedger, SpekiProvider};
-
+use speki_dto::{RunLedger, SpekiProvider};
+use serde::{Deserialize, Serialize};
 use super::*;
-use crate::{attribute::AttributeId, audio::AudioId, card_provider::CardProvider, index::Bigram, ledger::CardEvent, App, Attribute};
+use crate::{attribute::AttributeId, audio::AudioId, card_provider::CardProvider, ledger::CardEvent, App, Attribute, CacheKey};
 
 pub type CardId = Uuid;
 
@@ -12,10 +13,7 @@ pub type CardId = Uuid;
 pub struct BaseCard {
     pub id: CardId,
     pub ty: CardType,
-    pub deleted: bool,
     pub dependencies: BTreeSet<CardId>,
-    pub last_modified: Duration,
-    pub source: ModifiedSource,
     pub front_audio: Option<AudioId>,
     pub back_audio: Option<AudioId>,
 }
@@ -38,21 +36,6 @@ impl BaseCard {
         }
     }
 
-    pub async fn bigrams(&self, provider: &CardProvider) -> Vec<Bigram> {
-        let mut bigrams = vec![];
-
-        for bigram in self.ty.display_front(provider).await
-            .chars()
-            .collect::<Vec<_>>()
-            .windows(2)
-            .map(|w| Bigram::new(w[0], w[1]))
-            .collect::<Vec<Bigram>>() {
-                bigrams.push(bigram);
-        }
-
-        bigrams
-    }
-
     pub fn new_with_id(id: impl Into<Option<CardId>>, ty: impl Into<CardType>) -> Self {
         let id: Option<CardId> = id.into();
         let id = id.unwrap_or_else(|| CardId::new_v4());
@@ -60,10 +43,7 @@ impl BaseCard {
         Self {
             id,
             ty: ty.into(),
-            deleted: false,
             dependencies: Default::default(),
-            last_modified: Default::default(),
-            source: Default::default(),
             front_audio: None,
             back_audio: None,
         }
@@ -83,9 +63,6 @@ impl From<RawCard> for BaseCard {
             id: raw.id,
             ty: into_any(raw.data),
             dependencies: raw.dependencies,
-            last_modified: raw.last_modified,
-            deleted: raw.deleted,
-            source: raw.source,
             front_audio: raw.front_audio,
             back_audio: raw.back_audio,
         }
@@ -98,9 +75,6 @@ impl From<BaseCard> for RawCard {
             id: card.id,
             data: from_any(card.ty),
             dependencies: card.dependencies,
-            deleted: card.deleted,
-            last_modified: card.last_modified,
-            source: card.source,
             tags: Default::default(),
             front_audio: card.front_audio,
             back_audio: card.back_audio,
@@ -220,6 +194,9 @@ pub struct AttributeCard {
 
 impl AttributeCard {
     pub async fn display_front(&self, provider: &CardProvider) -> String {
+        "omg an attribute".to_string()
+    }
+     /* 
      let attr =    provider
             .providers
             .attrs
@@ -236,6 +213,7 @@ impl AttributeCard {
             .await
             .unwrap_or_else(|| "oops, instance is deleted".to_string())
     }
+    */
 }
 
 /// A specific instance of a class
@@ -560,16 +538,18 @@ struct RawCard {
     dependencies: BTreeSet<Uuid>,
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     tags: BTreeMap<String, String>,
-    #[serde(default, skip_serializing_if = "is_false")]
-    deleted: bool,
-    #[serde(default)]
-    last_modified: Duration,
-    #[serde(default)]
-    source: ModifiedSource,
     #[serde(default)]
     front_audio: Option<AudioId>,
     #[serde(default)]
     back_audio: Option<AudioId>,
+}
+
+pub fn bigrams(text: &str) -> Vec<[char;2]> {
+    text.chars()
+        .collect::<Vec<_>>()
+        .windows(2)
+        .map(|w| [w[0], w[1]])
+        .collect()
 }
 
 pub fn normalize_string(str: &str) -> String {
@@ -577,130 +557,136 @@ pub fn normalize_string(str: &str) -> String {
 }
 
 impl RunLedger<CardEvent> for BaseCard {
-    fn run_event(selv: Option<Self>, event: CardEvent) -> (Self, Vec<CardEvent>) {
-        let id = event.id;
+    fn caches(&self) -> HashSet<String>{
+        let mut out: HashSet<String> = Default::default();
 
+        for dep in &self.dependencies {
+            out.insert(CacheKey::Dependent(*dep).to_string());
+        }
+
+        for bigram in bigrams(&self.ty.raw_front()) {
+            out.insert(CacheKey::Bigram(bigram).to_string());
+        }
+
+        match &self.ty {
+            CardType::Instance(InstanceCard { class, .. }) => {
+                out.insert(CacheKey::Instance(*class).to_string());
+            },
+            CardType::Normal(card) => {},
+            CardType::Unfinished(card) => {},
+            CardType::Attribute(AttributeCard {attribute, instance, ..}) => {
+                out.insert(CacheKey::AttrClass(*instance).to_string());
+                out.insert(CacheKey::AttrId(*attribute).to_string());
+
+            },
+            CardType::Class(ClassCard {parent_class, ..}) => {
+                if let Some(class) = parent_class {
+                    out.insert(CacheKey::SubClass(*class).to_string());
+                }
+            },
+            CardType::Statement(card) => {},
+            CardType::Event(card) => {},
+        };
+
+        
+
+        if let Some(back) = self.ty.backside() {
+            match back {
+                BackSide::Text(_) => {},
+                BackSide::Card(id) => {
+                    out.insert(CacheKey::BackRef(id).to_string());
+                },
+                BackSide::List(ids) => {
+                    for id in ids {
+                        out.insert(CacheKey::BackRef(id).to_string());
+                    }
+                },
+                BackSide::Time(_) => {},
+                BackSide::Trivial => {},
+                BackSide::Invalid => {},
+            }
+        }
+
+        out.insert(CacheKey::CardType(self.ty.fieldless()).to_string());
+
+        out
+    }
+    
+    fn new_default(id: String) -> Self {
+        Self {
+            id: id.parse().unwrap(),
+            ty: CardType::Normal(NormalCard { front: "uninit".to_string(), back: BackSide::Text("uninit".to_string()) }),
+            dependencies: Default::default(),
+            front_audio: Default::default(),
+            back_audio: Default::default(),
+        }
+    }
+
+    fn run_event(mut self, event: CardEvent) -> Self {
         match event.action {
             CardAction::SetFrontAudio { audio } => {
-                let mut base = selv.unwrap();
-                base.front_audio = audio;
-                (base, vec![])
+                self.front_audio = audio;
             },
             CardAction::SetBackAudio { audio } => {
-                let mut base = selv.unwrap();
-                base.back_audio = audio;
-                (base, vec![])
+                self.back_audio = audio;
             },
             CardAction::UpsertCard { ty } => {
-                (BaseCard::new_with_id(id, ty), vec![])
+                self.ty = ty;
             },
             CardAction::DeleteCard => {
-                /* 
-                let mut events = vec![];
-                let mut base = selv.unwrap();
-                base.set_delete();
-
-                for dependent in &base.dependents {
-                    let action = CardAction::RemoveDependency { dependency: id };
-                    let event = CardEvent {
-                        action,
-                        id: *dependent,
-                    };
-                    events.push(event);
-
-                }
-                */
-
-                let mut events = vec![];
-                let mut base = selv.unwrap();
-
-                (base, events)
-
-            },
-            CardAction::AddDependent { dependent } => {
-                let mut base = selv.unwrap();
-                //base.dependents.insert(dependent);
-                (base, vec![])
-            },
-            CardAction::RemoveDependent { dependent } => {
-                let mut base = selv.unwrap();
-                //base.dependents.remove(&dependent);
-                (base, vec![])
             },
             CardAction::AddDependency { dependency } => {
-                let mut base = selv.unwrap();
-                base.dependencies.insert(dependency);
-                let event = CardEvent {
-                    action: CardAction::AddDependent { dependent: id },
-                    id: dependency,
-                };
-                (base, vec![event])
+                self.dependencies.insert(dependency);
             },
             CardAction::RemoveDependency { dependency } => {
-                let mut base = selv.unwrap();
-                base.dependencies.remove(&dependency);
-                base.ty.remove_dep(dependency);
-                let event = CardEvent {
-                    action: CardAction::RemoveDependent { dependent: id },
-                    id: dependency,
-                };
-                (base, vec![event])
+                self.dependencies.remove(&dependency);
+                self.ty.remove_dep(dependency);
             },
             CardAction::SetBackRef { reff } => {
                 let backside = BackSide::Card(reff);
-                let mut base = selv.unwrap();
-                base.ty = base.ty.set_backside(backside);
-                (base, vec![])
+                self.ty = self.ty.set_backside(backside);
             },
         }
-    }
-}
 
-impl Item for BaseCard {
-    type PreviousVersion = Self;
-    type Key = CardId;
-
-    fn last_modified(&self) -> Duration {
-        self.last_modified
+        self
     }
 
-    fn as_string(&self) -> String {
-        let mut s = String::new();
-        let raw: RawCard = self.clone().into();
-        s.push_str(&raw.data.front.unwrap_or_default());
-        s.push_str(" ");
-        s.push_str(&raw.data.back.map(|b| b.to_string()).unwrap_or_default());
-        normalize_string(&s)
-    }
+    fn derive_events(&self) -> Vec<CardEvent> {
+        let mut actions = vec![];
 
-    fn set_last_modified(&mut self, time: Duration) {
-        self.last_modified = time;
-    }
+        let action = CardAction::UpsertCard { ty: self.ty.clone() };
+        actions.push(action);
 
-    fn set_source(&mut self, source: ModifiedSource) {
-        self.source = source;
-    }
+        if let Some(audio) = self.front_audio {
+            let action = CardAction::SetFrontAudio { audio: Some(audio)};
+            actions.push(action);
+        }
 
-    fn source(&self) -> ModifiedSource {
-        self.source
-    }
+        if let Some(audio) = self.back_audio {
+            let action = CardAction::SetFrontAudio { audio: Some(audio)};
+            actions.push(action);
+        }
 
-    fn id(&self) -> Uuid {
-        self.id
-    }
 
+        for dep in &self.dependencies {
+            let action = CardAction::AddDependency {dependency: *dep};
+            actions.push(action);
+        }
+
+        let id = self.id;
+
+        actions.into_iter().map(|action|CardEvent::new(id, action)).collect()
+    }
+    
+    fn item_id(&self) -> String {
+        self.id.to_string()
+    }
+    
     fn identifier() -> &'static str {
         "cards"
     }
-
-    fn deleted(&self) -> bool {
-        self.deleted
-    }
-
-    fn set_delete(&mut self) {
-        self.deleted = true;
-    }
 }
+
 
 #[derive(Ord, PartialOrd, Eq, Hash, PartialEq, Debug, Clone)]
 pub enum BackSide {
@@ -848,14 +834,10 @@ impl Serialize for BackSide {
     }
 }
 
-fn is_false(flag: &bool) -> bool {
-    !flag
-}
-
 #[derive(Serialize, Deserialize, Debug, Clone, Default)]
 pub struct Config;
 
-#[derive(Serialize, Deserialize, Debug, Clone, Default, Copy, Eq, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, Clone, Default, Copy, Eq, PartialEq, Hash, PartialOrd)]
 #[serde(rename_all = "lowercase")]
 pub enum CType {
     Instance,
@@ -971,5 +953,3 @@ fn from_any(ty: CardType) -> RawType {
     raw
 }
 
-
-use serde::{de::DeserializeOwned, Deserialize, Serialize};

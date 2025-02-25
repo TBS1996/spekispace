@@ -1,14 +1,82 @@
 use std::{
-    collections::{BTreeSet, HashMap},
+    collections::{BTreeSet, HashMap, HashSet},
     fmt::Debug,
     sync::{Arc, RwLock},
 };
-
 use dioxus_logger::tracing::{info, trace};
-
 use crate::{
-    card::{BaseCard, CardId}, ledger::{CardAction, CardEvent}, metadata::Metadata, recall_rate::History, Card, Provider, Recaller, TimeGetter
+    audio::Audio, card::{BaseCard, CardId}, ledger::{CardAction, CardEvent}, metadata::Metadata, recall_rate::History, CacheKey, Card, Provider, Recaller, TimeGetter
 };
+
+#[derive(Clone)]
+pub struct Caches{
+    inner: Arc<RwLock<HashMap<CacheKey, Arc<HashSet<String>>>>>,
+    providers: Provider,
+}
+
+impl Debug for Caches {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Caches").field("inner", &self.inner).finish()
+    }
+}
+
+impl Caches {
+    pub fn new(providers: Provider) -> Self {
+        Self {
+            inner: Default::default(),
+            providers,
+        }
+    }
+
+    pub async fn get(&self, key: CacheKey) -> Arc<HashSet<String>> {
+        if let Some(set) = self.inner.read().unwrap().get(&key) {
+            return set.clone();
+        }
+
+        let set = match key.clone() {
+           key @ CacheKey::Dependent(_) =>  {
+                let key = key.to_string();
+                self.providers.cards.load_cache(&key).await
+            },
+            key @ CacheKey::Bigram(_) => {
+                let key = key.to_string();
+                self.providers.cards.load_cache(&key).await
+            },
+            key @ CacheKey::CardType(_) => {
+                let key = key.to_string();
+                self.providers.cards.load_cache(&key).await
+            },
+            key @ CacheKey::Suspended(_) => {
+                let key = key.to_string();
+                self.providers.metadata.load_cache(&key).await
+            },
+            key @ CacheKey::BackRef(_) => {
+                let key = key.to_string();
+                self.providers.cards.load_cache(&key).await
+            },
+            key @ CacheKey::Instance(_) => {
+                let key = key.to_string();
+                self.providers.cards.load_cache(&key).await
+            },
+            key @ CacheKey::SubClass(_) => {
+                let key = key.to_string();
+                self.providers.cards.load_cache(&key).await
+            },
+            key @ CacheKey::AttrClass(_) => {
+                let key = key.to_string();
+                self.providers.cards.load_cache(&key).await
+            },
+            key @ CacheKey::AttrId(_) => {
+                let key = key.to_string();
+                self.providers.cards.load_cache(&key).await
+            },
+        };
+
+        let set = Arc::new(set);
+        self.inner.write().unwrap().insert(key, set.clone());
+        set
+    }
+}
 
 #[derive(Clone)]
 pub struct CardProvider {
@@ -16,7 +84,7 @@ pub struct CardProvider {
     pub providers: Provider,
     time_provider: TimeGetter,
     recaller: Recaller,
-    validate: bool,
+    pub cache: Caches,
 }
 
 impl Debug for CardProvider {
@@ -35,36 +103,7 @@ impl CardProvider {
 
     pub async fn load_all_card_ids(&self) -> Vec<CardId> {
         info!("x1");
-        self.providers.cards.load_ids().await
-    }
-
-    pub async fn refresh_cache(&self) {
-        info!("starting cache refresh... might take a while..");
-        let cards = self.providers.cards.load_all().await;
-
-        self.providers.indices.refresh(self, cards.values()).await;
-        self.providers.dependents.refresh(cards.values()).await;
-
-        info!("done with cache refresh!");
-    }
-
-    async fn validate_cache(&self, id: CardId) {
-        let base_card = self.providers.cards.load_item(id).await.unwrap();
-        let mut cards: HashMap<CardId, BaseCard> = Default::default();
-
-        if !self.providers.dependents.check(&base_card).await {
-            cards = self.providers.cards.load_all().await;
-            self.providers.dependents.refresh(cards.values()).await;
-        }
-
-
-        if !self.providers.indices.check(self, &base_card).await {
-            if cards.is_empty() {
-                cards = self.providers.cards.load_all().await;
-            }
-
-            self.providers.indices.refresh(self, cards.values()).await;
-        }
+        self.providers.cards.load_ids().await.into_iter().map(|id|id.parse().unwrap()).collect()
     }
 
     pub async fn filtered_load<F, Fut>(&self, filter: F) -> Vec<Arc<Card>>
@@ -104,47 +143,33 @@ impl CardProvider {
 
     pub async fn dependents(&self, id: CardId) -> BTreeSet<CardId> {
         trace!("dependents of: {}", id);
-        self.providers.dependents.load(id).await
+        Arc::unwrap_or_clone(self.cache.get(CacheKey::Dependent(id)).await).into_iter().map(|x|x.parse().unwrap()).collect()
     }
 
 
     pub async fn load(&self, id: CardId) -> Option<Arc<Card>> {
         if let Some(card) = self.cards.read().unwrap().get(&id).cloned() {
-            if self.validate {
-                self.validate_cache(id).await;
-            }
-
             return Some(card);
         }
 
-        let base = self.providers.cards.load_item(id).await?;
-        let history = match self.providers.reviews.load_item(id).await {
+        let base = self.providers.cards.load_item(&id.to_string()).await?;
+        let history = match self.providers.reviews.load_item(&id.to_string()).await {
             Some(revs) => revs,
             None => History::new(id),
         };
-        let metadata = match self.providers.metadata.load_item(id).await {
+        let metadata = match self.providers.metadata.load_item(&id.to_string()).await {
             Some(meta) => meta,
             None => Metadata::new(id),
         };
         
-        let front_audio = match base.front_audio {
-            Some(audio) => Some(self.providers.audios.load_item(audio).await.unwrap()),
-            None => None,
-        };
 
-        let back_audio = match base.back_audio {
-            Some(audio) => Some(self.providers.audios.load_item(audio).await.unwrap()),
-            None => None,
-        };
+        let front_audio: Option<Audio> = None;
+        let back_audio: Option<Audio> = None;
 
 
         let card = Arc::new(Card::from_parts(base, history, metadata, self.clone(), self.recaller.clone(), front_audio, back_audio).await);
 
         self.cards.write().unwrap().insert(id, card.clone());
-
-        if self.validate {
-            self.validate_cache(id).await;
-        }
 
         Some(card)
     }
@@ -162,9 +187,9 @@ impl CardProvider {
         Self {
             cards: Default::default(),
             time_provider,
-            providers: provider,
             recaller,
-            validate: false,
+            cache: Caches::new(provider.clone()),
+            providers: provider,
         }
     }
 }

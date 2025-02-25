@@ -1,7 +1,7 @@
 use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
-use speki_dto::{Item, MergeInto, ModifiedSource};
+use speki_dto::{LedgerEvent, RunLedger};
 use uuid::Uuid;
 
 use crate::{
@@ -91,9 +91,8 @@ fn calculate_recall_rate(days_passed: &Duration, stability: &Duration) -> Recall
 pub struct History {
     id: Uuid,
     reviews: Vec<Review>,
-    #[serde(default)]
-    source: ModifiedSource,
 }
+
 
 impl History {
     pub fn inner(&self) -> &Vec<Review> {
@@ -146,7 +145,6 @@ impl History {
         Self {
             id,
             reviews: Default::default(),
-            source: Default::default(),
         }
     }
 
@@ -175,81 +173,62 @@ pub struct Review {
     pub time_spent: Duration,
 }
 
-impl Item for History {
-    type PreviousVersion = Self;
-    type Key = CardId;
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ReviewEvent {
+pub    id: CardId,
+ pub   grade: Recall,
+  pub  timestamp: Duration,
+}
 
-    fn last_modified(&self) -> Duration {
-        self.reviews
-            .iter()
-            .max()
-            .map(|rev| rev.timestamp)
-            .unwrap_or_default()
-    }
 
-    fn set_last_modified(&mut self, _time: Duration) {}
-
-    fn source(&self) -> ModifiedSource {
-        self.source
-    }
-
-    fn set_source(&mut self, source: ModifiedSource) {
-        self.source = source;
-    }
-
-    fn id(&self) -> Uuid {
-        self.id
-    }
-
-    fn identifier() -> &'static str {
-        "reviews"
-    }
-
-    fn merge(mut self, other: Self) -> Option<MergeInto<Self>>
-    where
-        Self: Sized,
-    {
-        debug_assert!(self.id == other.id);
-
-        let selflen = self.reviews.len();
-        let otherlen = other.reviews.len();
-
-        if selflen == otherlen {
-            return None;
-        }
-
-        let merged = {
-            self.merge_into(other);
-            self
-        };
-
-        let mergedlen = merged.len();
-
-        Some(if mergedlen == selflen {
-            MergeInto::Right(merged)
-        } else if mergedlen == otherlen {
-            MergeInto::Left(merged)
-        } else {
-            MergeInto::Both(merged)
-        })
-    }
-
-    fn deleted(&self) -> bool {
-        false
-    }
-
-    fn set_delete(&mut self) {}
-
-    fn item_deserialize(s: String) -> Self {
-        if let Ok(history) = toml::from_str(&s) {
-            history
-        } else if let Ok(history) = serde_json::from_str(&s) {
-            history
-        } else {
-            panic!("failed to deserialize reviews: {s}");
-        }
+impl LedgerEvent for ReviewEvent {
+    fn id(&self) -> String {
+        self.id.to_string()
     }
 }
+
+impl RunLedger<ReviewEvent> for History {
+    fn run_event(mut self, event: ReviewEvent) -> Self {
+        let review = Review {
+            timestamp: event.timestamp,
+            grade: event.grade,
+            time_spent: Default::default(),
+        };
+
+        self.push(review);
+
+        self
+    }
+
+    fn derive_events(&self) -> Vec<ReviewEvent> {
+        let mut actions: Vec<ReviewEvent> = vec![];
+
+        for review in &self.reviews {
+            let event = ReviewEvent {
+                id: self.id,
+                grade: review.grade,
+                timestamp: review.timestamp,
+            };
+
+            actions.push(event);
+        }
+
+        actions
+    }
+    
+    fn new_default(id: String) -> Self {
+        Self::new(id.parse().unwrap())
+    }
+    
+    fn item_id(&self) -> String {
+        self.id.to_string()
+    }
+    
+    fn identifier() -> &'static str {
+        "history"
+    }
+}
+
 
 #[derive(
     Ord, PartialOrd, Eq, PartialEq, Hash, Deserialize, Serialize, Debug, Default, Clone, Copy,

@@ -1,7 +1,6 @@
 use std::{fmt::Display, sync::Arc, time::Duration};
 
 use serde::{Deserialize, Serialize};
-use speki_dto::{Item, ModifiedSource};
 use uuid::Uuid;
 
 use crate::Card;
@@ -59,14 +58,6 @@ impl Display for NumOrd {
 
         write!(f, "{s}")
     }
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-struct ItemData {
-    last_modified: Duration,
-    deleted: bool,
-    id: Uuid,
-    source: ModifiedSource,
 }
 
 /// Filter for cards.
@@ -212,43 +203,6 @@ pub struct FilterItem {
     name: String,
     deleted: bool,
     id: Uuid,
-    source: ModifiedSource,
     filters: CardFilter,
 }
 
-impl Item for FilterItem {
-    type PreviousVersion = Self;
-    type Key = Uuid;
-
-    fn deleted(&self) -> bool {
-        self.deleted
-    }
-
-    fn set_delete(&mut self) {
-        self.deleted = true;
-    }
-
-    fn set_last_modified(&mut self, time: std::time::Duration) {
-        self.last_modified = time;
-    }
-
-    fn last_modified(&self) -> std::time::Duration {
-        self.last_modified
-    }
-
-    fn id(&self) -> uuid::Uuid {
-        self.id
-    }
-
-    fn identifier() -> &'static str {
-        "cardfilter"
-    }
-
-    fn source(&self) -> speki_dto::ModifiedSource {
-        self.source
-    }
-
-    fn set_source(&mut self, source: speki_dto::ModifiedSource) {
-        self.source = source;
-    }
-}

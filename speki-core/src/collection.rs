@@ -4,11 +4,11 @@ use std::{
 
 use async_recursion::async_recursion;
 use serde::{Deserialize, Serialize};
-use speki_dto::{Item, ModifiedSource};
+use speki_dto::RunLedger;
 use tracing::{error, info, warn};
 use uuid::Uuid;
 
-use crate::{card::CardId, card_provider::CardProvider, Card};
+use crate::{card::CardId, card_provider::CardProvider, ledger::{CollectionAction, CollectionEvent}, Card};
 
 pub type CollectionId = Uuid;
 
@@ -23,9 +23,41 @@ pub struct Collection {
     pub id: CollectionId,
     pub name: String,
     pub dyncards: Vec<MaybeDyn>,
-    pub last_modified: Duration,
-    pub deleted: bool,
-    pub source: ModifiedSource,
+}
+
+
+impl RunLedger<CollectionEvent> for Collection {
+    fn run_event(mut self, event: CollectionEvent) -> Self {
+        match event.action {
+            CollectionAction::SetName(s) => self.name = s,
+            CollectionAction::InsertDyn(val) => self.dyncards.push(val),
+            CollectionAction::RemoveDyn(val) => {
+                self.dyncards.retain(|x|x != &val);
+            }
+        }
+
+        self
+    }
+
+    fn derive_events(&self) -> Vec<CollectionEvent> {
+        todo!()
+    }
+
+    fn new_default(id: String) -> Self {
+        Self {
+            id: id.parse().unwrap(),
+            name: "uninit".to_string(),
+            dyncards: Default::default(),
+        }
+    }
+
+    fn item_id(&self) -> String {
+        self.id.to_string()
+    }
+
+    fn identifier() -> &'static str {
+        "collections"
+    }
 }
 
 impl Collection {
@@ -34,9 +66,6 @@ impl Collection {
             id: CollectionId::new_v4(),
             name,
             dyncards: Default::default(),
-            last_modified: Default::default(),
-            deleted: Default::default(),
-            source: Default::default(),
         }
     }
 
@@ -228,19 +257,15 @@ impl DynCard {
 
                 output
             }
-            DynCard::Dependents(id) => 
-            {
-
-            match provider
-                .load(*id)
-                .await
-                {
-                    Some(card) => card.dependents().await.into_iter().map(|x|MaybeCard::Card(x)).collect(),
-                    None =>  vec![],
+            DynCard::Dependents(id) => {
+                match provider
+                    .load(*id)
+                    .await
+                    {
+                        Some(card) => card.dependents().await.into_iter().map(|x|MaybeCard::Card(x)).collect(),
+                        None =>  vec![],
+                    }
                 }
-
-            }
-            
 
             DynCard::RecDependents(id) => {
                 let ids = match provider.load(*id).await {
@@ -260,133 +285,3 @@ impl DynCard {
     }
 }
 
-impl Item for Collection {
-    type PreviousVersion = prev::CollectionV1;
-    type Key = Uuid;
-
-    fn deleted(&self) -> bool {
-        self.deleted
-    }
-
-    fn set_delete(&mut self) {
-        self.deleted = true;
-    }
-
-    fn set_last_modified(&mut self, time: Duration) {
-        self.last_modified = time;
-    }
-
-    fn last_modified(&self) -> Duration {
-        self.last_modified
-    }
-
-    fn id(&self) -> Uuid {
-        self.id
-    }
-
-    fn identifier() -> &'static str {
-        "collections"
-    }
-
-    fn source(&self) -> ModifiedSource {
-        self.source
-    }
-
-    fn set_source(&mut self, source: ModifiedSource) {
-        self.source = source;
-    }
-}
-
-mod prev {
-    use tracing::info;
-
-    use super::*;
-
-    #[derive(Serialize, Deserialize, Debug, Clone, Eq, PartialEq, Copy, Hash)]
-    pub enum DynCard {
-        Card(CardId),
-        Instances(CardId),
-        Dependents(CardId),
-        RecDependents(CardId),
-        Collection(CollectionId),
-        Any,
-    }
-
-    impl From<DynCard> for super::MaybeDyn {
-        fn from(value: DynCard) -> Self {
-            match value {
-                DynCard::Card(id) => MaybeDyn::Dyn(super::DynCard::Card(id)),
-                DynCard::Instances(id) => MaybeDyn::Dyn(super::DynCard::Instances(id)),
-                DynCard::Dependents(id) => MaybeDyn::Dyn(super::DynCard::Dependents(id)),
-                DynCard::RecDependents(id) => MaybeDyn::Dyn(super::DynCard::RecDependents(id)),
-                DynCard::Any => MaybeDyn::Dyn(super::DynCard::Any),
-                DynCard::Collection(id) => MaybeDyn::Collection(id),
-            }
-        }
-    }
-
-    #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Hash)]
-    pub struct CollectionV1 {
-        pub id: CollectionId,
-        pub name: String,
-        pub dyncards: Vec<DynCard>,
-        pub last_modified: Duration,
-        pub deleted: bool,
-        pub source: ModifiedSource,
-    }
-
-    impl From<CollectionV1> for Collection {
-        fn from(col: CollectionV1) -> Self {
-            info!("converitng collectionv1 to col");
-            Collection {
-                id: col.id,
-                name: col.name,
-                dyncards: col
-                    .dyncards
-                    .into_iter()
-                    .map(super::MaybeDyn::from)
-                    .collect(),
-                last_modified: col.last_modified,
-                deleted: col.deleted,
-                source: col.source,
-            }
-        }
-    }
-
-    impl Item for CollectionV1 {
-        type PreviousVersion = Self;
-        type Key = Uuid;
-
-        fn deleted(&self) -> bool {
-            self.deleted
-        }
-
-        fn set_delete(&mut self) {
-            self.deleted = true;
-        }
-
-        fn set_last_modified(&mut self, time: Duration) {
-            self.last_modified = time;
-        }
-
-        fn last_modified(&self) -> Duration {
-            self.last_modified
-        }
-
-        fn id(&self) -> Uuid {
-            self.id
-        }
-
-        fn identifier() -> &'static str {
-            "collections"
-        }
-
-        fn source(&self) -> ModifiedSource {
-            self.source
-        }
-
-        fn set_source(&mut self, source: ModifiedSource) {
-            self.source = source;
-        }
-    }
-}

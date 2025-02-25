@@ -1,24 +1,18 @@
 use std::{fmt::Debug, sync::Arc};
 
 use dioxus::prelude::*;
-use futures::future::join;
 use speki_core::{
-    audio::Audio,
     card::{BaseCard, CardId},
     cardfilter::{CardFilter, FilterItem},
     collection::{Collection, CollectionId},
-    metadata::Metadata,
     AttributeDTO, Card,
 };
-use speki_dto::Syncable;
 use speki_provider::{DexieProvider, WasmTime};
 use speki_web::{CardEntry, Node, NodeMetadata};
 use tracing::info;
 use wasm_bindgen::prelude::*;
 
 use crate::{
-    firebase::{AuthUser, FirestoreProvider},
-    nav::SYNCING,
     TouchRec, APP,
 };
 
@@ -30,11 +24,6 @@ impl App {
         Self(Arc::new(speki_core::App::new(
             speki_core::SimpleRecall,
             WasmTime,
-            DexieProvider::new(),
-            DexieProvider::new(),
-            DexieProvider::new(),
-            DexieProvider::new(),
-            DexieProvider::new(),
             DexieProvider::new(),
             DexieProvider::new(),
             DexieProvider::new(),
@@ -52,7 +41,7 @@ impl App {
 
     pub async fn delete_collection(&self, id: CollectionId) {
         let col = self.load_collection(id).await;
-        self.0.provider.collections.delete(col).await;
+        //self.0.provider.collections.delete(col).await;
     }
 
     pub async fn fill_cache(&self) {
@@ -156,6 +145,7 @@ extern "C" {
     fn now() -> f64;
 }
 
+/* 
 pub async fn sync(agent: AuthUser) {
     let time_provider = APP.read().0.time_provider.clone();
     info!("starting sync!");
@@ -197,6 +187,7 @@ pub async fn sync(agent: AuthUser) {
 
     info!("done syncing in {} seconds!", elapsed.as_secs_f32());
 }
+    */
 
 pub async fn get_meta(node: &Node) -> NodeMetadata {
     match node {

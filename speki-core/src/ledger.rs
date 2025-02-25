@@ -2,13 +2,9 @@ use std::collections::VecDeque;
 
 use serde::{Deserialize, Serialize};
 use speki_dto::LedgerEvent;
-use crate::{audio::AudioId, card::{BaseCard, CardId}, recall_rate::Review, CardType};
+use crate::{audio::AudioId, card::{BaseCard, CardId}, collection::{CollectionId, DynCard, MaybeDyn}, metadata::Metadata, recall_rate::{Review, ReviewEvent}, CardType};
 
 pub fn decompose(card: &BaseCard) -> Vec<CardEvent> {
-    if card.deleted {
-        return vec![];
-    }
-
     let mut actions = vec![];
 
     let action = CardAction::UpsertCard { ty: card.ty.clone() };
@@ -33,23 +29,14 @@ pub fn decompose(card: &BaseCard) -> Vec<CardEvent> {
 
 use speki_dto::RunLedger;
 
-pub fn check_compose(mut old_card: BaseCard) {
-    old_card.last_modified = Default::default();
-    old_card.source = Default::default();
+pub fn check_compose(old_card: BaseCard) {
     let actions = decompose(&old_card);
-    let mut card: Option<BaseCard> = None;
+    let mut card: BaseCard = BaseCard::new_default(old_card.id.to_string());
 
     for action in actions {
-        let mut events: VecDeque<CardEvent> = VecDeque::from([action]);
-        while let Some(event) = events.pop_front() {
-            let (new_item, new_events) = BaseCard::run_event(card.clone(), event);
-            card = Some(new_item);
-            events.extend(new_events);
-        }
+        card = card.run_event(action);
     }
-    let mut card = card.unwrap();
-    card.last_modified = Default::default();
-    card.source = Default::default();
+
     assert_eq!(&old_card, &card);
 }
 
@@ -65,9 +52,9 @@ impl CardEvent {
     }
 }
 
-impl LedgerEvent<BaseCard> for CardEvent {
-    fn id(&self) -> CardId {
-        self.id
+impl LedgerEvent for CardEvent {
+    fn id(&self) -> String {
+        self.id.to_string()
     }
 }
 
@@ -85,12 +72,6 @@ pub enum CardAction {
     RemoveDependency {
         dependency: CardId,
     },
-    AddDependent {
-        dependent: CardId,
-    },
-    RemoveDependent {
-        dependent: CardId,
-    },
     SetBackRef{
         reff: CardId,
     },
@@ -104,11 +85,21 @@ pub enum HistoryEvent {
     },
 }
 
-pub enum MetaEvent {
-    SetSuspend{
-        id: CardId,
-        status: bool,
-    },
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MetaEvent {
+    pub id: CardId,
+    pub action: MetaAction,
+}
+
+impl LedgerEvent for MetaEvent {
+    fn id(&self) -> String{
+        self.id.to_string()
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum MetaAction {
+    Suspend(bool),
 }
 
 impl From<MetaEvent> for Event {
@@ -121,15 +112,46 @@ impl From<CardEvent> for Event {
         Event::Card(event)
     }
 }
-impl From<HistoryEvent> for Event {
-    fn from(event: HistoryEvent) -> Self {
+impl From<ReviewEvent> for Event {
+    fn from(event: ReviewEvent) -> Self {
         Event::History(event)
+    }
+}
+impl From<CollectionEvent> for Event {
+    fn from(event: CollectionEvent) -> Self {
+        Event::Collection(event)
     }
 }
 
 
 pub enum Event {
     Meta(MetaEvent),
-    History(HistoryEvent),
+    History(ReviewEvent),
     Card(CardEvent),
+    Collection(CollectionEvent),
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct CollectionEvent {
+    pub action: CollectionAction,
+    pub id: CollectionId,
+}
+
+impl CollectionEvent {
+    pub fn new(id: CollectionId, action: CollectionAction) -> Self {
+        Self {id, action}
+    }
+}
+
+impl LedgerEvent for CollectionEvent {
+    fn id(&self) -> String {
+        self.id.to_string()
+    }
+}
+
+#[derive(Deserialize, Serialize, Clone, Debug)]
+pub enum CollectionAction {
+    SetName(String),
+    InsertDyn(MaybeDyn),
+    RemoveDyn(MaybeDyn),
 }

@@ -8,14 +8,13 @@ use std::{
 };
 
 use futures::executor::block_on;
-use serde::{ser::SerializeSeq, Deserialize, Deserializer, Serialize};
+use serde::{ser::SerializeSeq, Deserializer};
 use serde_json::Value;
-use speki_dto::{Item, LazyItem, ModifiedSource};
 use tracing::info;
 use uuid::Uuid;
 
 use crate::{
-    audio::{Audio, AudioId}, card_provider::CardProvider, ledger::{CardAction, CardEvent, HistoryEvent, MetaEvent}, metadata::{IsSuspended, Metadata}, recall_rate::{History, Recall, Review, SimpleRecall}, RecallCalc, Recaller, TimeGetter
+    audio::{Audio, AudioId}, card_provider::CardProvider, ledger::{CardAction, CardEvent, HistoryEvent, MetaEvent}, metadata::{IsSuspended, Metadata}, recall_rate::{History, Recall, Review, ReviewEvent, SimpleRecall}, RecallCalc, Recaller, TimeGetter
 };
 
 pub type RecallRate = f32;
@@ -30,7 +29,7 @@ pub struct Card {
     front_audio: Option<Audio>,
     back_audio: Option<Audio>,
     base: BaseCard,
-    metadata: LazyItem<Metadata>,
+    metadata: Metadata,
     history: History,
     card_provider: CardProvider,
     recaller: Recaller,
@@ -72,6 +71,9 @@ impl std::fmt::Display for Card {
     }
 }
 
+use speki_dto::LedgerEvent;
+use speki_dto::RunLedger;
+
 impl Card {
     pub fn front_audio(&self) -> Option<&Audio> {
         self.front_audio.as_ref()
@@ -91,10 +93,6 @@ impl Card {
     
     pub fn get_ty(&self) -> CardType {
         self.base.ty.clone()
-    }
-
-    pub fn last_modified(&self) -> Duration {
-        self.base.last_modified
     }
 
     /// Loads all the ancestor ancestor classes
@@ -129,16 +127,12 @@ impl Card {
     }
 
     pub async fn add_review(&mut self, recall: Recall) {
-        let review = Review {
-            timestamp: self.time_provider().current_time(),
+        let event = ReviewEvent {
+            id: self.id,
             grade: recall,
-            time_spent: Default::default(),
+            timestamp: self.current_time(),
         };
-
-        self.history.push(review.clone());
-        let event = HistoryEvent::Review { id: self.id, review };
         self.card_provider.providers.run_event(event).await;
-        self.refresh().await;
     }
 
     pub fn time_provider(&self) -> TimeGetter {
@@ -176,12 +170,12 @@ impl Card {
     ) -> Self {
         let id = base.id;
 
-        debug_assert!(id == history.id() && id == metadata.id());
+        debug_assert!(id.to_string() == history.item_id() && id.to_string() == metadata.item_id());
 
         Self {
             id,
             base,
-            metadata: LazyItem::new_with_value(metadata, card_provider.providers.metadata.clone()).await,
+            metadata,
             history,
             card_provider,
             recaller,
@@ -408,13 +402,17 @@ impl Card {
     }
 
     pub fn is_suspended(&self) -> bool {
-        futures::executor::block_on(self.metadata.read()).suspended.is_suspended()
+        self.metadata.suspended.is_suspended()
     }
 
     pub async fn set_suspend(&mut self, suspend: bool) {
-        let event = MetaEvent::SetSuspend { id: self.id, status: suspend };
+        let event = MetaEvent {
+            id: self.id,
+            action: crate::ledger::MetaAction::Suspend(suspend),
+        };
+
         self.card_provider.providers.run_event(event).await;
-        self.metadata.write().await.suspended = IsSuspended::from(suspend);
+        self.metadata.suspended = suspend.into();
         self.card_provider.invalidate_card(self.id);
         self.refresh().await;
     }

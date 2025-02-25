@@ -6,7 +6,6 @@ use super::{
 use crate::{overlays::card_selector::MyClosure, APP};
 use dioxus::prelude::*;
 use speki_core::collection::{Collection, CollectionId, DynCard, MaybeCard, MaybeDyn};
-use speki_dto::Item;
 use speki_web::CardEntry;
 use std::{collections::BTreeMap, fmt::Display, sync::Arc};
 use tracing::info;
@@ -353,6 +352,9 @@ pub fn ColViewRender(props: CollectionEditor) -> Element {
 mod entry_selector {
     use super::*;
 
+    use speki_dto::RunLedger;
+
+
     pub fn dependencies(col: Signal<Collection>) -> CardSelector {
         let f = MyClosure::new(move |card: CardEntry| {
             let mut col = col.clone();
@@ -379,7 +381,7 @@ mod entry_selector {
 
     pub async fn collection(col: Signal<Collection>) -> ItemSelector<Collection> {
         let mut cols = APP.read().load_collections().await;
-        cols.retain(|_col| _col.id != col.read().id());
+        cols.retain(|_col| _col.id.to_string() != col.read().item_id());
         info!("debug 4");
 
         let f = Box::new(move |chosen_col: Collection| {

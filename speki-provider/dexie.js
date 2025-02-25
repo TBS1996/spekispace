@@ -10,7 +10,7 @@ metadataDb.version(1).stores({
 function createDexieInstance(typeName) {
     const db = new Dexie(`dexie_${typeName}`);
     db.version(1).stores({
-        records: "id, content, lastModified",
+        records: "id, content",
     });
     return db;
 }
@@ -31,13 +31,6 @@ export async function clearSpace(typeName) {
     } else {
         console.log(`Cleared all data from dexie_${typeName}`);
     }
-}
-
-
-function ensureUnixSeconds(timestamp) {
-    const TooBig = 173426346900;
-    if (timestamp == null) return null;
-    return timestamp > TooBig ? Math.floor(timestamp / 1000) : Math.floor(timestamp);
 }
 
 export async function saveDbId(id) {
@@ -70,10 +63,10 @@ export async function loadSyncTime(key) {
     return syncData.lastSync;
 }
 
-export async function saveContent(typeName, id, content, lastModified) {
+export async function saveContent(typeName, id, content) {
     console.log(`Saving content to type: ${typeName}`);
     const db = getDexieInstance(typeName);
-    await db.records.put({ id, content, lastModified });
+    await db.records.put({ id, content });
 }
 
 export async function loadRecord(typeName, id) {
@@ -81,13 +74,7 @@ export async function loadRecord(typeName, id) {
     const record = await db.records.get(id);
 
     if (!record) return null;
-
-    return {
-        id,
-        content: record.content,
-        last_modified: ensureUnixSeconds(record.lastModified) ?? null,
-        inserted: null,
-    };
+    return record.content;
 }
 
 export async function loadAllRecords(typeName) {
@@ -96,12 +83,7 @@ export async function loadAllRecords(typeName) {
     console.log(`heyy found ${records.length} ids of type ${typeName}`);
 
     return records.reduce((map, record) => {
-        map[record.id] = {
-            id: record.id,
-            content: record.content,
-            last_modified: ensureUnixSeconds(record.lastModified),
-            inserted: null,
-        };
+        map[record.id] = record.content;
         return map;
     }, {});
 }

@@ -1,13 +1,13 @@
 use std::{collections::HashMap, time::Duration};
-
 use async_trait::async_trait;
 use js_sys::Promise;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use speki_dto::{Item, ProviderId, Record, SpekiProvider, Syncable, TimeProvider};
+use speki_dto::ProviderId;
 use speki_provider::WasmTime;
 use tracing::info;
 use wasm_bindgen::prelude::*;
+
 
 use crate::LOGIN_STATE;
 
@@ -53,6 +53,7 @@ fn duration_to_firestore_jsvalue(duration: Duration) -> JsValue {
     obj.into()
 }
 
+/* 
 #[async_trait(?Send)]
 impl<T: Item> Syncable<T> for FirestoreProvider {
     async fn save_id(&self, id: ProviderId) {
@@ -115,7 +116,7 @@ impl<T: Item> SpekiProvider<T> for FirestoreProvider {
         self.time.current_time()
     }
 
-    async fn load_record(&self, id: T::Key) -> Option<Record> {
+    async fn load_content(&self, id: T::Key) -> Option<Record> {
         let ty = T::identifier();
         let id = JsValue::from_str(&id.to_string());
         let promise = loadRecord(&self.user_id(), &JsValue::from_str(ty), &id);
@@ -125,7 +126,7 @@ impl<T: Item> SpekiProvider<T> for FirestoreProvider {
         record
     }
 
-    async fn load_all_records(&self) -> HashMap<T::Key, Record> {
+    async fn load_all_contents(&self) -> HashMap<T::Key, Record> {
         let ty = T::identifier();
         let not_before = JsValue::from_f64(Duration::default().as_secs_f64());
         let promise = loadAllRecords(&self.user_id(), &JsValue::from_str(ty), &not_before);
@@ -181,10 +182,11 @@ impl<T: Item> SpekiProvider<T> for FirestoreProvider {
         saveContents(&user_id, &table, &js_records_value);
     }
 
-    async fn save_record_in(&self, space: &str, record: Record) {
+    async fn save_content(&self, space: &str, record: Record) {
         SpekiProvider::<T>::save_records(self, vec![record]).await;
     }
 }
+*/
 
 #[wasm_bindgen(module = "/assets/firebase.js")]
 extern "C" {

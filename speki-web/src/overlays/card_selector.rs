@@ -2,7 +2,7 @@ use std::{collections::BTreeMap, future::Future, pin::Pin, sync::Arc};
 
 use dioxus::prelude::*;
 use speki_core::{
-    card::{normalize_string, CardId}, cardfilter::CardFilter, collection::{DynCard, MaybeDyn}, index::Bigram
+    card::{normalize_string, CardId}, card_provider::Caches, cardfilter::CardFilter, collection::{DynCard, MaybeDyn}, CacheKey
 };
 use speki_web::{CardEntry, Node};
 use tracing::info;
@@ -66,6 +66,10 @@ impl Default for CardSelector {
     }
 }
 
+fn bigram_sort(text: &str, cache: Caches) -> Vec<CardId> {
+    vec![]
+}
+
 impl CardSelector {
     pub fn new(with_memo: bool, allowed_cards: Vec<CardTy>) -> Self {
         let allowed_cards = Signal::new_in_scope(allowed_cards, ScopeId::APP);
@@ -123,20 +127,22 @@ impl CardSelector {
                     info!("so many cards! {}", cards.len());
 
                     let mut matching_cards: BTreeMap<Uuid, u32> = BTreeMap::new();
-                    let providers = APP.read().inner().provider.clone();
 
                     for bigram in bigrams(search.as_ref()) {
-                        let indices = providers.indices.load(bigram).await;
+                        let indices = APP.read().inner().card_provider.cache.get(CacheKey::Bigram(bigram)).await;
 
-                        for id in indices {
+                        for id in indices.as_ref() {
+                            let id: Uuid = id.parse().unwrap();
                             if cards.contains_key(&id) {
                                 *matching_cards.entry(id).or_insert(0) += 1;
                             }
                         }
                     }
 
+
                     let mut sorted_cards: Vec<_> = matching_cards.into_iter().collect();
                     sorted_cards.sort_by(|a, b| b.1.cmp(&a.1));
+
 
                     if search.is_empty() {
                         sorted_cards = cards.iter().take(100).map(|id| (*id.0, 0)).collect();
@@ -454,10 +460,13 @@ fn TableRender(
     }
 }
 
-fn bigrams(text: &str) -> Vec<Bigram> {
+
+
+
+fn bigrams(text: &str) -> Vec<[char;2]> {
     text.chars()
         .collect::<Vec<_>>()
         .windows(2)
-        .map(|w| Bigram::new(w[0], w[1]))
+        .map(|w| [w[0],w[1]])
         .collect()
 }

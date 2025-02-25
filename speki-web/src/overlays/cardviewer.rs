@@ -4,6 +4,7 @@ use dioxus::prelude::*;
 use speki_core::{
     audio::AudioId, card::CardId, ledger::{CardAction, CardEvent}, CardType, ClassCard, InstanceCard, NormalCard, UnfinishedCard
 };
+
 use speki_web::{CardEntry, Node, NodeId, NodeMetadata};
 use tracing::info;
 
@@ -274,8 +275,8 @@ impl CardViewer {
         let front = {
             let frnt = FrontPut::new(CardTy::from_ctype(card.card.read().get_ty().fieldless()));
             if let Some(id) = card.card.read().front_audio_id() {
-                let audio = APP.read().inner().provider.audios.load_item(id).await;
-                frnt.audio.clone().set(audio);
+                //let audio = APP.read().inner().provider.audios.load_item(id).await;
+                //frnt.audio.clone().set(audio);
             }
             frnt.text.clone().set(raw_ty.raw_front());
             frnt
@@ -285,8 +286,8 @@ impl CardViewer {
             let back = raw_ty.raw_back();
             let bck = BackPut::new(raw_ty.backside()).with_dependents(tempnode.clone());
             if let Some(id) = card.card.read().back_audio_id() {
-                let audio = APP.read().inner().provider.audios.load_item(id).await;
-                bck.audio.clone().set(audio);
+                //let audio = APP.read().inner().provider.audios.load_item(id).await;
+                //bck.audio.clone().set(audio);
             }
 
             bck.text.clone().set(back);
@@ -701,10 +702,10 @@ fn save_button(CardViewer: CardViewer) -> Element {
                         }
 
                         if let Some(audio) = selv.editor.front.audio.cloned() {
-                            APP.read().inner().provider.audios.save_item(audio).await;
+                            //APP.read().inner().provider.audios.save_item(audio).await;
                         }
                         if let Some(audio) = selv.editor.back.audio.cloned() {
-                            APP.read().inner().provider.audios.save_item(audio).await;
+                            //APP.read().inner().provider.audios.save_item(audio).await;
                         }
 
                         for event in events {

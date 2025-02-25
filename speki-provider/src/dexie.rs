@@ -1,17 +1,13 @@
 use std::{
-    collections::{BTreeSet, HashMap}, sync::{atomic::{AtomicU64, Ordering}, Arc}, time::Duration
+    collections::{BTreeSet, HashMap, HashSet}, sync::{atomic::{AtomicU64, Ordering}, Arc}, time::Duration
 };
 use async_trait::async_trait;
 use js_sys::Promise;
-use serde::{de::DeserializeOwned, Serialize};
 use serde_json::Value;
-use speki_dto::Indexable;
-use speki_dto::{Item, LedgerEntry, LedgerEvent, LedgerProvider, ProviderId, Record, SpekiProvider, Syncable, TimeProvider};
+use speki_dto::{LedgerEntry, LedgerEvent, ProviderId, SpekiProvider, TimeProvider};
 use tracing::info;
-use uuid::Uuid;
 use wasm_bindgen::prelude::*;
 use speki_dto::RunLedger;
-use std::hash::Hash;
 
 #[derive(Copy, Clone)]
 pub struct WasmTime;
@@ -43,75 +39,29 @@ impl DexieProvider {
 
 
 #[async_trait(?Send)]
-impl<T: Item> Indexable<T> for DexieProvider {
-    async fn load_indices(&self, word: String) -> BTreeSet<Uuid> {
-        info!("loading indices for: {word}");
-        let ty = format!("textindex_{}", T::identifier());
-        let id = JsValue::from_str(&word);
-        let promise = loadRecord(&JsValue::from_str(&ty), &id);
-        let future = wasm_bindgen_futures::JsFuture::from(promise);
-        let jsvalue = future.await.unwrap();
-        let record: Option<Record> = serde_wasm_bindgen::from_value(jsvalue).unwrap_or_default();
-        record
-            .map(|r| serde_json::from_str(&r.content).unwrap())
-            .unwrap_or_default()
-    }
-
-    async fn save_indices(&self, word: String, indices: BTreeSet<Uuid>) {
-        info!("saving indices for: {word}");
-        let ty = format!("textindex_{}", T::identifier());
-        let id = JsValue::from_str(&word);
-        let content = JsValue::from_str(&serde_json::to_string(&indices).unwrap());
-        let last_modified = JsValue::from_str(&0.to_string());
-        saveContent(&JsValue::from_str(&ty), &id, &content, &last_modified);
-    }
-}
-
-#[async_trait(?Send)]
-impl<T: Item> Syncable<T> for DexieProvider {
-    async fn save_id(&self, id: ProviderId) {
-        let s = JsValue::from_str(&id.to_string());
-        saveDbId(&s);
-    }
-
-    async fn load_id_opt(&self) -> Option<ProviderId> {
-        if self.id.is_some() {
-            return self.id;
-        }
-
-        let promise = loadDbId();
-        let future = wasm_bindgen_futures::JsFuture::from(promise);
-        let jsvalue = future.await.unwrap();
-        serde_wasm_bindgen::from_value::<ProviderId>(jsvalue).ok()
-    }
-
-    async fn update_sync_info(&self, other: ProviderId, current_time: Duration) {
-        let ty = T::identifier();
-        let key = format!("{}-{:?}", other, ty);
-        let key = JsValue::from_str(&key);
-        let val = JsValue::from_f64(current_time.as_secs() as f64);
-        saveSyncTime(&key, &val);
-    }
-
-    async fn last_sync(&self, other: ProviderId) -> Duration {
-        let ty = T::identifier();
-        let key = format!("{}-{:?}", other, ty);
-        let key = JsValue::from_str(&key);
-        let promise = loadSyncTime(&key);
-        let future = wasm_bindgen_futures::JsFuture::from(promise);
-        let jsvalue = future.await.unwrap();
-        let timestamp: f32 = serde_wasm_bindgen::from_value(jsvalue).unwrap();
-        Duration::from_secs_f32(timestamp)
-    }
-}
-
-#[async_trait(?Send)]
-impl<T: Item> SpekiProvider<T> for DexieProvider {
+impl<T: RunLedger<L>, L: LedgerEvent> SpekiProvider<T, L> for DexieProvider {
     async fn current_time(&self) -> Duration {
         self.time.current_time()
     }
 
-    async fn load_record(&self, id: T::Key) -> Option<Record> {
+    async fn save_cache(&self, key: String, ids: HashSet<String>) {
+        let value = serde_wasm_bindgen::to_value(&ids).unwrap(); // Store as a native array
+        let id = JsValue::from_str(&key);
+        let space = format!("{}_cache", T::identifier());
+        saveContent(&JsValue::from_str(&space), &id, &value);
+    }
+
+    async fn load_cache(&self, key: &str) -> HashSet<String>{
+        let space = format!("{}_cache", T::identifier());
+        let id = JsValue::from_str(key);
+        let promise = loadRecord(&JsValue::from_str(&space), &id);
+        let future = wasm_bindgen_futures::JsFuture::from(promise);
+        let jsvalue = future.await.unwrap();
+        let x: Option<HashSet<String>> = serde_wasm_bindgen::from_value(jsvalue).unwrap();
+        x.unwrap_or_default()
+    }
+
+    async fn load_content(&self, space: &str, id: &str) -> Option<String> {
         let ty = T::identifier();
         let id = JsValue::from_str(&id.to_string());
         let promise = loadRecord(&JsValue::from_str(ty), &id);
@@ -120,53 +70,44 @@ impl<T: Item> SpekiProvider<T> for DexieProvider {
         serde_wasm_bindgen::from_value(jsvalue).unwrap()
     }
 
-    async fn load_all_records(&self) -> HashMap<T::Key, Record> {
+    async fn load_all_contents(&self) -> HashMap<String, String> {
         let ty = T::identifier();
         info!("from dexie loading all {ty:?}");
         let promise = loadAllRecords(&JsValue::from_str(ty));
         let future = wasm_bindgen_futures::JsFuture::from(promise);
         let jsvalue = future.await.unwrap();
-        let map: HashMap<T::Key, Record> = serde_wasm_bindgen::from_value(jsvalue).unwrap();
+        let map: HashMap<String, String> = serde_wasm_bindgen::from_value(jsvalue).unwrap();
         info!("from dexie loaded {:?} {:?}", map.len(), ty);
         map
     }
 
-    async fn save_record_in(&self, space: &str, record: Record) {
-        let id = JsValue::from_str(&record.id.to_string());
-        let content = JsValue::from_str(&record.content);
-        let last_modified = JsValue::from_str(&record.last_modified.to_string());
-        saveContent(&JsValue::from_str(space), &id, &content, &last_modified);
+    async fn save_content(&self, space: &str, id: String, record: String) {
+        let id = JsValue::from_str(&id);
+        let content = JsValue::from_str(&record);
+        saveContent(&JsValue::from_str(space), &id, &content);
     }
 
-    async fn load_ids(&self) -> Vec<T::Key> {
+    async fn load_ids(&self) -> Vec<String> {
         info!("loaidng all ids of type: {}", T::identifier());
-        load_ids::<T>(T::identifier()).await
+        load_ids(T::identifier()).await
     }
-}
 
 
-static MICRO: once_cell::sync::Lazy<Arc<AtomicU64>> = once_cell::sync::Lazy::new(|| {
-    Arc::new(AtomicU64::new(0))
-});
-
-
-#[async_trait::async_trait(?Send)]
-impl<T: Item + Hash + RunLedger<E>, E: LedgerEvent<T> + Serialize + DeserializeOwned + Clone + 'static> LedgerProvider<T, E> for DexieProvider{
-    async fn load_ledger(&self) -> Vec<E>{
+    async fn load_ledger(&self) -> Vec<L>{
         let space = format!("{}_ledger", T::identifier());
 
         let promise = loadAllRecords(&JsValue::from_str(&space));
         let future = wasm_bindgen_futures::JsFuture::from(promise);
         let jsvalue = future.await.unwrap();
-        let map: HashMap<String, Record> = serde_wasm_bindgen::from_value(jsvalue).unwrap();
+        let map: HashMap<String, String> = serde_wasm_bindgen::from_value(jsvalue).unwrap();
 
-        let mut foo: Vec<LedgerEntry<T, E>> = vec![];
+        let mut foo: Vec<LedgerEntry<L>> = vec![];
 
         for (key, value) in map.iter(){
             let key: u64 = key.parse().unwrap();
-            let action: E = serde_json::from_str(&value.content).unwrap();
+            let action: L = serde_json::from_str(&value).unwrap();
             let timestamp = Duration::from_micros(key + (MICRO.fetch_add(1, Ordering::SeqCst) % 1_000_000));
-            let event: LedgerEntry<T, E> = LedgerEntry::new(timestamp, action);
+            let event: LedgerEntry<L> = LedgerEntry::new(timestamp, action);
             foo.push(event);
         }
 
@@ -175,26 +116,34 @@ impl<T: Item + Hash + RunLedger<E>, E: LedgerEvent<T> + Serialize + DeserializeO
     }
 
     /// Clear the storage area so we can re-run everything.
-    async fn reset_space(&self) {
+    async fn clear_state(&self) {
         let space = JsValue::from_str(T::identifier());
         clearSpace(&space);
     }
 
-    async fn reset_ledger(&self) {
+    async fn clear_space(&self, _space: &str) {
+        unreachable!()
+    }
+
+    async fn clear_ledger(&self) {
         let space = format!("{}_ledger", T::identifier());
         let space = JsValue::from_str(&space);
         clearSpace(&space);
     }
 
 
-    async fn save_ledger(&self, event: LedgerEntry<T, E>) {
+    async fn save_ledger(&self, event: LedgerEntry<L>) {
         let space = format!("{}_ledger", T::identifier());
         let id = JsValue::from_str(&event.timestamp.as_micros().to_string());
         let content = JsValue::from_str(&serde_json::to_string(&event.event).unwrap());
-        let last_modified = JsValue::from_str(&0.to_string());
-        saveContent(&JsValue::from_str(&space), &id, &content, &last_modified);
+        saveContent(&JsValue::from_str(&space), &id, &content);
     }
 }
+
+
+static MICRO: once_cell::sync::Lazy<Arc<AtomicU64>> = once_cell::sync::Lazy::new(|| {
+    Arc::new(AtomicU64::new(0))
+});
 
 #[wasm_bindgen(module = "/dexie.js")]
 extern "C" {
@@ -206,7 +155,7 @@ extern "C" {
 
     fn loadRecord(table: &JsValue, id: &JsValue) -> Promise;
     fn loadAllRecords(table: &JsValue) -> Promise;
-    fn saveContent(table: &JsValue, id: &JsValue, content: &JsValue, last_modified: &JsValue);
+    fn saveContent(table: &JsValue, id: &JsValue, content: &JsValue);
     fn deleteContent(table: &JsValue, id: &JsValue);
     fn loadAllIds(table: &JsValue) -> Promise;
 
@@ -223,7 +172,7 @@ pub fn _current_time() -> Duration {
     Duration::from_millis(now() as u64)
 }
 
-pub async fn load_ids<T: Item>(table: &str) -> Vec<T::Key> {
+pub async fn load_ids(table: &str) -> Vec<String> {
     info!("load_ids called, table: {}", table);
     let val = promise_to_val(loadAllIds(&JsValue::from_str(table))).await;
     val.as_array()
