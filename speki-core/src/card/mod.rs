@@ -224,7 +224,7 @@ impl Card {
     pub async fn set_ref(mut self, reff: CardId) -> Card {
         let backside = BackSide::Card(reff);
         self.base.ty = self.base.ty.set_backside(backside);
-        let action = CardAction::SetBackRef { reff };
+        let action = CardAction::SetBackRef ( reff );
         let event = CardEvent::new(self.id, action);
         self.card_provider.providers.run_event(event).await;
         self.refresh().await;
@@ -246,7 +246,7 @@ impl Card {
 
         info!("dep was there: {res}");
         self.base.ty.remove_dep(dependency);
-        let action = CardAction::RemoveDependency {dependency };
+        let action = CardAction::RemoveDependency (dependency );
         let event = CardEvent::new(self.id, action);
         self.card_provider.providers.run_event(event).await;
         self.refresh().await;
@@ -254,7 +254,7 @@ impl Card {
 
     pub async fn add_dependency(&mut self, dependency: CardId) {
         self.base.dependencies.insert(dependency);
-        let action = CardAction::AddDependency { dependency };
+        let action = CardAction::AddDependency ( dependency );
         let event = CardEvent::new(self.id, action);
         self.card_provider.providers.run_event(event).await;
         self.refresh().await;
@@ -270,7 +270,7 @@ impl Card {
 
     pub async fn into_type(mut self, data: impl Into<CardType>) -> Self {
         self.base.ty = data.into();
-        let action = CardAction::UpsertCard { ty: self.base.ty.clone() };
+        let action = CardAction::UpsertCard ( self.base.ty.clone() );
         let event = CardEvent::new(self.id, action);
         self.card_provider.providers.run_event(event).await;
         self.refresh().await;

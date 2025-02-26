@@ -187,8 +187,11 @@ impl LedgerEvent for ReviewEvent {
     }
 }
 
+
 impl RunLedger<ReviewEvent> for History {
-    fn run_event(mut self, event: ReviewEvent) -> Self {
+    type Error = ();
+
+    fn run_event(mut self, event: ReviewEvent) -> Result<Self, ()> {
         let review = Review {
             timestamp: event.timestamp,
             grade: event.grade,
@@ -197,7 +200,7 @@ impl RunLedger<ReviewEvent> for History {
 
         self.push(review);
 
-        self
+        Ok(self)
     }
 
     fn derive_events(&self) -> Vec<ReviewEvent> {
@@ -222,10 +225,6 @@ impl RunLedger<ReviewEvent> for History {
     
     fn item_id(&self) -> String {
         self.id.to_string()
-    }
-    
-    fn identifier() -> &'static str {
-        "history"
     }
 }
 

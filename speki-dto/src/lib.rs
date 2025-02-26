@@ -36,7 +36,9 @@ pub trait LedgerEvent: Debug + Clone + Serialize + DeserializeOwned + Send + Syn
 
 /// Represents how a ledger mutates or creates an item.
 pub trait RunLedger<L: LedgerEvent + Debug>: Serialize + DeserializeOwned + Hash + 'static{
-    fn run_event(self, event: L) -> Self;
+    type Error: Debug;
+
+    fn run_event(self, event: L) -> Result<Self, Self::Error>;
 
     fn derive_events(&self) -> Vec<L>;
 
@@ -44,7 +46,14 @@ pub trait RunLedger<L: LedgerEvent + Debug>: Serialize + DeserializeOwned + Hash
 
     fn item_id(&self) -> String;
 
-    fn identifier() -> &'static str;
+    fn identifier() -> &'static str {
+        std::any::type_name::<Self>().split("::").last().unwrap()
+    }
+
+    /// when checking for correctness, the items of the returned ids must be checked to verify invariants
+    fn invariant_deps(&self) -> Vec<String> {
+        vec![]
+    }
 
     fn caches(&self) -> HashSet<String>{
         Default::default()
@@ -146,7 +155,7 @@ pub trait SpekiProvider<T: RunLedger<L>, L: LedgerEvent>: Sync {
             None => T::new_default(event.id())
         };
 
-        let item = item.run_event(event);
+        let item = item.run_event(event).unwrap();
         self.save_item(item).await;
     }
 

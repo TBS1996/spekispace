@@ -27,7 +27,9 @@ pub struct Collection {
 
 
 impl RunLedger<CollectionEvent> for Collection {
-    fn run_event(mut self, event: CollectionEvent) -> Self {
+    type Error = ();
+
+    fn run_event(mut self, event: CollectionEvent) -> Result<Self, Self::Error> {
         match event.action {
             CollectionAction::SetName(s) => self.name = s,
             CollectionAction::InsertDyn(val) => self.dyncards.push(val),
@@ -36,7 +38,8 @@ impl RunLedger<CollectionEvent> for Collection {
             }
         }
 
-        self
+
+        Ok(self)
     }
 
     fn derive_events(&self) -> Vec<CollectionEvent> {
@@ -53,10 +56,6 @@ impl RunLedger<CollectionEvent> for Collection {
 
     fn item_id(&self) -> String {
         self.id.to_string()
-    }
-
-    fn identifier() -> &'static str {
-        "collections"
     }
 }
 

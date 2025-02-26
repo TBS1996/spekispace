@@ -693,12 +693,12 @@ fn save_button(CardViewer: CardViewer) -> Element {
                         let mut events: Vec<LedgerEvent> = vec![];
 
                         let id = selveste.old_card.cloned().map(|card|card.id()).unwrap_or_else(CardId::new_v4);
-                        events.push(CardEvent::new(id, CardAction::UpsertCard{ty: card.ty}).into());
-                        events.push(CardEvent::new(id, CardAction::SetFrontAudio {audio: card.front_audio}).into());
-                        events.push(CardEvent::new(id, CardAction::SetBackAudio { audio: card.back_audio}).into());
+                        events.push(CardEvent::new(id, CardAction::UpsertCard(card.ty)).into());
+                        events.push(CardEvent::new(id, CardAction::SetFrontAudio (card.front_audio)).into());
+                        events.push(CardEvent::new(id, CardAction::SetBackAudio ( card.back_audio)).into());
 
                         for dep in card.deps {
-                            events.push(CardEvent::new(id, CardAction::AddDependency{ dependency: dep}).into());
+                            events.push(CardEvent::new(id, CardAction::AddDependency(dep)).into());
                         }
 
                         if let Some(audio) = selv.editor.front.audio.cloned() {

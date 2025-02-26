@@ -7,18 +7,18 @@ use crate::{audio::AudioId, card::{BaseCard, CardId}, collection::{CollectionId,
 pub fn decompose(card: &BaseCard) -> Vec<CardEvent> {
     let mut actions = vec![];
 
-    let action = CardAction::UpsertCard { ty: card.ty.clone() };
+    let action = CardAction::UpsertCard (card.ty.clone() );
     actions.push(action);
 
 
-    let action = CardAction::SetFrontAudio { audio: card.front_audio.clone() };
+    let action = CardAction::SetFrontAudio ( card.front_audio.clone() );
     actions.push(action);
 
-    let action = CardAction::SetBackAudio { audio: card.back_audio.clone() };
+    let action = CardAction::SetBackAudio ( card.back_audio.clone() );
     actions.push(action);
 
     for dep in &card.dependencies {
-        let action = CardAction::AddDependency {dependency: *dep};
+        let action = CardAction::AddDependency (*dep);
         actions.push(action);
     }
 
@@ -34,7 +34,7 @@ pub fn check_compose(old_card: BaseCard) {
     let mut card: BaseCard = BaseCard::new_default(old_card.id.to_string());
 
     for action in actions {
-        card = card.run_event(action);
+        card = card.run_event(action).unwrap();
     }
 
     assert_eq!(&old_card, &card);
@@ -42,13 +42,13 @@ pub fn check_compose(old_card: BaseCard) {
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct CardEvent {
-    pub action: CardAction,
+    pub action: Vec<CardAction>,
     pub id: CardId,
 }
 
 impl CardEvent {
     pub fn new(id: CardId, action: CardAction) -> Self {
-        Self {id, action}
+        Self {id, action: vec![action]}
     }
 }
 
@@ -60,21 +60,13 @@ impl LedgerEvent for CardEvent {
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
 pub enum CardAction {
-    SetFrontAudio{audio: Option<AudioId>},
-    SetBackAudio{audio: Option<AudioId>},
-    UpsertCard {
-        ty: CardType,
-    },
+    SetFrontAudio(Option<AudioId>),
+    SetBackAudio(Option<AudioId>),
+    UpsertCard(CardType),
     DeleteCard,
-    AddDependency {
-        dependency: CardId,
-    },
-    RemoveDependency {
-        dependency: CardId,
-    },
-    SetBackRef{
-        reff: CardId,
-    },
+    AddDependency(CardId),
+    RemoveDependency(CardId),
+    SetBackRef(CardId),
 }
 
 

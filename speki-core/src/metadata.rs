@@ -25,12 +25,14 @@ impl Metadata {
 }
 
 impl RunLedger<MetaEvent> for Metadata {
-    fn run_event(mut self, event: MetaEvent) -> Self {
+    type Error = ();
+
+    fn run_event(mut self, event: MetaEvent) -> Result<Self, ()> {
         match event.action {
             crate::ledger::MetaAction::Suspend(flag) => self.suspended = flag.into(),
         }
 
-        self
+        Ok(self)
     }
 
     fn derive_events(&self) -> Vec<MetaEvent> {
@@ -52,10 +54,6 @@ impl RunLedger<MetaEvent> for Metadata {
     
     fn item_id(&self) -> String {
         self.id.to_string()
-    }
-    
-    fn identifier() -> &'static str {
-        "metadata"
     }
 }
 

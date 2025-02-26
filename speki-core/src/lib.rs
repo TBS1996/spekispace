@@ -125,14 +125,7 @@ impl Provider {
             }
         }
 
-        for i in 0..actions.len() {
-            if matches!(&actions[i].action, CardAction::UpsertCard {..}) {
-                let action = actions.remove(i);
-                actions.insert(0, action);
-            }
-        }
-
-        actions
+        todo!();
     }
 
     pub async fn run_event(&self, event: impl Into<Event>) {
@@ -352,10 +345,8 @@ impl App {
 
         let id = CardId::new_v4();
 
-        let action = CardAction::UpsertCard { ty: data.into() };
-        let event = CardEvent {
-            action, id
-        };
+        let action = CardAction::UpsertCard ( data.into() );
+        let event = CardEvent::new(id, action);
 
         self.provider.run_event(event).await;
         id
@@ -374,7 +365,7 @@ impl App {
             class,
         };
         let id = CardId::new_v4();
-        let event = CardEvent::new(id, CardAction::UpsertCard { ty: data.into() });
+        let event = CardEvent::new(id, CardAction::UpsertCard ( data.into() ));
         self.provider.run_event(event).await;
         id
     }
@@ -382,7 +373,7 @@ impl App {
     pub async fn add_card_with_id(&self, front: String, back: impl Into<BackSide>, id: CardId) {
         let back = back.into();
         let data = NormalCard { front, back };
-        let event = CardEvent::new(id, CardAction::UpsertCard { ty: data.into() });
+        let event = CardEvent::new(id, CardAction::UpsertCard ( data.into() ));
         self.provider.run_event(event).await;
     }
 
@@ -391,7 +382,7 @@ impl App {
         let data = NormalCard { front, back };
 
         let id = CardId::new_v4();
-        let event = CardEvent::new(id, CardAction::UpsertCard { ty: data.into() });
+        let event = CardEvent::new(id, CardAction::UpsertCard ( data.into() ));
         self.provider.run_event(event).await;
         id
     }
@@ -399,7 +390,7 @@ impl App {
     pub async fn add_unfinished(&self, front: String) -> CardId {
         let data = UnfinishedCard { front };
         let id = CardId::new_v4();
-        let event = CardEvent::new(id, CardAction::UpsertCard { ty: data.into() });
+        let event = CardEvent::new(id, CardAction::UpsertCard ( data.into() ));
         self.provider.run_event(event).await;
         id
     }

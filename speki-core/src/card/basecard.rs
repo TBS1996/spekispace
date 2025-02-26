@@ -557,6 +557,7 @@ pub fn normalize_string(str: &str) -> String {
 }
 
 impl RunLedger<CardEvent> for BaseCard {
+    type Error = ();
     fn caches(&self) -> HashSet<String>{
         let mut out: HashSet<String> = Default::default();
 
@@ -622,54 +623,55 @@ impl RunLedger<CardEvent> for BaseCard {
         }
     }
 
-    fn run_event(mut self, event: CardEvent) -> Self {
-        match event.action {
-            CardAction::SetFrontAudio { audio } => {
-                self.front_audio = audio;
-            },
-            CardAction::SetBackAudio { audio } => {
-                self.back_audio = audio;
-            },
-            CardAction::UpsertCard { ty } => {
-                self.ty = ty;
-            },
-            CardAction::DeleteCard => {
-            },
-            CardAction::AddDependency { dependency } => {
-                self.dependencies.insert(dependency);
-            },
-            CardAction::RemoveDependency { dependency } => {
-                self.dependencies.remove(&dependency);
-                self.ty.remove_dep(dependency);
-            },
-            CardAction::SetBackRef { reff } => {
-                let backside = BackSide::Card(reff);
-                self.ty = self.ty.set_backside(backside);
-            },
+    fn run_event(mut self, event: CardEvent) -> Result<Self, ()> {
+        for action in event.action {
+            match action {
+                CardAction::SetFrontAudio ( audio ) => {
+                    self.front_audio = audio;
+                },
+                CardAction::SetBackAudio ( audio ) => {
+                    self.back_audio = audio;
+                },
+                CardAction::UpsertCard ( ty ) => {
+                    self.ty = ty;
+                },
+                CardAction::DeleteCard => {},
+                CardAction::AddDependency ( dependency ) => {
+                    self.dependencies.insert(dependency);
+                },
+                CardAction::RemoveDependency ( dependency ) => {
+                    self.dependencies.remove(&dependency);
+                    self.ty.remove_dep(dependency);
+                },
+                CardAction::SetBackRef ( reff ) => {
+                    let backside = BackSide::Card(reff);
+                    self.ty = self.ty.set_backside(backside);
+                },
+            }
         }
 
-        self
+        Ok(self)
     }
 
     fn derive_events(&self) -> Vec<CardEvent> {
         let mut actions = vec![];
 
-        let action = CardAction::UpsertCard { ty: self.ty.clone() };
+        let action = CardAction::UpsertCard (self.ty.clone() );
         actions.push(action);
 
         if let Some(audio) = self.front_audio {
-            let action = CardAction::SetFrontAudio { audio: Some(audio)};
+            let action = CardAction::SetFrontAudio ( Some(audio));
             actions.push(action);
         }
 
         if let Some(audio) = self.back_audio {
-            let action = CardAction::SetFrontAudio { audio: Some(audio)};
+            let action = CardAction::SetFrontAudio ( Some(audio));
             actions.push(action);
         }
 
 
         for dep in &self.dependencies {
-            let action = CardAction::AddDependency {dependency: *dep};
+            let action = CardAction::AddDependency (*dep);
             actions.push(action);
         }
 
@@ -680,10 +682,6 @@ impl RunLedger<CardEvent> for BaseCard {
     
     fn item_id(&self) -> String {
         self.id.to_string()
-    }
-    
-    fn identifier() -> &'static str {
-        "cards"
     }
 }
 
