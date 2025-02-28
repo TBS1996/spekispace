@@ -136,6 +136,7 @@ pub trait LedgerProvider<T: RunLedger<L>, L: LedgerEvent>: Storage<T> {
         foo.into_iter().map(|e| e.event).collect()
 
     }
+
     async fn save_ledger(&self, event: LedgerEntry<L>) {
         let key = event.timestamp.as_micros().to_string();
         let val = serde_json::to_string(&event.event).unwrap();

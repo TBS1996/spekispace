@@ -27,6 +27,13 @@ pub struct FsProvider {
     id: Option<ProviderId>,
 }
 
+
+fn write_string(path: &Path, s: String) {
+    let mut f = File::create(&path).unwrap();
+    f.write_all(s.as_bytes()).unwrap();
+
+}
+
 impl FsProvider {
     pub fn new() -> Self {
         fs::create_dir_all(STORAGE_DIR).ok();
@@ -52,9 +59,8 @@ impl FsProvider {
 
     fn write_file(table: &str, id: &str, contents: impl Serialize) {
         let path = Self::file_path(table, id);
-        let mut f = File::create(&path).unwrap();
         let contents = serde_json::to_string(&contents).unwrap();
-        f.write_all(contents.as_bytes()).unwrap();
+        write_string(&path, contents);
     }
 
     fn load_file<T: DeserializeOwned>(table: &str, id: &str) -> Option<T> {
@@ -95,13 +101,14 @@ impl<T: Serialize + DeserializeOwned + 'static> Storage<T> for FsProvider {
         let dir = Self::table_path(space);
         load_file_contents(&dir)
     }
+
     async fn save_content(&self, space: &str, id: &str, record: String) {
-        Self::write_file(space, &id, record);
+        let path = Self::file_path(space, id);
+        write_string(&path, record);
     }
 
-    async fn load_ids(&self) -> Vec<String> {
-        let ty = <FsProvider as Storage<T>>::item_name(self);
-        let dir = Self::table_path(ty);
+    async fn load_ids(&self, space: &str) -> Vec<String> {
+        let dir = Self::table_path(space);
         let mut map = vec![];
         if let Ok(entries) = fs::read_dir(dir) {
             for entry in entries.flatten() {
@@ -131,7 +138,7 @@ impl<T: RunLedger<L>, L: LedgerEvent> LedgerProvider<T, L> for FsProvider {
     }
 
     async fn load_ledger(&self) -> Vec<L>{
-        let space = <MemStorage as LedgerProvider<T, L>>::ledger_space(self);
+        let space = <Self as LedgerProvider<T, L>>::ledger_space(self);
 
         let map: HashMap<String, String> = <Self as Storage<T>>::load_all_contents(self, &space).await;
 

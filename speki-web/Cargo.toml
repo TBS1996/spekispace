@@ -40,7 +40,7 @@ gloo = { workspace = true, optional = true }
 gloo-utils = { workspace = true, optional = true }
 
 [features]
-default = ["web"]
+default = ["desktop"]
 web = [
     "dioxus/web",
     "speki-provider/dexie",
