@@ -279,7 +279,7 @@ pub fn ColViewRender(props: CollectionEditor) -> Element {
                 col.write().name = name;
 
                 spawn(async move {
-                    APP.read().save_collection(col.cloned()).await;
+                    APP.read().run_col_event(todo!()).await;
                     selv.done.clone().set(true);
                 });
 

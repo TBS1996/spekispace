@@ -9,7 +9,7 @@ use ledger::{check_compose, decompose, CardAction, CardEvent, CollectionEvent, E
 use metadata::Metadata;
 use recall_rate::{History, ReviewEvent};
 use serde::{de::DeserializeOwned, Serialize};
-use speki_dto::{LedgerEntry, LedgerEvent, RunLedger, SpekiProvider, TimeProvider};
+use speki_dto::{LedgerEntry, LedgerEvent, LedgerProvider, RunLedger, Storage, TimeProvider};
 use tracing::trace;
 
 pub mod attribute;
@@ -68,17 +68,18 @@ pub trait RecallCalc {
 
 #[derive(Clone)]
 pub struct CollectionProvider {
-   inner: Arc<Box<dyn SpekiProvider<Collection, CollectionEvent>>>,
+   inner: Arc<Box<dyn LedgerProvider<Collection, CollectionEvent>>>,
 }
 
 impl CollectionProvider {
-    pub fn new(inner: Arc<Box<dyn SpekiProvider<Collection, CollectionEvent>>>) -> Self {
+    pub fn new(inner: Arc<Box<dyn LedgerProvider<Collection, CollectionEvent>>>) -> Self {
         Self {
             inner
         }
     }
-    pub async fn save(&self, collection: Collection) {
-        self.inner.save_item(collection).await
+    pub async fn save(&self, event: CollectionEvent) {
+        let now = self.inner.current_time().await;
+        self.inner.save_and_run(event, now).await;
     }
 
     pub async fn load(&self, id: CollectionId) -> Option<Collection> {
@@ -90,16 +91,16 @@ impl CollectionProvider {
     }
 
     pub async fn load_all(&self) -> HashMap<CollectionId, Collection> {
-        self.inner.load_all().await.into_iter().map(|(key, val)| (key.parse().unwrap(), val)).collect()
+        self.inner.load_all_items().await.into_iter().map(|(key, val)| (key.parse().unwrap(), val)).collect()
     }
 }
 
 #[derive(Clone)]
 pub struct Provider {
-    pub cards: Arc<Box<dyn SpekiProvider<BaseCard, CardEvent>>>,
-    pub reviews: Arc<Box<dyn SpekiProvider<History, ReviewEvent>>>,
+    pub cards: Arc<Box<dyn LedgerProvider<BaseCard, CardEvent>>>,
+    pub reviews: Arc<Box<dyn LedgerProvider<History, ReviewEvent>>>,
     pub collections: CollectionProvider,
-    pub metadata: Arc<Box<dyn SpekiProvider<Metadata, MetaEvent>>>,
+    pub metadata: Arc<Box<dyn LedgerProvider<Metadata, MetaEvent>>>,
     pub time: TimeGetter,
 }
 
@@ -109,7 +110,7 @@ impl Provider {
     }
 
     pub async fn check_decompose_lol(&self) {
-        for (_, card) in self.cards.load_all().await{
+        for (_, card) in self.cards.load_all_items().await{
             check_compose(card);
         }
     }
@@ -119,7 +120,7 @@ impl Provider {
     pub async fn derive_card_ledger_from_state(&self) -> Vec<CardEvent>{
         let mut actions: Vec<CardEvent> = vec![];
 
-        for (_, card) in self.cards.load_all().await {
+        for (_, card) in self.cards.load_all_items().await {
             for action in decompose(&card) {
                 actions.push(action);
             }
@@ -149,40 +150,39 @@ impl Provider {
 
 
 #[derive(Clone)]
-pub struct PureMem<L: LedgerEvent>{
+pub struct MemStorage{
     time: TimeGetter,
-    state: Arc<RwLock<HashMap<String, String>>>,
-    ledger: Arc<RwLock<HashMap<u64, LedgerEntry<L>>>>,
-    cache: Arc<RwLock<HashMap<String, HashSet<String>>>>,
+    storage: Arc<RwLock<HashMap<String, HashMap<String, String>>>>,
 }
 
-impl<E: LedgerEvent + Serialize + DeserializeOwned + Clone + 'static> PureMem<E> {
-    pub fn new(time: TimeGetter) -> Self {
-        Self {
-            time,
-            state: Default::default(),
-            ledger: Default::default(),
-            cache: Default::default(),
-        }
+#[async_trait::async_trait(?Send)]
+impl<T: Serialize + DeserializeOwned + 'static> Storage<T> for MemStorage{
+    async fn load_content(&self, space: &str, id: &str) -> Option<String> {
+        self.storage.read().unwrap().get(space)?.get(id).cloned()
+    }
+    async fn load_all_contents(&self, space: &str) -> HashMap<String, String> {
+        self.storage.read().unwrap().get(space).cloned().unwrap_or_default()
+    }
+    async fn save_content(&self, space: &str, id: &str, record: String) {
+        self.storage.write().unwrap().entry(space.to_string()).or_default().insert(id.to_string(), record);
     }
 }
 
 
 #[async_trait::async_trait(?Send)]
-impl<T: RunLedger<L>, L: LedgerEvent> SpekiProvider<T, L> for PureMem<L>{
-    async fn load_content(&self, space: &str, id: &str) -> Option<String>{todo!()}
-    async fn load_all_contents(&self) -> HashMap<String, String>{todo!()}
-
-    async fn save_content(&self, space: &str, id: String, record: String){
-        self.state.write().unwrap().insert(id, record);
-    }
-
+impl<T: RunLedger<L>, L: LedgerEvent> LedgerProvider<T, L> for MemStorage {
     async fn save_cache(&self, key: String, ids: HashSet<String>) {
-        self.cache.write().unwrap().insert(key, ids);
+        let space = <MemStorage as LedgerProvider<T, L>>::cache_space(self);
+        let content = serde_json::to_string(&ids).unwrap();
+        <MemStorage as Storage<T>>::save_content(self, &space, &key, content).await;
     }
 
     async fn load_cache(&self, key: &str) -> HashSet<String>{
-        self.cache.read().unwrap().get(key).cloned().unwrap_or_default()
+        let space = <MemStorage as LedgerProvider<T, L>>::cache_space(self);
+        match <MemStorage as Storage<T>>::load_content(self, &space, &key).await {
+            Some(x) => serde_json::from_str(&x).unwrap(),
+            None => Default::default(),
+        }
     }
 
 
@@ -192,18 +192,28 @@ impl<T: RunLedger<L>, L: LedgerEvent> SpekiProvider<T, L> for PureMem<L>{
     /// Clear the storage area so we can re-run everything.
     async fn clear_space(&self, space: &str){todo!()}
     async fn clear_state(&self) {
-        self.state.write().unwrap().clear();
+        let space = <MemStorage as Storage<T>>::item_name(self);
+        self.storage.write().unwrap().remove(space);
     }
+
     async fn clear_ledger(&self) {
-        self.ledger.write().unwrap().clear();
+        let space = <MemStorage as LedgerProvider<T, L>>::ledger_space(self);
+        self.storage.write().unwrap().remove(&space);
     }
+
     async fn load_ledger(&self) -> Vec<L>{
-        let map = self.ledger.read().unwrap().clone();
+        let space = <MemStorage as LedgerProvider<T, L>>::ledger_space(self);
+
+        let map: HashMap<String, String> = <MemStorage as Storage<T>>::load_all_contents(self, &space).await;
 
         let mut foo: Vec<LedgerEntry<L>> = vec![];
 
-        for (_, value) in map.iter(){
-            foo.push(value.clone());
+        for (time, value) in map.iter(){
+            let time: u64 = time.parse().unwrap();
+            let timestamp = Duration::from_micros(time);
+            let event: L = serde_json::from_str(value).unwrap();
+            let entry = LedgerEntry { timestamp, event };
+            foo.push(entry);
         }
 
         foo.sort_by_key(|k|k.timestamp);
@@ -211,7 +221,10 @@ impl<T: RunLedger<L>, L: LedgerEvent> SpekiProvider<T, L> for PureMem<L>{
     }
 
     async fn save_ledger(&self, event: LedgerEntry<L>){
-        self.ledger.write().unwrap().insert(event.timestamp.as_micros() as u64, event);
+        let key = event.timestamp.as_micros().to_string();
+        let val = serde_json::to_string(&event.event).unwrap();
+        let space = <MemStorage as LedgerProvider<T, L>>::ledger_space(self);
+        self.storage.write().unwrap().entry(space.to_string()).or_default().insert(key, val);
     }
 }
 
@@ -244,10 +257,10 @@ impl App {
     where
         A: RecallCalc + 'static + Send,
         B: TimeProvider + 'static + Send + Sync,
-        C: SpekiProvider<BaseCard, CardEvent> + 'static + Send,
-        D: SpekiProvider<History, ReviewEvent> + 'static + Send,
-        E: SpekiProvider<Collection, CollectionEvent> + 'static + Send,
-        F: SpekiProvider<Metadata, MetaEvent> + 'static + Send,
+        C: LedgerProvider<BaseCard, CardEvent> + 'static + Send,
+        D: LedgerProvider<History, ReviewEvent> + 'static + Send,
+        E: LedgerProvider<Collection, CollectionEvent> + 'static + Send,
+        F: LedgerProvider<Metadata, MetaEvent> + 'static + Send,
     {
         info!("initialtize app");
 

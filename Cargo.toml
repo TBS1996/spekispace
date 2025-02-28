@@ -10,6 +10,7 @@ speki-provider = { path = "speki-provider" }
 omtrent = { path = "omtrent" }
 speki-dto = { path = "speki-dto" }
 
+tokio = { version = "1", features = ["fs", "rt-multi-thread"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0.128"
 uuid = { version = "1.0", features = ["v4", "serde", "js"] }

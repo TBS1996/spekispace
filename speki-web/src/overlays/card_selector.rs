@@ -8,8 +8,12 @@ use speki_web::{CardEntry, Node};
 use tracing::info;
 use uuid::Uuid;
 
+
+#[cfg(feature = "web")]
+use crate::components::graph::GraphRep;
+
 use crate::{
-    components::{CardTy, FilterComp, FilterEditor, GraphRep},
+    components::{CardTy, FilterComp, FilterEditor},
     overlays::{cardviewer::CardViewer, colviewer::ColViewRender},
     APP,
 };

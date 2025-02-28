@@ -3,7 +3,6 @@
     nixpkgs.url = "github:nixos/nixpkgs/nixpkgs-unstable";
     flake-parts.url = "github:hercules-ci/flake-parts";
     systems.url = "github:nix-systems/default";
-
     rust-overlay.url = "github:oxalica/rust-overlay";
   };
 
@@ -19,8 +18,9 @@
               "rust-analyzer"
               "clippy"
             ];
-            targets = [ "wasm32-unknown-unknown" ];
+	    targets = [ "wasm32-unknown-unknown" ];
           };
+
           rustBuildInputs = [
             pkgs.openssl
             pkgs.libiconv
@@ -51,13 +51,21 @@
           devShells.default = pkgs.mkShell {
             name = "dioxus-dev";
             buildInputs = rustBuildInputs ++ [
-              rustToolchain
-              pkgs.wasm-pack
+	      pkgs.wasm-pack
               pkgs.wasm-bindgen-cli
+              rustToolchain
+              pkgs.nodejs_20  # Adds Node.js
+              pkgs.tailwindcss # Adds TailwindCSS
             ];
+
+            nativeBuildInputs = [
+              rustToolchain
+            ];
+
             shellHook = ''
               # For rust-analyzer 'hover' tooltips to work.
               export RUST_SRC_PATH="${rustToolchain}/lib/rustlib/src/rust/library";
+              echo "Node.js and TailwindCSS are now available!"
             '';
           };
         };

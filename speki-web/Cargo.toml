@@ -4,46 +4,52 @@ version = "0.1.0"
 authors = ["tor <tor.saebjornsen@cognite.com>"]
 edition = "2021"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
 [lib]
 crate-type = ["cdylib", "rlib"]
 
-
 [dependencies]
 
-dioxus = { version = "0.6.1", features = ["web", "router"] }
-
+dioxus = { version = "0.6.1", features = ["router"] } # No default "web" feature
 dioxus-logger.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
-wasm-bindgen.workspace = true
 futures.workspace = true
 futures-util.workspace = true
-gloo-utils.workspace = true
-gloo.workspace = true
-js-sys.workspace = true
 serde.workspace = true
-serde-wasm-bindgen.workspace = true
 serde_json.workspace = true
-wasm-bindgen-futures.workspace = true
-web-sys.workspace = true
 toml.workspace = true
 async-trait.workspace = true
 uuid.workspace = true
 petgraph.workspace = true
 once_cell.workspace = true
-speki-provider = { workspace = true, features = ["dexie"] }
+speki-provider = { workspace = true, default-features = false, features = [] }
 strum.workspace = true
 fancy-regex.workspace = true
 eyre.workspace = true
 async-recursion.workspace = true
-
-
 speki-dto = { path = "../speki-dto" }
 speki-core = { path = "../speki-core" }
 
+# WebAssembly-specific dependencies (optional)
+wasm-bindgen = { workspace = true, optional = true }
+wasm-bindgen-futures = { workspace = true, optional = true }
+serde-wasm-bindgen = { workspace = true, optional = true }
+js-sys = { workspace = true, optional = true }
+web-sys = { workspace = true, optional = true }
+gloo = { workspace = true, optional = true }
+gloo-utils = { workspace = true, optional = true }
 
 [features]
-desktop = ["dioxus/desktop"]
-
+default = ["web"]
+web = [
+    "dioxus/web",
+    "speki-provider/dexie",
+    "dep:js-sys",
+    "dep:wasm-bindgen",
+    "dep:wasm-bindgen-futures",
+    "dep:serde-wasm-bindgen",
+    "dep:web-sys",
+    "dep:gloo",
+    "dep:gloo-utils"
+]
+desktop = ["dioxus/desktop", "speki-provider/fs"]

@@ -110,6 +110,7 @@ impl RustGraph {
 
     pub fn create_cyto_graph(&self, cyto_id: &str) {
         info!("creating cyto instance");
+        #[cfg(feature = "web")]
         super::js::create_cyto_instance(cyto_id);
         tracing::trace!("adding nodes");
         let guard = self.inner.lock().unwrap();
@@ -125,6 +126,7 @@ impl RustGraph {
         nodes.dedup_by_key(|node| node.id.to_string());
 
         for node in nodes.clone() {
+            #[cfg(feature = "web")]
             super::js::add_node(
                 cyto_id,
                 &node.id.to_string(),
@@ -140,6 +142,7 @@ impl RustGraph {
             let source = &guard[edge.source()];
             let target = &guard[edge.target()];
 
+            #[cfg(feature = "web")]
             super::js::add_edge(cyto_id, &source.id.to_string(), &target.id.to_string());
         }
     }

@@ -20,6 +20,7 @@ impl AddCardState {
     }
 }
 
+
 #[component]
 pub fn Add() -> Element {
     let selv = ADD_CARDS.cloned();

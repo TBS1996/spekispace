@@ -2,7 +2,7 @@
 mod fs;
 
 #[cfg(feature = "fs")]
-pub use fs::FileProvider;
+pub use fs::{FsProvider, FsTime};
 
 #[cfg(feature = "browserfs")]
 mod browserfs;

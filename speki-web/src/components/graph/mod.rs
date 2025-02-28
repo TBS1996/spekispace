@@ -15,6 +15,7 @@ use tracing::info;
 use crate::{overlays::card_selector::MyClosure, utils, APP, ROUTE_CHANGE};
 
 mod digraph;
+#[cfg(feature = "web")]
 mod js;
 
 static COUNTER: AtomicUsize = AtomicUsize::new(0);
@@ -125,11 +126,6 @@ pub fn GraphRepRender(
     new_card_hook: Option<MyClosure>,
     is_init: Signal<bool>,
 ) -> Element {
-    if let Some(dom) = utils::rect(&cyto_id) {
-        tracing::trace!("nice, a dom! {dom:?}");
-    } else {
-        tracing::trace!("oh no theres no dom");
-    }
 
     let cur_scope = current_scope_id().unwrap();
     scope.clone().set(cur_scope.0);
@@ -139,6 +135,7 @@ pub fn GraphRepRender(
     if let Some(label) = label.as_ref() {
         let label = label.cloned();
         if let Some(origin) = inner.origin() {
+            #[cfg(feature = "web")]
             js::update_label(&cyto_id, origin, &label);
         } else {
             info!("no origin");
@@ -312,6 +309,8 @@ pub fn GraphRepRender(
 
 fn adjust_graph(cyto_id: &str, origin: String) {
     info!("adjust graph");
+    #[cfg(feature = "web")]
     js::run_layout(cyto_id, &origin);
+    #[cfg(feature = "web")]
     js::zoom_to_node(cyto_id, &origin);
 }

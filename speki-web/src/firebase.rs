@@ -1,12 +1,15 @@
 use std::{collections::HashMap, time::Duration};
 use async_trait::async_trait;
+#[cfg(feature = "web")]
 use js_sys::Promise;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use speki_dto::ProviderId;
-use speki_provider::WasmTime;
 use tracing::info;
+#[cfg(feature = "web")]
 use wasm_bindgen::prelude::*;
+
+use speki_provider::WasmTime;
 
 
 use crate::LOGIN_STATE;
@@ -18,6 +21,7 @@ pub struct FirestoreProvider {
     id: Option<ProviderId>,
 }
 
+#[cfg(feature = "web")]
 impl FirestoreProvider {
     pub fn new(user: AuthUser) -> Self {
         Self {

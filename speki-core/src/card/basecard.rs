@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 use omtrent::TimeStamp;
-use speki_dto::{RunLedger, SpekiProvider};
+use speki_dto::{RunLedger, LedgerProvider};
 use serde::{Deserialize, Serialize};
 use super::*;
 use crate::{attribute::AttributeId, audio::AudioId, card_provider::CardProvider, ledger::CardEvent, App, Attribute, CacheKey};

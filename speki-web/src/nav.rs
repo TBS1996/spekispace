@@ -1,6 +1,8 @@
 use dioxus::prelude::*;
 
+#[cfg(feature = "web")]
 use crate::{firebase, LOGIN_STATE};
+
 use crate::{Route, CURRENT_ROUTE};
 
 pub fn image(src: &str, img_size: usize, spin: bool) -> Element {
@@ -44,7 +46,9 @@ fn route_elm(route: Route) -> Element {
     }
 }
 
+#[cfg(not(feature = "desktop"))]
 #[component]
+#[cfg(not(feature = "desktop"))]
 pub fn nav() -> Element {
     rsx! {
         section {
@@ -93,6 +97,36 @@ pub fn nav() -> Element {
                                 }
                             },
                         }
+                    }
+                }
+            }
+        }
+    }
+}
+
+
+#[cfg(feature = "desktop")]
+#[component]
+#[cfg(feature = "desktop")]
+pub fn nav() -> Element {
+    rsx! {
+        section {
+            class: "relative w-full",
+            nav {
+                class: "flex justify-between items-center w-full p-0 overflow-hidden",
+                div {
+                    class: "flex w-full items-center lg:pl-12 lg:py-8 pl-4 py-4 flex-nowrap",
+                    ul {
+                        class: "flex flex-row font-semibold font-heading space-x-6",
+
+                        Link {
+                            to: Route::Menu {  },
+                            { image("burger.svg", 28, false ) }
+                        }
+
+                        { route_elm(Route::Review {}) }
+                        { route_elm(Route::Add {}) }
+                        { route_elm(Route::Browse {}) }
                     }
                 }
             }

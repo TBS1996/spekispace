@@ -433,38 +433,41 @@ impl CardViewer {
         );
     }
 
-    fn render_inputs(&self) -> Element {
-        info!("render inputs");
-        let ty = self.editor.front.dropdown.selected.clone();
+}
 
-        rsx! {
-            div {
-                input_elements {
-                    front: self.editor.front.clone(),
-                    back: self.editor.back.clone(),
-                    concept: self.editor.concept.clone(),
-                    overlay: self.overlay.clone(),
-                    ty: ty.cloned(),
-                }
 
+#[component]
+fn RenderInputs(props: CardViewer) -> Element {
+    info!("render inputs");
+    let ty = props.editor.front.dropdown.selected.clone();
+
+    rsx! {
+        div {
+            InputElements {
+                front: props.editor.front.clone(),
+                back: props.editor.back.clone(),
+                concept: props.editor.concept.clone(),
+                overlay: props.overlay.clone(),
+                ty: ty.cloned(),
             }
-            div {
-                if let Some(card) = self.old_card.cloned() {
-                    DeleteButton{card: card.id(), isdone: self.is_done.clone(), overlay: self.overlay.clone()}
 
-                    Suspend { card: self.old_card.clone() }
-                }
+        }
+        div {
+            if let Some(card) = props.old_card.cloned() {
+                DeleteButton{card: card.id(), isdone: props.is_done.clone(), overlay: props.overlay.clone()}
 
-                add_dep { selv: self.clone() }
-
-                save_button { CardViewer: self.clone() }
+                Suspend { card: props.old_card.clone() }
             }
+
+            add_dep { selv: props.clone() }
+
+            save_button { CardViewer: props.clone() }
         }
     }
 }
 
 #[component]
-fn input_elements(
+fn InputElements(
     front: FrontPut,
     back: BackPut,
     concept: CardRef,
@@ -579,8 +582,9 @@ fn input_elements(
     }
 }
 
+
 #[component]
-pub fn CardViewerRender(props: CardViewer) -> Element {
+pub fn xCardViewerRender(props: CardViewer) -> Element {
     info!("render cardviewer");
 
     rsx! {
@@ -592,7 +596,6 @@ pub fn CardViewerRender(props: CardViewer) -> Element {
                 div {
                     class: "flex-none p-2 w-full max-w-[500px] box-border order-2 md:order-1 overflow-y-auto",
                     style: "min-height: 0; max-height: 100%;",
-                    { props.render_inputs() }
                 }
                 div {
                     class: "flex-1 w-full box-border mb-2 md:mb-0 order-1 md:order-2",
@@ -608,6 +611,30 @@ pub fn CardViewerRender(props: CardViewer) -> Element {
                 }
             }
         }
+    }
+}
+
+
+#[component]
+pub fn CardViewerRender(props: CardViewer) -> Element {
+    info!("render cardviewer");
+
+    rsx! {
+                div {
+                    class: "flex-none p-2 w-full max-w-[505] box-border order-2",
+                  //  style: "min-height: 0; max-height: 100%;",
+                    RenderInputs {
+                        editor:props.editor.clone(),
+                        dependents:props.dependents.clone(),
+                        graph:props.graph.clone(),
+                        save_hook:props.save_hook.clone(),
+                        is_done:props.is_done.clone(),
+                        old_card:props.old_card.clone(),
+                        old_meta:props.old_meta.clone(),
+                        tempnode:props.tempnode.clone(),
+                        overlay:props.overlay.clone(),
+                    }
+                }
     }
 }
 

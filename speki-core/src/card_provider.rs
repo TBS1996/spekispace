@@ -103,7 +103,7 @@ impl CardProvider {
 
     pub async fn load_all_card_ids(&self) -> Vec<CardId> {
         info!("x1");
-        self.providers.cards.load_ids().await.into_iter().map(|id|id.parse().unwrap()).collect()
+        self.providers.cards.load_item_ids().await.into_iter().map(|id|id.parse().unwrap()).collect()
     }
 
     pub async fn filtered_load<F, Fut>(&self, filter: F) -> Vec<Arc<Card>>

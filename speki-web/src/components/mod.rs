@@ -1,3 +1,4 @@
+#[cfg(feature = "web")]
 pub mod audioupload;
 pub mod backside;
 pub mod cardref;

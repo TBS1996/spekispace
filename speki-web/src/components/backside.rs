@@ -6,9 +6,11 @@ use speki_core::{audio::Audio, card::BackSide};
 use strum::{EnumIter, IntoEnumIterator};
 use tracing::info;
 
+#[cfg(feature = "web")]
+use crate::components::audioupload::AudioUpload;
 use crate::{
     components::{
-        audioupload::AudioUpload, cardref::CardRefRender, dropdown::DropComponent, CardRef,
+        cardref::CardRefRender, dropdown::DropComponent, CardRef,
         DropDownMenu,
     },
     overlays::{card_selector::MyClosure, cardviewer::TempNode, OverlayEnum},
@@ -26,7 +28,70 @@ pub struct BackPut {
     pub audio: Signal<Option<Audio>>,
 }
 
+
+#[cfg(not(feature = "web"))]
 #[component]
+#[cfg(not(feature = "web"))]
+pub fn BackPutRender(
+    text: Signal<String>,
+    dropdown: DropDownMenu<BackOpts>,
+    ref_card: CardRef,
+    overlay: Signal<Option<OverlayEnum>>,
+    audio: Signal<Option<Audio>>,
+) -> Element {
+    rsx! {
+        div {
+            class: "block text-gray-700 text-sm font-medium max-w-full",
+            if !IS_SHORT() {
+                "Back:"
+            }
+
+            div {
+                class: "backside-editor flex items-center space-x-4",
+
+                div {
+                    class: "flex-grow overflow-hidden",
+                    { match *dropdown.selected.read() {
+                        BackOpts::Text => {
+
+
+        let placeholder = if IS_SHORT.cloned() { "Back side" } else { "" };
+        let mut sig = text.clone();
+        rsx! {
+            input {
+                class: "bg-white w-full border border-gray-300 rounded-md p-2 mb-4 text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent",
+                value: "{sig}",
+                placeholder: "{placeholder}",
+                oninput: move |evt| sig.set(evt.value()),
+            }
+        }
+                        },
+                        BackOpts::Card => rsx!{ CardRefRender{
+                            card_display: ref_card.display.clone(),
+                            selected_card: ref_card.card.clone(),
+                            placeholder: ref_card.placeholder.cloned(),
+                            on_select: ref_card.on_select.clone(),
+                            on_deselect: ref_card.on_deselect.clone(),
+                            dependent: ref_card.dependent.clone(),
+                            allowed: ref_card.allowed.clone(),
+                            overlay,
+                        }},
+                    }}
+                }
+
+                div {
+                    class: "flex-shrink-0",
+                    style: "width: 65px;",
+                    DropComponent {options: dropdown.options.clone(), selected: dropdown.selected.clone()}
+                }
+            }
+        }
+    }
+}
+
+#[cfg(feature = "web")]
+#[component]
+#[cfg(feature = "web")]
 pub fn BackPutRender(
     text: Signal<String>,
     dropdown: DropDownMenu<BackOpts>,

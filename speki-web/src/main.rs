@@ -10,6 +10,7 @@ use std::{
 
 use dioxus::prelude::*;
 use dioxus_logger::tracing::{info, Level};
+#[cfg(not(feature = "desktop"))]
 use firebase::AuthUser;
 use pages::{ImportState, ReviewPage};
 
@@ -19,6 +20,7 @@ use crate::{
 };
 
 mod components;
+#[cfg(feature = "web")]
 mod firebase;
 mod nav;
 mod overlays;
@@ -40,6 +42,44 @@ fn main() {
 
     dioxus::launch(TheApp);
 }
+
+
+#[component]
+pub fn TheApp() -> Element {
+    let id = current_scope_id();
+    info!("omg?? scope id: {id:?}");
+    use_context_provider(ImportState::new);
+    use_context_provider(ReviewPage::new);
+
+    spawn(async move {
+        #[cfg(not(feature = "desktop"))]
+        {
+
+        if let Some(currauth) = firebase::current_sign_in().await {
+            *LOGIN_STATE.write() = Some(currauth);
+            info!("user logged in!");
+        } else {
+            info!("no user logged in!");
+        }
+
+        }
+        APP.read().fill_cache().await;
+    });
+
+    rsx! {
+        document::Link {
+            rel: "stylesheet",
+            href: asset!("/public/tailwind.css")
+        }
+
+        div {
+            class: "bg-white min-h-screen",
+            Router::<Route> {}
+        }
+
+    }
+}
+
 
 #[derive(Debug, Copy, Clone)]
 pub struct TouchRec {
@@ -64,78 +104,22 @@ pub struct Point {
     pub y: f64,
 }
 
-#[derive(Clone, Debug, Default)]
-pub struct NonClickable {
-    inner: Arc<Mutex<HashMap<Route, HashMap<String, TouchRec>>>>,
-}
-
-impl NonClickable {
-    pub fn contains(&self, point: Point) -> bool {
-        let route = CURRENT_ROUTE.cloned();
-        for (id, rec) in self.inner.lock().unwrap().entry(route).or_default().iter() {
-            if rec.contains(point) {
-                if utils::is_element_present(id) {
-                    return true;
-                }
-            }
-        }
-
-        false
-    }
-
-    pub fn clear(&self) {
-        let route = CURRENT_ROUTE.cloned();
-        self.inner.lock().unwrap().entry(route).or_default().clear();
-    }
-
-    pub fn insert(&self, id: String, rec: TouchRec) {
-        let route = CURRENT_ROUTE.cloned();
-        self.inner
-            .lock()
-            .unwrap()
-            .entry(route)
-            .or_default()
-            .insert(id, rec);
-    }
-}
-
 static APP: GlobalSignal<App> = Signal::global(App::new);
 static IS_SHORT: GlobalSignal<bool> = Signal::global(|| screen_height_in_inches().unwrap() < 4.);
 static CURRENT_ROUTE: GlobalSignal<Route> = Signal::global(|| Route::Menu {});
+#[cfg(not(feature = "desktop"))]
 static LOGIN_STATE: GlobalSignal<Option<AuthUser>> = Signal::global(|| None);
 
-#[component]
-pub fn TheApp() -> Element {
-    let id = current_scope_id();
-    info!("omg?? scope id: {id:?}");
-    use_context_provider(ImportState::new);
-    use_context_provider(ReviewPage::new);
 
-    spawn(async move {
-        if let Some(currauth) = firebase::current_sign_in().await {
-            *LOGIN_STATE.write() = Some(currauth);
-            info!("user logged in!");
-        } else {
-            info!("no user logged in!");
-        }
-        APP.read().fill_cache().await;
-    });
 
-    rsx! {
-        document::Link {
-            rel: "stylesheet",
-            href: asset!("/public/tailwind.css")
-        }
-
-        div {
-            class: "bg-white min-h-screen",
-            Router::<Route> {}
-        }
-
-    }
+/// Estimates the screen height in inches.
+#[cfg(feature = "desktop")]
+pub fn screen_height_in_inches() -> Option<f64> {
+    Some(5.0)
 }
 
 /// Estimates the screen height in inches.
+#[cfg(feature = "web")]
 pub fn screen_height_in_inches() -> Option<f64> {
     let window = web_sys::window()?; // Access the browser window
     let screen = window.screen().unwrap(); // Access the screen object
@@ -148,7 +132,7 @@ pub fn screen_height_in_inches() -> Option<f64> {
 #[component]
 fn Wrapper() -> Element {
     *CURRENT_ROUTE.write() = use_route::<Route>();
-    info!("wrapper scope id: {:?}", current_scope_id().unwrap());
+    info!("wrapper scope id: {:?}", current_scope_id());
     ROUTE_CHANGE.store(true, Ordering::SeqCst);
 
     rsx! {

@@ -8,7 +8,12 @@ use speki_core::card::CardId;
 use speki_core::{App, Card};
 use tracing::info;
 use uuid::Uuid;
+
+#[cfg(feature = "web")]
 use wasm_bindgen::prelude::*;
+
+#[cfg(feature = "desktop")]
+use dioxus::desktop::use_window;
 
 #[derive(Clone, Debug)]
 pub enum GraphAction {
@@ -82,6 +87,7 @@ fn trigger_refresh(id: &str) {
     scope.needs_update();
 }
 
+#[cfg(feature = "web")]
 #[wasm_bindgen(js_name = onNodeClick)]
 pub async fn on_node_click(cyto_id: &str, node_id: &str) {
     info!("cyto id: {cyto_id}");
@@ -92,6 +98,7 @@ pub async fn on_node_click(cyto_id: &str, node_id: &str) {
     trigger_refresh(cyto_id);
 }
 
+#[cfg(feature = "web")]
 #[wasm_bindgen(js_name = onEdgeClick)]
 pub async fn on_edge_click(cyto_id: &str, source: &str, target: &str) {
     info!("okcyto id: {cyto_id}");
@@ -215,6 +222,8 @@ impl NodeMetadata {
         }
     }
 }
+
+
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Node {

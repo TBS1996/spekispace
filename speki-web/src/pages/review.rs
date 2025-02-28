@@ -270,7 +270,7 @@ fn RenderCols(
                         info!("new collection made!");
                         spawn(async move {
                             info!("saving it!");
-                            APP.read().save_collection(col).await;
+                            APP.read().run_col_event(todo!()).await;
                             done.clone().set(true);
                             info!("saved it!");
                         });

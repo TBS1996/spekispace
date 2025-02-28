@@ -8,9 +8,15 @@ pub fn About() -> Element {
     }
 }
 
-use web_sys::{Blob, BlobPropertyBag, HtmlAudioElement, Url};
 
-pub fn play_audio(audio_data: &Vec<u8>, mime_type: &str) {
+
+#[cfg(feature = "desktop")]
+pub fn play_audio(audio_data: &[u8], mime_type: &str) {
+}
+
+#[cfg(not(feature = "desktop"))]
+pub fn play_audio(audio_data: &[u8], mime_type: &str) {
+    use web_sys::{Blob, BlobPropertyBag, HtmlAudioElement, Url};
     // Log the MIME type and data size
     info!("Audio data size: {}", audio_data.len());
     info!("MIME type: {}", mime_type);

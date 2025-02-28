@@ -2,24 +2,36 @@ use std::{fmt::Debug, sync::Arc};
 
 use dioxus::prelude::*;
 use speki_core::{
-    card::{BaseCard, CardId},
-    cardfilter::{CardFilter, FilterItem},
-    collection::{Collection, CollectionId},
-    AttributeDTO, Card,
+    card::{BaseCard, CardId}, cardfilter::{CardFilter, FilterItem}, collection::{Collection, CollectionId}, ledger::CollectionEvent, AttributeDTO, Card
 };
+#[cfg(not(feature = "desktop"))]
 use speki_provider::{DexieProvider, WasmTime};
 use speki_web::{CardEntry, Node, NodeMetadata};
 use tracing::info;
+#[cfg(not(feature = "desktop"))]
 use wasm_bindgen::prelude::*;
 
+
+
+
+#[cfg(feature = "desktop")]
+use dioxus::desktop::use_window;
+
+
 use crate::{
+    nav::SYNCING,
     TouchRec, APP,
 };
+
+
+#[cfg(not(feature = "desktop"))]
+use crate::firebase::{AuthUser, FirestoreProvider};
 
 #[derive(Clone)]
 pub struct App(Arc<speki_core::App>);
 
 impl App {
+    #[cfg(not(feature = "desktop"))]
     pub fn new() -> Self {
         Self(Arc::new(speki_core::App::new(
             speki_core::SimpleRecall,
@@ -28,6 +40,20 @@ impl App {
             DexieProvider::new(),
             DexieProvider::new(),
             DexieProvider::new(),
+        )))
+    }
+
+    #[cfg(feature = "desktop")]
+    pub fn new() -> Self {
+        use speki_provider::{FsProvider, FsTime};
+
+        Self(Arc::new(speki_core::App::new(
+            speki_core::SimpleRecall,
+            FsTime,
+            FsProvider::new(),
+            FsProvider::new(),
+            FsProvider::new(),
+            FsProvider::new(),
         )))
     }
 
@@ -85,8 +111,8 @@ impl App {
             .collect()
     }
 
-    pub async fn save_collection(&self, collection: Collection) {
-        self.0.provider.collections.save(collection).await;
+    pub async fn run_col_event(&self, event: CollectionEvent) {
+        todo!()
     }
 
     pub async fn new_instance(
@@ -115,30 +141,29 @@ impl Debug for App {
     }
 }
 
-pub fn rect(id: &str) -> Option<TouchRec> {
-    let rec = web_sys::window()?
-        .document()?
-        .get_element_by_id(id)?
-        .get_bounding_client_rect();
 
-    let rect = TouchRec {
-        x: rec.x(),
-        y: rec.y(),
-        height: rec.height(),
-        width: rec.width(),
-    };
 
-    Some(rect)
-}
 
+/// **Check if an element is present (Web & Desktop)**
 pub fn is_element_present(id: &str) -> bool {
-    web_sys::window()
-        .and_then(|win| win.document())
-        .unwrap()
-        .get_element_by_id(id)
-        .is_some()
+    #[cfg(feature = "web")]
+    {
+        return web_sys::window()
+            .and_then(|win| win.document())
+            .unwrap()
+            .get_element_by_id(id)
+            .is_some();
+    }
+
+    #[cfg(feature = "desktop")]
+    {
+        return true;
+    }
+    panic!()
 }
 
+
+#[cfg(not(feature = "desktop"))]
 #[wasm_bindgen]
 extern "C" {
     #[wasm_bindgen(js_namespace = Date)]
