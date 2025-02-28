@@ -65,6 +65,7 @@ fn get_hash<T: Hash>(item: &T) -> Hashed {
 }
 
 
+
 #[async_trait::async_trait(?Send)]
 pub trait Storage<T: Serialize + DeserializeOwned + 'static> {
     async fn load_content(&self, space: &str, id: &str) -> Option<String>;
@@ -80,7 +81,24 @@ pub trait Storage<T: Serialize + DeserializeOwned + 'static> {
     }
 
     fn item_name(&self) -> &'static str {
-        std::any::type_name::<T>().split("::").last().unwrap()
+        use std::sync::OnceLock;
+        use std::any;
+
+        static TYPE_NAME_CACHE: OnceLock<RwLock<HashMap<any::TypeId, &'static str>>> = OnceLock::new();
+
+        let cache = TYPE_NAME_CACHE.get_or_init(|| RwLock::new(HashMap::new()));
+
+        let type_id = any::TypeId::of::<T>();
+
+        if let Some(name) = cache.read().unwrap().get(&type_id) {
+            return name;
+        }
+    
+        let mut cache_lock = cache.write().unwrap();
+        let name = any::type_name::<T>().split("::").last().unwrap().to_lowercase();
+        let leaked = Box::leak(name.into_boxed_str());
+        debug_assert!(cache_lock.insert(type_id, leaked).is_none());
+        leaked
     }
 
 
