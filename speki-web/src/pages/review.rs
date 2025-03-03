@@ -88,16 +88,12 @@ pub fn Review() -> Element {
             root: rsx!{
                 div {
                     class: "{class}",
-                    div {
-                        class: "flex space-x-4 mt-6",
-                        RenderCols{
-                            filter: state.filter.to_filter(),
-                            collections: state.collections.clone(),
-                            overlay: state.overlay.clone(),
-                        }
-                        FilterComp {editor}
-
+                    RenderCols{
+                        filter: state.filter.to_filter(),
+                        collections: state.collections.clone(),
+                        overlay: state.overlay.clone(),
                     }
+                    FilterComp {editor}
                 }
             }
         }
@@ -209,7 +205,7 @@ fn RenderCols(
 
     rsx! {
         div {
-            class: "flex flex-col max-w-[550px] mr-5",
+       //     class: "flex flex-col max-w-[550px] mr-5",
 
             button {
                 class: "inline-flex items-center text-white bg-gray-800 border-0 py-1 px-3 focus:outline-none hover:bg-gray-700 rounded text-base mb-8",

@@ -2,7 +2,7 @@ use std::{
     any::Any, collections::{BTreeSet, HashMap, HashSet}, fs::{self, read_to_string, File}, io::Write, path::{Path, PathBuf}, time::{Duration, UNIX_EPOCH}
 };
 use async_trait::async_trait;
-use speki_dto::{LedgerEntry, LedgerEvent, ProviderId, RunLedger, LedgerProvider, Storage, TimeProvider};
+use speki_dto::{LedgerEntry, LedgerEvent, ProviderId, RunLedger, Storage, TimeProvider};
 use uuid::Uuid;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
@@ -23,13 +23,17 @@ impl TimeProvider for FsTime {
 
 #[derive(Clone)]
 pub struct FsProvider {
-    time: FsTime,
     id: Option<ProviderId>,
 }
 
 
 fn write_string(path: &Path, s: String) {
-    let mut f = File::create(&path).unwrap();
+    let mut f = match File::create(&path) {
+        Ok(f) => f,
+        Err(e) => {
+            panic!("error writing to path: {:?} string: {s}, error: {e}", path);
+        },
+    };
     f.write_all(s.as_bytes()).unwrap();
 
 }
@@ -38,7 +42,6 @@ impl FsProvider {
     pub fn new() -> Self {
         fs::create_dir_all(STORAGE_DIR).ok();
         Self {
-            time: FsTime,
             id: None,
         }
     }
@@ -55,23 +58,6 @@ impl FsProvider {
         let table = Path::new(STORAGE_DIR).join(table);
         std::fs::create_dir_all(&table).unwrap();
         table
-    }
-
-    fn write_file(table: &str, id: &str, contents: impl Serialize) {
-        let path = Self::file_path(table, id);
-        let contents = serde_json::to_string(&contents).unwrap();
-        write_string(&path, contents);
-    }
-
-    fn load_file<T: DeserializeOwned>(table: &str, id: &str) -> Option<T> {
-        let path = Self::file_path(table, id);
-        if !path.exists() {
-            return None;
-        }
-
-        let contents = read_to_string(&path).unwrap();
-        let item: T = serde_json::from_str(&contents).unwrap();
-        Some(item)
     }
 }
 
@@ -92,6 +78,11 @@ pub fn load_file_contents(dir: &Path) -> HashMap<String, String> {
 
 #[async_trait::async_trait(?Send)]
 impl<T: Serialize + DeserializeOwned + 'static> Storage<T> for FsProvider {
+    async fn clear_space(&self, space: &str) {
+        let path = Self::table_path(space);
+        std::fs::remove_dir_all(&path).unwrap();
+    }
+
     async fn load_content(&self, space: &str, id: &str) -> Option<String> {
         let path = Self::file_path(space, id);
         fs::read_to_string(&path).ok()
@@ -117,78 +108,6 @@ impl<T: Serialize + DeserializeOwned + 'static> Storage<T> for FsProvider {
             }
         }
         map
-    }
-}
-
-
-#[async_trait(?Send)]
-impl<T: RunLedger<L>, L: LedgerEvent> LedgerProvider<T, L> for FsProvider {
-    async fn current_time(&self) -> Duration {
-        self.time.current_time()
-    }
-
-    async fn save_cache(&self, key: String, ids: HashSet<String>) {
-        let space = <FsProvider as LedgerProvider<T, L>>::cache_space(self);
-        Self::write_file(&space, &key, ids);
-    }
-
-    async fn load_cache(&self, key: &str) -> HashSet<String>{
-        let space = <FsProvider as LedgerProvider<T, L>>::cache_space(self);
-        Self::load_file(&space, key).unwrap_or_default()
-    }
-
-    async fn load_ledger(&self) -> Vec<L>{
-        let space = <Self as LedgerProvider<T, L>>::ledger_space(self);
-
-        let map: HashMap<String, String> = <Self as Storage<T>>::load_all_contents(self, &space).await;
-
-        let mut foo: Vec<LedgerEntry<L>> = vec![];
-
-        for (time, value) in map.iter(){
-            let time: u64 = time.parse().unwrap();
-            let timestamp = Duration::from_micros(time);
-            let event: L = serde_json::from_str(value).unwrap();
-            let entry = LedgerEntry { timestamp, event };
-            foo.push(entry);
-        }
-
-        foo.sort_by_key(|k|k.timestamp);
-        foo.into_iter().map(|e| e.event).collect()
-    }
-
-    /// Clear the storage area so we can re-run everything.
-    async fn clear_state(&self) {
-        let ty = <FsProvider as Storage<T>>::item_name(self);
-        let space = Self::table_path(&ty);
-        let path = Path::new(&space);
-        if path.exists() {
-            fs::remove_dir_all(path).unwrap();
-            println!("Deleted directory: {:?}",space);
-        } else {
-            println!("Directory does not exist: {:?}", space);
-        }
-    }
-
-    async fn clear_space(&self, _space: &str) {
-        panic!()
-    }
-
-    async fn clear_ledger(&self) {
-        let space = <FsProvider as LedgerProvider<T, L>>::ledger_space(self);
-        let path = Path::new(&space);
-        if path.exists() {
-            fs::remove_dir_all(path).unwrap();
-            println!("Deleted directory: {:?}",space);
-        } else {
-            println!("Directory does not exist: {:?}", space);
-        }
-    }
-
-
-    async fn save_ledger(&self, event: LedgerEntry<L>) {
-        let space = <FsProvider as LedgerProvider<T, L>>::ledger_space(self);
-        let id  = event.timestamp.as_micros().to_string();
-        Self::write_file(&space, &id, event.event);
     }
 }
 

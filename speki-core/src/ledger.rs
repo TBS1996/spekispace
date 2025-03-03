@@ -2,7 +2,21 @@ use std::collections::VecDeque;
 
 use serde::{Deserialize, Serialize};
 use speki_dto::LedgerEvent;
-use crate::{audio::AudioId, card::{BaseCard, CardId}, collection::{CollectionId, DynCard, MaybeDyn}, metadata::Metadata, recall_rate::{Review, ReviewEvent}, CardType};
+use crate::{audio::AudioId, card::{BaseCard, CardId}, collection::{CollectionId, DynCard, MaybeDyn}, metadata::Metadata, recall_rate::{History, Review, ReviewEvent}, CardType};
+
+
+pub fn decompose_history(history: History) -> Vec<ReviewEvent> {
+    let mut actions = vec![];
+
+    let id = history.id;
+    for review in history.reviews {
+        actions.push(ReviewEvent {
+            id, grade: review.grade, timestamp: review.timestamp
+        });
+    }
+
+    actions
+}
 
 pub fn decompose(card: &BaseCard) -> Vec<CardEvent> {
     let mut actions = vec![];
@@ -11,11 +25,15 @@ pub fn decompose(card: &BaseCard) -> Vec<CardEvent> {
     actions.push(action);
 
 
-    let action = CardAction::SetFrontAudio ( card.front_audio.clone() );
-    actions.push(action);
+    if card.front_audio.is_some() {
+        let action = CardAction::SetFrontAudio ( card.front_audio.clone() );
+        actions.push(action);
+    }
 
-    let action = CardAction::SetBackAudio ( card.back_audio.clone() );
-    actions.push(action);
+    if card.back_audio.is_some() {
+        let action = CardAction::SetBackAudio ( card.back_audio.clone() );
+        actions.push(action);
+    }
 
     for dep in &card.dependencies {
         let action = CardAction::AddDependency (*dep);
@@ -40,7 +58,7 @@ pub fn check_compose(old_card: BaseCard) {
     assert_eq!(&old_card, &card);
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug, Hash)]
 pub struct CardEvent {
     pub action: Vec<CardAction>,
     pub id: CardId,
@@ -58,15 +76,15 @@ impl LedgerEvent for CardEvent {
     }
 }
 
-#[derive(Deserialize, Serialize, Clone, Debug)]
+#[derive(Deserialize, Serialize, Clone, Debug, Hash)]
 pub enum CardAction {
     SetFrontAudio(Option<AudioId>),
     SetBackAudio(Option<AudioId>),
-    UpsertCard(CardType),
-    DeleteCard,
-    AddDependency(CardId),
     RemoveDependency(CardId),
+    AddDependency(CardId),
+    UpsertCard(CardType),
     SetBackRef(CardId),
+    DeleteCard,
 }
 
 
@@ -77,7 +95,7 @@ pub enum HistoryEvent {
     },
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Hash)]
 pub struct MetaEvent {
     pub id: CardId,
     pub action: MetaAction,
@@ -89,7 +107,7 @@ impl LedgerEvent for MetaEvent {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Hash)]
 pub enum MetaAction {
     Suspend(bool),
 }
@@ -123,7 +141,7 @@ pub enum Event {
     Collection(CollectionEvent),
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug, Hash)]
 pub struct CollectionEvent {
     pub action: CollectionAction,
     pub id: CollectionId,
@@ -141,7 +159,7 @@ impl LedgerEvent for CollectionEvent {
     }
 }
 
-#[derive(Deserialize, Serialize, Clone, Debug)]
+#[derive(Deserialize, Serialize, Clone, Debug, Hash)]
 pub enum CollectionAction {
     SetName(String),
     InsertDyn(MaybeDyn),

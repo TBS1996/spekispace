@@ -89,8 +89,8 @@ fn calculate_recall_rate(days_passed: &Duration, stability: &Duration) -> Recall
 
 #[derive(Ord, PartialOrd, Eq, PartialEq, Hash, Clone, Debug, Deserialize, Serialize)]
 pub struct History {
-    id: Uuid,
-    reviews: Vec<Review>,
+    pub id: Uuid,
+    pub reviews: Vec<Review>,
 }
 
 
@@ -150,6 +150,7 @@ impl History {
 
     pub fn push(&mut self, review: Review) {
         self.reviews.push(review);
+        self.reviews.sort_by_key(|r|r.timestamp);
     }
 
     pub fn insert_many(&mut self, reviews: impl IntoIterator<Item = Review>) {
@@ -173,7 +174,7 @@ pub struct Review {
     pub time_spent: Duration,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Hash)]
 pub struct ReviewEvent {
 pub    id: CardId,
  pub   grade: Recall,

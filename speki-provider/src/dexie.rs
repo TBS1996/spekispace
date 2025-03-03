@@ -5,7 +5,7 @@ use async_trait::async_trait;
 use js_sys::Promise;
 use serde::{de::DeserializeOwned, Serialize};
 use serde_json::Value;
-use speki_dto::{LedgerEntry, LedgerEvent, LedgerProvider, ProviderId, Storage, TimeProvider};
+use speki_dto::{LedgerEntry, LedgerEvent, ProviderId, Storage, TimeProvider};
 use tracing::info;
 use wasm_bindgen::prelude::*;
 use speki_dto::RunLedger;
@@ -21,14 +21,12 @@ impl TimeProvider for WasmTime {
 
 #[derive(Clone)]
 pub struct DexieProvider {
-    time: WasmTime,
     id: Option<ProviderId>,
 }
 
 impl DexieProvider {
     pub fn new() -> Self {
         Self {
-            time: WasmTime,
             id: None,
         }
     }
@@ -68,14 +66,7 @@ impl<T: Serialize + DeserializeOwned + 'static> Storage<T> for DexieProvider {
         info!("loaidng all ids of type: {space}");
         load_ids(space).await
     }
-}
 
-
-#[async_trait(?Send)]
-impl<T: RunLedger<L>, L: LedgerEvent> LedgerProvider<T, L> for DexieProvider {
-    async fn current_time(&self) -> Duration {
-        self.time.current_time()
-    }
 
     async fn clear_space(&self, space: &str) {
         let space = JsValue::from_str(&space);
@@ -83,10 +74,6 @@ impl<T: RunLedger<L>, L: LedgerEvent> LedgerProvider<T, L> for DexieProvider {
     }
 }
 
-
-static MICRO: once_cell::sync::Lazy<Arc<AtomicU64>> = once_cell::sync::Lazy::new(|| {
-    Arc::new(AtomicU64::new(0))
-});
 
 #[wasm_bindgen(module = "/dexie.js")]
 extern "C" {

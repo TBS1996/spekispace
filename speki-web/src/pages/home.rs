@@ -18,6 +18,11 @@ pub fn Menu() -> Element {
                 class: "flex flex-col space-y-4 w-full max-w-md",
 
                 Link {
+                    to: Route::Debug {  } ,
+                    class: "{buttonclass}",
+                    "debug"
+                }
+                Link {
                     to: Route::About {  } ,
                     class: "{buttonclass}",
                     "about"

@@ -1,11 +1,10 @@
 #![allow(non_snake_case)]
 
 use std::{
-    collections::HashMap,
-    sync::{
+    collections::HashMap, path::PathBuf, sync::{
         atomic::{AtomicBool, Ordering},
         Arc, Mutex,
-    },
+    }
 };
 
 use dioxus::prelude::*;
@@ -13,6 +12,7 @@ use dioxus_logger::tracing::{info, Level};
 #[cfg(not(feature = "desktop"))]
 use firebase::AuthUser;
 use pages::{ImportState, ReviewPage};
+use speki_core::{card::{BaseCard, RawCard}, import_card_ledger, import_history_ledger, ledger::decompose};
 
 use crate::{
     pages::{About, Add, Browse, Import, Menu, Review},
@@ -33,6 +33,8 @@ pub const DEFAULT_FILTER: &'static str =
 /// We need to re-render cyto instance every time the route changes, so this boolean
 /// is true every time we change route, and is set back to false after the cyto instance is re-rendered
 pub static ROUTE_CHANGE: AtomicBool = AtomicBool::new(false);
+
+
 
 fn main() {
     dioxus_logger::init(Level::INFO).expect("failed to init logger");
@@ -196,21 +198,31 @@ impl Route {
 #[component]
 fn Debug() -> Element {
 
-    let hash = use_resource(move  || async move {
-        let hash = APP.read().inner().provider.cards.hash().await;
+    let card_hash = use_resource(move  || async move {
+        let hash = APP.read().inner().provider.cards.storage_hash().await;
         hash
     });
 
-    let mut hash2 = hash.clone();
-    let mut hash3 = hash.clone();
+    let review_hash = use_resource(move  || async move {
+        let hash = APP.read().inner().provider.reviews.storage_hash().await;
+        hash
+    });
+
+    let mut hash2 = card_hash.clone();
+    let mut hash3 = card_hash.clone();
+
+    let mut revhash2 = review_hash.clone();
+    let mut revhash3 = review_hash.clone();
+
 
 
     rsx! {
         div {
             class: "flex flex-col",
 
+            p {"cards hash: {card_hash.cloned().unwrap_or_default()}"}
+            p {"history hash: {review_hash.cloned().unwrap_or_default()}"}
 
-            {hash}
 
         button {
             onclick: move |_| {
@@ -226,7 +238,9 @@ fn Debug() -> Element {
             onclick: move |_| {
                 spawn(async move {
                     APP.read().inner().provider.cards.clear_state().await;
+                    APP.read().inner().provider.reviews.clear_state().await;
                     hash2.restart();
+                    revhash2.restart();
                 });
             },
             "clear state!"
@@ -236,7 +250,9 @@ fn Debug() -> Element {
             onclick: move |_| {
                 spawn(async move {
                     APP.read().inner().provider.cards.recompute_state_from_ledger().await;
+                    APP.read().inner().provider.reviews.recompute_state_from_ledger().await;
                     hash3.restart();
+                    revhash3.restart();
                 });
             },
             "recompute state"
@@ -250,24 +266,17 @@ fn Debug() -> Element {
             },
             "check derived events from all cards re-assemble to same card"
         }
-
         button {
             onclick: move |_| {
                 spawn(async move {
+                    let cards = APP.read().inner().provider.cards.clone();
+                    import_card_ledger(cards).await;
+                    let ledger  = APP.read().inner().provider.reviews.clone();
+                    import_history_ledger(ledger).await;
 
-                    let hash = APP.read().inner().provider.cards.hash().await;
-                    info!("hash of cards:<{}>", hash);
                 });
             },
-            "hash of current cards state"
-        }
-        button {
-            onclick: move |_| {
-                spawn(async move {
-                    APP.read().inner().index_all().await;
-                });
-            },
-            "index!"
+            "import ledger i guess"
         }
     }
 

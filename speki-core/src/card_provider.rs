@@ -103,7 +103,7 @@ impl CardProvider {
 
     pub async fn load_all_card_ids(&self) -> Vec<CardId> {
         info!("x1");
-        self.providers.cards.load_item_ids().await.into_iter().map(|id|id.parse().unwrap()).collect()
+        self.providers.cards.load_ids().await.into_iter().map(|id|id.parse().unwrap()).collect()
     }
 
     pub async fn filtered_load<F, Fut>(&self, filter: F) -> Vec<Arc<Card>>
@@ -152,12 +152,12 @@ impl CardProvider {
             return Some(card);
         }
 
-        let base = self.providers.cards.load_item(&id.to_string()).await?;
-        let history = match self.providers.reviews.load_item(&id.to_string()).await {
+        let base = self.providers.cards.load(&id.to_string()).await?;
+        let history = match self.providers.reviews.load(&id.to_string()).await {
             Some(revs) => revs,
             None => History::new(id),
         };
-        let metadata = match self.providers.metadata.load_item(&id.to_string()).await {
+        let metadata = match self.providers.metadata.load(&id.to_string()).await {
             Some(meta) => meta,
             None => Metadata::new(id),
         };

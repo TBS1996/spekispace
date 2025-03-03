@@ -33,27 +33,30 @@ pub struct App(Arc<speki_core::App>);
 impl App {
     #[cfg(not(feature = "desktop"))]
     pub fn new() -> Self {
+        use speki_dto::Ledger;
+
         Self(Arc::new(speki_core::App::new(
             speki_core::SimpleRecall,
             WasmTime,
-            DexieProvider::new(),
-            DexieProvider::new(),
-            DexieProvider::new(),
-            DexieProvider::new(),
+            Ledger::new(Box::new(DexieProvider::new())),
+            Ledger::new(Box::new(DexieProvider::new())),
+            Ledger::new(Box::new(DexieProvider::new())),
+            Ledger::new(Box::new(DexieProvider::new())),
         )))
     }
 
     #[cfg(feature = "desktop")]
     pub fn new() -> Self {
+        use speki_dto::Ledger;
         use speki_provider::{FsProvider, FsTime};
 
         Self(Arc::new(speki_core::App::new(
             speki_core::SimpleRecall,
             FsTime,
-            FsProvider::new(),
-            FsProvider::new(),
-            FsProvider::new(),
-            FsProvider::new(),
+            Ledger::new(Box::new(FsProvider::new())),
+            Ledger::new(Box::new(FsProvider::new())),
+            Ledger::new(Box::new(FsProvider::new())),
+            Ledger::new(Box::new(FsProvider::new())),
         )))
     }
 

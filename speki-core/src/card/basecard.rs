@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 use omtrent::TimeStamp;
-use speki_dto::{RunLedger, LedgerProvider};
+use speki_dto::{RunLedger};
 use serde::{Deserialize, Serialize};
 use super::*;
 use crate::{attribute::AttributeId, audio::AudioId, card_provider::CardProvider, ledger::CardEvent, App, Attribute, CacheKey};
@@ -530,7 +530,7 @@ impl RawType {
 }
 
 #[derive(Serialize, Deserialize, Default, Debug, Clone)]
-struct RawCard {
+pub struct RawCard {
     id: Uuid,
     #[serde(flatten)]
     data: RawType,
@@ -545,7 +545,8 @@ struct RawCard {
 }
 
 pub fn bigrams(text: &str) -> Vec<[char;2]> {
-    text.chars()
+    normalize_string(text)
+    .chars()
         .collect::<Vec<_>>()
         .windows(2)
         .map(|w| [w[0], w[1]])
@@ -553,7 +554,11 @@ pub fn bigrams(text: &str) -> Vec<[char;2]> {
 }
 
 pub fn normalize_string(str: &str) -> String {
-    deunicode::deunicode(str).to_lowercase()
+        deunicode::deunicode(str)
+        .to_lowercase()
+        .chars()
+        .filter(|c| c.is_ascii_alphanumeric()) 
+        .collect()
 }
 
 impl RunLedger<CardEvent> for BaseCard {

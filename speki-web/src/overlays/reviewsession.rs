@@ -31,6 +31,14 @@ fn RecallButton(
         Recall::Perfect => "😁",
     };
 
+
+    let label = match recall {
+        Recall::None => "1",
+        Recall::Late => "2",
+        Recall::Some => "3",
+        Recall::Perfect => "4",
+    };
+
     rsx! {
         button {
             class: "bg-white mt-6 inline-flex items-center justify-center text-white border-0 py-4 px-6 focus:outline-none hover:bg-gray-700 rounded md:mt-0 text-4xl leading-none",
@@ -86,7 +94,7 @@ fn ReviewButtons(
 ) -> Element {
     rsx! {
         div {
-            class: "flex flex-col items-center justify-center h-[68px]",
+            class: "flex flex-col items-center justify-center h-[680px]",
 
             if !show_backside() {
                 button {
@@ -148,7 +156,22 @@ impl ReviewSession {
 
         for card in &self.cards {
             let cards = card.evaluate(provider.clone()).await;
-            out.extend(cards);
+            for card in cards {
+                match card {
+                    MaybeCard::Id(id) => {
+                        let card = provider.load(id).await.unwrap();
+                        if self.filter.filter(card.clone()).await {
+                            out.insert(MaybeCard::Card(card));
+                        }
+                    },
+                    MaybeCard::Card(card) => {
+                        if self.filter.filter(card.clone()).await {
+                            out.insert(MaybeCard::Card(card));
+                        }
+                    },
+                }
+                
+            }
         }
 
         out

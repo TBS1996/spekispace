@@ -2,7 +2,7 @@ use std::{collections::BTreeMap, future::Future, pin::Pin, sync::Arc};
 
 use dioxus::prelude::*;
 use speki_core::{
-    card::{normalize_string, CardId}, card_provider::Caches, cardfilter::CardFilter, collection::{DynCard, MaybeDyn}, CacheKey
+    card::{bigrams, normalize_string, CardId}, card_provider::Caches, cardfilter::CardFilter, collection::{DynCard, MaybeDyn}, CacheKey
 };
 use speki_web::{CardEntry, Node};
 use tracing::info;
@@ -143,6 +143,7 @@ impl CardSelector {
                     }
 
 
+                    info!("sorting cards");
                     let mut sorted_cards: Vec<_> = matching_cards.into_iter().collect();
                     sorted_cards.sort_by(|a, b| b.1.cmp(&a.1));
 
@@ -150,24 +151,10 @@ impl CardSelector {
                     if search.is_empty() {
                         sorted_cards = cards.iter().take(100).map(|id| (*id.0, 0)).collect();
                     } else if search.chars().count() == 1 {
-                        let mut sorted = vec![];
-                        for card in cards.iter() {
-                            let Some(entry) = card.1.write_silent().entry().await else {
-                                continue;
-                            };
-
-                            if sorted.len() > 100 {
-                                break;
-                            }
-                            if let Some(s) = entry.front.cloned().map(|s| s.to_lowercase()) {
-                                if s.to_lowercase().contains(&search) {
-                                    sorted.push((*card.0, 0));
-                                }
-                            }
-                        }
-
-                        sorted_cards = sorted;
+                        sorted_cards = cards.iter().take(100).map(|id| (*id.0, 0)).collect();
                     }
+
+                    info!("cards sorted");
 
                     for card in sorted_cards {
                         let entry = cards.get(&card.0).unwrap();
@@ -194,6 +181,8 @@ impl CardSelector {
                             }
                         }
                     }
+
+                    info!("done filtering :)");
 
                     filtered_cards
                 }
@@ -461,15 +450,4 @@ fn TableRender(
                 }
             }
     }
-}
-
-
-
-
-fn bigrams(text: &str) -> Vec<[char;2]> {
-    text.chars()
-        .collect::<Vec<_>>()
-        .windows(2)
-        .map(|w| [w[0],w[1]])
-        .collect()
 }

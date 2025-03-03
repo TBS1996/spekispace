@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{sync::Arc, time::Duration};
 
 use dioxus::prelude::*;
 use speki_core::{
@@ -614,15 +614,62 @@ pub fn xCardViewerRender(props: CardViewer) -> Element {
     }
 }
 
+use speki_core::recall_rate::History as MyHistory;
+
+fn hr_dur(dur: Duration) -> String {
+    let secs = dur.as_secs();
+
+    if secs > 86400 {
+        format!("{:.2}d", secs as f32 / 86400.)
+    } else if secs > 3600 {
+        format!("{:.2}h", secs as f32 / 3600.)
+    } else if secs > 60 {
+        format!("{:.2}m", secs as f32 / 60.)
+    } else {
+        format!("{}", secs)
+    }
+}
+
+#[component]
+fn DisplayHistory(history: MyHistory, now: Duration)  -> Element {
+    let output = if history.reviews.is_empty() {
+        format!("no review history")
+    } else {
+        let mut output = format!("review history: ");
+        for review in history.reviews {
+            let dur = now - review.timestamp;
+            output.push_str(&format!(" {},", hr_dur(dur)));
+        }
+
+        output
+    };
+
+    rsx! {
+        p{"{output}"}
+    }
+
+}
 
 #[component]
 pub fn CardViewerRender(props: CardViewer) -> Element {
     info!("render cardviewer");
 
+    let history = {
+        if let Some(card) = props.old_card.cloned() {
+            card.card.cloned().history().clone()
+        } else {
+            speki_core::recall_rate::History::new(Default::default())
+        }
+    };
+
+    let now = APP.read().inner().time_provider.current_time();
+
     rsx! {
                 div {
                     class: "flex-none p-2 w-full max-w-[505] box-border order-2",
                   //  style: "min-height: 0; max-height: 100%;",
+                  DisplayHistory { history, now }
+
                     RenderInputs {
                         editor:props.editor.clone(),
                         dependents:props.dependents.clone(),
