@@ -1,18 +1,22 @@
 use std::{fmt::Debug, sync::Arc};
 
 use dioxus::prelude::*;
-use speki_core::{cardfilter::CardFilter, collection::{Collection, DynCard}};
+use speki_core::{
+    cardfilter::CardFilter,
+    collection::{Collection, DynCard},
+};
 use tracing::info;
 
 use crate::{
     components::{FilterComp, FilterEditor},
     overlays::{
-        colviewer::CollectionEditor, reviewsession::{ReviewSession, ReviewState}, textinput::TextInput, Overender,
-        OverlayEnum,
+        colviewer::CollectionEditor,
+        reviewsession::{ReviewSession, ReviewState},
+        textinput::TextInput,
+        Overender, OverlayEnum,
     },
     APP, IS_SHORT,
 };
-
 
 #[derive(Clone)]
 pub struct ReviewPage {
@@ -49,15 +53,13 @@ impl ReviewPage {
             let mut futs = vec![];
 
             for col in _cols {
-                futs.push(
-                    async move {
-                        let dist = RecallDist::new(col.clone()).await;
-                        (col, dist)
-                    }
-                );
+                futs.push(async move {
+                    let dist = RecallDist::new(col.clone()).await;
+                    (col, dist)
+                });
             }
 
-            for (col, dist) in futures::future::join_all(futs).await{
+            for (col, dist) in futures::future::join_all(futs).await {
                 out.push((col, dist));
             }
 

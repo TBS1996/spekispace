@@ -2,7 +2,10 @@ use std::{sync::Arc, time::Duration};
 
 use dioxus::prelude::*;
 use speki_core::{
-    audio::AudioId, card::CardId, ledger::{CardAction, CardEvent}, CardType, ClassCard, InstanceCard, NormalCard, UnfinishedCard
+    audio::AudioId,
+    card::CardId,
+    ledger::{CardAction, CardEvent},
+    CardType, ClassCard, InstanceCard, NormalCard, UnfinishedCard,
 };
 
 use speki_web::{CardEntry, Node, NodeId, NodeMetadata};
@@ -432,9 +435,7 @@ impl CardViewer {
             self.old_meta.cloned(),
         );
     }
-
 }
-
 
 #[component]
 fn RenderInputs(props: CardViewer) -> Element {
@@ -582,7 +583,6 @@ fn InputElements(
     }
 }
 
-
 #[component]
 pub fn xCardViewerRender(props: CardViewer) -> Element {
     info!("render cardviewer");
@@ -631,7 +631,7 @@ fn hr_dur(dur: Duration) -> String {
 }
 
 #[component]
-fn DisplayHistory(history: MyHistory, now: Duration)  -> Element {
+fn DisplayHistory(history: MyHistory, now: Duration) -> Element {
     let output = if history.reviews.is_empty() {
         format!("no review history")
     } else {
@@ -647,7 +647,6 @@ fn DisplayHistory(history: MyHistory, now: Duration)  -> Element {
     rsx! {
         p{"{output}"}
     }
-
 }
 
 #[component]

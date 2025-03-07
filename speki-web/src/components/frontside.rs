@@ -6,7 +6,6 @@ use speki_core::{audio::Audio, card::CType};
 use strum::{EnumIter, IntoEnumIterator};
 use tracing::info;
 
-
 #[cfg(feature = "web")]
 use crate::components::audioupload::AudioUpload;
 
@@ -103,7 +102,6 @@ pub fn FrontPutRender(
         }
     }
 }
-
 
 #[cfg(feature = "web")]
 #[component]

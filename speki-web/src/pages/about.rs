@@ -8,11 +8,8 @@ pub fn About() -> Element {
     }
 }
 
-
-
 #[cfg(feature = "desktop")]
-pub fn play_audio(audio_data: &[u8], mime_type: &str) {
-}
+pub fn play_audio(audio_data: &[u8], mime_type: &str) {}
 
 #[cfg(not(feature = "desktop"))]
 pub fn play_audio(audio_data: &[u8], mime_type: &str) {
@@ -24,8 +21,7 @@ pub fn play_audio(audio_data: &[u8], mime_type: &str) {
     // Convert Vec<u8> to Uint8Array
 
     let array = js_sys::Array::new();
-    let uint8arr =
-        js_sys::Uint8Array::new(&unsafe { js_sys::Uint8Array::view(audio_data) }.into());
+    let uint8arr = js_sys::Uint8Array::new(&unsafe { js_sys::Uint8Array::view(audio_data) }.into());
     array.push(&uint8arr.buffer());
 
     // Create a Blob with the specified MIME type

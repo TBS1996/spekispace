@@ -8,14 +8,8 @@ use wasm_bindgen::prelude::*;
 #[cfg(feature = "desktop")]
 fn eval_js(js_code: &str) -> Option<String> {
     let window = use_window();
-    window.with_webview(|webview| {
-        webview
-            .evaluate_script(js_code)
-            .ok()
-            .flatten()
-    })
+    window.with_webview(|webview| webview.evaluate_script(js_code).ok().flatten())
 }
-
 
 #[cfg(feature = "web")]
 #[wasm_bindgen(module = "/assets/cyto.js")]

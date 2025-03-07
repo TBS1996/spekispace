@@ -9,10 +9,7 @@ use tracing::info;
 #[cfg(feature = "web")]
 use crate::components::audioupload::AudioUpload;
 use crate::{
-    components::{
-        cardref::CardRefRender, dropdown::DropComponent, CardRef,
-        DropDownMenu,
-    },
+    components::{cardref::CardRefRender, dropdown::DropComponent, CardRef, DropDownMenu},
     overlays::{card_selector::MyClosure, cardviewer::TempNode, OverlayEnum},
     APP, IS_SHORT,
 };
@@ -27,7 +24,6 @@ pub struct BackPut {
     pub ref_card: CardRef,
     pub audio: Signal<Option<Audio>>,
 }
-
 
 #[cfg(not(feature = "web"))]
 #[component]

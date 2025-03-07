@@ -2,7 +2,12 @@ use dioxus::prelude::*;
 use speki_web::CardEntry;
 use std::{collections::BTreeSet, rc::Rc, sync::Arc};
 
-use speki_core::{card::CardId, cardfilter::CardFilter, collection::{DynCard, MaybeCard}, recall_rate::Recall};
+use speki_core::{
+    card::CardId,
+    cardfilter::CardFilter,
+    collection::{DynCard, MaybeCard},
+    recall_rate::Recall,
+};
 use tracing::info;
 
 use crate::{
@@ -30,7 +35,6 @@ fn RecallButton(
         Recall::Some => "🙂",
         Recall::Perfect => "😁",
     };
-
 
     let label = match recall {
         Recall::None => "1",
@@ -130,7 +134,6 @@ fn ReviewButtons(
     }
 }
 
-
 #[derive(Clone, PartialEq, Debug)]
 pub struct ReviewSession {
     cards: Vec<DynCard>,
@@ -163,14 +166,13 @@ impl ReviewSession {
                         if self.filter.filter(card.clone()).await {
                             out.insert(MaybeCard::Card(card));
                         }
-                    },
+                    }
                     MaybeCard::Card(card) => {
                         if self.filter.filter(card.clone()).await {
                             out.insert(MaybeCard::Card(card));
                         }
-                    },
+                    }
                 }
-                
             }
         }
 
@@ -343,7 +345,6 @@ impl ReviewState {
             thecards.push(card.id());
         }
 
-
         let overlay: Signal<Option<OverlayEnum>> = Signal::new_in_scope(None, ScopeId::APP);
         let queue: Signal<Queue> = Signal::new_in_scope(Queue::new(thecards), ScopeId::APP);
 
@@ -353,9 +354,7 @@ impl ReviewState {
         let card = ScopeId::APP.in_runtime(|| {
             use_resource(move || async move {
                 match queue.read().current() {
-                    Some(id) => {
-                        APP.read().try_load_card(id).await
-                    }
+                    Some(id) => APP.read().try_load_card(id).await,
                     None => None,
                 }
             })
@@ -368,7 +367,7 @@ impl ReviewState {
                         let mut deps: Vec<(CardEntry, Signal<Option<OverlayEnum>>)> = vec![];
 
                         for dep in &card.dependencies() {
-                            if let Some(dep) = APP.read().try_load_card(*dep).await{
+                            if let Some(dep) = APP.read().try_load_card(*dep).await {
                                 deps.push((dep, overlay.clone()));
                             }
                         }

@@ -1,12 +1,14 @@
-use std::{
-    collections::{HashMap, HashSet}, fmt::Debug, hash::{DefaultHasher, Hash, Hasher}, marker::PhantomData, ops::{Deref, DerefMut}, str::FromStr, sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard}, time::Duration
-};
-use std::vec::Vec;
-use nonempty::{nonempty, NonEmpty};
 use serde::{de::DeserializeOwned, Deserialize, Deserializer, Serialize};
+use std::vec::Vec;
+use std::{
+    collections::{HashMap, HashSet},
+    fmt::Debug,
+    hash::{DefaultHasher, Hash, Hasher},
+    marker::PhantomData,
+    sync::{Arc, RwLock},
+};
 use tracing::info;
 use uuid::Uuid;
-
 
 pub trait TimeProvider {
     fn current_time(&self) -> std::time::Duration;
@@ -22,7 +24,7 @@ pub struct Ledger<T: LedgerItem<E>, E: LedgerEvent> {
     storage: Arc<Box<dyn LedgerStorage<T, E>>>,
 }
 
-impl<T: LedgerItem<E>, E: LedgerEvent>Ledger<T, E> {
+impl<T: LedgerItem<E>, E: LedgerEvent> Ledger<T, E> {
     pub fn new(storage: Box<dyn LedgerStorage<T, E>>) -> Self {
         Self {
             ledger: Default::default(),
@@ -31,9 +33,7 @@ impl<T: LedgerItem<E>, E: LedgerEvent>Ledger<T, E> {
     }
 }
 
-
-
-impl<T: LedgerItem<E>, E: LedgerEvent>  Ledger<T, E> {
+impl<T: LedgerItem<E>, E: LedgerEvent> Ledger<T, E> {
     pub async fn load(&self, id: &str) -> Option<T> {
         self.storage.load_item(id).await
     }
@@ -42,15 +42,15 @@ impl<T: LedgerItem<E>, E: LedgerEvent>  Ledger<T, E> {
         self.storage.load_all_items().await
     }
 
-    pub async fn load_ids(&self)  -> Vec<String> {
+    pub async fn load_ids(&self) -> Vec<String> {
         self.storage.load_ids(&self.storage.blob_ns()).await
     }
 
-    pub async fn xsave_ledger(&self, event: E, prev: Option<LedgerEntry<E>>) -> LedgerEntry<E>{
+    pub async fn xsave_ledger(&self, event: E, prev: Option<LedgerEntry<E>>) -> LedgerEntry<E> {
         self.storage.xsave_ledger_entry(event, prev).await
     }
 
-    pub async fn save_ledger(&self, event: E) -> LedgerEntry<E>{
+    pub async fn save_ledger(&self, event: E) -> LedgerEntry<E> {
         self.storage.save_ledger_entry(event).await
     }
 
@@ -63,8 +63,8 @@ impl<T: LedgerItem<E>, E: LedgerEvent>  Ledger<T, E> {
     }
 
     pub async fn save_all_cache(&self) {
-        let mut caches : HashMap<(&'static str, String), HashSet<E::Key>> = Default::default();
-        let mut ref_caches : HashMap<E::Key, HashMap<&'static str, E::Key>> = Default::default();
+        let mut caches: HashMap<(&'static str, String), HashSet<E::Key>> = Default::default();
+        let mut ref_caches: HashMap<E::Key, HashMap<&'static str, E::Key>> = Default::default();
 
         for (_, item) in self.storage.load_all_items().await {
             let id = item.item_id();
@@ -81,24 +81,38 @@ impl<T: LedgerItem<E>, E: LedgerEvent>  Ledger<T, E> {
         }
 
         for ((property, value), id) in caches {
-            self.storage.save_property_cache(property, &value, id.into_iter().map(|x|x.to_string()).collect()).await;
+            self.storage
+                .save_property_cache(
+                    property,
+                    &value,
+                    id.into_iter().map(|x| x.to_string()).collect(),
+                )
+                .await;
         }
 
         for (id, map) in ref_caches {
             for (deptype, reff) in map {
-                self.storage.save_refdep(&id.to_string(), deptype, &reff.to_string()).await;
+                self.storage
+                    .save_refdep(&id.to_string(), deptype, &reff.to_string())
+                    .await;
             }
         }
     }
 
     pub async fn storage_hash(&self) -> Hashed {
-        let mut state: Vec<(String, T)> = self.storage.load_all_items().await.into_iter().map(|(key, val)|(key.to_string(), val)).collect();
-        state.sort_by_key(|x|x.0.clone());
+        let mut state: Vec<(String, T)> = self
+            .storage
+            .load_all_items()
+            .await
+            .into_iter()
+            .map(|(key, val)| (key.to_string(), val))
+            .collect();
+        state.sort_by_key(|x| x.0.clone());
         get_hash(&state)
     }
 
     pub async fn hash(&self) -> Option<Hashed> {
-        self.ledger.read().unwrap().last().map(|last|last.hash())
+        self.ledger.read().unwrap().last().map(|last| last.hash())
     }
 
     pub async fn clear_state(&self) {
@@ -110,7 +124,7 @@ impl<T: LedgerItem<E>, E: LedgerEvent>  Ledger<T, E> {
 
         let item = match self.storage.load_item(&event.id().to_string()).await {
             Some(item) => item,
-            None => T::new_default(event.id())
+            None => T::new_default(event.id()),
         };
 
         let id = item.item_id();
@@ -127,7 +141,6 @@ impl<T: LedgerItem<E>, E: LedgerEvent>  Ledger<T, E> {
         self.save_ledger(event).await;
     }
 
-
     pub async fn recompute_state_from_ledger(&self) -> Hashed {
         self.clear_state().await;
         let ledger = self.storage.load_ledger().await;
@@ -136,8 +149,14 @@ impl<T: LedgerItem<E>, E: LedgerEvent>  Ledger<T, E> {
             self.run_event(event.event).await;
         }
 
-        let mut state: Vec<(String, T)>  = self.storage.load_all_items().await.into_iter().map(|(key, val)|(key.to_string(), val)).collect();
-        state.sort_by_key(|k|k.0.clone());
+        let mut state: Vec<(String, T)> = self
+            .storage
+            .load_all_items()
+            .await
+            .into_iter()
+            .map(|(key, val)| (key.to_string(), val))
+            .collect();
+        state.sort_by_key(|k| k.0.clone());
         self.save_all_cache().await;
         get_hash(&state)
     }
@@ -152,7 +171,7 @@ pub struct LedgerEntry<E: LedgerEvent> {
 
 impl<'de, E> Deserialize<'de> for LedgerEntry<E>
 where
-    E: LedgerEvent + DeserializeOwned, 
+    E: LedgerEvent + DeserializeOwned,
 {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
@@ -175,7 +194,9 @@ where
 }
 
 /// Represents a single event in the ledger.
-pub trait LedgerEvent: Hash + Debug + Clone + Serialize + DeserializeOwned + Send + Sync + 'static {
+pub trait LedgerEvent:
+    Hash + Debug + Clone + Serialize + DeserializeOwned + Send + Sync + 'static
+{
     type Key: Copy + Eq + Hash + ToString + Debug;
 
     fn id(&self) -> Self::Key;
@@ -185,8 +206,7 @@ pub trait LedgerEvent: Hash + Debug + Clone + Serialize + DeserializeOwned + Sen
     }
 }
 
-
-impl<E: LedgerEvent + Serialize + DeserializeOwned> LedgerEntry<E>{
+impl<E: LedgerEvent + Serialize + DeserializeOwned> LedgerEntry<E> {
     pub fn new(previous: Option<Hashed>, index: usize, event: E) -> Self {
         Self {
             previous,
@@ -195,25 +215,26 @@ impl<E: LedgerEvent + Serialize + DeserializeOwned> LedgerEntry<E>{
         }
     }
 
-   pub fn hash(&self) -> Hashed {
-    let mut data = self.event.data_hash();
-    if let Some(prev) = self.previous.as_ref() {
-        data.push_str(prev);
+    pub fn hash(&self) -> Hashed {
+        let mut data = self.event.data_hash();
+        if let Some(prev) = self.previous.as_ref() {
+            data.push_str(prev);
+        }
+
+        get_hash(&data)
     }
-
-    get_hash(&data)
-   }
 }
-
 
 fn get_hash<T: Hash>(item: &T) -> Hashed {
     let mut hasher = DefaultHasher::new();
     item.hash(&mut hasher);
-    format!("{:x}", hasher.finish()) 
+    format!("{:x}", hasher.finish())
 }
 
 /// Represents how a ledger mutates or creates an item.
-pub trait LedgerItem<E: LedgerEvent + Debug>: Serialize + DeserializeOwned + Hash + 'static{
+pub trait LedgerItem<E: LedgerEvent + Debug>:
+    Serialize + DeserializeOwned + Hash + 'static
+{
     type Error: Debug;
 
     fn run_event(self, event: E) -> Result<Self, Self::Error>;
@@ -224,23 +245,24 @@ pub trait LedgerItem<E: LedgerEvent + Debug>: Serialize + DeserializeOwned + Has
 
     fn item_id(&self) -> E::Key;
 
-    fn dep_cache(&self) -> HashMap<&'static str, HashSet<E::Key>>{
+    fn dep_cache(&self) -> HashMap<&'static str, HashSet<E::Key>> {
         Default::default()
     }
 
-    fn caches(&self) -> HashSet<(&'static str, String)>{
+    fn caches(&self) -> HashSet<(&'static str, String)> {
         Default::default()
     }
 }
 
-
-/// Hmmm, 3 kind of 'caches' 
-/// self referential stuff, so if A->B, then B should also know about this relationship 
+/// Hmmm, 3 kind of 'caches'
+/// self referential stuff, so if A->B, then B should also know about this relationship
 /// list of items with a certain property, so, all items that are suspended, or with certain bigrams
 /// expensive stuff that can be calculated from the item, like for example the equation for a review history
 
 #[async_trait::async_trait(?Send)]
-pub trait LedgerStorage<T: Serialize + DeserializeOwned + 'static, E: LedgerEvent>: Storage + ItemStorage<T>{
+pub trait LedgerStorage<T: Serialize + DeserializeOwned + 'static, E: LedgerEvent>:
+    Storage + ItemStorage<T>
+{
     async fn load_refdeps(&self, id: &str, deptype: &str) -> HashSet<String>;
     async fn save_refdep(&self, id: &str, dep_type: &str, reff: &str);
 
@@ -249,7 +271,7 @@ pub trait LedgerStorage<T: Serialize + DeserializeOwned + 'static, E: LedgerEven
         self.clear_space(&ns).await;
     }
 
-    async fn load_all_items(&self) -> HashMap<String, T>{
+    async fn load_all_items(&self) -> HashMap<String, T> {
         let ns = self.blob_ns();
         self.xload_all_items(&ns).await
     }
@@ -267,7 +289,10 @@ pub trait LedgerStorage<T: Serialize + DeserializeOwned + 'static, E: LedgerEven
 
     async fn load_property_cache(&self, property: &str, value: &str) -> HashSet<String> {
         let ns = self.property_cache_ns(property);
-        self.load_content(&ns, value).await.map(|x|serde_json::from_slice(&x).unwrap()).unwrap_or_default()
+        self.load_content(&ns, value)
+            .await
+            .map(|x| serde_json::from_slice(&x).unwrap())
+            .unwrap_or_default()
     }
 
     async fn save_property_cache(&self, property: &str, value: &str, ids: HashSet<String>) {
@@ -292,10 +317,13 @@ pub trait LedgerStorage<T: Serialize + DeserializeOwned + 'static, E: LedgerEven
         self.load_ledger().await.last().map(ToOwned::to_owned)
     }
 
-
-    async fn xsave_ledger_entry(&self, event: E, last_ledger: Option<LedgerEntry<E>>) -> LedgerEntry<E>{
-        let last_hash = last_ledger.as_ref().map(|x|x.hash());
-        let new_index = last_ledger.map(|l|l.index).unwrap_or_default() + 1;
+    async fn xsave_ledger_entry(
+        &self,
+        event: E,
+        last_ledger: Option<LedgerEntry<E>>,
+    ) -> LedgerEntry<E> {
+        let last_hash = last_ledger.as_ref().map(|x| x.hash());
+        let new_index = last_ledger.map(|l| l.index).unwrap_or_default() + 1;
         let entry = LedgerEntry {
             previous: last_hash,
             index: new_index,
@@ -308,7 +336,7 @@ pub trait LedgerStorage<T: Serialize + DeserializeOwned + 'static, E: LedgerEven
         entry
     }
 
-    async fn save_ledger_entry(&self, event: E) -> LedgerEntry<E>{
+    async fn save_ledger_entry(&self, event: E) -> LedgerEntry<E> {
         let last_ledger = self.last_ledger_entry().await;
         self.xsave_ledger_entry(event, last_ledger).await
     }
@@ -324,7 +352,7 @@ pub trait LedgerStorage<T: Serialize + DeserializeOwned + 'static, E: LedgerEven
                 return vec![];
             }
 
-            for (hash, value) in map.into_iter(){
+            for (hash, value) in map.into_iter() {
                 let action: LedgerEntry<E> = serde_json::from_slice(&value).unwrap();
                 foo.push((hash.parse().unwrap(), action));
             }
@@ -332,9 +360,7 @@ pub trait LedgerStorage<T: Serialize + DeserializeOwned + 'static, E: LedgerEven
             foo
         };
 
-        foo.sort_by_key(|k|k.0);
-
-
+        foo.sort_by_key(|k| k.0);
 
         let mut output: Vec<LedgerEntry<E>> = vec![];
         let mut prev_hash: Option<String> = None;
@@ -353,7 +379,7 @@ pub trait LedgerStorage<T: Serialize + DeserializeOwned + 'static, E: LedgerEven
         self.xload_item(&ns, key).await
     }
 
-    async fn save_item(&self, key: &str, item: T){
+    async fn save_item(&self, key: &str, item: T) {
         let ns = self.blob_ns();
         self.xsave_item(&ns, key, &item).await
     }
@@ -379,10 +405,11 @@ pub trait LedgerStorage<T: Serialize + DeserializeOwned + 'static, E: LedgerEven
     }
 
     fn item_name(&self) -> &'static str {
-        use std::sync::OnceLock;
         use std::any;
+        use std::sync::OnceLock;
 
-        static TYPE_NAME_CACHE: OnceLock<RwLock<HashMap<any::TypeId, &'static str>>> = OnceLock::new();
+        static TYPE_NAME_CACHE: OnceLock<RwLock<HashMap<any::TypeId, &'static str>>> =
+            OnceLock::new();
 
         let cache = TYPE_NAME_CACHE.get_or_init(|| RwLock::new(HashMap::new()));
 
@@ -391,7 +418,7 @@ pub trait LedgerStorage<T: Serialize + DeserializeOwned + 'static, E: LedgerEven
         if let Some(name) = cache.read().unwrap().get(&type_id) {
             return name;
         }
-    
+
         let mut cache_lock = cache.write().unwrap();
         let name = self.formatter(any::type_name::<T>());
         let leaked = Box::leak(name.into_boxed_str());
@@ -399,7 +426,6 @@ pub trait LedgerStorage<T: Serialize + DeserializeOwned + 'static, E: LedgerEven
         leaked
     }
 }
-
 
 #[async_trait::async_trait(?Send)]
 pub trait Storage {
@@ -425,17 +451,20 @@ pub struct BincodeProvider<T: Serialize + DeserializeOwned + 'static> {
 }
 
 #[async_trait::async_trait(?Send)]
-impl<T: Serialize + DeserializeOwned + 'static> ItemStorage<T> for BincodeProvider<T>  {
-    async fn xload_item(&self, space: &[&str], id: &str) -> Option<T>  {
+impl<T: Serialize + DeserializeOwned + 'static> ItemStorage<T> for BincodeProvider<T> {
+    async fn xload_item(&self, space: &[&str], id: &str) -> Option<T> {
         let bytes = self.inner.load_content(space, id).await?;
         let x: T = bincode::deserialize(&bytes).unwrap();
         Some(x)
     }
 
     async fn xload_all_items(&self, space: &[&str]) -> HashMap<String, T> {
-        self.inner.load_all_contents(space).await.into_iter().map(|(key, val)| {
-            (key, bincode::deserialize(&val).unwrap())
-        }).collect()
+        self.inner
+            .load_all_contents(space)
+            .await
+            .into_iter()
+            .map(|(key, val)| (key, bincode::deserialize(&val).unwrap()))
+            .collect()
     }
 
     async fn xsave_item(&self, space: &[&str], id: &str, item: &T) {
@@ -450,9 +479,6 @@ pub trait ItemStorage<T> {
     async fn xload_all_items(&self, space: &[&str]) -> HashMap<String, T>;
     async fn xsave_item(&self, space: &[&str], id: &str, item: &T);
 }
-
-
-
 
 /// Interface to load/store string encoded content, key-value based system
 #[async_trait::async_trait(?Send)]
@@ -472,4 +498,3 @@ pub trait TextStorage: Storage {
         todo!()
     }
 }
-

@@ -1,9 +1,15 @@
 use std::collections::VecDeque;
 
+use crate::{
+    audio::AudioId,
+    card::{BaseCard, CardId, RawCard},
+    collection::{CollectionId, DynCard, MaybeDyn},
+    metadata::Metadata,
+    recall_rate::{History, Review, ReviewEvent},
+    CardType,
+};
 use serde::{Deserialize, Serialize};
 use speki_dto::LedgerEvent;
-use crate::{audio::AudioId, card::{BaseCard, CardId, RawCard}, collection::{CollectionId, DynCard, MaybeDyn}, metadata::Metadata, recall_rate::{History, Review, ReviewEvent}, CardType};
-
 
 pub fn decompose_history(history: History) -> Vec<ReviewEvent> {
     let mut actions = vec![];
@@ -11,7 +17,9 @@ pub fn decompose_history(history: History) -> Vec<ReviewEvent> {
     let id = history.id;
     for review in history.reviews {
         actions.push(ReviewEvent {
-            id, grade: review.grade, timestamp: review.timestamp
+            id,
+            grade: review.grade,
+            timestamp: review.timestamp,
         });
     }
 
@@ -21,28 +29,30 @@ pub fn decompose_history(history: History) -> Vec<ReviewEvent> {
 pub fn decompose(card: &BaseCard) -> Vec<CardEvent> {
     let mut actions = vec![];
 
-    let action = CardAction::UpsertCard (card.ty.clone() );
+    let action = CardAction::UpsertCard(card.ty.clone());
     actions.push(action);
 
-
     if card.front_audio.is_some() {
-        let action = CardAction::SetFrontAudio ( card.front_audio.clone() );
+        let action = CardAction::SetFrontAudio(card.front_audio.clone());
         actions.push(action);
     }
 
     if card.back_audio.is_some() {
-        let action = CardAction::SetBackAudio ( card.back_audio.clone() );
+        let action = CardAction::SetBackAudio(card.back_audio.clone());
         actions.push(action);
     }
 
     for dep in &card.dependencies {
-        let action = CardAction::AddDependency (*dep);
+        let action = CardAction::AddDependency(*dep);
         actions.push(action);
     }
 
     let id = card.id;
 
-    actions.into_iter().map(|action|CardEvent::new(id, action)).collect()
+    actions
+        .into_iter()
+        .map(|action| CardEvent::new(id, action))
+        .collect()
 }
 
 use speki_dto::LedgerItem;
@@ -67,7 +77,10 @@ pub struct CardEvent {
 
 impl CardEvent {
     pub fn new(id: CardId, action: CardAction) -> Self {
-        Self {id, action: vec![action]}
+        Self {
+            id,
+            action: vec![action],
+        }
     }
 }
 
@@ -90,12 +103,8 @@ pub enum CardAction {
     DeleteCard,
 }
 
-
 pub enum HistoryEvent {
-    Review{
-        id: CardId,
-        review: Review,
-    },
+    Review { id: CardId, review: Review },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Hash)]
@@ -107,7 +116,7 @@ pub struct MetaEvent {
 impl LedgerEvent for MetaEvent {
     type Key = CardId;
 
-    fn id(&self) -> Self::Key{
+    fn id(&self) -> Self::Key {
         self.id
     }
 }
@@ -138,7 +147,6 @@ impl From<CollectionEvent> for Event {
     }
 }
 
-
 pub enum Event {
     Meta(MetaEvent),
     History(ReviewEvent),
@@ -154,7 +162,7 @@ pub struct CollectionEvent {
 
 impl CollectionEvent {
     pub fn new(id: CollectionId, action: CollectionAction) -> Self {
-        Self {id, action}
+        Self { id, action }
     }
 }
 

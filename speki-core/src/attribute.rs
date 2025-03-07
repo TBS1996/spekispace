@@ -69,4 +69,3 @@ pub struct AttributeDTO {
 }
 
 pub type AttributeId = Uuid;
-

@@ -104,7 +104,6 @@ pub fn nav() -> Element {
     }
 }
 
-
 #[cfg(feature = "desktop")]
 #[component]
 #[cfg(feature = "desktop")]

@@ -1,10 +1,12 @@
+use serde::{de::DeserializeOwned, Serialize};
+use speki_dto::{ItemStorage, LedgerEvent, LedgerStorage, ProviderId, Storage, TimeProvider};
 use std::{
-    any::Any, collections::{BTreeSet, HashMap, HashSet}, fs::{self, hard_link, read_to_string, File}, io::Write, path::{Path, PathBuf}, time::{Duration, UNIX_EPOCH}
+    collections::{HashMap, HashSet},
+    fs::{self, hard_link, File},
+    io::Write,
+    path::{Path, PathBuf},
+    time::Duration,
 };
-use async_trait::async_trait;
-use speki_dto::{ItemStorage, LedgerEntry, LedgerEvent, LedgerItem, LedgerStorage, ProviderId, Storage, TimeProvider};
-use uuid::Uuid;
-use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
 const STORAGE_DIR: &str = "/home/tor/spekifs";
 
@@ -13,37 +15,34 @@ pub struct FsTime;
 
 impl TimeProvider for FsTime {
     fn current_time(&self) -> Duration {
-        Duration::from_secs(std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_secs())
+        Duration::from_secs(
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_secs(),
+        )
     }
 }
-
 
 #[derive(Clone)]
 pub struct FsProvider {
     id: Option<ProviderId>,
 }
 
-
 fn write_bytes(path: &Path, s: &[u8]) {
     let mut f = match File::create(&path) {
         Ok(f) => f,
         Err(e) => {
             panic!("error writing to path: {:?} bytes: {s:?}, error: {e}", path);
-        },
+        }
     };
     f.write_all(s).unwrap();
-
 }
 
 impl FsProvider {
     pub fn new() -> Self {
         fs::create_dir_all(STORAGE_DIR).ok();
-        Self {
-            id: None,
-        }
+        Self { id: None }
     }
 
     pub fn set_id(&mut self, id: ProviderId) {
@@ -73,17 +72,16 @@ pub fn load_file_contents(dir: &Path) -> HashMap<String, Vec<u8>> {
             if let Ok(content) = fs::read(entry.path()) {
                 let key = entry.file_name().into_string().unwrap();
                 map.insert(key, content);
-
             }
         }
     }
     map
 }
 
-use std::os::unix::fs::symlink;
-
 #[async_trait::async_trait(?Send)]
-impl<T: Serialize + DeserializeOwned + std::fmt::Debug + 'static, E: LedgerEvent> LedgerStorage<T, E> for FsProvider {
+impl<T: Serialize + DeserializeOwned + std::fmt::Debug + 'static, E: LedgerEvent>
+    LedgerStorage<T, E> for FsProvider
+{
     async fn load_refdeps(&self, _id: &str, _deptype: &str) -> HashSet<String> {
         unimplemented!()
     }
@@ -97,7 +95,8 @@ impl<T: Serialize + DeserializeOwned + std::fmt::Debug + 'static, E: LedgerEvent
 
     async fn save_property_cache(&self, property: &str, value: &str, ids: HashSet<String>) {
         for id in ids {
-            <FsProvider as LedgerStorage<T, E>>::insert_property_cache(self, property, value, id).await;
+            <FsProvider as LedgerStorage<T, E>>::insert_property_cache(self, property, value, id)
+                .await;
         }
     }
 
@@ -146,9 +145,11 @@ impl<T: Serialize + DeserializeOwned + std::fmt::Debug + 'static, E: LedgerEvent
         x.push(deptype);
 
         let path = Self::file_path(&x, id);
-        load_file_contents(&path).into_iter().map(|(key, val)| (key, serde_json::from_slice(&val).unwrap())).collect()
+        load_file_contents(&path)
+            .into_iter()
+            .map(|(key, val)| (key, serde_json::from_slice(&val).unwrap()))
+            .collect()
     }
-
 }
 
 #[async_trait::async_trait(?Send)]
@@ -186,10 +187,11 @@ impl Storage for FsProvider {
     }
 }
 
-
 #[async_trait::async_trait(?Send)]
-impl<T: Serialize + DeserializeOwned + std::fmt::Debug + Sized + 'static> ItemStorage<T> for FsProvider  {
-    async fn xload_item(&self, space: &[&str], id: &str) -> Option<T>  {
+impl<T: Serialize + DeserializeOwned + std::fmt::Debug + Sized + 'static> ItemStorage<T>
+    for FsProvider
+{
+    async fn xload_item(&self, space: &[&str], id: &str) -> Option<T> {
         let bytes = self.load_content(space, id).await?;
         let x: T = bincode::deserialize(&bytes).unwrap();
         Some(x)

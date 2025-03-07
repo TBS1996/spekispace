@@ -28,7 +28,6 @@ other is the various dynamic things like, choose dependents of cards, choose oth
 
 */
 
-
 #[derive(Clone, Eq, PartialEq)]
 pub struct DynEntry {
     name: String,
@@ -352,7 +351,6 @@ mod entry_selector {
     use super::*;
 
     use speki_dto::LedgerItem;
-
 
     pub fn dependencies(col: Signal<Collection>) -> CardSelector {
         let f = MyClosure::new(move |card: CardEntry| {

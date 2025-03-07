@@ -2,7 +2,11 @@ use std::{fmt::Debug, sync::Arc};
 
 use dioxus::prelude::*;
 use speki_core::{
-    card::{BaseCard, CardId}, cardfilter::{CardFilter, FilterItem}, collection::{Collection, CollectionId}, ledger::CollectionEvent, AttributeDTO, Card
+    card::{BaseCard, CardId},
+    cardfilter::{CardFilter, FilterItem},
+    collection::{Collection, CollectionId},
+    ledger::CollectionEvent,
+    AttributeDTO, Card,
 };
 #[cfg(not(feature = "desktop"))]
 use speki_provider::{DexieProvider, WasmTime};
@@ -11,18 +15,10 @@ use tracing::info;
 #[cfg(not(feature = "desktop"))]
 use wasm_bindgen::prelude::*;
 
-
-
-
 #[cfg(feature = "desktop")]
 use dioxus::desktop::use_window;
 
-
-use crate::{
-    nav::SYNCING,
-    TouchRec, APP,
-};
-
+use crate::{nav::SYNCING, TouchRec, APP};
 
 #[cfg(not(feature = "desktop"))]
 use crate::firebase::{AuthUser, FirestoreProvider};
@@ -144,9 +140,6 @@ impl Debug for App {
     }
 }
 
-
-
-
 /// **Check if an element is present (Web & Desktop)**
 pub fn is_element_present(id: &str) -> bool {
     #[cfg(feature = "web")]
@@ -165,7 +158,6 @@ pub fn is_element_present(id: &str) -> bool {
     panic!()
 }
 
-
 #[cfg(not(feature = "desktop"))]
 #[wasm_bindgen]
 extern "C" {
@@ -173,7 +165,7 @@ extern "C" {
     fn now() -> f64;
 }
 
-/* 
+/*
 pub async fn sync(agent: AuthUser) {
     let time_provider = APP.read().0.time_provider.clone();
     info!("starting sync!");

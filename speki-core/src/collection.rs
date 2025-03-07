@@ -1,5 +1,9 @@
 use std::{
-    cmp::Ordering, collections::{BTreeSet, HashSet}, fmt::Display, sync::Arc, time::Duration
+    cmp::Ordering,
+    collections::{BTreeSet, HashSet},
+    fmt::Display,
+    sync::Arc,
+    time::Duration,
 };
 
 use async_recursion::async_recursion;
@@ -8,7 +12,12 @@ use speki_dto::LedgerItem;
 use tracing::{error, info, warn};
 use uuid::Uuid;
 
-use crate::{card::CardId, card_provider::CardProvider, ledger::{CollectionAction, CollectionEvent}, Card};
+use crate::{
+    card::CardId,
+    card_provider::CardProvider,
+    ledger::{CollectionAction, CollectionEvent},
+    Card,
+};
 
 pub type CollectionId = Uuid;
 
@@ -25,7 +34,6 @@ pub struct Collection {
     pub dyncards: Vec<MaybeDyn>,
 }
 
-
 impl LedgerItem<CollectionEvent> for Collection {
     type Error = ();
 
@@ -34,10 +42,9 @@ impl LedgerItem<CollectionEvent> for Collection {
             CollectionAction::SetName(s) => self.name = s,
             CollectionAction::InsertDyn(val) => self.dyncards.push(val),
             CollectionAction::RemoveDyn(val) => {
-                self.dyncards.retain(|x|x != &val);
+                self.dyncards.retain(|x| x != &val);
             }
         }
-
 
         Ok(self)
     }
@@ -96,9 +103,7 @@ impl Collection {
 
         for card in &self.dyncards {
             let xprovider = provider.clone();
-            futs.push(async move {
-                card.evaluate(xprovider).await
-            });
+            futs.push(async move { card.evaluate(xprovider).await });
         }
 
         for x in futures::future::join_all(futs).await {
@@ -145,7 +150,7 @@ impl Collection {
             futs.push(fut);
         }
 
-        for cards in futures::future::join_all(futs).await{
+        for cards in futures::future::join_all(futs).await {
             out.extend(cards);
         }
 
@@ -256,15 +261,15 @@ impl DynCard {
 
                 output
             }
-            DynCard::Dependents(id) => {
-                match provider
-                    .load(*id)
+            DynCard::Dependents(id) => match provider.load(*id).await {
+                Some(card) => card
+                    .dependents()
                     .await
-                    {
-                        Some(card) => card.dependents().await.into_iter().map(|x|MaybeCard::Card(x)).collect(),
-                        None =>  vec![],
-                    }
-                }
+                    .into_iter()
+                    .map(|x| MaybeCard::Card(x))
+                    .collect(),
+                None => vec![],
+            },
 
             DynCard::RecDependents(id) => {
                 let ids = match provider.load(*id).await {
@@ -283,4 +288,3 @@ impl DynCard {
         }
     }
 }
-

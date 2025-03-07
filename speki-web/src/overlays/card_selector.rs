@@ -2,12 +2,15 @@ use std::{collections::BTreeMap, future::Future, pin::Pin, sync::Arc};
 
 use dioxus::prelude::*;
 use speki_core::{
-    card::{bigrams, normalize_string, CardId}, card_provider::Caches, cardfilter::CardFilter, collection::{DynCard, MaybeDyn}, CacheKey
+    card::{bigrams, normalize_string, CardId},
+    card_provider::Caches,
+    cardfilter::CardFilter,
+    collection::{DynCard, MaybeDyn},
+    CacheKey,
 };
 use speki_web::{CardEntry, Node};
 use tracing::info;
 use uuid::Uuid;
-
 
 use crate::components::graph::GraphRep;
 
@@ -132,7 +135,13 @@ impl CardSelector {
                     let mut matching_cards: BTreeMap<Uuid, u32> = BTreeMap::new();
 
                     for bigram in bigrams(search.as_ref()) {
-                        let indices = APP.read().inner().card_provider.cache.get(CacheKey::Bigram(bigram)).await;
+                        let indices = APP
+                            .read()
+                            .inner()
+                            .card_provider
+                            .cache
+                            .get(CacheKey::Bigram(bigram))
+                            .await;
 
                         for id in indices.as_ref() {
                             let id: Uuid = id.parse().unwrap();
@@ -142,11 +151,9 @@ impl CardSelector {
                         }
                     }
 
-
                     info!("sorting cards");
                     let mut sorted_cards: Vec<_> = matching_cards.into_iter().collect();
                     sorted_cards.sort_by(|a, b| b.1.cmp(&a.1));
-
 
                     if search.is_empty() {
                         sorted_cards = cards.iter().take(100).map(|id| (*id.0, 0)).collect();

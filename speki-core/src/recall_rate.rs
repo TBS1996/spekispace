@@ -93,7 +93,6 @@ pub struct History {
     pub reviews: Vec<Review>,
 }
 
-
 impl History {
     pub fn inner(&self) -> &Vec<Review> {
         &self.reviews
@@ -150,7 +149,7 @@ impl History {
 
     pub fn push(&mut self, review: Review) {
         self.reviews.push(review);
-        self.reviews.sort_by_key(|r|r.timestamp);
+        self.reviews.sort_by_key(|r| r.timestamp);
     }
 
     pub fn insert_many(&mut self, reviews: impl IntoIterator<Item = Review>) {
@@ -176,11 +175,10 @@ pub struct Review {
 
 #[derive(Debug, Clone, Serialize, Deserialize, Hash)]
 pub struct ReviewEvent {
-pub id: CardId,
- pub   grade: Recall,
-  pub  timestamp: Duration,
+    pub id: CardId,
+    pub grade: Recall,
+    pub timestamp: Duration,
 }
-
 
 impl LedgerEvent for ReviewEvent {
     type Key = CardId;
@@ -189,7 +187,6 @@ impl LedgerEvent for ReviewEvent {
         self.id
     }
 }
-
 
 impl LedgerItem<ReviewEvent> for History {
     type Error = ();
@@ -221,16 +218,15 @@ impl LedgerItem<ReviewEvent> for History {
 
         actions
     }
-    
+
     fn new_default(id: CardId) -> Self {
         Self::new(id)
     }
-    
+
     fn item_id(&self) -> CardId {
         self.id
     }
 }
-
 
 #[derive(
     Ord, PartialOrd, Eq, PartialEq, Hash, Deserialize, Serialize, Debug, Default, Clone, Copy,

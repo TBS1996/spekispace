@@ -1,16 +1,15 @@
-use std::{collections::HashMap, time::Duration};
 use async_trait::async_trait;
 #[cfg(feature = "web")]
 use js_sys::Promise;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use speki_dto::ProviderId;
+use std::{collections::HashMap, time::Duration};
 use tracing::info;
 #[cfg(feature = "web")]
 use wasm_bindgen::prelude::*;
 
 use speki_provider::WasmTime;
-
 
 use crate::LOGIN_STATE;
 
@@ -57,7 +56,7 @@ fn duration_to_firestore_jsvalue(duration: Duration) -> JsValue {
     obj.into()
 }
 
-/* 
+/*
 #[async_trait(?Send)]
 impl<T: Item> Syncable<T> for FirestoreProvider {
     async fn save_id(&self, id: ProviderId) {

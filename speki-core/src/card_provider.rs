@@ -1,22 +1,29 @@
+use crate::{
+    audio::Audio,
+    card::{BaseCard, CardId},
+    ledger::{CardAction, CardEvent},
+    metadata::Metadata,
+    recall_rate::History,
+    CacheKey, Card, Provider, Recaller, TimeGetter,
+};
+use dioxus_logger::tracing::{info, trace};
 use std::{
     collections::{BTreeSet, HashMap, HashSet},
     fmt::Debug,
     sync::{Arc, RwLock},
 };
-use dioxus_logger::tracing::{info, trace};
-use crate::{
-    audio::Audio, card::{BaseCard, CardId}, ledger::{CardAction, CardEvent}, metadata::Metadata, recall_rate::History, CacheKey, Card, Provider, Recaller, TimeGetter
-};
 
 #[derive(Clone)]
-pub struct Caches{
+pub struct Caches {
     inner: Arc<RwLock<HashMap<CacheKey, Arc<HashSet<String>>>>>,
     providers: Provider,
 }
 
 impl Debug for Caches {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("Caches").field("inner", &self.inner).finish()
+        f.debug_struct("Caches")
+            .field("inner", &self.inner)
+            .finish()
     }
 }
 
@@ -37,19 +44,19 @@ impl Caches {
             key @ CacheKey::Bigram(_) => {
                 let (key, value) = key.to_parts();
                 self.providers.cards.load_property_cache(key, &value).await
-            },
+            }
             key @ CacheKey::CardType(_) => {
                 let (key, value) = key.to_parts();
                 self.providers.cards.load_property_cache(key, &value).await
-            },
+            }
             key @ CacheKey::Suspended(_) => {
                 let (key, value) = key.to_parts();
                 self.providers.cards.load_property_cache(key, &value).await
-            },
+            }
             key @ CacheKey::AttrId(_) => {
                 let (key, value) = key.to_parts();
                 self.providers.cards.load_property_cache(key, &value).await
-            },
+            }
         };
 
         let set = Arc::new(set);
@@ -83,7 +90,13 @@ impl CardProvider {
 
     pub async fn load_all_card_ids(&self) -> Vec<CardId> {
         info!("x1");
-        self.providers.cards.load_ids().await.into_iter().map(|id|id.parse().unwrap()).collect()
+        self.providers
+            .cards
+            .load_ids()
+            .await
+            .into_iter()
+            .map(|id| id.parse().unwrap())
+            .collect()
     }
 
     pub async fn filtered_load<F, Fut>(&self, filter: F) -> Vec<Arc<Card>>
@@ -127,7 +140,6 @@ impl CardProvider {
         todo!()
     }
 
-
     pub async fn load(&self, id: CardId) -> Option<Arc<Card>> {
         if let Some(card) = self.cards.read().unwrap().get(&id).cloned() {
             return Some(card);
@@ -142,21 +154,29 @@ impl CardProvider {
             Some(meta) => meta,
             None => Metadata::new(id),
         };
-        
 
         let front_audio: Option<Audio> = None;
         let back_audio: Option<Audio> = None;
 
-
-        let card = Arc::new(Card::from_parts(base, history, metadata, self.clone(), self.recaller.clone(), front_audio, back_audio).await);
+        let card = Arc::new(
+            Card::from_parts(
+                base,
+                history,
+                metadata,
+                self.clone(),
+                self.recaller.clone(),
+                front_audio,
+                back_audio,
+            )
+            .await,
+        );
 
         self.cards.write().unwrap().insert(id, card.clone());
 
         Some(card)
     }
 
-
-    pub fn invalidate_card(&self, id: CardId) -> Option<Arc<Card>>{
+    pub fn invalidate_card(&self, id: CardId) -> Option<Arc<Card>> {
         self.cards.write().unwrap().remove(&id)
     }
 

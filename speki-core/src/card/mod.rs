@@ -10,13 +10,18 @@ use std::{
 use futures::executor::block_on;
 use serde::{ser::SerializeSeq, Deserializer};
 use serde_json::Value;
-use tracing::info;
 use speki_dto::LedgerEvent;
 use speki_dto::LedgerItem;
+use tracing::info;
 use uuid::Uuid;
 
 use crate::{
-    audio::{Audio, AudioId}, card_provider::CardProvider, ledger::{CardAction, CardEvent, HistoryEvent, MetaEvent}, metadata::{IsSuspended, Metadata}, recall_rate::{History, Recall, Review, ReviewEvent, SimpleRecall}, RecallCalc, Recaller, TimeGetter
+    audio::{Audio, AudioId},
+    card_provider::CardProvider,
+    ledger::{CardAction, CardEvent, HistoryEvent, MetaEvent},
+    metadata::{IsSuspended, Metadata},
+    recall_rate::{History, Recall, Review, ReviewEvent, SimpleRecall},
+    RecallCalc, Recaller, TimeGetter,
 };
 
 pub type RecallRate = f32;
@@ -73,7 +78,6 @@ impl std::fmt::Display for Card {
     }
 }
 
-
 impl Card {
     pub fn front_audio(&self) -> Option<&Audio> {
         self.front_audio.as_ref()
@@ -90,13 +94,11 @@ impl Card {
     pub fn back_audio_id(&self) -> Option<AudioId> {
         self.base.back_audio
     }
-    
-    pub async fn dependents(&self) -> BTreeSet<Arc<Self>> {
 
+    pub async fn dependents(&self) -> BTreeSet<Arc<Self>> {
         let mut cards = BTreeSet::default();
-        for card in 
-        self.card_provider.dependents(self.id).await {
-            let card = self.card_provider.load(card).await.unwrap(); 
+        for card in self.card_provider.dependents(self.id).await {
+            let card = self.card_provider.load(card).await.unwrap();
             cards.insert(card);
         }
         cards
@@ -174,8 +176,8 @@ impl Card {
 
     pub fn is_instance_of(&self, class: CardId) -> bool {
         if self.base.data.ty == CType::Instance {
-            self.base.data.class() .unwrap() == class
-        } else  {
+            self.base.data.class().unwrap() == class
+        } else {
             false
         }
     }
@@ -187,14 +189,14 @@ impl Card {
     pub async fn set_ref(mut self, reff: CardId) -> Card {
         let backside = BackSide::Card(reff);
         self.base = self.base.set_backside(backside);
-        let action = CardAction::SetBackRef ( reff );
+        let action = CardAction::SetBackRef(reff);
         let event = CardEvent::new(self.id, action);
         self.card_provider.providers.run_event(event).await;
         self.refresh().await;
         self
     }
 
-    pub async fn rm_dependency(&mut self, dependency: CardId){
+    pub async fn rm_dependency(&mut self, dependency: CardId) {
         info!(
             "for removal, dependent: {}, -- dependency: {}",
             self.id(),
@@ -209,7 +211,7 @@ impl Card {
 
         info!("dep was there: {res}");
         self.base.remove_dep(dependency);
-        let action = CardAction::RemoveDependency (dependency );
+        let action = CardAction::RemoveDependency(dependency);
         let event = CardEvent::new(self.id, action);
         self.card_provider.providers.run_event(event).await;
         self.refresh().await;
@@ -217,7 +219,7 @@ impl Card {
 
     pub async fn add_dependency(&mut self, dependency: CardId) {
         self.base.dependencies.insert(dependency);
-        let action = CardAction::AddDependency ( dependency );
+        let action = CardAction::AddDependency(dependency);
         let event = CardEvent::new(self.id, action);
         self.card_provider.providers.run_event(event).await;
         self.refresh().await;
@@ -348,7 +350,11 @@ impl Card {
     }
 
     pub async fn print(&self) -> String {
-        self.base.data.front.clone().unwrap_or_else(|| String::from("oops"))
+        self.base
+            .data
+            .front
+            .clone()
+            .unwrap_or_else(|| String::from("oops"))
     }
 
     pub fn is_pending(&self) -> bool {

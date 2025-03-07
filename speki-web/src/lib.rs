@@ -223,8 +223,6 @@ impl NodeMetadata {
     }
 }
 
-
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Node {
     Card(CardId),

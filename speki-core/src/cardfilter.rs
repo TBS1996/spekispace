@@ -205,4 +205,3 @@ pub struct FilterItem {
     id: Uuid,
     filters: CardFilter,
 }
-

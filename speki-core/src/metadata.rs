@@ -4,10 +4,13 @@ use serde::{
     de::{self, Deserializer},
     Deserialize, Serialize,
 };
-use speki_dto::{LedgerItem};
+use speki_dto::LedgerItem;
 use uuid::Uuid;
 
-use crate::{card::CardId, ledger::{MetaAction, MetaEvent}};
+use crate::{
+    card::CardId,
+    ledger::{MetaAction, MetaEvent},
+};
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize, Hash)]
 pub struct Metadata {
@@ -41,17 +44,17 @@ impl LedgerItem<MetaEvent> for Metadata {
         if self.suspended.is_suspended() {
             actions.push(MetaEvent {
                 id: self.id,
-                action: MetaAction::Suspend(true)
+                action: MetaAction::Suspend(true),
             });
         }
 
         actions
     }
-    
+
     fn new_default(id: CardId) -> Self {
         Self::new(id)
     }
-    
+
     fn item_id(&self) -> CardId {
         self.id
     }

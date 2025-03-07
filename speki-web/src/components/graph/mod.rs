@@ -126,7 +126,6 @@ pub fn GraphRepRender(
     new_card_hook: Option<MyClosure>,
     is_init: Signal<bool>,
 ) -> Element {
-
     let cur_scope = current_scope_id().unwrap();
     scope.clone().set(cur_scope.0);
     info!("init scope: {scope:?}");
