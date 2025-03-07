@@ -223,17 +223,6 @@ fn Debug() -> Element {
             p {"cards hash: {card_hash.cloned().unwrap_or_default()}"}
             p {"history hash: {review_hash.cloned().unwrap_or_default()}"}
 
-
-        button {
-            onclick: move |_| {
-                spawn(async move {
-                    APP.read().inner().provider.cards.clear_ledger().await
-                });
-            },
-            "clear ledgers!"
-        }
-
-
         button {
             onclick: move |_| {
                 spawn(async move {

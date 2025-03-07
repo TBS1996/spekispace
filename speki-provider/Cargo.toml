@@ -24,6 +24,7 @@ speki-dto.workspace = true
 uuid.workspace = true
 serde-wasm-bindgen = { workspace = true, optional = true }
 once_cell.workspace = true
+bincode.workspace = true
 
 [features]
 fs = ["dep:rayon", "dep:tokio", "dep:serde"]

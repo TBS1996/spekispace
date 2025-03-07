@@ -1,5 +1,5 @@
 use std::{collections::{HashMap, HashSet}, fmt::Debug, hash, sync::{Arc, RwLock}, time::Duration};
-use card::{BackSide, BaseCard, CType, CardId, RecallRate};
+use card::{BackSide, BaseCard, CType, CardId, RawCard, RecallRate};
 use card_provider::CardProvider;
 use cardfilter::{CardFilter};
 use collection::{Collection, CollectionId};
@@ -9,7 +9,7 @@ use ledger::{check_compose, decompose, decompose_history, CardAction, CardEvent,
 use metadata::Metadata;
 use recall_rate::{History, ReviewEvent};
 use serde::{de::DeserializeOwned, Serialize};
-use speki_dto::{Ledger, LedgerEntry, LedgerEvent, RunLedger, Storage, TimeProvider};
+use speki_dto::{Ledger, LedgerEntry, LedgerEvent, LedgerItem, Storage, TimeProvider};
 use tracing::trace;
 
 pub mod attribute;
@@ -25,8 +25,8 @@ pub mod ledger;
 
 pub use attribute::{Attribute, AttributeDTO, AttributeId};
 pub use card::{
-    AttributeCard, Card, CardTrait, CardType, ClassCard, EventCard, InstanceCard, NormalCard,
-    StatementCard, UnfinishedCard,
+    AttributeCard, Card, CardType, ClassCard, InstanceCard,
+    StatementCard,
 };
 pub use common::current_time;
 pub use omtrent::TimeStamp;
@@ -34,30 +34,41 @@ pub use recall_rate::SimpleRecall;
 
 
 #[derive(Clone, PartialEq, PartialOrd, Hash, Eq, Debug)]
+pub enum DepCacheKey {
+    Dependent,
+    Instance,
+    BackRef,
+    SubClass,
+    AttrClass,
+}
+
+impl DepCacheKey {
+    pub fn to_str(&self) -> &'static str {
+        match self {
+            DepCacheKey::Dependent => "dependents",
+            DepCacheKey::Instance => "instances",
+            DepCacheKey::BackRef => "backrefs",
+            DepCacheKey::SubClass => "subclasses",
+            DepCacheKey::AttrClass => "attrclass",
+        }
+    }
+}
+
+#[derive(Clone, PartialEq, PartialOrd, Hash, Eq, Debug)]
 pub enum CacheKey {
-    Dependent(CardId),
     Bigram([char;2]),
     Suspended(bool),
     CardType(CType),
-    Instance(CardId),
-    BackRef(CardId),
-    SubClass(CardId),
     AttrId(AttributeId),
-    AttrClass(CardId),
 }
 
 impl CacheKey {
-    pub fn to_string(&self) -> String {
+    pub fn to_parts(&self) -> (&'static str, String) {
         match self {
-            CacheKey::Dependent(id) => format!("dependents:{id}"),
-            CacheKey::Bigram([a, b]) => format!("bigram:{a}{b}"),
-            CacheKey::Suspended(flag) => format!("suspended:{flag}"),
-            CacheKey::CardType(cty) => format!("type:{:?}", cty),
-            CacheKey::Instance(id) => format!("instance:{id}"),
-            CacheKey::BackRef(id) => format!("backref:{id}"),
-            CacheKey::SubClass(id) => format!("subclass:{id}"),
-            CacheKey::AttrId(id) => format!("attrid:{id}"),
-            CacheKey::AttrClass(id) => format!("attrclass:{id}"),
+            CacheKey::Bigram([a, b]) => ("bigram", format!("{a}{b}")),
+            CacheKey::Suspended(flag) => ("suspended", format!("{flag}")),
+            CacheKey::CardType(ctype) => ("cardtype", format!("{ctype:?}")),
+            CacheKey::AttrId(id) => ("attr_id", id.to_string()),
         }
     }
 }
@@ -93,7 +104,7 @@ impl CollectionProvider {
 
 #[derive(Clone)]
 pub struct Provider {
-    pub cards: Ledger<BaseCard, CardEvent>,
+    pub cards: Ledger<RawCard, CardEvent>,
     pub reviews: Ledger<History, ReviewEvent>,
     pub collections: CollectionProvider,
     pub metadata: Ledger<Metadata, MetaEvent>,
@@ -107,7 +118,7 @@ impl Provider {
 
     pub async fn check_decompose_lol(&self) {
         for (_, card) in self.cards.load_all().await{
-            check_compose(card);
+            todo!()
         }
     }
 
@@ -117,9 +128,10 @@ impl Provider {
         let mut actions: Vec<CardEvent> = vec![];
 
         for (_, card) in self.cards.load_all().await {
-            for action in decompose(&card) {
-                actions.push(action);
-            }
+            todo!();
+          //  for action in decompose(&card) {
+         //       actions.push(action);
+         //   }
         }
 
         todo!();
@@ -146,23 +158,27 @@ impl Provider {
 
 #[derive(Clone)]
 pub struct MemStorage{
-    storage: Arc<RwLock<HashMap<String, HashMap<String, String>>>>,
+    storage: Arc<RwLock<HashMap<String, HashMap<String, Vec<u8>>>>>,
 }
 
 #[async_trait::async_trait(?Send)]
-impl<T: Serialize + DeserializeOwned + 'static> Storage<T> for MemStorage{
-    async fn load_content(&self, space: &str, id: &str) -> Option<String> {
-        self.storage.read().unwrap().get(space)?.get(id).cloned()
+impl Storage for MemStorage{
+    async fn load_content(&self, space: &[&str], id: &str) -> Option<Vec<u8>> {
+        let space = space.join("::");
+        self.storage.read().unwrap().get(&space)?.get(id).cloned()
     }
-    async fn load_all_contents(&self, space: &str) -> HashMap<String, String> {
-        self.storage.read().unwrap().get(space).cloned().unwrap_or_default()
+    async fn load_all_contents(&self, space: &[&str]) -> HashMap<String, Vec<u8>> {
+        let space = space.join("::");
+        self.storage.read().unwrap().get(&space).cloned().unwrap_or_default()
     }
-    async fn save_content(&self, space: &str, id: &str, record: String) {
-        self.storage.write().unwrap().entry(space.to_string()).or_default().insert(id.to_string(), record);
+    async fn save_content(&self, space: &[&str], id: &str, content: &[u8]) {
+        let space = space.join("::");
+        self.storage.write().unwrap().entry(space.to_string()).or_default().insert(id.to_string(), content.to_owned());
     }
 
-    async fn clear_space(&self, space: &str) {
-        self.storage.write().unwrap().remove(space);
+    async fn clear_space(&self, space: &[&str]) {
+        let space = space.join("::");
+        self.storage.write().unwrap().remove(&space);
     }
 }
 
@@ -184,7 +200,7 @@ impl Debug for App {
 }
 
 
-pub async fn import_card_ledger(ledger: Ledger<BaseCard, CardEvent>) {
+pub async fn import_card_ledger(ledger: Ledger<RawCard, CardEvent>) {
     let path = std::path::PathBuf::from("/home/tor/Downloads/spekicards.json");
 
     #[derive(Debug, serde::Deserialize)]
@@ -196,13 +212,16 @@ pub async fn import_card_ledger(ledger: Ledger<BaseCard, CardEvent>) {
 
     let y: Lol = serde_json::from_str(&s).unwrap();
 
+    let mut prev: Option<LedgerEntry<CardEvent>> = None;
+
     for rec in y.records {
         let val = rec.get("content").unwrap().as_str().unwrap().to_string();
-        let card:  BaseCard = toml::from_str(&val).unwrap();
-        let actions = decompose(&card);
-        for action in actions {
-            ledger.save_and_run(action).await;
-        }
+        let card:  RawCard = toml::from_str(&val).unwrap();
+        todo!()
+        //let actions = decompose(&card);
+        //for action in actions {
+        //    prev = Some(ledger.xsave_ledger(action, prev).await);
+        //}
     }
 }
 
@@ -218,13 +237,14 @@ pub async fn import_history_ledger(ledger: Ledger<History, ReviewEvent>) {
     let s = std::fs::read_to_string(&path).unwrap();
 
     let y: Lol = serde_json::from_str(&s).unwrap();
+    let mut prev: Option<LedgerEntry<ReviewEvent>> = None;
 
     for rec in y.records {
         let val = rec.get("content").unwrap().as_str().unwrap().to_string();
         let card:  History = toml::from_str(&val).unwrap();
         let actions = decompose_history(card);
         for action in actions {
-            ledger.save_and_run(action).await;
+            prev = Some(ledger.xsave_ledger(action, prev).await);
         }
     }
 }
@@ -233,7 +253,7 @@ impl App {
     pub fn new<A, B>(
         recall_calc: A,
         time_provider: B,
-        card_provider: Ledger<BaseCard, CardEvent>,
+        card_provider: Ledger<RawCard, CardEvent>,
         history_provider: Ledger<History, ReviewEvent>,
         collections_provider: Ledger<Collection, CollectionEvent>,
         meta_provider: Ledger<Metadata, MetaEvent>,
@@ -318,28 +338,6 @@ impl App {
         ids
     }
 
-    pub async fn add_class(
-        &self,
-        front: String,
-        back: impl Into<BackSide>,
-        parent_class: Option<CardId>,
-    ) -> CardId {
-        let back = back.into();
-        let data = ClassCard {
-            name: front,
-            back,
-            parent_class,
-        };
-
-        let id = CardId::new_v4();
-
-        let action = CardAction::UpsertCard ( data.into() );
-        let event = CardEvent::new(id, action);
-
-        self.provider.run_event(event).await;
-        id
-    }
-
     pub async fn add_instance(
         &self,
         front: String,
@@ -347,13 +345,13 @@ impl App {
         class: CardId,
     ) -> CardId {
         let back = back.map(|back| back.into());
-        let data = InstanceCard {
+        let data = CardType::Instance {
             name: front,
             back,
             class,
         };
         let id = CardId::new_v4();
-        let event = CardEvent::new(id, CardAction::UpsertCard ( data.into() ));
+        let event = CardEvent::new(id, CardAction::UpsertCard ( data ));
         self.provider.run_event(event).await;
         id
     }
@@ -381,18 +379,6 @@ impl App {
         let event = CardEvent::new(id, CardAction::UpsertCard ( data.into() ));
         self.provider.run_event(event).await;
         id
-    }
-
-    pub async fn set_class(&self, card_id: CardId, class: CardId) -> Result<()> {
-        let card = self.card_provider.load(card_id).await.unwrap();
-
-        let instance = InstanceCard {
-            name: card.print().await,
-            back: card.back_side().map(ToOwned::to_owned),
-            class,
-        };
-        Arc::unwrap_or_clone(card).into_type(instance).await;
-        Ok(())
     }
 
     pub async fn load_class_cards(&self) -> Vec<Arc<Card>> {

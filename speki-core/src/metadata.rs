@@ -4,7 +4,7 @@ use serde::{
     de::{self, Deserializer},
     Deserialize, Serialize,
 };
-use speki_dto::{RunLedger};
+use speki_dto::{LedgerItem};
 use uuid::Uuid;
 
 use crate::{card::CardId, ledger::{MetaAction, MetaEvent}};
@@ -24,7 +24,7 @@ impl Metadata {
     }
 }
 
-impl RunLedger<MetaEvent> for Metadata {
+impl LedgerItem<MetaEvent> for Metadata {
     type Error = ();
 
     fn run_event(mut self, event: MetaEvent) -> Result<Self, ()> {
@@ -48,12 +48,12 @@ impl RunLedger<MetaEvent> for Metadata {
         actions
     }
     
-    fn new_default(id: String) -> Self {
-        Self::new(id.parse().unwrap())
+    fn new_default(id: CardId) -> Self {
+        Self::new(id)
     }
     
-    fn item_id(&self) -> String {
-        self.id.to_string()
+    fn item_id(&self) -> CardId {
+        self.id
     }
 }
 

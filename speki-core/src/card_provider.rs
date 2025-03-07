@@ -34,41 +34,21 @@ impl Caches {
         }
 
         let set = match key.clone() {
-           key @ CacheKey::Dependent(_) =>  {
-                let key = key.to_string();
-                self.providers.cards.load_cache(&key).await
-            },
             key @ CacheKey::Bigram(_) => {
-                let key = key.to_string();
-                self.providers.cards.load_cache(&key).await
+                let (key, value) = key.to_parts();
+                self.providers.cards.load_property_cache(key, &value).await
             },
             key @ CacheKey::CardType(_) => {
-                let key = key.to_string();
-                self.providers.cards.load_cache(&key).await
+                let (key, value) = key.to_parts();
+                self.providers.cards.load_property_cache(key, &value).await
             },
             key @ CacheKey::Suspended(_) => {
-                let key = key.to_string();
-                self.providers.metadata.load_cache(&key).await
-            },
-            key @ CacheKey::BackRef(_) => {
-                let key = key.to_string();
-                self.providers.cards.load_cache(&key).await
-            },
-            key @ CacheKey::Instance(_) => {
-                let key = key.to_string();
-                self.providers.cards.load_cache(&key).await
-            },
-            key @ CacheKey::SubClass(_) => {
-                let key = key.to_string();
-                self.providers.cards.load_cache(&key).await
-            },
-            key @ CacheKey::AttrClass(_) => {
-                let key = key.to_string();
-                self.providers.cards.load_cache(&key).await
+                let (key, value) = key.to_parts();
+                self.providers.cards.load_property_cache(key, &value).await
             },
             key @ CacheKey::AttrId(_) => {
-                let key = key.to_string();
-                self.providers.cards.load_cache(&key).await
+                let (key, value) = key.to_parts();
+                self.providers.cards.load_property_cache(key, &value).await
             },
         };
 
@@ -143,7 +123,8 @@ impl CardProvider {
 
     pub async fn dependents(&self, id: CardId) -> BTreeSet<CardId> {
         trace!("dependents of: {}", id);
-        Arc::unwrap_or_clone(self.cache.get(CacheKey::Dependent(id)).await).into_iter().map(|x|x.parse().unwrap()).collect()
+        //Arc::unwrap_or_clone(self.cache.get(CacheKey::Dependent(id)).await).into_iter().map(|x|x.parse().unwrap()).collect()
+        todo!()
     }
 
 

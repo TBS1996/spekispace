@@ -4,7 +4,7 @@ use std::{
 
 use async_recursion::async_recursion;
 use serde::{Deserialize, Serialize};
-use speki_dto::RunLedger;
+use speki_dto::LedgerItem;
 use tracing::{error, info, warn};
 use uuid::Uuid;
 
@@ -26,7 +26,7 @@ pub struct Collection {
 }
 
 
-impl RunLedger<CollectionEvent> for Collection {
+impl LedgerItem<CollectionEvent> for Collection {
     type Error = ();
 
     fn run_event(mut self, event: CollectionEvent) -> Result<Self, Self::Error> {
@@ -46,16 +46,16 @@ impl RunLedger<CollectionEvent> for Collection {
         todo!()
     }
 
-    fn new_default(id: String) -> Self {
+    fn new_default(id: CollectionId) -> Self {
         Self {
-            id: id.parse().unwrap(),
+            id,
             name: "uninit".to_string(),
             dyncards: Default::default(),
         }
     }
 
-    fn item_id(&self) -> String {
-        self.id.to_string()
+    fn item_id(&self) -> CollectionId {
+        self.id
     }
 }
 

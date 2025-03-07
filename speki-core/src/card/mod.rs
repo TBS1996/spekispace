@@ -11,6 +11,8 @@ use futures::executor::block_on;
 use serde::{ser::SerializeSeq, Deserializer};
 use serde_json::Value;
 use tracing::info;
+use speki_dto::LedgerEvent;
+use speki_dto::LedgerItem;
 use uuid::Uuid;
 
 use crate::{
@@ -28,7 +30,7 @@ pub struct Card {
     id: CardId,
     front_audio: Option<Audio>,
     back_audio: Option<Audio>,
-    base: BaseCard,
+    base: RawCard,
     metadata: Metadata,
     history: History,
     card_provider: CardProvider,
@@ -59,7 +61,7 @@ impl Debug for Card {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let mut s = String::new();
         s.push_str(&format!("{:?}\n", self.id));
-        s.push_str(&format!("{:?}\n", self.base.ty));
+        s.push_str(&format!("{:?}\n", self.base.data.ty));
 
         write!(f, "{}", s)
     }
@@ -71,8 +73,6 @@ impl std::fmt::Display for Card {
     }
 }
 
-use speki_dto::LedgerEvent;
-use speki_dto::RunLedger;
 
 impl Card {
     pub fn front_audio(&self) -> Option<&Audio> {
@@ -91,24 +91,6 @@ impl Card {
         self.base.back_audio
     }
     
-    pub fn get_ty(&self) -> CardType {
-        self.base.ty.clone()
-    }
-
-    /// Loads all the ancestor ancestor classes
-    /// for example, king, human male, human
-    pub async fn load_ancestor_classes(&self) -> Vec<CardId> {
-        let mut classes = vec![];
-        let mut parent_class = self.parent_class();
-
-        while let Some(class) = parent_class {
-            classes.push(class);
-            parent_class = self.card_provider.load(class).await.unwrap().parent_class();
-        }
-
-        classes
-    }
-
     pub async fn dependents(&self) -> BTreeSet<Arc<Self>> {
 
         let mut cards = BTreeSet::default();
@@ -160,7 +142,7 @@ impl Card {
     }
 
     pub async fn from_parts(
-        base: BaseCard,
+        base: RawCard,
         history: History,
         metadata: Metadata,
         card_provider: CardProvider,
@@ -169,8 +151,6 @@ impl Card {
         back_audio: Option<Audio>,
     ) -> Self {
         let id = base.id;
-
-        debug_assert!(id.to_string() == history.item_id() && id.to_string() == metadata.item_id());
 
         Self {
             id,
@@ -184,46 +164,29 @@ impl Card {
         }
     }
 
-    pub fn card_type(&self) -> &CardType {
-        &self.base.ty
-    }
-
-    /// Returns the class this card belongs to (if any)
-    pub fn parent_class(&self) -> Option<CardId> {
-        match &self.base.ty {
-            CardType::Instance(instance) => Some(instance.class),
-            CardType::Class(class) => class.parent_class,
-            CardType::Normal(_) => None,
-            CardType::Unfinished(_) => None,
-            CardType::Attribute(_) => None,
-            CardType::Statement(_) => None,
-            CardType::Event(_) => None,
-        }
-    }
-
     pub fn is_finished(&self) -> bool {
-        self.base.ty.is_finished()
+        self.base.data.ty != CType::Unfinished
     }
 
     pub fn is_class(&self) -> bool {
-        self.base.ty.is_class()
+        self.base.data.ty == CType::Class
     }
 
-    pub fn is_instance_of(&self, _class: CardId) -> bool {
-        if let CardType::Instance(InstanceCard { class, .. }) = self.base.ty {
-            class == _class
-        } else {
+    pub fn is_instance_of(&self, class: CardId) -> bool {
+        if self.base.data.ty == CType::Instance {
+            self.base.data.class() .unwrap() == class
+        } else  {
             false
         }
     }
 
     pub fn is_instance(&self) -> bool {
-        self.base.ty.is_instance()
+        self.base.data.ty == CType::Instance
     }
 
     pub async fn set_ref(mut self, reff: CardId) -> Card {
         let backside = BackSide::Card(reff);
-        self.base.ty = self.base.ty.set_backside(backside);
+        self.base = self.base.set_backside(backside);
         let action = CardAction::SetBackRef ( reff );
         let event = CardEvent::new(self.id, action);
         self.card_provider.providers.run_event(event).await;
@@ -245,7 +208,7 @@ impl Card {
         }
 
         info!("dep was there: {res}");
-        self.base.ty.remove_dep(dependency);
+        self.base.remove_dep(dependency);
         let action = CardAction::RemoveDependency (dependency );
         let event = CardEvent::new(self.id, action);
         self.card_provider.providers.run_event(event).await;
@@ -260,21 +223,12 @@ impl Card {
         self.refresh().await;
     }
 
-    pub fn back_side(&self) -> Option<&BackSide> {
-        self.base.back_side()
+    pub fn back_side(&self) -> Option<BackSide> {
+        self.base.data.backside()
     }
 
     pub async fn delete_card(self) {
         self.card_provider.remove_card(self.id).await;
-    }
-
-    pub async fn into_type(mut self, data: impl Into<CardType>) -> Self {
-        self.base.ty = data.into();
-        let action = CardAction::UpsertCard ( self.base.ty.clone() );
-        let event = CardEvent::new(self.id, action);
-        self.card_provider.providers.run_event(event).await;
-        self.refresh().await;
-        self
     }
 
     pub async fn recursive_dependents(&self) -> Vec<CardId> {
@@ -340,13 +294,13 @@ impl Card {
             BackSide::Card(id) => {
                 format!(
                     "→ {}",
-                    self.card_provider.load(*id).await.unwrap().print().await
+                    self.card_provider.load(id).await.unwrap().print().await
                 )
             }
             BackSide::List(list) => format!("→ [{}]", {
                 let mut res = vec![];
                 for id in list {
-                    let s = self.card_provider.load(*id).await.unwrap().print().await;
+                    let s = self.card_provider.load(id).await.unwrap().print().await;
                     res.push(s);
                 }
 
@@ -394,7 +348,7 @@ impl Card {
     }
 
     pub async fn print(&self) -> String {
-        self.base.ty.display_front(&self.card_provider).await
+        self.base.data.front.clone().unwrap_or_else(|| String::from("oops"))
     }
 
     pub fn is_pending(&self) -> bool {

@@ -1,7 +1,7 @@
 use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
-use speki_dto::{LedgerEvent, RunLedger};
+use speki_dto::{LedgerEvent, LedgerItem};
 use uuid::Uuid;
 
 use crate::{
@@ -176,20 +176,22 @@ pub struct Review {
 
 #[derive(Debug, Clone, Serialize, Deserialize, Hash)]
 pub struct ReviewEvent {
-pub    id: CardId,
+pub id: CardId,
  pub   grade: Recall,
   pub  timestamp: Duration,
 }
 
 
 impl LedgerEvent for ReviewEvent {
-    fn id(&self) -> String {
-        self.id.to_string()
+    type Key = CardId;
+
+    fn id(&self) -> CardId {
+        self.id
     }
 }
 
 
-impl RunLedger<ReviewEvent> for History {
+impl LedgerItem<ReviewEvent> for History {
     type Error = ();
 
     fn run_event(mut self, event: ReviewEvent) -> Result<Self, ()> {
@@ -220,12 +222,12 @@ impl RunLedger<ReviewEvent> for History {
         actions
     }
     
-    fn new_default(id: String) -> Self {
-        Self::new(id.parse().unwrap())
+    fn new_default(id: CardId) -> Self {
+        Self::new(id)
     }
     
-    fn item_id(&self) -> String {
-        self.id.to_string()
+    fn item_id(&self) -> CardId {
+        self.id
     }
 }
 

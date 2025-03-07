@@ -2,7 +2,7 @@ use std::collections::VecDeque;
 
 use serde::{Deserialize, Serialize};
 use speki_dto::LedgerEvent;
-use crate::{audio::AudioId, card::{BaseCard, CardId}, collection::{CollectionId, DynCard, MaybeDyn}, metadata::Metadata, recall_rate::{History, Review, ReviewEvent}, CardType};
+use crate::{audio::AudioId, card::{BaseCard, CardId, RawCard}, collection::{CollectionId, DynCard, MaybeDyn}, metadata::Metadata, recall_rate::{History, Review, ReviewEvent}, CardType};
 
 
 pub fn decompose_history(history: History) -> Vec<ReviewEvent> {
@@ -45,17 +45,18 @@ pub fn decompose(card: &BaseCard) -> Vec<CardEvent> {
     actions.into_iter().map(|action|CardEvent::new(id, action)).collect()
 }
 
-use speki_dto::RunLedger;
+use speki_dto::LedgerItem;
 
 pub fn check_compose(old_card: BaseCard) {
     let actions = decompose(&old_card);
-    let mut card: BaseCard = BaseCard::new_default(old_card.id.to_string());
+    let mut card: RawCard = RawCard::new_default(old_card.id);
 
     for action in actions {
         card = card.run_event(action).unwrap();
     }
 
-    assert_eq!(&old_card, &card);
+    todo!()
+    //assert_eq!(&old_card, &card);
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, Hash)]
@@ -71,8 +72,10 @@ impl CardEvent {
 }
 
 impl LedgerEvent for CardEvent {
-    fn id(&self) -> String {
-        self.id.to_string()
+    type Key = CardId;
+
+    fn id(&self) -> Self::Key {
+        self.id
     }
 }
 
@@ -102,8 +105,10 @@ pub struct MetaEvent {
 }
 
 impl LedgerEvent for MetaEvent {
-    fn id(&self) -> String{
-        self.id.to_string()
+    type Key = CardId;
+
+    fn id(&self) -> Self::Key{
+        self.id
     }
 }
 
@@ -154,8 +159,10 @@ impl CollectionEvent {
 }
 
 impl LedgerEvent for CollectionEvent {
-    fn id(&self) -> String {
-        self.id.to_string()
+    type Key = CollectionId;
+
+    fn id(&self) -> Self::Key {
+        self.id
     }
 }
 

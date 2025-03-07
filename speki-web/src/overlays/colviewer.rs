@@ -12,7 +12,6 @@ use tracing::info;
 use uuid::Uuid;
 
 /*
-
 two main parts
 
 one is the list of the collection
@@ -27,8 +26,8 @@ the other one has maybe like tabs ?
 one tab is just search for a specific card and choose it
 other is the various dynamic things like, choose dependents of cards, choose other collection etc...
 
-
 */
+
 
 #[derive(Clone, Eq, PartialEq)]
 pub struct DynEntry {
@@ -352,7 +351,7 @@ pub fn ColViewRender(props: CollectionEditor) -> Element {
 mod entry_selector {
     use super::*;
 
-    use speki_dto::RunLedger;
+    use speki_dto::LedgerItem;
 
 
     pub fn dependencies(col: Signal<Collection>) -> CardSelector {
@@ -381,7 +380,7 @@ mod entry_selector {
 
     pub async fn collection(col: Signal<Collection>) -> ItemSelector<Collection> {
         let mut cols = APP.read().load_collections().await;
-        cols.retain(|_col| _col.id.to_string() != col.read().item_id());
+        cols.retain(|_col| _col.id != col.read().item_id());
         info!("debug 4");
 
         let f = Box::new(move |chosen_col: Collection| {
