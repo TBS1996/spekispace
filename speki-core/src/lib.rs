@@ -33,7 +33,7 @@ pub mod metadata;
 pub mod recall_rate;
 
 pub use attribute::{Attribute, AttributeDTO, AttributeId};
-pub use card::{AttributeCard, Card, CardType, ClassCard, InstanceCard, StatementCard};
+pub use card::{Card, CardType};
 pub use common::current_time;
 pub use omtrent::TimeStamp;
 pub use recall_rate::SimpleRecall;
@@ -366,7 +366,7 @@ impl App {
 
     pub async fn add_card_with_id(&self, front: String, back: impl Into<BackSide>, id: CardId) {
         let back = back.into();
-        let data = NormalCard { front, back };
+        let data = CardType::Normal { front, back };
         let event = CardEvent::new(id, CardAction::UpsertCard(data.into()));
         self.provider.run_event(event).await;
     }

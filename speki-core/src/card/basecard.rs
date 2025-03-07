@@ -39,31 +39,6 @@ impl BaseCard {
     }
 }
 
-impl From<RawCard> for BaseCard {
-    fn from(raw: RawCard) -> Self {
-        Self {
-            id: raw.id,
-            ty: into_any(raw.data),
-            dependencies: raw.dependencies,
-            front_audio: raw.front_audio,
-            back_audio: raw.back_audio,
-        }
-    }
-}
-
-impl From<BaseCard> for RawCard {
-    fn from(card: BaseCard) -> Self {
-        RawCard {
-            id: card.id,
-            data: from_any(card.ty),
-            dependencies: card.dependencies,
-            tags: Default::default(),
-            front_audio: card.front_audio,
-            back_audio: card.back_audio,
-        }
-    }
-}
-
 #[derive(PartialEq, Debug, Clone, Serialize, Deserialize, Hash)]
 pub enum CardType {
     /// A specific instance of a class
@@ -266,11 +241,10 @@ impl RawType {
     }
 }
 
-#[derive(Serialize, Deserialize, Default, Debug, Clone, Hash)]
+#[derive(Serialize, Deserialize, Debug, Clone, Hash)]
 pub struct RawCard {
     pub id: Uuid,
-    #[serde(flatten)]
-    pub data: RawType,
+    pub data: CardType,
     #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
     pub dependencies: BTreeSet<Uuid>,
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
@@ -336,35 +310,100 @@ impl RawCard {
 
     /// Returns the class this card belongs to (if any)
     pub fn parent_class(&self) -> Option<CardId> {
-        match self.data.ty {
-            CType::Instance | CType::Class => self.data.class,
-            CType::Normal => None,
-            CType::Unfinished => None,
-            CType::Attribute => None,
-            CType::Statement => None,
-            CType::Event => None,
+        match self.data {
+            CardType::Instance {class, ..} => Some(class),
+            CardType::Normal {..} => None,
+            CardType::Unfinished {..} => None,
+            CardType::Attribute {..} => None,
+            CardType::Class {parent_class, ..} => parent_class,
+            CardType::Statement { .. } => None,
+            CardType::Event {..} => None,
+        }
+    }
+
+
+    pub fn mut_backside(&mut self) -> Option<&mut BackSide> {
+        match &mut self.data {
+            CardType::Instance { back, ..} => back.as_mut(),
+            CardType::Normal { back, .. } => Some(back),
+            CardType::Unfinished { .. } => None,
+            CardType::Attribute { back, .. } => Some(back),
+            CardType::Class { back, ..} => Some(back),
+            CardType::Statement { .. } => None,
+            CardType::Event { .. } => todo!(),
+        }
+    }
+
+    pub fn ref_backside(&self) -> Option<&BackSide> {
+        match &self.data {
+            CardType::Instance { back, ..} => back.as_ref(),
+            CardType::Normal { back, .. } => Some(back),
+            CardType::Unfinished { .. } => None,
+            CardType::Attribute { back, .. } => Some(back),
+            CardType::Class { back, ..} => Some(back),
+            CardType::Statement { .. } => None,
+            CardType::Event { .. } => todo!(),
         }
     }
 
     /// Returns all dependencies of the card
     pub async fn dependencies(&self) -> BTreeSet<CardId> {
         let mut deps = self.dependencies.clone();
-        let backdeps = self
-            .data
-            .back
-            .clone()
-            .map(|b| b.dependencies())
-            .unwrap_or_default();
-        deps.extend(backdeps);
+        if let Some(back) = self.ref_backside() {
+            deps.extend(back.dependencies());
+        }
+
+        match &self.data {
+            CardType::Instance { class, ..} => {
+                deps.insert(*class);
+            },
+            CardType::Normal { .. } => {},
+            CardType::Unfinished { .. } => {},
+            CardType::Attribute {instance, ..} => {
+                deps.insert(*instance);
+            },
+            CardType::Class { parent_class, .. } =>  {
+                if let Some(class) = parent_class {
+                    deps.insert(*class);
+                }
+            },
+            CardType::Statement { .. } => {},
+            CardType::Event { .. } => {},
+        }
+
         deps
     }
 
     pub fn set_backside(mut self, new_back: BackSide) -> Self {
-        self.data.back = Some(new_back);
-        if self.data.ty == CType::Unfinished {
-            self.data.ty = CType::Normal;
-        }
+        let data = match self.data.clone() {
+            x @ CardType::Event{..} => x,
+            CardType::Instance{ name, back: _, class } => CardType::Instance { name , back: Some(new_back), class},
+            x @ CardType::Statement{..} => x,
+
+            CardType::Normal{ front, back: _ } => CardType::Normal {
+                front,
+                back: new_back,
+            },
+            CardType::Unfinished{ front } => CardType::Normal {
+                front,
+                back: new_back,
+            },
+            CardType::Attribute{
+                attribute,
+                instance: concept_card,
+                back: _
+            } => CardType::Attribute {
+                attribute,
+                back: new_back,
+                instance: concept_card,
+            },
+            CardType::Class { name, back: _, parent_class } => CardType::Class { name, back: new_back, parent_class  },
+        };
+
+        self.data = data;
         self
+
+
     }
 }
 
