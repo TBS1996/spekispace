@@ -436,30 +436,30 @@ impl LedgerItem<CardEvent> for RawCard {
                 .insert(*dep);
         }
 
-        match &self.data.ty {
-            CType::Normal => {}
-            CType::Unfinished => {}
-            CType::Instance => {
-                let class = self.data.class.unwrap();
+        match self.data {
+            CardType::Normal { .. } => {},
+            CardType::Unfinished { .. } => {},
+            CardType::Instance { name, back, class } => {
                 out.entry(&DepCacheKey::Instance.to_str())
                     .or_default()
                     .insert(class);
-            }
-            CType::Attribute => {
-                let instance = self.data.instance.unwrap();
+
+            },
+            CardType::Attribute { attribute, back, instance } => {
                 out.entry(&DepCacheKey::AttrClass.to_str())
                     .or_default()
                     .insert(instance);
-            }
-            CType::Class => {
-                if let Some(class) = self.data.class {
+            },
+            CardType::Class { name, back, parent_class } => {
+                if let Some(class) = parent_class {
                     out.entry(&DepCacheKey::SubClass.to_str())
                         .or_default()
                         .insert(class);
                 }
-            }
-            CType::Statement => {}
-            CType::Event => {}
+
+            },
+            CardType::Statement { front } => {},
+            CardType::Event {..} => {},
         };
 
         if let Some(back) = &self.data.back {
