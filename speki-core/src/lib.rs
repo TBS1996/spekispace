@@ -3,9 +3,7 @@ use card_provider::CardProvider;
 use cardfilter::CardFilter;
 use collection::{Collection, CollectionId};
 use dioxus_logger::tracing::info;
-use ledger::{
-    decompose_history, CardAction, CardEvent, CollectionEvent, Event, MetaEvent,
-};
+use ledger::{decompose_history, CardAction, CardEvent, CollectionEvent, Event, MetaEvent};
 use metadata::Metadata;
 use recall_rate::{History, ReviewEvent};
 use speki_dto::{Ledger, LedgerEntry, LedgerEvent, LedgerItem, Storage, TimeProvider};

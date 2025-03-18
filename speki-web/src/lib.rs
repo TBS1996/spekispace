@@ -12,7 +12,6 @@ use uuid::Uuid;
 #[cfg(feature = "web")]
 use wasm_bindgen::prelude::*;
 
-
 #[derive(Clone, Debug)]
 pub enum GraphAction {
     NodeClick(NodeId),

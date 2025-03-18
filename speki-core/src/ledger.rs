@@ -1,4 +1,3 @@
-
 use crate::{
     audio::AudioId,
     card::CardId,
@@ -23,7 +22,6 @@ pub fn decompose_history(history: History) -> Vec<ReviewEvent> {
 
     actions
 }
-
 
 #[derive(Serialize, Deserialize, Clone, Debug, Hash)]
 pub struct CardEvent {

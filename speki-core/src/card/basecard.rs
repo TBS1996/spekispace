@@ -1,6 +1,7 @@
 use super::*;
 use crate::{
-    attribute::AttributeId, audio::AudioId, card_provider::CardProvider, ledger::CardEvent, CacheKey, DepCacheKey,
+    attribute::AttributeId, audio::AudioId, card_provider::CardProvider, ledger::CardEvent,
+    CacheKey, DepCacheKey,
 };
 use omtrent::TimeStamp;
 use serde::{Deserialize, Serialize};
@@ -70,7 +71,15 @@ pub enum CardType {
 
 impl CardType {
     pub fn class(&self) -> Option<CardId> {
-        from_any(self.clone()).class()
+        match self {
+            CardType::Instance { class, .. } => Some(*class),
+            CardType::Normal { .. } => None,
+            CardType::Unfinished { .. } => None,
+            CardType::Attribute { .. } => None,
+            CardType::Class { parent_class, .. } => *parent_class,
+            CardType::Statement { .. } => None,
+            CardType::Event { .. } => None,
+        }
     }
 
     pub fn backside(&self) -> Option<&BackSide> {
@@ -86,14 +95,19 @@ impl CardType {
     }
 
     pub fn raw_front(&self) -> String {
-        from_any(self.clone()).front.unwrap_or_default()
+        match self.clone() {
+            CardType::Instance { name, .. } => name,
+            CardType::Normal { front, .. } => front,
+            CardType::Unfinished { front } => front,
+            CardType::Attribute { .. } => format!("attr card"),
+            CardType::Class { name, .. } => name,
+            CardType::Statement { front } => front,
+            CardType::Event { front, .. } => front,
+        }
     }
 
     pub fn raw_back(&self) -> String {
-        from_any(self.clone())
-            .back
-            .map(|b| b.to_string())
-            .unwrap_or_default()
+        self.backside().map(|x| x.to_string()).unwrap_or_default()
     }
 
     pub async fn get_dependencies(&self) -> BTreeSet<CardId> {
@@ -177,49 +191,6 @@ impl CardType {
     }
     pub fn is_finished(&self) -> bool {
         !matches!(self, Self::Unfinished { .. })
-    }
-}
-
-#[derive(Serialize, Deserialize, Default, Debug, Clone, Hash)]
-struct RawType {
-    pub ty: CType,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub front: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    back: Option<BackSide>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    class: Option<Uuid>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    instance: Option<Uuid>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    attribute: Option<Uuid>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    start_time: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    end_time: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    parent_event: Option<Uuid>,
-}
-
-impl RawType {
-    pub fn class(&self) -> Option<Uuid> {
-        self.class.clone()
-    }
-
-    pub fn backside(&self) -> Option<BackSide> {
-        use CType as C;
-        match self.ty {
-            C::Instance | C::Normal | C::Attribute | C::Class => self.back.clone(),
-            C::Unfinished | C::Statement | C::Event => None,
-        }
-    }
-
-    pub fn mut_backside(&mut self) -> Option<&mut BackSide> {
-        use CType as C;
-        match self.ty {
-            C::Instance | C::Normal | C::Attribute | C::Class => self.back.as_mut(),
-            C::Unfinished | C::Statement | C::Event => None,
-        }
     }
 }
 
@@ -757,59 +728,4 @@ impl CType {
             CType::Event => false,
         }
     }
-}
-
-pub fn from_any(ty: CardType) -> RawType {
-    let mut raw = RawType::default();
-    let fieldless = ty.fieldless();
-    raw.ty = fieldless;
-
-    match ty {
-        CardType::Instance { name, class, back } => {
-            raw.class = Some(class);
-            raw.front = Some(name);
-            raw.back = back;
-        }
-        CardType::Normal { front, back } => {
-            raw.front = Some(front);
-            raw.back = Some(back);
-        }
-        CardType::Unfinished { front } => {
-            raw.front = Some(front);
-        }
-        CardType::Attribute {
-            attribute,
-            back,
-            instance,
-        } => {
-            raw.attribute = Some(attribute);
-            raw.back = Some(back);
-            raw.instance = Some(instance);
-        }
-        CardType::Class {
-            name,
-            back,
-            parent_class,
-        } => {
-            raw.front = Some(name);
-            raw.back = Some(back);
-            raw.class = parent_class;
-        }
-        CardType::Statement { front } => {
-            raw.front = Some(front);
-        }
-        CardType::Event {
-            front,
-            start_time,
-            end_time,
-            parent_event,
-        } => {
-            raw.front = Some(front);
-            raw.start_time = Some(start_time.serialize());
-            raw.end_time = end_time.map(|t| t.serialize());
-            raw.parent_event = parent_event;
-        }
-    };
-
-    raw
 }

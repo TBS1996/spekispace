@@ -5,7 +5,8 @@ use speki_core::{
     card::CardId,
     cardfilter::CardFilter,
     collection::{Collection, CollectionId},
-    ledger::CollectionEvent, Card,
+    ledger::CollectionEvent,
+    Card,
 };
 #[cfg(not(feature = "desktop"))]
 use speki_provider::{DexieProvider, WasmTime};
@@ -13,7 +14,6 @@ use speki_web::{CardEntry, Node, NodeMetadata};
 use tracing::info;
 #[cfg(not(feature = "desktop"))]
 use wasm_bindgen::prelude::*;
-
 
 use crate::APP;
 
