@@ -167,15 +167,15 @@ impl Card {
     }
 
     pub fn is_finished(&self) -> bool {
-        !matches!(&self.base.data, CardType::Unfinished {..})
+        !matches!(&self.base.data, CardType::Unfinished { .. })
     }
 
     pub fn is_class(&self) -> bool {
-        matches!(&self.base.data, CardType::Class {..})
+        matches!(&self.base.data, CardType::Class { .. })
     }
 
     pub fn is_instance_of(&self, _class: CardId) -> bool {
-        if let CardType::Instance {class, ..} = &self.base.data {
+        if let CardType::Instance { class, .. } = &self.base.data {
             *class == _class
         } else {
             false
@@ -346,9 +346,7 @@ impl Card {
     }
 
     pub async fn print(&self) -> String {
-        self.base
-            .data
-            .raw_front()
+        self.base.data.raw_front()
     }
 
     pub fn is_pending(&self) -> bool {

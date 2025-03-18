@@ -10,7 +10,6 @@ use std::collections::{HashMap, HashSet};
 
 pub type CardId = Uuid;
 
-
 #[derive(PartialEq, Debug, Clone, Serialize, Deserialize, Hash)]
 pub enum CardType {
     /// A specific instance of a class
@@ -77,7 +76,7 @@ impl CardType {
 
     pub fn backside(&self) -> Option<&BackSide> {
         match self {
-            CardType::Instance {back, ..} => back.as_ref(),
+            CardType::Instance { back, .. } => back.as_ref(),
             CardType::Normal { back, .. } => Some(&back),
             CardType::Unfinished { .. } => None,
             CardType::Attribute { back, .. } => Some(&back),
@@ -295,24 +294,23 @@ impl RawCard {
     /// Returns the class this card belongs to (if any)
     pub fn parent_class(&self) -> Option<CardId> {
         match self.data {
-            CardType::Instance {class, ..} => Some(class),
-            CardType::Normal {..} => None,
-            CardType::Unfinished {..} => None,
-            CardType::Attribute {..} => None,
-            CardType::Class {parent_class, ..} => parent_class,
+            CardType::Instance { class, .. } => Some(class),
+            CardType::Normal { .. } => None,
+            CardType::Unfinished { .. } => None,
+            CardType::Attribute { .. } => None,
+            CardType::Class { parent_class, .. } => parent_class,
             CardType::Statement { .. } => None,
-            CardType::Event {..} => None,
+            CardType::Event { .. } => None,
         }
     }
 
-
     pub fn mut_backside(&mut self) -> Option<&mut BackSide> {
         match &mut self.data {
-            CardType::Instance { back, ..} => back.as_mut(),
+            CardType::Instance { back, .. } => back.as_mut(),
             CardType::Normal { back, .. } => Some(back),
             CardType::Unfinished { .. } => None,
             CardType::Attribute { back, .. } => Some(back),
-            CardType::Class { back, ..} => Some(back),
+            CardType::Class { back, .. } => Some(back),
             CardType::Statement { .. } => None,
             CardType::Event { .. } => todo!(),
         }
@@ -320,11 +318,11 @@ impl RawCard {
 
     pub fn ref_backside(&self) -> Option<&BackSide> {
         match &self.data {
-            CardType::Instance { back, ..} => back.as_ref(),
+            CardType::Instance { back, .. } => back.as_ref(),
             CardType::Normal { back, .. } => Some(back),
             CardType::Unfinished { .. } => None,
             CardType::Attribute { back, .. } => Some(back),
-            CardType::Class { back, ..} => Some(back),
+            CardType::Class { back, .. } => Some(back),
             CardType::Statement { .. } => None,
             CardType::Event { .. } => todo!(),
         }
@@ -338,21 +336,21 @@ impl RawCard {
         }
 
         match &self.data {
-            CardType::Instance { class, ..} => {
+            CardType::Instance { class, .. } => {
                 deps.insert(*class);
-            },
-            CardType::Normal { .. } => {},
-            CardType::Unfinished { .. } => {},
-            CardType::Attribute {instance, ..} => {
+            }
+            CardType::Normal { .. } => {}
+            CardType::Unfinished { .. } => {}
+            CardType::Attribute { instance, .. } => {
                 deps.insert(*instance);
-            },
-            CardType::Class { parent_class, .. } =>  {
+            }
+            CardType::Class { parent_class, .. } => {
                 if let Some(class) = parent_class {
                     deps.insert(*class);
                 }
-            },
-            CardType::Statement { .. } => {},
-            CardType::Event { .. } => {},
+            }
+            CardType::Statement { .. } => {}
+            CardType::Event { .. } => {}
         }
 
         deps
@@ -360,34 +358,48 @@ impl RawCard {
 
     pub fn set_backside(mut self, new_back: BackSide) -> Self {
         let data = match self.data.clone() {
-            x @ CardType::Event{..} => x,
-            CardType::Instance{ name, back: _, class } => CardType::Instance { name , back: Some(new_back), class},
-            x @ CardType::Statement{..} => x,
+            x @ CardType::Event { .. } => x,
+            CardType::Instance {
+                name,
+                back: _,
+                class,
+            } => CardType::Instance {
+                name,
+                back: Some(new_back),
+                class,
+            },
+            x @ CardType::Statement { .. } => x,
 
-            CardType::Normal{ front, back: _ } => CardType::Normal {
+            CardType::Normal { front, back: _ } => CardType::Normal {
                 front,
                 back: new_back,
             },
-            CardType::Unfinished{ front } => CardType::Normal {
+            CardType::Unfinished { front } => CardType::Normal {
                 front,
                 back: new_back,
             },
-            CardType::Attribute{
+            CardType::Attribute {
                 attribute,
                 instance: concept_card,
-                back: _
+                back: _,
             } => CardType::Attribute {
                 attribute,
                 back: new_back,
                 instance: concept_card,
             },
-            CardType::Class { name, back: _, parent_class } => CardType::Class { name, back: new_back, parent_class  },
+            CardType::Class {
+                name,
+                back: _,
+                parent_class,
+            } => CardType::Class {
+                name,
+                back: new_back,
+                parent_class,
+            },
         };
 
         self.data = data;
         self
-
-
     }
 }
 
@@ -421,29 +433,27 @@ impl LedgerItem<CardEvent> for RawCard {
         }
 
         match &self.data {
-            CardType::Normal { .. } => {},
-            CardType::Unfinished { .. } => {},
+            CardType::Normal { .. } => {}
+            CardType::Unfinished { .. } => {}
             CardType::Instance { class, .. } => {
                 out.entry(&DepCacheKey::Instance.to_str())
                     .or_default()
                     .insert(*class);
-
-            },
+            }
             CardType::Attribute { instance, .. } => {
                 out.entry(&DepCacheKey::AttrClass.to_str())
                     .or_default()
                     .insert(*instance);
-            },
+            }
             CardType::Class { parent_class, .. } => {
                 if let Some(class) = parent_class {
                     out.entry(&DepCacheKey::SubClass.to_str())
                         .or_default()
                         .insert(*class);
                 }
-
-            },
-            CardType::Statement { .. } => {},
-            CardType::Event {..} => {},
+            }
+            CardType::Statement { .. } => {}
+            CardType::Event { .. } => {}
         };
 
         if let Some(back) = &self.data.backside() {
@@ -477,17 +487,16 @@ impl LedgerItem<CardEvent> for RawCard {
             out.insert(CacheKey::Bigram(bigram).to_parts());
         }
 
-
         match &self.data {
-            CardType::Normal {..} => {}
-            CardType::Unfinished {..} => {}
-            CardType::Instance {..} => {}
+            CardType::Normal { .. } => {}
+            CardType::Unfinished { .. } => {}
+            CardType::Instance { .. } => {}
             CardType::Attribute { attribute, .. } => {
                 out.insert(CacheKey::AttrId(*attribute).to_parts());
             }
-            CardType::Class {..} => {}
-            CardType::Statement {..} => {}
-            CardType::Event {..} => {}
+            CardType::Class { .. } => {}
+            CardType::Statement { .. } => {}
+            CardType::Event { .. } => {}
         };
 
         out.insert(CacheKey::CardType(self.data.fieldless()).to_parts());
@@ -583,7 +592,6 @@ pub enum BackSide {
     Trivial, // Answer is obvious, used when card is more of a dependency anchor
     Invalid, // A reference card was deleted
 }
-
 
 #[derive(Serialize, Deserialize, Ord, PartialOrd, Eq, Hash, PartialEq, Debug, Clone)]
 pub enum BarSide {
@@ -722,7 +730,6 @@ impl<'de> Deserialize<'de> for BackSide {
     }
 }
 
-
 #[derive(Serialize, Deserialize, Debug, Clone, Default)]
 pub struct Config;
 
@@ -752,7 +759,6 @@ impl CType {
         }
     }
 }
-
 
 pub fn from_any(ty: CardType) -> RawType {
     let mut raw = RawType::default();

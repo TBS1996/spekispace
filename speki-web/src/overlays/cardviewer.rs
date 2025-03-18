@@ -5,7 +5,7 @@ use speki_core::{
     audio::AudioId,
     card::CardId,
     ledger::{CardAction, CardEvent},
-    CardType, 
+    CardType,
 };
 
 use speki_web::{CardEntry, Node, NodeId, NodeMetadata};
@@ -130,13 +130,13 @@ impl CardEditor {
                     return None;
                 }
 
-                CardType::Normal{ front, back }
+                CardType::Normal { front, back }
             }
             CardTy::Class => {
                 let parent_class = self.concept.selected_card().cloned();
                 let back = backside.to_backside()?;
 
-                CardType::Class{
+                CardType::Class {
                     name: front,
                     back,
                     parent_class,
@@ -146,13 +146,13 @@ impl CardEditor {
                 let class = self.concept.selected_card().cloned()?;
                 let back = backside.to_backside();
 
-                CardType::Instance{
+                CardType::Instance {
                     name: front,
                     back,
                     class,
                 }
             }
-            CardTy::Unfinished => CardType::Unfinished{ front },
+            CardTy::Unfinished => CardType::Unfinished { front },
         };
 
         Some(CardRep {

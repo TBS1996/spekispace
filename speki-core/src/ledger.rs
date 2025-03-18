@@ -26,9 +26,7 @@ pub fn decompose_history(history: History) -> Vec<ReviewEvent> {
     actions
 }
 
-
 use speki_dto::LedgerItem;
-
 
 #[derive(Serialize, Deserialize, Clone, Debug, Hash)]
 pub struct CardEvent {

@@ -5,8 +5,7 @@ use collection::{Collection, CollectionId};
 use dioxus_logger::tracing::info;
 use eyre::Result;
 use ledger::{
-    decompose_history, CardAction, CardEvent, CollectionEvent, Event,
-    HistoryEvent, MetaEvent,
+    decompose_history, CardAction, CardEvent, CollectionEvent, Event, HistoryEvent, MetaEvent,
 };
 use metadata::Metadata;
 use recall_rate::{History, ReviewEvent};

@@ -1,6 +1,6 @@
 use crate::{
     audio::Audio,
-    card::{CardId},
+    card::CardId,
     ledger::{CardAction, CardEvent},
     metadata::Metadata,
     recall_rate::History,

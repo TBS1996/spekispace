@@ -14,10 +14,7 @@ use dioxus_logger::tracing::{info, Level};
 #[cfg(not(feature = "desktop"))]
 use firebase::AuthUser;
 use pages::{ImportState, ReviewPage};
-use speki_core::{
-    card::{RawCard},
-    import_card_ledger, import_history_ledger,
-};
+use speki_core::{card::RawCard, import_card_ledger, import_history_ledger};
 
 use crate::{
     pages::{About, Add, Browse, Import, Menu, Review},
