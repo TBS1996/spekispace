@@ -3,18 +3,15 @@ use card_provider::CardProvider;
 use cardfilter::CardFilter;
 use collection::{Collection, CollectionId};
 use dioxus_logger::tracing::info;
-use eyre::Result;
 use ledger::{
-    decompose_history, CardAction, CardEvent, CollectionEvent, Event, HistoryEvent, MetaEvent,
+    decompose_history, CardAction, CardEvent, CollectionEvent, Event, MetaEvent,
 };
 use metadata::Metadata;
 use recall_rate::{History, ReviewEvent};
-use serde::{de::DeserializeOwned, Serialize};
 use speki_dto::{Ledger, LedgerEntry, LedgerEvent, LedgerItem, Storage, TimeProvider};
 use std::{
-    collections::{HashMap, HashSet},
+    collections::HashMap,
     fmt::Debug,
-    hash,
     sync::{Arc, RwLock},
     time::Duration,
 };
@@ -128,7 +125,7 @@ impl Provider {
     pub async fn decompose_save_card_ledger(&self) {}
 
     pub async fn derive_card_ledger_from_state(&self) -> Vec<CardEvent> {
-        let mut actions: Vec<CardEvent> = vec![];
+        let actions: Vec<CardEvent> = vec![];
 
         for (_, card) in self.cards.load_all().await {
             todo!();
@@ -222,7 +219,7 @@ pub async fn import_card_ledger(ledger: Ledger<RawCard, CardEvent>) {
 
     let y: Lol = serde_json::from_str(&s).unwrap();
 
-    let mut prev: Option<LedgerEntry<CardEvent>> = None;
+    let prev: Option<LedgerEntry<CardEvent>> = None;
 
     for rec in y.records {
         let val = rec.get("content").unwrap().as_str().unwrap().to_string();

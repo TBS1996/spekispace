@@ -8,7 +8,7 @@ use std::{
 };
 
 use futures::executor::block_on;
-use serde::{ser::SerializeSeq, Deserializer};
+use serde::Deserializer;
 use serde_json::Value;
 use speki_dto::LedgerEvent;
 use speki_dto::LedgerItem;
@@ -18,9 +18,9 @@ use uuid::Uuid;
 use crate::{
     audio::{Audio, AudioId},
     card_provider::CardProvider,
-    ledger::{CardAction, CardEvent, HistoryEvent, MetaEvent},
-    metadata::{IsSuspended, Metadata},
-    recall_rate::{History, Recall, Review, ReviewEvent, SimpleRecall},
+    ledger::{CardAction, CardEvent, MetaEvent},
+    metadata::Metadata,
+    recall_rate::{History, Recall, ReviewEvent, SimpleRecall},
     RecallCalc, Recaller, TimeGetter,
 };
 

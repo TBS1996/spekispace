@@ -1,7 +1,6 @@
 use super::*;
 use crate::{
-    attribute::AttributeId, audio::AudioId, card_provider::CardProvider, ledger::CardEvent, App,
-    Attribute, CacheKey, DepCacheKey,
+    attribute::AttributeId, audio::AudioId, card_provider::CardProvider, ledger::CardEvent, CacheKey, DepCacheKey,
 };
 use omtrent::TimeStamp;
 use serde::{Deserialize, Serialize};

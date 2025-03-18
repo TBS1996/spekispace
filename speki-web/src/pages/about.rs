@@ -1,5 +1,4 @@
 use dioxus::prelude::*;
-use tracing::info;
 
 #[component]
 pub fn About() -> Element {

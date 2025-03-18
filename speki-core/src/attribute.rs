@@ -1,9 +1,9 @@
-use std::{pin::Pin, time::Duration};
+use std::pin::Pin;
 
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::{card::CardId, card_provider::CardProvider, App};
+use crate::{card::CardId, card_provider::CardProvider};
 
 /// An attribute of a sub-class or an instance
 /// predefined questions that are valid for all in its class.

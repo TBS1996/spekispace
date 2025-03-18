@@ -12,8 +12,6 @@ use uuid::Uuid;
 #[cfg(feature = "web")]
 use wasm_bindgen::prelude::*;
 
-#[cfg(feature = "desktop")]
-use dioxus::desktop::use_window;
 
 #[derive(Clone, Debug)]
 pub enum GraphAction {

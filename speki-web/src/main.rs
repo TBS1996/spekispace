@@ -1,20 +1,13 @@
 #![allow(non_snake_case)]
 
-use std::{
-    collections::HashMap,
-    path::PathBuf,
-    sync::{
-        atomic::{AtomicBool, Ordering},
-        Arc, Mutex,
-    },
-};
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use dioxus::prelude::*;
 use dioxus_logger::tracing::{info, Level};
 #[cfg(not(feature = "desktop"))]
 use firebase::AuthUser;
 use pages::{ImportState, ReviewPage};
-use speki_core::{card::RawCard, import_card_ledger, import_history_ledger};
+use speki_core::{import_card_ledger, import_history_ledger};
 
 use crate::{
     pages::{About, Add, Browse, Import, Menu, Review},

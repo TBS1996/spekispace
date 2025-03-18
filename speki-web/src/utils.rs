@@ -3,10 +3,9 @@ use std::{fmt::Debug, sync::Arc};
 use dioxus::prelude::*;
 use speki_core::{
     card::CardId,
-    cardfilter::{CardFilter, FilterItem},
+    cardfilter::CardFilter,
     collection::{Collection, CollectionId},
-    ledger::CollectionEvent,
-    AttributeDTO, Card,
+    ledger::CollectionEvent, Card,
 };
 #[cfg(not(feature = "desktop"))]
 use speki_provider::{DexieProvider, WasmTime};
@@ -15,10 +14,8 @@ use tracing::info;
 #[cfg(not(feature = "desktop"))]
 use wasm_bindgen::prelude::*;
 
-#[cfg(feature = "desktop")]
-use dioxus::desktop::use_window;
 
-use crate::{nav::SYNCING, TouchRec, APP};
+use crate::APP;
 
 #[cfg(not(feature = "desktop"))]
 use crate::firebase::{AuthUser, FirestoreProvider};

@@ -1,10 +1,8 @@
-use std::collections::VecDeque;
 
 use crate::{
     audio::AudioId,
-    card::{CardId, RawCard},
-    collection::{CollectionId, DynCard, MaybeDyn},
-    metadata::Metadata,
+    card::CardId,
+    collection::{CollectionId, MaybeDyn},
     recall_rate::{History, Review, ReviewEvent},
     CardType,
 };
@@ -26,7 +24,6 @@ pub fn decompose_history(history: History) -> Vec<ReviewEvent> {
     actions
 }
 
-use speki_dto::LedgerItem;
 
 #[derive(Serialize, Deserialize, Clone, Debug, Hash)]
 pub struct CardEvent {
