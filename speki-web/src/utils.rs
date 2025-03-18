@@ -2,7 +2,7 @@ use std::{fmt::Debug, sync::Arc};
 
 use dioxus::prelude::*;
 use speki_core::{
-    card::{BaseCard, CardId},
+    card::{CardId},
     cardfilter::{CardFilter, FilterItem},
     collection::{Collection, CollectionId},
     ledger::CollectionEvent,

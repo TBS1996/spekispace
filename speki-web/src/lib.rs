@@ -211,7 +211,7 @@ impl NodeMetadata {
             None => cyan_color(),
         };
 
-        let ty = card.card.read().card_type().fieldless();
+        let ty = card.card.read().base.data.fieldless();
 
         Self {
             id: NodeId::new_from_card(card.card.read().id()),

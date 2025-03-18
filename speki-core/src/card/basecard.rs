@@ -10,34 +10,6 @@ use std::collections::{HashMap, HashSet};
 
 pub type CardId = Uuid;
 
-/// Represents the card without userdata, the part that can be freely shared among different users.
-#[derive(Clone, Debug, Hash, PartialEq)]
-pub struct BaseCard {
-    pub id: CardId,
-    pub ty: CardType,
-    pub dependencies: BTreeSet<CardId>,
-    pub front_audio: Option<AudioId>,
-    pub back_audio: Option<AudioId>,
-}
-
-impl BaseCard {
-    pub fn new(ty: impl Into<CardType>) -> Self {
-        Self::new_with_id(CardId::new_v4(), ty)
-    }
-
-    pub fn new_with_id(id: impl Into<Option<CardId>>, ty: impl Into<CardType>) -> Self {
-        let id: Option<CardId> = id.into();
-        let id = id.unwrap_or_else(|| CardId::new_v4());
-
-        Self {
-            id,
-            ty: ty.into(),
-            dependencies: Default::default(),
-            front_audio: None,
-            back_audio: None,
-        }
-    }
-}
 
 #[derive(PartialEq, Debug, Clone, Serialize, Deserialize, Hash)]
 pub enum CardType {
@@ -101,6 +73,18 @@ pub enum CardType {
 impl CardType {
     pub fn class(&self) -> Option<CardId> {
         from_any(self.clone()).class()
+    }
+
+    pub fn backside(&self) -> Option<&BackSide> {
+        match self {
+            CardType::Instance {back, ..} => back.as_ref(),
+            CardType::Normal { back, .. } => Some(&back),
+            CardType::Unfinished { .. } => None,
+            CardType::Attribute { back, .. } => Some(&back),
+            CardType::Class { back, .. } => Some(&back),
+            CardType::Statement { .. } => None,
+            CardType::Event { .. } => None,
+        }
     }
 
     pub fn raw_front(&self) -> String {
@@ -436,33 +420,33 @@ impl LedgerItem<CardEvent> for RawCard {
                 .insert(*dep);
         }
 
-        match self.data {
+        match &self.data {
             CardType::Normal { .. } => {},
             CardType::Unfinished { .. } => {},
-            CardType::Instance { name, back, class } => {
+            CardType::Instance { class, .. } => {
                 out.entry(&DepCacheKey::Instance.to_str())
                     .or_default()
-                    .insert(class);
+                    .insert(*class);
 
             },
-            CardType::Attribute { attribute, back, instance } => {
+            CardType::Attribute { instance, .. } => {
                 out.entry(&DepCacheKey::AttrClass.to_str())
                     .or_default()
-                    .insert(instance);
+                    .insert(*instance);
             },
-            CardType::Class { name, back, parent_class } => {
+            CardType::Class { parent_class, .. } => {
                 if let Some(class) = parent_class {
                     out.entry(&DepCacheKey::SubClass.to_str())
                         .or_default()
-                        .insert(class);
+                        .insert(*class);
                 }
 
             },
-            CardType::Statement { front } => {},
+            CardType::Statement { .. } => {},
             CardType::Event {..} => {},
         };
 
-        if let Some(back) = &self.data.back {
+        if let Some(back) = &self.data.backside() {
             match back {
                 BackSide::Text(_) => {}
                 BackSide::Card(id) => {
@@ -489,23 +473,24 @@ impl LedgerItem<CardEvent> for RawCard {
     fn caches(&self) -> HashSet<(&'static str, String)> {
         let mut out: HashSet<(&'static str, String)> = Default::default();
 
-        for bigram in bigrams(&self.data.front.clone().unwrap_or_default()) {
+        for bigram in bigrams(&self.data.raw_front()) {
             out.insert(CacheKey::Bigram(bigram).to_parts());
         }
 
-        match &self.data.ty {
-            CType::Normal => {}
-            CType::Unfinished => {}
-            CType::Instance => {}
-            CType::Attribute => {
-                out.insert(CacheKey::AttrId(self.data.attribute.unwrap()).to_parts());
+
+        match &self.data {
+            CardType::Normal {..} => {}
+            CardType::Unfinished {..} => {}
+            CardType::Instance {..} => {}
+            CardType::Attribute { attribute, .. } => {
+                out.insert(CacheKey::AttrId(*attribute).to_parts());
             }
-            CType::Class => {}
-            CType::Statement => {}
-            CType::Event => {}
+            CardType::Class {..} => {}
+            CardType::Statement {..} => {}
+            CardType::Event {..} => {}
         };
 
-        out.insert(CacheKey::CardType(self.data.ty).to_parts());
+        out.insert(CacheKey::CardType(self.data.fieldless()).to_parts());
 
         out
     }
@@ -513,10 +498,10 @@ impl LedgerItem<CardEvent> for RawCard {
     fn new_default(id: CardId) -> Self {
         Self {
             id,
-            data: from_any(CardType::Normal {
+            data: CardType::Normal {
                 front: "uninit".to_string(),
                 back: BackSide::Text("uninit".to_string()),
-            }),
+            },
             tags: Default::default(),
             dependencies: Default::default(),
             front_audio: Default::default(),
@@ -534,7 +519,7 @@ impl LedgerItem<CardEvent> for RawCard {
                     self.back_audio = audio;
                 }
                 CardAction::UpsertCard(ty) => {
-                    self.data = from_any(ty);
+                    self.data = ty;
                 }
                 CardAction::DeleteCard => {}
                 CardAction::AddDependency(dependency) => {
@@ -597,6 +582,30 @@ pub enum BackSide {
     Time(TimeStamp),
     Trivial, // Answer is obvious, used when card is more of a dependency anchor
     Invalid, // A reference card was deleted
+}
+
+
+#[derive(Serialize, Deserialize, Ord, PartialOrd, Eq, Hash, PartialEq, Debug, Clone)]
+pub enum BarSide {
+    Text(String),
+    Card(CardId),
+    List(Vec<CardId>),
+    Time(TimeStamp),
+    Trivial,
+    Invalid,
+}
+
+impl From<BarSide> for BackSide {
+    fn from(value: BarSide) -> Self {
+        match value {
+            BarSide::Text(val) => BackSide::Text(val),
+            BarSide::Card(val) => BackSide::Card(val),
+            BarSide::List(val) => BackSide::List(val),
+            BarSide::Time(val) => BackSide::Time(val),
+            BarSide::Trivial => BackSide::Trivial,
+            BarSide::Invalid => BackSide::Invalid,
+        }
+    }
 }
 
 impl Default for BackSide {
@@ -708,34 +717,11 @@ impl<'de> Deserialize<'de> for BackSide {
             }
             Value::Bool(_) => Ok(BackSide::Trivial),
             Value::String(s) => Ok(s.into()),
-            _ => Err(serde::de::Error::custom("Expected a string or an array")),
+            val => Ok(serde_json::from_value::<BarSide>(val).unwrap().into()),
         }
     }
 }
 
-/*
-impl Serialize for BackSide {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        match *self {
-            BackSide::Trivial => serializer.serialize_bool(false),
-            BackSide::Invalid => serializer.serialize_str(Self::INVALID_STR),
-            BackSide::Time(ref t) => serializer.serialize_str(&t.serialize()),
-            BackSide::Text(ref s) => serializer.serialize_str(s),
-            BackSide::Card(ref id) => serializer.serialize_str(&id.to_string()),
-            BackSide::List(ref ids) => {
-                let mut seq = serializer.serialize_seq(Some(ids.len()))?;
-                for id in ids {
-                    seq.serialize_element(&id.to_string())?;
-                }
-                seq.end()
-            }
-        }
-    }
-}
-*/
 
 #[derive(Serialize, Deserialize, Debug, Clone, Default)]
 pub struct Config;
@@ -767,46 +753,6 @@ impl CType {
     }
 }
 
-fn into_any(raw: RawType) -> CardType {
-    match raw.ty {
-        CType::Instance => CardType::Instance {
-            name: raw.front.unwrap(),
-            class: raw.class.unwrap(),
-            back: raw.back,
-        },
-        CType::Normal => CardType::Normal {
-            front: raw.front.unwrap(),
-            back: raw.back.unwrap(),
-        },
-        CType::Unfinished => CardType::Unfinished {
-            front: raw.front.unwrap(),
-        },
-        CType::Attribute => CardType::Attribute {
-            attribute: raw.attribute.unwrap(),
-            back: raw.back.unwrap(),
-            instance: raw.instance.unwrap(),
-        },
-        CType::Class => CardType::Class {
-            name: raw.front.unwrap(),
-            back: raw.back.unwrap(),
-            parent_class: raw.class,
-        },
-        CType::Statement => CardType::Statement {
-            front: raw.front.unwrap(),
-        },
-        CType::Event => CardType::Event {
-            front: raw.front.unwrap(),
-            start_time: raw
-                .start_time
-                .clone()
-                .map(TimeStamp::from_string)
-                .flatten()
-                .unwrap_or_default(),
-            end_time: raw.end_time.clone().map(TimeStamp::from_string).flatten(),
-            parent_event: raw.parent_event,
-        },
-    }
-}
 
 pub fn from_any(ty: CardType) -> RawType {
     let mut raw = RawType::default();

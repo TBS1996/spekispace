@@ -1,11 +1,11 @@
-use card::{BackSide, BaseCard, CType, CardId, RawCard, RecallRate};
+use card::{BackSide, CType, CardId, RawCard, RecallRate};
 use card_provider::CardProvider;
 use cardfilter::CardFilter;
 use collection::{Collection, CollectionId};
 use dioxus_logger::tracing::info;
 use eyre::Result;
 use ledger::{
-    check_compose, decompose, decompose_history, CardAction, CardEvent, CollectionEvent, Event,
+    decompose_history, CardAction, CardEvent, CollectionEvent, Event,
     HistoryEvent, MetaEvent,
 };
 use metadata::Metadata;
@@ -68,6 +68,7 @@ pub enum CacheKey {
 }
 
 impl CacheKey {
+    /// Gets identifier and value of cache entry
     pub fn to_parts(&self) -> (&'static str, String) {
         match self {
             CacheKey::Bigram([a, b]) => ("bigram", format!("{a}{b}")),
@@ -373,7 +374,7 @@ impl App {
 
     pub async fn add_card(&self, front: String, back: impl Into<BackSide>) -> CardId {
         let back = back.into();
-        let data = NormalCard { front, back };
+        let data = CardType::Normal { front, back };
 
         let id = CardId::new_v4();
         let event = CardEvent::new(id, CardAction::UpsertCard(data.into()));
@@ -382,7 +383,7 @@ impl App {
     }
 
     pub async fn add_unfinished(&self, front: String) -> CardId {
-        let data = UnfinishedCard { front };
+        let data = CardType::Unfinished { front };
         let id = CardId::new_v4();
         let event = CardEvent::new(id, CardAction::UpsertCard(data.into()));
         self.provider.run_event(event).await;

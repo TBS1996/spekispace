@@ -5,7 +5,7 @@ use speki_core::{
     audio::AudioId,
     card::CardId,
     ledger::{CardAction, CardEvent},
-    CardType, ClassCard, InstanceCard, NormalCard, UnfinishedCard,
+    CardType, 
 };
 
 use speki_web::{CardEntry, Node, NodeId, NodeMetadata};
@@ -130,29 +130,29 @@ impl CardEditor {
                     return None;
                 }
 
-                CardType::Normal(NormalCard { front, back })
+                CardType::Normal{ front, back }
             }
             CardTy::Class => {
                 let parent_class = self.concept.selected_card().cloned();
                 let back = backside.to_backside()?;
 
-                CardType::Class(ClassCard {
+                CardType::Class{
                     name: front,
                     back,
                     parent_class,
-                })
+                }
             }
             CardTy::Instance => {
                 let class = self.concept.selected_card().cloned()?;
                 let back = backside.to_backside();
 
-                CardType::Instance(InstanceCard {
+                CardType::Instance{
                     name: front,
                     back,
                     class,
-                })
+                }
             }
-            CardTy::Unfinished => CardType::Unfinished(UnfinishedCard { front }),
+            CardTy::Unfinished => CardType::Unfinished{ front },
         };
 
         Some(CardRep {
@@ -271,12 +271,12 @@ impl CardViewer {
     pub async fn new_from_card(card: CardEntry, graph: GraphRep) -> Self {
         let tempnode = TempNode::Old(card.id());
 
-        let raw_ty = card.card.read().get_ty();
+        let raw_ty = card.card.read().base.data.clone();
 
         graph.new_set_card(card.clone());
 
         let front = {
-            let frnt = FrontPut::new(CardTy::from_ctype(card.card.read().get_ty().fieldless()));
+            let frnt = FrontPut::new(CardTy::from_ctype(card.card.read().base.data.fieldless()));
             if let Some(id) = card.card.read().front_audio_id() {
                 //let audio = APP.read().inner().provider.audios.load_item(id).await;
                 //frnt.audio.clone().set(audio);
@@ -287,7 +287,7 @@ impl CardViewer {
 
         let back = {
             let back = raw_ty.raw_back();
-            let bck = BackPut::new(raw_ty.backside()).with_dependents(tempnode.clone());
+            let bck = BackPut::new(raw_ty.backside().cloned()).with_dependents(tempnode.clone());
             if let Some(id) = card.card.read().back_audio_id() {
                 //let audio = APP.read().inner().provider.audios.load_item(id).await;
                 //bck.audio.clone().set(audio);

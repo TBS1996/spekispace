@@ -2,7 +2,7 @@ use std::collections::VecDeque;
 
 use crate::{
     audio::AudioId,
-    card::{BaseCard, CardId, RawCard},
+    card::{CardId, RawCard},
     collection::{CollectionId, DynCard, MaybeDyn},
     metadata::Metadata,
     recall_rate::{History, Review, ReviewEvent},
@@ -26,48 +26,9 @@ pub fn decompose_history(history: History) -> Vec<ReviewEvent> {
     actions
 }
 
-pub fn decompose(card: &BaseCard) -> Vec<CardEvent> {
-    let mut actions = vec![];
-
-    let action = CardAction::UpsertCard(card.ty.clone());
-    actions.push(action);
-
-    if card.front_audio.is_some() {
-        let action = CardAction::SetFrontAudio(card.front_audio.clone());
-        actions.push(action);
-    }
-
-    if card.back_audio.is_some() {
-        let action = CardAction::SetBackAudio(card.back_audio.clone());
-        actions.push(action);
-    }
-
-    for dep in &card.dependencies {
-        let action = CardAction::AddDependency(*dep);
-        actions.push(action);
-    }
-
-    let id = card.id;
-
-    actions
-        .into_iter()
-        .map(|action| CardEvent::new(id, action))
-        .collect()
-}
 
 use speki_dto::LedgerItem;
 
-pub fn check_compose(old_card: BaseCard) {
-    let actions = decompose(&old_card);
-    let mut card: RawCard = RawCard::new_default(old_card.id);
-
-    for action in actions {
-        card = card.run_event(action).unwrap();
-    }
-
-    todo!()
-    //assert_eq!(&old_card, &card);
-}
 
 #[derive(Serialize, Deserialize, Clone, Debug, Hash)]
 pub struct CardEvent {

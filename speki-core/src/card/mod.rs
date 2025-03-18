@@ -35,7 +35,7 @@ pub struct Card {
     id: CardId,
     front_audio: Option<Audio>,
     back_audio: Option<Audio>,
-    base: RawCard,
+    pub base: RawCard,
     metadata: Metadata,
     history: History,
     card_provider: CardProvider,
@@ -66,7 +66,7 @@ impl Debug for Card {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let mut s = String::new();
         s.push_str(&format!("{:?}\n", self.id));
-        s.push_str(&format!("{:?}\n", self.base.data.ty));
+        s.push_str(&format!("{:?}\n", self.base.data.type_name()));
 
         write!(f, "{}", s)
     }
@@ -167,23 +167,19 @@ impl Card {
     }
 
     pub fn is_finished(&self) -> bool {
-        self.base.data.ty != CType::Unfinished
+        !matches!(&self.base.data, CardType::Unfinished {..})
     }
 
     pub fn is_class(&self) -> bool {
-        self.base.data.ty == CType::Class
+        matches!(&self.base.data, CardType::Class {..})
     }
 
-    pub fn is_instance_of(&self, class: CardId) -> bool {
-        if self.base.data.ty == CType::Instance {
-            self.base.data.class().unwrap() == class
+    pub fn is_instance_of(&self, _class: CardId) -> bool {
+        if let CardType::Instance {class, ..} = &self.base.data {
+            *class == _class
         } else {
             false
         }
-    }
-
-    pub fn is_instance(&self) -> bool {
-        self.base.data.ty == CType::Instance
     }
 
     pub async fn set_ref(mut self, reff: CardId) -> Card {
@@ -225,7 +221,7 @@ impl Card {
         self.refresh().await;
     }
 
-    pub fn back_side(&self) -> Option<BackSide> {
+    pub fn back_side(&self) -> Option<&BackSide> {
         self.base.data.backside()
     }
 
@@ -296,13 +292,13 @@ impl Card {
             BackSide::Card(id) => {
                 format!(
                     "→ {}",
-                    self.card_provider.load(id).await.unwrap().print().await
+                    self.card_provider.load(*id).await.unwrap().print().await
                 )
             }
             BackSide::List(list) => format!("→ [{}]", {
                 let mut res = vec![];
                 for id in list {
-                    let s = self.card_provider.load(id).await.unwrap().print().await;
+                    let s = self.card_provider.load(*id).await.unwrap().print().await;
                     res.push(s);
                 }
 
@@ -352,9 +348,7 @@ impl Card {
     pub async fn print(&self) -> String {
         self.base
             .data
-            .front
-            .clone()
-            .unwrap_or_else(|| String::from("oops"))
+            .raw_front()
     }
 
     pub fn is_pending(&self) -> bool {

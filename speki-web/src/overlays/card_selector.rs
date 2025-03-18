@@ -175,7 +175,7 @@ impl CardSelector {
 
                         if allowed_cards.is_empty()
                             || allowed_cards.read().contains(&CardTy::from_ctype(
-                                card.card.read().get_ty().fieldless(),
+                                card.card.read().base.data.fieldless(),
                             ))
                         {
                             let flag = match filtermemo.cloned() {

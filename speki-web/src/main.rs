@@ -15,9 +15,8 @@ use dioxus_logger::tracing::{info, Level};
 use firebase::AuthUser;
 use pages::{ImportState, ReviewPage};
 use speki_core::{
-    card::{BaseCard, RawCard},
+    card::{RawCard},
     import_card_ledger, import_history_ledger,
-    ledger::decompose,
 };
 
 use crate::{

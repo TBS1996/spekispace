@@ -193,7 +193,8 @@ impl<T: Serialize + DeserializeOwned + std::fmt::Debug + Sized + 'static> ItemSt
 {
     async fn xload_item(&self, space: &[&str], id: &str) -> Option<T> {
         let bytes = self.load_content(space, id).await?;
-        let x: T = bincode::deserialize(&bytes).unwrap();
+        //let x: T = bincode::deserialize(&bytes).unwrap();
+        let x: T = serde_json::from_slice(&bytes).unwrap();
         Some(x)
     }
 
@@ -203,7 +204,7 @@ impl<T: Serialize + DeserializeOwned + std::fmt::Debug + Sized + 'static> ItemSt
         let mut out: HashMap<String, T> = Default::default();
 
         for (key, val) in contents {
-            let val: T = bincode::deserialize(&val).unwrap();
+            let val: T = serde_json::from_slice(&val).unwrap();
             out.insert(key, val);
         }
 
@@ -212,7 +213,8 @@ impl<T: Serialize + DeserializeOwned + std::fmt::Debug + Sized + 'static> ItemSt
 
     async fn xsave_item(&self, space: &[&str], id: &str, item: &T) {
         dbg!(item);
-        let bytes = bincode::serialize(item).unwrap();
+        //let bytes = bincode::serialize(item).unwrap();
+        let bytes = serde_json::to_vec(item).unwrap();
         self.save_content(space, id, &bytes).await;
     }
 }
