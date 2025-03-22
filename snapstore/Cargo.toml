@@ -1,0 +1,10 @@
+[package]
+name = "snapstore"
+version = "0.1.0"
+edition = "2024"
+authors = ["tor torberge@outlook.com"]
+description = "snapshot based database"
+license = "GPL-2.0-only"
+
+[dependencies]
+walkdir.workspace = true
