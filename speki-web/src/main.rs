@@ -230,15 +230,6 @@ fn Debug() -> Element {
             },
             "recompute state"
         }
-
-        button {
-            onclick: move |_| {
-                spawn(async move {
-                    APP.read().inner().provider.check_decompose_lol().await;
-                });
-            },
-            "check derived events from all cards re-assemble to same card"
-        }
         button {
             onclick: move |_| {
                 spawn(async move {

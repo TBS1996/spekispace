@@ -6,7 +6,7 @@ use dioxus_logger::tracing::info;
 use ledger::{decompose_history, CardAction, CardEvent, CollectionEvent, Event, MetaEvent};
 use metadata::Metadata;
 use recall_rate::{History, ReviewEvent};
-use speki_dto::{Ledger, LedgerEntry, LedgerEvent, LedgerItem, Storage, TimeProvider};
+use speki_dto::{Ledger, LedgerEntry, Storage, TimeProvider};
 use std::{
     collections::HashMap,
     fmt::Debug,
@@ -112,27 +112,6 @@ pub struct Provider {
 impl Provider {
     async fn run_card_event(&self, event: CardEvent) {
         self.cards.save_and_run(event).await;
-    }
-
-    pub async fn check_decompose_lol(&self) {
-        for (_, card) in self.cards.load_all().await {
-            todo!()
-        }
-    }
-
-    pub async fn decompose_save_card_ledger(&self) {}
-
-    pub async fn derive_card_ledger_from_state(&self) -> Vec<CardEvent> {
-        let actions: Vec<CardEvent> = vec![];
-
-        for (_, card) in self.cards.load_all().await {
-            todo!();
-            //  for action in decompose(&card) {
-            //       actions.push(action);
-            //   }
-        }
-
-        todo!();
     }
 
     pub async fn run_event(&self, event: impl Into<Event>) {

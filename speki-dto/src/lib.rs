@@ -225,6 +225,7 @@ impl<E: LedgerEvent + Serialize + DeserializeOwned> LedgerEntry<E> {
     }
 }
 
+
 fn get_hash<T: Hash>(item: &T) -> Hashed {
     let mut hasher = DefaultHasher::new();
     item.hash(&mut hasher);
