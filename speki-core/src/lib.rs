@@ -87,7 +87,7 @@ impl CollectionProvider {
         Self { inner }
     }
     pub async fn save(&self, event: CollectionEvent) {
-        self.inner.save_and_run(event).await;
+        todo!()
     }
 
     pub async fn load(&self, id: CollectionId) -> Option<Collection> {
@@ -111,7 +111,7 @@ pub struct Provider {
 
 impl Provider {
     async fn run_card_event(&self, event: CardEvent) {
-        self.cards.save_and_run(event).await;
+        self.cards.save_ledger(event).await;
     }
 
     pub async fn run_event(&self, event: impl Into<Event>) {
@@ -119,16 +119,16 @@ impl Provider {
             Event::Meta(event) => self.run_meta_event(event).await,
             Event::History(event) => self.run_history_event(event).await,
             Event::Card(event) => self.run_card_event(event).await,
-            Event::Collection(col) => self.collections.inner.save_and_run(col).await,
+            Event::Collection(col) => todo!(),
         }
     }
 
     async fn run_history_event(&self, event: ReviewEvent) {
-        self.reviews.save_and_run(event).await;
+        todo!()
     }
 
     async fn run_meta_event(&self, event: MetaEvent) {
-        self.metadata.save_and_run(event).await;
+        todo!()
     }
 }
 

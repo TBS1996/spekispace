@@ -8,3 +8,4 @@ license = "GPL-2.0-only"
 
 [dependencies]
 walkdir.workspace = true
+tracing.workspace = true

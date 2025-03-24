@@ -46,10 +46,10 @@ impl App {
         Self(Arc::new(speki_core::App::new(
             speki_core::SimpleRecall,
             FsTime,
-            Ledger::new(Box::new(FsProvider::new())),
-            Ledger::new(Box::new(FsProvider::new())),
-            Ledger::new(Box::new(FsProvider::new())),
-            Ledger::new(Box::new(FsProvider::new())),
+            Ledger::new(Box::new(FsProvider::new("card"))),
+            Ledger::new(Box::new(FsProvider::new("history"))),
+            Ledger::new(Box::new(FsProvider::new("col"))),
+            Ledger::new(Box::new(FsProvider::new("meta"))),
         )))
     }
 

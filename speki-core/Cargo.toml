@@ -16,6 +16,7 @@ futures.workspace = true
 eyre.workspace = true
 omtrent.workspace = true
 speki-dto.workspace = true
+snapstore.workspace = true
 dioxus-logger.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true

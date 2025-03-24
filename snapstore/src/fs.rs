@@ -1,36 +1,40 @@
-use std::{collections::HashMap, fs, hash::{DefaultHasher, Hash, Hasher}, ops::Deref, os::unix::fs::symlink, path::{Path, PathBuf}, sync::{Arc, Mutex, RwLock}};
+use std::{collections::HashMap, fs::{self, read_link}, hash::{DefaultHasher, Hash, Hasher}, ops::Deref, os::unix::fs::symlink, path::{Path, PathBuf}, sync::Arc};
 
+use tracing::trace;
 use walkdir::WalkDir;
 
 use super::SnapStorage;
 
 type Hashed = String;
-type Item = String;
-type Key = String;
-
 
 #[derive(Debug, Clone)]
 pub struct SnapFs {
-    chain_path: Arc<PathBuf>,
     blob_path: Arc<PathBuf>,
-    hashes: Arc<Mutex<Vec<Hashed>>>,
 }
 
 impl SnapStorage for SnapFs {
-    fn save_on_gen(&self, key: &str, prev_generation: &str, item_hash: &str) -> crate::Hashed {
+    fn save_on_gen(&self, key: &str, prev_generation: Option<&str>, item_hash: &str) -> crate::Hashed {
         let item_path = full_blob_path(&self.blob_path, item_hash);
-        let top_map = FsDir::load(self.blob_path.clone(), prev_generation.to_owned()).unwrap();
+
+        let top_map = match prev_generation {
+            Some(prev_gen) => FsDir::load(self.blob_path.clone(), prev_gen.to_owned()).unwrap(),
+            None => {
+                let empty = Dir::new();
+                empty.persist(self.blob_path.clone())
+            },
+        };
+
         let all: ItemPath = top_map.all_dirs(&key);
         let x = all.save_item(key.to_owned(), item_path);
         let top_hash = x.first().unwrap().hash.clone();
-        self.save_new_generation(top_hash.clone());
         top_hash
     }
 
-    fn get_all(&self) -> HashMap<String, Vec<u8>> {
+    fn get_all(&self, hash: &str) -> HashMap<String, Vec<u8>> {
+        let path = self.the_full_blob_path(hash);
         let mut file_map = HashMap::new();
 
-        for entry in WalkDir::new(&*self.blob_path) {
+        for entry in WalkDir::new(&path) {
             let entry = entry.unwrap();
             let path = entry.path();
     
@@ -45,17 +49,34 @@ impl SnapStorage for SnapFs {
         file_map
     }
 
-    fn get_with_gen(&self, key: &str, gen_hash: &crate::Hashed) -> Option<Vec<u8>> {
-        let path = self.full_path(gen_hash, key);
+    fn get_cache(&self, gen_hash: &str, cache_key: &str) -> Vec<String> {
+        let path = self.full_path(gen_hash, &cache_key);
+
+        let mut out = vec![];
+        for entry in fs::read_dir(&path).unwrap() {
+            out.push(entry.unwrap().file_name().into_string().unwrap());
+
+        }
+
+        out
+    }
+
+    fn insert_cache(&self, gen_hash: &str, cache_key: &str, item: &str) -> Hashed {
+        let item_blob_path = self.get_item_path(gen_hash, item);
+        let path = FsDir::load(self.blob_path.clone(), gen_hash.to_owned()).unwrap();
+        let itempath = path.all_dirs(cache_key);
+        itempath.save_item(item.to_string(), item_blob_path).first().unwrap().get_hash()
+    }
+    
+    fn remove_cache(&self, gen_hash: &str, cache_key: &str, item: &str) -> Hashed {
+        let topdir = FsDir::load(self.blob_path.clone(), gen_hash.to_string()).unwrap();
+        let all = topdir.all_dirs(cache_key);
+        all.remove_item(item.to_owned()).first().unwrap().get_hash()
+    }
+
+    fn get(&self, hash: &str, key: &str) -> Option<Vec<u8>> {
+        let path = self.full_path(hash, key);
         fs::read(&path).ok()
-    }
-
-    fn get_gen(&self, idx: usize) -> crate::Hashed {
-        self.hashes.lock().unwrap().get(idx).expect("no such generation").to_owned()
-    }
-
-    fn latest_generation(&self) -> crate::Hashed {
-        self.hashes.lock().unwrap().last().unwrap().to_owned()
     }
     
     fn save_item(&self, item_hash: &str, item: Vec<u8>) {
@@ -63,39 +84,41 @@ impl SnapStorage for SnapFs {
         fs::File::create(&path).unwrap();
         fs::write(&path, &item).unwrap();
     }
+    
+    fn remove(&self, gen_hash: &str, key: &str) -> crate::Hashed {
+        let topdir = FsDir::load(self.blob_path.clone(), gen_hash.to_string()).unwrap();
+        let all = topdir.all_dirs(key);
+        all.remove_item(key.to_owned()).first().unwrap().get_hash()
+    }
 }
 
 
 impl SnapFs {
     pub fn new(root: PathBuf) -> Self {
-        let chain_path = Arc::new(root.join("chain"));
         let blob_path = Arc::new(root.join("blobs"));
-        fs::create_dir_all(&*chain_path).unwrap();
         fs::create_dir_all(&*blob_path).unwrap();
-        let mut hash_paths: Vec<PathBuf> = vec![];
-
-        for entry in fs::read_dir(&*chain_path).unwrap() {
-            hash_paths.push(entry.unwrap().path());
-        }
-
-        hash_paths.sort();
-        let hashes: Vec<Hashed> = hash_paths.into_iter().map(|p|fs::read_link(&p).unwrap().file_name().unwrap().to_str().unwrap().to_string()).collect();
 
         let selv = Self {
-            chain_path,
             blob_path,
-            hashes: Arc::new(Mutex::new(hashes)),
         };
 
-        selv.save_new_generation(Dir::new(selv.blob_path.clone()).persist().hash);
         selv
     }
 
-    fn the_full_blob_path(&self, hash: &str) -> PathBuf {
+    fn get_item_path(&self, genn: &str, item_key: &str) -> PathBuf{
+        let itemhash = self.get_item_hash(genn, item_key);
+        self.the_full_blob_path(&itemhash)
+    }
+
+    fn get_item_hash(&self, genn: &str, item: &str) -> Hashed {
+        read_link(self.full_path(genn, item)).unwrap().file_name().unwrap().to_str().unwrap().to_owned()
+    }
+
+    pub fn the_full_blob_path(&self, hash: &str) -> PathBuf {
         full_blob_path(&self.blob_path, hash)
     }
 
-    fn full_path(&self, _gen: &Hashed, key: &str) -> PathBuf {
+    fn full_path(&self, _gen: &str, key: &str) -> PathBuf {
         let mut path = self.the_full_blob_path(_gen);
         for cmp in get_key_components(key){
             path = path.join(format!("{cmp}"));
@@ -104,16 +127,6 @@ impl SnapFs {
         path = path.join(key);
 
         path
-    }
-
-    fn save_new_generation(&self, hash: Hashed) {
-        let name = format!("{:06}", self.hashes.lock().unwrap().len());
-        let link = self.chain_path.join(name);
-        let original = self.the_full_blob_path(&hash);
-        if let Err(e) = symlink(&original, &link) {
-            dbg!(original, link, e);
-        }
-        self.hashes.lock().unwrap().push(hash);
     }
 }
 
@@ -128,6 +141,7 @@ fn get_hash<T: Hash>(item: &T) -> Hashed {
 /// A Dir as it exists on the filesystem, cannot be mutated inmemory, only acquired by loading from fs.
 #[derive(Debug)]
 struct FsDir {
+    blob_path: Arc<PathBuf>,
     hash: Hashed,
     dir: Dir,
 }
@@ -161,11 +175,11 @@ impl FsDir {
         }
 
         let dir = Dir {
-            blob_path: dir_path,
             contents,
         };
 
         Some(Self {
+            blob_path: dir_path,
             hash,
             dir,
         })
@@ -179,17 +193,16 @@ impl FsDir {
         full_blob_path(&self.blob_path, &self.hash)
     }
 
-
-
     /// must only be called from top-level directory
     /// 
     /// returns a vector of all the directories from current to the one where the item of a given key is located.
     /// if the key doesn't exist it'll fill it with empty dir objects.
     fn all_dirs(self, key: &str) -> ItemPath {
+        trace!("retrieving full itempath of key: {key}");
         let dir_path = self.blob_path.clone();
         let mut path = self.path();
 
-        let mut out = ItemPath { top_dir: self.into_inner(), dirs: vec![] };
+        let mut out = ItemPath { blob_path: self.blob_path.clone(), top_dir: self.into_inner(), dirs: vec![] };
 
         for num in get_key_components(key){
             path = path.join(format!("{num}"));
@@ -205,11 +218,10 @@ impl FsDir {
                 let dir = Self::load(dir_path.clone(), hash.to_owned()).unwrap().into_inner();
                 out.dirs.push((dir, num));
             } else {
-                let dir = Dir::new(dir_path.clone());
+                let dir = Dir::new();
                 out.dirs.push((dir, num));
             }
         }
-
         out
     }
 }
@@ -231,24 +243,28 @@ struct ItemPath {
     top_dir: Dir,
     /// The dirs leading to the item, along with the key component that lead to this dir
     dirs: Vec<(Dir, String)>,
+    blob_path: Arc<PathBuf>,
 }
 
 impl ItemPath {
-    fn save_item(mut self, key: String, item_path: PathBuf) -> Vec<FsDir> {
+    /// Modifies the leaf dir of the itempath, persists all the dirs leading up to it and returns them
+    fn modify<F: FnOnce(&mut Dir)>(mut self, dir_modifier: F) -> Vec<FsDir> {
         let mut out = vec![];
 
         let (item_dir, mut parent_component) = self.dirs.pop().unwrap();
 
         let mut dir = item_dir;
-        dir.insert_file(key, item_path);
-        let fs_item_dir = dir.persist();
+
+        dir_modifier(&mut dir);
+
+        let fs_item_dir = dir.persist(self.blob_path.clone());
         let mut path = fs_item_dir.path();
         out.push(fs_item_dir);
 
         while let Some((dir, cmp)) = self.dirs.pop() {
             let mut dir = dir;
             dir.insert_dir(format!("{parent_component}"), path.clone());
-            let fsdir = dir.persist();
+            let fsdir = dir.persist(self.blob_path.clone());
             path = fsdir.path();
             parent_component = cmp;
             out.insert(0, fsdir);
@@ -256,10 +272,46 @@ impl ItemPath {
 
         let mut top_dir = self.top_dir;
         top_dir.insert_dir(format!("{parent_component}"), path);
-        let fs_top_dir = top_dir.persist();
+        let fs_top_dir = top_dir.persist(self.blob_path.clone());
         out.insert(0, fs_top_dir);
 
         out
+
+    }
+
+    /// Creates a hardlink to an item in the leafdir
+    fn save_item(self, key: String, item_path: PathBuf) -> Vec<FsDir> {
+        tracing::trace!("inserting item: key: {key}, path: {item_path:?}");
+
+        let f: Box<dyn FnOnce(&mut Dir)> = Box::new(|dir: &mut Dir|{
+            match dir.insert_file(key, item_path) {
+                Some(old) => {
+                    tracing::debug!("previous item: {old:?}")
+                },
+                None => {
+                    tracing::trace!("item inserted for first time");
+                },
+            }
+        });
+
+        self.modify(f)
+    }
+
+    /// Removes a hardlink to an item in the leafdir
+    fn remove_item(self, key: String) -> Vec<FsDir> {
+        tracing::trace!("removing item: {key}");
+        let f: Box<dyn FnOnce(&mut Dir)> = Box::new(|dir: &mut Dir|{
+            match dir.contents.remove(&key) {
+                Some(old) => {
+                    tracing::debug!("item removed: {old:?}");
+                },
+                None => {
+                    tracing::warn!("tried to remove {key}, but it was not present");
+                },
+            } 
+        });
+
+        self.modify(f)
     }
 }
 
@@ -287,13 +339,34 @@ impl Content {
         } else {
             Self::Dir(path)
         }
+    }
 
+    /// Creates a symlink in case of a directory, hardlink for files.
+    /// this is because hardlinks take up less space, but cannot be used for directories
+    fn create_file_reference(&self, link: PathBuf) {
+        match self {
+            Self::File(original) => {
+                match fs::hard_link(original, link) {
+                    Ok(()) => {},
+                    Err(e) => {
+                        dbg!(e);
+                    },
+                }
+            },
+            Self::Dir(original) => {
+                match symlink(original, link) {
+                    Ok(()) => {},
+                    Err(e) => {
+                        dbg!(e);
+                    },
+                }
+            },
+        }
     }
 }
 
 #[derive(Debug)]
 struct Dir{
-    blob_path: Arc<PathBuf>,
     contents: HashMap<String, Content>,
 }
 
@@ -307,19 +380,21 @@ impl Deref for Dir {
 
 impl Dir {
     fn get_hash(&self) -> Hashed {
-        let mut hash = get_hash(&());
+        if self.contents.is_empty() {
+            get_hash(&())
+        } else {
+            let mut hash = Hashed::default();
+            for (_, val) in self.contents.iter() {
+                let entry_hash = val.file_name().unwrap().to_str().unwrap();
+                hash.push_str(&entry_hash);
+            }
 
-        for (_, val) in self.contents.iter() {
-            let entry_hash = val.file_name().unwrap().to_str().unwrap();
-            hash.push_str(&entry_hash);
+            get_hash(&hash)
         }
-
-        get_hash(&hash)
     }
 
-    fn new(dir_path: Arc<PathBuf>) -> Self {
+    fn new() -> Self {
         Self {
-            blob_path: dir_path,
             contents: Default::default(),
         }
     }
@@ -328,37 +403,18 @@ impl Dir {
         self.contents.insert(key, Content::Dir(path));
     }
 
-    fn insert_file(&mut self, key: String, path: PathBuf) {
-        self.contents.insert(key, Content::File(path));
+    fn insert_file(&mut self, key: String, path: PathBuf) -> Option<Content>{
+        self.contents.insert(key, Content::File(path))
     }
 
-    fn persist(self) -> FsDir {
-        let dir_path = self.blob_path.clone();
+    fn persist(self, dir_path: Arc<PathBuf>) -> FsDir {
         let hash = self.get_hash();
-        let path = full_blob_path(&self.blob_path, &hash);
+        let path = full_blob_path(&dir_path, &hash);
         fs::create_dir_all(&path).unwrap();
 
         for (name, original) in self.contents.iter() {
             let link = path.join(name);
-            match original {
-                Content::File(original) => {
-                    match fs::hard_link(original, link) {
-                        Ok(_) => {},
-                        Err(e) => {
-                            dbg!(e);
-                        },
-                    }
-                },
-                Content::Dir(original) => {
-                    match symlink(original, link) {
-                        Ok(_) => {},
-                        Err(e) => {
-                            dbg!(e);
-                        },
-                    }
-
-                },
-            }
+            original.create_file_reference(link);
         }
 
         FsDir::load(dir_path, hash).unwrap()
@@ -374,36 +430,4 @@ fn full_blob_path(blob_store: &Path, hash: &str) -> PathBuf {
     let dir = blob_store.join(topdir);
     fs::create_dir_all(&dir).ok();
     dir.join(hash)
-}
-
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn testlol(){
-        let root = PathBuf::from("/home/tor/spekifs/test");
-        fs::remove_dir_all(&root).ok();
-        let mut snfs = SnapFs::new(root);
-        let key = String::from("hey");
-        let item = String::from("myitem");
-        snfs.save(&key.clone(), item.into_bytes());
-
-        let key = String::from("hey");
-        let item = String::from("updateditem");
-        snfs.save(&key.clone(), item.into_bytes());
-
-        dbg!(snfs.get_with_gen_idx(&key, 1));
-        dbg!(snfs.get_with_gen_idx(&key, 2));
-
-        snfs.save("whatthefuck", "nicethere".into());
-        snfs.save("whaffasdf", "foo".into());
-        snfs.save("awkjasf", "baz".into());
-        snfs.save("whatsfa", "bar".into());
-        snfs.save("wosfda", "bar".into());
-        snfs.save("wosfsadfa", "bar".into());
-        snfs.save("wasdfsa", "bar".into());
-
-    }
 }

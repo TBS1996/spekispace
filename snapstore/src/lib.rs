@@ -12,33 +12,45 @@ fn get_hash<T: Hash>(item: &T) -> Hashed {
     format!("{:x}", hasher.finish())
 }
 
-pub trait SnapStorage {
-    fn save_on_gen(&self, key: &str, prev_generation: &str, item_hash: &str) -> Hashed; 
+struct HashedItem<T: Hash> {
+    hash: String,
+    item: T,
+}
 
+impl<T: Hash> HashedItem<T> {
+    fn new(item: T) -> Self {
+        let hash = get_hash(&item);
+
+        Self {
+            hash,
+            item,
+        }
+    }
+}
+
+pub trait SnapStorage {
+    fn save_on_gen(&self, key: &str, prev_generation: Option<&str>, item_hash: &str) -> Hashed; 
+
+    /// Saves item to the blob store
     fn save_item(&self, item_hash: &str, item: Vec<u8>);
 
-    fn get_with_gen(&self, key: &str, gen_hash: &Hashed) -> Option<Vec<u8>>;
+    fn get(&self, hash: &str, key: &str) -> Option<Vec<u8>>;
 
-    fn get_gen(&self, idx: usize) -> Hashed;
+    fn get_cache(&self, gen_hash: &str, cache_key: &str) -> Vec<String>;
 
-    fn latest_generation(&self) -> Hashed;
+    fn insert_cache(&self, gen_hash: &str, cache_key: &str, item: &str) -> Hashed;
 
-    fn get_with_gen_idx(&self, key: &Key, generation: usize) -> Option<Vec<u8>> {
-        let hash = self.get_gen(generation);
-        self.get_with_gen(key, &hash)
-    }
+    fn remove_cache(&self, gen_hash: &str, cache_key: &str, item: &str) -> Hashed;
 
-    fn get(&self, key: &str) -> Option<Vec<u8>> {
-        let hash = self.latest_generation();
-        self.get_with_gen(key, &hash)
-    }
+    fn get_all(&self, gen_hash: &str) -> HashMap<String, Vec<u8>>;
 
-    fn get_all(&self) -> HashMap<String, Vec<u8>>;
-
-    fn save(&self, key: &str, item: Vec<u8>) -> Hashed{
-        let hash = self.latest_generation();
+    /// Saves the item and returns the hash to the new generation
+    fn save(&self, gen_hash: Option<&str>, key: &str, item: Vec<u8>) -> Hashed{
         let item_hash = get_hash(&item);
         self.save_item(&item_hash, item);
-        self.save_on_gen(key, &hash, &item_hash)
+        self.save_on_gen(key, gen_hash, &item_hash)
     }
+
+    /// removes the item and returns the top hash
+    fn remove(&self, gen_hash: &str, key: &str) -> Hashed;
 }

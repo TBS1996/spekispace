@@ -15,3 +15,4 @@ nonempty.workspace = true
 async-once-cell.workspace = true
 wasm-bindgen-futures.workspace = true
 bincode.workspace = true
+snapstore.workspace = true
