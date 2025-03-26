@@ -1,7 +1,7 @@
 use serde::{de::DeserializeOwned, Deserialize, Deserializer, Serialize};
 use snapstore::fs::SnapFs;
 use snapstore::{CacheKey, PropertyCacheKey, RefCacheKey, SnapStorage};
-use std::fs::{self, create_dir_all, hard_link};
+use std::fs::{self, hard_link};
 use std::io::Write;
 use std::os::unix::fs::symlink;
 use std::path::{Path, PathBuf};

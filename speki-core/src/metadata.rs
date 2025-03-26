@@ -9,7 +9,7 @@ use uuid::Uuid;
 
 use crate::{
     card::CardId,
-    ledger::{MetaAction, MetaEvent},
+    ledger::MetaEvent,
 };
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize, Hash)]
