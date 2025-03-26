@@ -6,7 +6,7 @@ use speki_core::{
     card_provider::Caches,
     cardfilter::CardFilter,
     collection::{DynCard, MaybeDyn},
-    CacheKey,
+    PropertyCache,
 };
 use speki_web::{CardEntry, Node};
 use tracing::info;
@@ -140,7 +140,7 @@ impl CardSelector {
                             .inner()
                             .card_provider
                             .cache
-                            .get(CacheKey::Bigram(bigram))
+                            .get(PropertyCache::Bigram(bigram))
                             .await;
 
                         for id in indices.as_ref() {

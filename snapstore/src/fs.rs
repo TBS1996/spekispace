@@ -3,6 +3,8 @@ use std::{collections::HashMap, fs::{self, read_link}, hash::{DefaultHasher, Has
 use tracing::trace;
 use walkdir::WalkDir;
 
+use crate::CacheKey;
+
 use super::SnapStorage;
 
 type Hashed = String;
@@ -49,28 +51,27 @@ impl SnapStorage for SnapFs {
         file_map
     }
 
-    fn get_cache(&self, gen_hash: &str, cache_key: &str) -> Vec<String> {
-        let path = self.full_path(gen_hash, &cache_key);
+    fn get_cache(&self, gen_hash: &str, cache_key: &CacheKey) -> Vec<String> {
+        let path = self.full_path(gen_hash, &cache_key.to_string());
 
         let mut out = vec![];
         for entry in fs::read_dir(&path).unwrap() {
             out.push(entry.unwrap().file_name().into_string().unwrap());
-
         }
 
         out
     }
 
-    fn insert_cache(&self, gen_hash: &str, cache_key: &str, item: &str) -> Hashed {
+    fn insert_cache(&self, gen_hash: &str, cache_key: &CacheKey, item: &str) -> Hashed {
         let item_blob_path = self.get_item_path(gen_hash, item);
         let path = FsDir::load(self.blob_path.clone(), gen_hash.to_owned()).unwrap();
-        let itempath = path.all_dirs(cache_key);
+        let itempath = path.all_dirs(&cache_key.to_string());
         itempath.save_item(item.to_string(), item_blob_path).first().unwrap().get_hash()
     }
     
-    fn remove_cache(&self, gen_hash: &str, cache_key: &str, item: &str) -> Hashed {
+    fn remove_cache(&self, gen_hash: &str, cache_key: &CacheKey, item: &str) -> Hashed {
         let topdir = FsDir::load(self.blob_path.clone(), gen_hash.to_string()).unwrap();
-        let all = topdir.all_dirs(cache_key);
+        let all = topdir.all_dirs(&cache_key.to_string());
         all.remove_item(item.to_owned()).first().unwrap().get_hash()
     }
 

@@ -4,9 +4,10 @@ use crate::{
     ledger::{CardAction, CardEvent},
     metadata::Metadata,
     recall_rate::History,
-    CacheKey, Card, Provider, Recaller, TimeGetter,
+    Card, Provider, Recaller, TimeGetter,
 };
 use dioxus_logger::tracing::{info, trace};
+use snapstore::CacheKey;
 use std::{
     collections::{BTreeSet, HashMap, HashSet},
     fmt::Debug,
@@ -22,7 +23,6 @@ pub struct Caches {
 impl Debug for Caches {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Caches")
-            .field("inner", &self.inner)
             .finish()
     }
 }
@@ -35,29 +35,13 @@ impl Caches {
         }
     }
 
-    pub async fn get(&self, key: CacheKey) -> Arc<HashSet<String>> {
+    pub async fn get(&self, key: impl Into<CacheKey>) -> Arc<HashSet<String>> {
+        let key: CacheKey = key.into();
         if let Some(set) = self.inner.read().unwrap().get(&key) {
             return set.clone();
         }
 
-        let set = match key.clone() {
-            key @ CacheKey::Bigram(_) => {
-                let (key, value) = key.to_parts();
-                self.providers.cards.load_property_cache(key, &value).await
-            }
-            key @ CacheKey::CardType(_) => {
-                let (key, value) = key.to_parts();
-                self.providers.cards.load_property_cache(key, &value).await
-            }
-            key @ CacheKey::Suspended(_) => {
-                let (key, value) = key.to_parts();
-                self.providers.cards.load_property_cache(key, &value).await
-            }
-            key @ CacheKey::AttrId(_) => {
-                let (key, value) = key.to_parts();
-                self.providers.cards.load_property_cache(key, &value).await
-            }
-        };
+        let set: HashSet<String> = self.providers.cards.get_cache(key.clone()).await.into_iter().collect();
 
         let set = Arc::new(set);
         self.inner.write().unwrap().insert(key, set.clone());

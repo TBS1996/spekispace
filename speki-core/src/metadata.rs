@@ -38,19 +38,6 @@ impl LedgerItem<MetaEvent> for Metadata {
         Ok(self)
     }
 
-    fn derive_events(&self) -> Vec<MetaEvent> {
-        let mut actions: Vec<MetaEvent> = vec![];
-
-        if self.suspended.is_suspended() {
-            actions.push(MetaEvent {
-                id: self.id,
-                action: MetaAction::Suspend(true),
-            });
-        }
-
-        actions
-    }
-
     fn new_default(id: CardId) -> Self {
         Self::new(id)
     }

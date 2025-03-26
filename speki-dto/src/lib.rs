@@ -1,6 +1,6 @@
 use serde::{de::DeserializeOwned, Deserialize, Deserializer, Serialize};
 use snapstore::fs::SnapFs;
-use snapstore::SnapStorage;
+use snapstore::{CacheKey, PropertyCacheKey, RefCacheKey, SnapStorage};
 use std::fs::{self, create_dir_all, hard_link};
 use std::io::Write;
 use std::os::unix::fs::symlink;
@@ -29,9 +29,9 @@ pub type LedgerHash = Hashed;
 #[derive(Clone)]
 pub struct Ledger<T: LedgerItem<E>, E: LedgerEvent> {
     ledger: Arc<RwLock<Vec<LedgerEntry<E>>>>,
-    storage: Arc<Box<dyn LedgerStorage<T, E>>>,
     snap: SnapFs,
     root: Arc<PathBuf>,
+    _phantom: PhantomData<T>,
 }
 
 impl<T: LedgerItem<E>, E: LedgerEvent> Ledger<T, E> {
@@ -40,9 +40,9 @@ impl<T: LedgerItem<E>, E: LedgerEvent> Ledger<T, E> {
         let snap = SnapFs::new((*root).clone());
         let selv = Self {
             ledger: Default::default(),
-            storage: Arc::new(storage),
             snap,
             root,
+            _phantom: PhantomData,
         };
 
         let ledger = Self::load_ledger(&selv.ledger_path());
@@ -102,6 +102,11 @@ impl<T: LedgerItem<E>, E: LedgerEvent> Ledger<T, E> {
         self.root.join("entries")
     }
 
+    pub async fn get_cache(&self, cache_key: impl Into<CacheKey>) -> Vec<String> {
+        let hash = self.state_hash().await;
+        self.snap.get_cache(&hash, &cache_key.into())
+    }
+
     fn get_state(&self, ledger_hash: &str) -> Option<StateHash> {
         let path = self.state_map_path().join(ledger_hash);
         if !path.exists() {
@@ -109,7 +114,6 @@ impl<T: LedgerItem<E>, E: LedgerEvent> Ledger<T, E> {
         } else {
             Some(fs::read_link(&path).unwrap().file_name().unwrap().to_str().unwrap().to_string())
         }
-
     }
 
     pub async fn state_hash(&self)  -> StateHash {
@@ -210,58 +214,7 @@ impl<T: LedgerItem<E>, E: LedgerEvent> Ledger<T, E> {
     }
 
     pub async fn load_ids(&self) -> Vec<String> {
-        return vec![];
-        //self.load_all().await.into_keys().collect()
-    }
-
-    pub async fn xsave_ledger(&self, event: E, prev: Option<LedgerEntry<E>>) -> LedgerEntry<E> {
-        self.storage.xsave_ledger_entry(event, prev).await
-    }
-
-
-    pub async fn save_property_cache(&self, property: &str, value: &str, ids: HashSet<String>) {
-        self.storage.save_property_cache(property, value, ids).await
-    }
-
-    pub async fn load_property_cache(&self, property: &str, value: &str) -> HashSet<String> {
-        self.storage.load_property_cache(property, value).await
-    }
-
-    pub async fn save_all_cache(&self) {
-        let mut caches: HashMap<(&'static str, String), HashSet<E::Key>> = Default::default();
-        let mut ref_caches: HashMap<E::Key, HashMap<&'static str, E::Key>> = Default::default();
-
-        for (_, item) in self.storage.load_all_items().await {
-            let id = item.item_id();
-            for x in item.caches() {
-                caches.entry(x).or_default().insert(id);
-            }
-
-            for (ty, keys) in item.dep_cache() {
-                for key in keys {
-                    let x = ref_caches.entry(key).or_default();
-                    x.insert(ty, id);
-                }
-            }
-        }
-
-        for ((property, value), id) in caches {
-            self.storage
-                .save_property_cache(
-                    property,
-                    &value,
-                    id.into_iter().map(|x| x.to_string()).collect(),
-                )
-                .await;
-        }
-
-        for (id, map) in ref_caches {
-            for (deptype, reff) in map {
-                self.storage
-                    .save_refdep(&id.to_string(), deptype, &reff.to_string())
-                    .await;
-            }
-        }
+        self.snap.get_all(&self.state_hash().await).into_keys().collect()
     }
 
     pub async fn hash(&self) -> Option<Hashed> {
@@ -276,20 +229,39 @@ impl<T: LedgerItem<E>, E: LedgerEvent> Ledger<T, E> {
     pub async fn run_event(&self, event: E, state_hash: Option<&str>) -> StateHash{
         info!("running event: {event:?}");
 
+        let mut new_item = true;
         let item = match state_hash {
             Some(hash) => {
                 match self.snap.get(hash, &event.id().to_string()).map(|v|serde_json::from_slice(&v).unwrap()) {
-                    Some(item) => item,
+                    Some(item) => {
+                        new_item = false;
+                        item
+                    },
                     None => T::new_default(event.id()),
                 }
             },
             None => T::new_default(event.id()),
         };
 
+        let old_cache = if !new_item { item.caches() } else {Default::default()};
+
         let id = item.item_id();
         let item = item.run_event(event).unwrap();
+        let new_caches = item.caches();
         let item = serde_json::to_vec(&item).unwrap();
-        self.snap.save(state_hash, &id.to_string(), item)
+        let mut state_hash = self.snap.save(state_hash, &id.to_string(), item);
+
+        let added_caches = new_caches.difference(&old_cache);
+        for (cache_key, id) in added_caches {
+            state_hash = self.snap.insert_cache(&state_hash, cache_key, id);
+        }
+
+        let removed_caches = old_cache.difference(&new_caches);
+        for (cache_key, id) in removed_caches {
+            state_hash = self.snap.remove_cache(&state_hash, cache_key, id);
+        }
+
+        state_hash
     }
 
     pub fn len(&self) -> usize {
@@ -371,6 +343,7 @@ fn get_hash<T: Hash>(item: &T) -> Hashed {
     format!("{:x}", hasher.finish())
 }
 
+
 /// Represents how a ledger mutates or creates an item.
 pub trait LedgerItem<E: LedgerEvent + Debug>:
     Serialize + DeserializeOwned + Hash + 'static
@@ -379,18 +352,51 @@ pub trait LedgerItem<E: LedgerEvent + Debug>:
 
     fn run_event(self, event: E) -> Result<Self, Self::Error>;
 
-    fn derive_events(&self) -> Vec<E>;
-
     fn new_default(id: E::Key) -> Self;
 
     fn item_id(&self) -> E::Key;
 
-    fn dep_cache(&self) -> HashMap<&'static str, HashSet<E::Key>> {
+    /// List of references to other items, along with the name of the type of reference.
+    /// 
+    /// Used to create a index, like if item A references item B, we cache that item B is referenced by item A, 
+    /// so that we don't need to search through all the items to find out or store it double in the item itself.
+    fn ref_cache(&self) -> HashMap<&'static str, HashSet<E::Key>> {
         Default::default()
     }
 
-    fn caches(&self) -> HashSet<(&'static str, String)> {
+    /// List of defined properties that this item has.
+    /// 
+    /// The property keys are predefined, hence theyre static str
+    /// the String is the Value which could be anything. 
+    /// For example ("suspended", true).
+    fn properties_cache(&self) -> HashSet<(&'static str, String)> {
         Default::default()
+    }
+
+    fn caches(&self) -> HashSet<(CacheKey, String)> {
+        let mut out: HashSet<(CacheKey, String)> = Default::default();
+        let id = self.item_id().to_string();
+
+        for (property, value) in self.properties_cache()  {
+            let key = PropertyCacheKey {
+                property,
+                value,
+            };
+            out.insert((CacheKey::Property(key), id.clone()));
+        }
+
+        for (reftype, ids) in self.ref_cache() {
+            let key = RefCacheKey {
+                reftype,
+                id: id.to_string(),
+            };
+
+            for ref_id in ids {
+                out.insert((CacheKey::ItemRef(key.clone()), ref_id.to_string()));
+            }
+        }
+
+        out
     }
 }
 

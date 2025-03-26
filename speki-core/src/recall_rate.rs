@@ -203,22 +203,6 @@ impl LedgerItem<ReviewEvent> for History {
         Ok(self)
     }
 
-    fn derive_events(&self) -> Vec<ReviewEvent> {
-        let mut actions: Vec<ReviewEvent> = vec![];
-
-        for review in &self.reviews {
-            let event = ReviewEvent {
-                id: self.id,
-                grade: review.grade,
-                timestamp: review.timestamp,
-            };
-
-            actions.push(event);
-        }
-
-        actions
-    }
-
     fn new_default(id: CardId) -> Self {
         Self::new(id)
     }

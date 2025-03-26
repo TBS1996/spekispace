@@ -48,10 +48,6 @@ impl LedgerItem<CollectionEvent> for Collection {
         Ok(self)
     }
 
-    fn derive_events(&self) -> Vec<CollectionEvent> {
-        todo!()
-    }
-
     fn new_default(id: CollectionId) -> Self {
         Self {
             id,

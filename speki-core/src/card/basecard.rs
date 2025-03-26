@@ -1,7 +1,7 @@
 use super::*;
 use crate::{
     attribute::AttributeId, audio::AudioId, card_provider::CardProvider, ledger::CardEvent,
-    CacheKey, DepCacheKey,
+    PropertyCache, DepCacheKey,
 };
 use omtrent::TimeStamp;
 use serde::{Deserialize, Serialize};
@@ -393,7 +393,7 @@ pub fn normalize_string(str: &str) -> String {
 impl LedgerItem<CardEvent> for RawCard {
     type Error = ();
 
-    fn dep_cache(&self) -> HashMap<&'static str, HashSet<CardId>> {
+    fn ref_cache(&self) -> HashMap<&'static str, HashSet<CardId>> {
         let mut out: HashMap<&str, HashSet<Uuid>> = Default::default();
 
         for dep in &self.dependencies {
@@ -450,11 +450,11 @@ impl LedgerItem<CardEvent> for RawCard {
         out
     }
 
-    fn caches(&self) -> HashSet<(&'static str, String)> {
+    fn properties_cache(&self) -> HashSet<(&'static str, String)> {
         let mut out: HashSet<(&'static str, String)> = Default::default();
 
         for bigram in bigrams(&self.data.raw_front()) {
-            out.insert(CacheKey::Bigram(bigram).to_parts());
+            out.insert(PropertyCache::Bigram(bigram).to_parts());
         }
 
         match &self.data {
@@ -462,14 +462,14 @@ impl LedgerItem<CardEvent> for RawCard {
             CardType::Unfinished { .. } => {}
             CardType::Instance { .. } => {}
             CardType::Attribute { attribute, .. } => {
-                out.insert(CacheKey::AttrId(*attribute).to_parts());
+                out.insert(PropertyCache::AttrId(*attribute).to_parts());
             }
             CardType::Class { .. } => {}
             CardType::Statement { .. } => {}
             CardType::Event { .. } => {}
         };
 
-        out.insert(CacheKey::CardType(self.data.fieldless()).to_parts());
+        out.insert(PropertyCache::CardType(self.data.fieldless()).to_parts());
 
         out
     }
@@ -516,36 +516,6 @@ impl LedgerItem<CardEvent> for RawCard {
         }
 
         Ok(self)
-    }
-
-    fn derive_events(&self) -> Vec<CardEvent> {
-        todo!();
-        let mut actions = vec![];
-
-        //let action = CardAction::UpsertCard (self.data.ty.clone() );
-        //actions.push(action);
-
-        if let Some(audio) = self.front_audio {
-            let action = CardAction::SetFrontAudio(Some(audio));
-            actions.push(action);
-        }
-
-        if let Some(audio) = self.back_audio {
-            let action = CardAction::SetFrontAudio(Some(audio));
-            actions.push(action);
-        }
-
-        for dep in &self.dependencies {
-            let action = CardAction::AddDependency(*dep);
-            actions.push(action);
-        }
-
-        let id = self.id;
-
-        actions
-            .into_iter()
-            .map(|action| CardEvent::new(id, action))
-            .collect()
     }
 
     fn item_id(&self) -> CardId {

@@ -6,6 +6,7 @@ use dioxus_logger::tracing::info;
 use ledger::{decompose_history, CardAction, CardEvent, CollectionEvent, Event, MetaEvent};
 use metadata::Metadata;
 use recall_rate::{History, ReviewEvent};
+use snapstore::{CacheKey, PropertyCacheKey};
 use speki_dto::{Ledger, LedgerEntry, Storage, TimeProvider};
 use std::{
     collections::HashMap,
@@ -54,21 +55,29 @@ impl DepCacheKey {
 }
 
 #[derive(Clone, PartialEq, PartialOrd, Hash, Eq, Debug)]
-pub enum CacheKey {
+pub enum PropertyCache {
     Bigram([char; 2]),
     Suspended(bool),
     CardType(CType),
     AttrId(AttributeId),
 }
 
-impl CacheKey {
+impl From<PropertyCache> for CacheKey {
+    fn from(value: PropertyCache) -> Self {
+        let (property, value) = value.to_parts();
+
+        CacheKey::Property(PropertyCacheKey{property, value})
+    }
+}
+
+impl PropertyCache {
     /// Gets identifier and value of cache entry
     pub fn to_parts(&self) -> (&'static str, String) {
         match self {
-            CacheKey::Bigram([a, b]) => ("bigram", format!("{a}{b}")),
-            CacheKey::Suspended(flag) => ("suspended", format!("{flag}")),
-            CacheKey::CardType(ctype) => ("cardtype", format!("{ctype:?}")),
-            CacheKey::AttrId(id) => ("attr_id", id.to_string()),
+            PropertyCache::Bigram([a, b]) => ("bigram", format!("{a}{b}")),
+            PropertyCache::Suspended(flag) => ("suspended", format!("{flag}")),
+            PropertyCache::CardType(ctype) => ("cardtype", format!("{ctype:?}")),
+            PropertyCache::AttrId(id) => ("attr_id", id.to_string()),
         }
     }
 }
@@ -210,6 +219,7 @@ pub async fn import_card_ledger(ledger: Ledger<RawCard, CardEvent>) {
 }
 
 pub async fn import_history_ledger(ledger: Ledger<History, ReviewEvent>) {
+    todo!();
     let path = std::path::PathBuf::from("/home/tor/Downloads/spekireviews.json");
 
     #[derive(Debug, serde::Deserialize)]
@@ -227,7 +237,7 @@ pub async fn import_history_ledger(ledger: Ledger<History, ReviewEvent>) {
         let card: History = toml::from_str(&val).unwrap();
         let actions = decompose_history(card);
         for action in actions {
-            prev = Some(ledger.xsave_ledger(action, prev).await);
+            //prev = Some(ledger.xsave_ledger(action, prev).await);
         }
     }
 }
