@@ -51,7 +51,6 @@ impl<T: LedgerItem<E>, E: LedgerEvent> Ledger<T, E> {
     }
 }
 
-
 pub fn load_file_contents(dir: &Path) -> HashMap<String, Vec<u8>> {
     let mut map = HashMap::new();
     if let Ok(entries) = fs::read_dir(dir) {
@@ -75,8 +74,14 @@ impl<T: LedgerItem<E>, E: LedgerEvent> Ledger<T, E> {
     }
 
     pub async fn save_ledger(&self, event: E) -> LedgerEntry<E> {
-        let hash = self.ledger.read().unwrap().last().map(|e|e.hash());
-        let idx = self.ledger.read().unwrap().last().map(|e|e.index).unwrap_or_default();
+        let hash = self.ledger.read().unwrap().last().map(|e| e.hash());
+        let idx = self
+            .ledger
+            .read()
+            .unwrap()
+            .last()
+            .map(|e| e.index)
+            .unwrap_or_default();
         let entry = LedgerEntry::new(hash, idx + 1, event);
         let hash = entry.hash();
         let vec = serde_json::to_vec(&entry).unwrap();
@@ -112,11 +117,19 @@ impl<T: LedgerItem<E>, E: LedgerEvent> Ledger<T, E> {
         if !path.exists() {
             None
         } else {
-            Some(fs::read_link(&path).unwrap().file_name().unwrap().to_str().unwrap().to_string())
+            Some(
+                fs::read_link(&path)
+                    .unwrap()
+                    .file_name()
+                    .unwrap()
+                    .to_str()
+                    .unwrap()
+                    .to_string(),
+            )
         }
     }
 
-    pub async fn state_hash(&self)  -> StateHash {
+    pub async fn state_hash(&self) -> StateHash {
         let ledger = self.ledger.read().unwrap();
         let ledger = ledger.iter().rev();
         let mut unapplied_entries = vec![];
@@ -135,10 +148,12 @@ impl<T: LedgerItem<E>, E: LedgerEvent> Ledger<T, E> {
 
         let mut last_applied = last_applied;
 
-        while let Some(entry)  = unapplied_entries.pop() {
-           let state_hash = self.run_event(entry.event.clone(), last_applied.as_deref()).await;
-           self.save_ledger_state(&entry.hash(), &state_hash);
-           last_applied = Some(state_hash);
+        while let Some(entry) = unapplied_entries.pop() {
+            let state_hash = self
+                .run_event(entry.event.clone(), last_applied.as_deref())
+                .await;
+            self.save_ledger_state(&entry.hash(), &state_hash);
+            last_applied = Some(state_hash);
         }
 
         last_applied.unwrap_or_default()
@@ -176,7 +191,6 @@ impl<T: LedgerItem<E>, E: LedgerEvent> Ledger<T, E> {
         }
     }
 
-
     fn load_ledger(space: &Path) -> Vec<LedgerEntry<E>> {
         let mut foo: Vec<(usize, LedgerEntry<E>)> = {
             let map: HashMap<String, Vec<u8>> = load_file_contents(&space);
@@ -210,11 +224,18 @@ impl<T: LedgerItem<E>, E: LedgerEvent> Ledger<T, E> {
 
     pub async fn load_all(&self) -> HashMap<String, T> {
         let hash = self.state_hash().await;
-        self.snap.get_all(&hash).into_iter().map(|(key, val)| (key, serde_json::from_slice(&val).unwrap())).collect()
+        self.snap
+            .get_all(&hash)
+            .into_iter()
+            .map(|(key, val)| (key, serde_json::from_slice(&val).unwrap()))
+            .collect()
     }
 
     pub async fn load_ids(&self) -> Vec<String> {
-        self.snap.get_all(&self.state_hash().await).into_keys().collect()
+        self.snap
+            .get_all(&self.state_hash().await)
+            .into_keys()
+            .collect()
     }
 
     pub async fn hash(&self) -> Option<Hashed> {
@@ -226,24 +247,32 @@ impl<T: LedgerItem<E>, E: LedgerEvent> Ledger<T, E> {
     }
 
     /// Clones the current state, modifies it with the new entry, and returns the hash of the new state.
-    pub async fn run_event(&self, event: E, state_hash: Option<&str>) -> StateHash{
+    pub async fn run_event(&self, event: E, state_hash: Option<&str>) -> StateHash {
         info!("running event: {event:?}");
 
         let mut new_item = true;
         let item = match state_hash {
             Some(hash) => {
-                match self.snap.get(hash, &event.id().to_string()).map(|v|serde_json::from_slice(&v).unwrap()) {
+                match self
+                    .snap
+                    .get(hash, &event.id().to_string())
+                    .map(|v| serde_json::from_slice(&v).unwrap())
+                {
                     Some(item) => {
                         new_item = false;
                         item
-                    },
+                    }
                     None => T::new_default(event.id()),
                 }
-            },
+            }
             None => T::new_default(event.id()),
         };
 
-        let old_cache = if !new_item { item.caches() } else {Default::default()};
+        let old_cache = if !new_item {
+            item.caches()
+        } else {
+            Default::default()
+        };
 
         let id = item.item_id();
         let item = item.run_event(event).unwrap();
@@ -336,13 +365,11 @@ impl<E: LedgerEvent + Serialize + DeserializeOwned> LedgerEntry<E> {
     }
 }
 
-
 fn get_hash<T: Hash>(item: &T) -> Hashed {
     let mut hasher = DefaultHasher::new();
     item.hash(&mut hasher);
     format!("{:x}", hasher.finish())
 }
-
 
 /// Represents how a ledger mutates or creates an item.
 pub trait LedgerItem<E: LedgerEvent + Debug>:
@@ -357,17 +384,17 @@ pub trait LedgerItem<E: LedgerEvent + Debug>:
     fn item_id(&self) -> E::Key;
 
     /// List of references to other items, along with the name of the type of reference.
-    /// 
-    /// Used to create a index, like if item A references item B, we cache that item B is referenced by item A, 
+    ///
+    /// Used to create a index, like if item A references item B, we cache that item B is referenced by item A,
     /// so that we don't need to search through all the items to find out or store it double in the item itself.
     fn ref_cache(&self) -> HashMap<&'static str, HashSet<E::Key>> {
         Default::default()
     }
 
     /// List of defined properties that this item has.
-    /// 
+    ///
     /// The property keys are predefined, hence theyre static str
-    /// the String is the Value which could be anything. 
+    /// the String is the Value which could be anything.
     /// For example ("suspended", true).
     fn properties_cache(&self) -> HashSet<(&'static str, String)> {
         Default::default()
@@ -377,11 +404,8 @@ pub trait LedgerItem<E: LedgerEvent + Debug>:
         let mut out: HashSet<(CacheKey, String)> = Default::default();
         let id = self.item_id().to_string();
 
-        for (property, value) in self.properties_cache()  {
-            let key = PropertyCacheKey {
-                property,
-                value,
-            };
+        for (property, value) in self.properties_cache() {
+            let key = PropertyCacheKey { property, value };
             out.insert((CacheKey::Property(key), id.clone()));
         }
 

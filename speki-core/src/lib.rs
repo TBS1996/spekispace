@@ -66,7 +66,7 @@ impl From<PropertyCache> for CacheKey {
     fn from(value: PropertyCache) -> Self {
         let (property, value) = value.to_parts();
 
-        CacheKey::Property(PropertyCacheKey{property, value})
+        CacheKey::Property(PropertyCacheKey { property, value })
     }
 }
 

@@ -2,7 +2,11 @@ use serde::{de::DeserializeOwned, Serialize};
 use snapstore::fs::SnapFs;
 use speki_dto::{ItemStorage, LedgerEvent, LedgerStorage, ProviderId, Storage, TimeProvider};
 use std::{
-    collections::{HashMap, HashSet}, fs::{self, hard_link, File}, io::Write, path::{Path, PathBuf}, time::Duration
+    collections::{HashMap, HashSet},
+    fs::{self, hard_link, File},
+    io::Write,
+    path::{Path, PathBuf},
+    time::Duration,
 };
 
 const STORAGE_DIR: &str = "/home/tor/spekifs";
@@ -217,5 +221,3 @@ impl<T: Serialize + DeserializeOwned + std::fmt::Debug + Sized + 'static> ItemSt
         self.save_content(space, id, &bytes).await;
     }
 }
-
-

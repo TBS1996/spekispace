@@ -7,10 +7,7 @@ use serde::{
 use speki_dto::LedgerItem;
 use uuid::Uuid;
 
-use crate::{
-    card::CardId,
-    ledger::MetaEvent,
-};
+use crate::{card::CardId, ledger::MetaEvent};
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize, Hash)]
 pub struct Metadata {

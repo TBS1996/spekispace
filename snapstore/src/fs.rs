@@ -1,4 +1,12 @@
-use std::{collections::HashMap, fs::{self, read_link}, hash::{DefaultHasher, Hash, Hasher}, ops::Deref, os::unix::fs::symlink, path::{Path, PathBuf}, sync::Arc};
+use std::{
+    collections::HashMap,
+    fs::{self, read_link},
+    hash::{DefaultHasher, Hash, Hasher},
+    ops::Deref,
+    os::unix::fs::symlink,
+    path::{Path, PathBuf},
+    sync::Arc,
+};
 
 use tracing::trace;
 use walkdir::WalkDir;
@@ -15,7 +23,12 @@ pub struct SnapFs {
 }
 
 impl SnapStorage for SnapFs {
-    fn save_on_gen(&self, key: &str, prev_generation: Option<&str>, item_hash: &str) -> crate::Hashed {
+    fn save_on_gen(
+        &self,
+        key: &str,
+        prev_generation: Option<&str>,
+        item_hash: &str,
+    ) -> crate::Hashed {
         let item_path = full_blob_path(&self.blob_path, item_hash);
 
         let top_map = match prev_generation {
@@ -23,7 +36,7 @@ impl SnapStorage for SnapFs {
             None => {
                 let empty = Dir::new();
                 empty.persist(self.blob_path.clone())
-            },
+            }
         };
 
         let all: ItemPath = top_map.all_dirs(&key);
@@ -39,7 +52,7 @@ impl SnapStorage for SnapFs {
         for entry in WalkDir::new(&path) {
             let entry = entry.unwrap();
             let path = entry.path();
-    
+
             if path.is_file() {
                 if let Some(file_name) = path.file_name().and_then(|n| n.to_str()) {
                     let contents = fs::read(path).unwrap();
@@ -47,7 +60,7 @@ impl SnapStorage for SnapFs {
                 }
             }
         }
-    
+
         file_map
     }
 
@@ -66,9 +79,13 @@ impl SnapStorage for SnapFs {
         let item_blob_path = self.get_item_path(gen_hash, item);
         let path = FsDir::load(self.blob_path.clone(), gen_hash.to_owned()).unwrap();
         let itempath = path.all_dirs(&cache_key.to_string());
-        itempath.save_item(item.to_string(), item_blob_path).first().unwrap().get_hash()
+        itempath
+            .save_item(item.to_string(), item_blob_path)
+            .first()
+            .unwrap()
+            .get_hash()
     }
-    
+
     fn remove_cache(&self, gen_hash: &str, cache_key: &CacheKey, item: &str) -> Hashed {
         let topdir = FsDir::load(self.blob_path.clone(), gen_hash.to_string()).unwrap();
         let all = topdir.all_dirs(&cache_key.to_string());
@@ -79,13 +96,13 @@ impl SnapStorage for SnapFs {
         let path = self.full_path(hash, key);
         fs::read(&path).ok()
     }
-    
+
     fn save_item(&self, item_hash: &str, item: Vec<u8>) {
         let path = self.the_full_blob_path(item_hash);
         fs::File::create(&path).unwrap();
         fs::write(&path, &item).unwrap();
     }
-    
+
     fn remove(&self, gen_hash: &str, key: &str) -> crate::Hashed {
         let topdir = FsDir::load(self.blob_path.clone(), gen_hash.to_string()).unwrap();
         let all = topdir.all_dirs(key);
@@ -93,26 +110,29 @@ impl SnapStorage for SnapFs {
     }
 }
 
-
 impl SnapFs {
     pub fn new(root: PathBuf) -> Self {
         let blob_path = Arc::new(root.join("blobs"));
         fs::create_dir_all(&*blob_path).unwrap();
 
-        let selv = Self {
-            blob_path,
-        };
+        let selv = Self { blob_path };
 
         selv
     }
 
-    fn get_item_path(&self, genn: &str, item_key: &str) -> PathBuf{
+    fn get_item_path(&self, genn: &str, item_key: &str) -> PathBuf {
         let itemhash = self.get_item_hash(genn, item_key);
         self.the_full_blob_path(&itemhash)
     }
 
     fn get_item_hash(&self, genn: &str, item: &str) -> Hashed {
-        read_link(self.full_path(genn, item)).unwrap().file_name().unwrap().to_str().unwrap().to_owned()
+        read_link(self.full_path(genn, item))
+            .unwrap()
+            .file_name()
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .to_owned()
     }
 
     pub fn the_full_blob_path(&self, hash: &str) -> PathBuf {
@@ -121,7 +141,7 @@ impl SnapFs {
 
     fn full_path(&self, _gen: &str, key: &str) -> PathBuf {
         let mut path = self.the_full_blob_path(_gen);
-        for cmp in get_key_components(key){
+        for cmp in get_key_components(key) {
             path = path.join(format!("{cmp}"));
         }
 
@@ -131,13 +151,11 @@ impl SnapFs {
     }
 }
 
-
 fn get_hash<T: Hash>(item: &T) -> Hashed {
     let mut hasher = DefaultHasher::new();
     item.hash(&mut hasher);
     format!("{:x}", hasher.finish())
 }
-
 
 /// A Dir as it exists on the filesystem, cannot be mutated inmemory, only acquired by loading from fs.
 #[derive(Debug)]
@@ -149,7 +167,7 @@ struct FsDir {
 
 impl Deref for FsDir {
     type Target = Dir;
-    
+
     fn deref(&self) -> &Self::Target {
         &self.dir
     }
@@ -175,9 +193,7 @@ impl FsDir {
             contents.insert(name, Content::new(sympath));
         }
 
-        let dir = Dir {
-            contents,
-        };
+        let dir = Dir { contents };
 
         Some(Self {
             blob_path: dir_path,
@@ -195,7 +211,7 @@ impl FsDir {
     }
 
     /// must only be called from top-level directory
-    /// 
+    ///
     /// returns a vector of all the directories from current to the one where the item of a given key is located.
     /// if the key doesn't exist it'll fill it with empty dir objects.
     fn all_dirs(self, key: &str) -> ItemPath {
@@ -203,9 +219,13 @@ impl FsDir {
         let dir_path = self.blob_path.clone();
         let mut path = self.path();
 
-        let mut out = ItemPath { blob_path: self.blob_path.clone(), top_dir: self.into_inner(), dirs: vec![] };
+        let mut out = ItemPath {
+            blob_path: self.blob_path.clone(),
+            top_dir: self.into_inner(),
+            dirs: vec![],
+        };
 
-        for num in get_key_components(key){
+        for num in get_key_components(key) {
             path = path.join(format!("{num}"));
             if path.exists() {
                 let sym = match fs::read_link(&path) {
@@ -213,10 +233,12 @@ impl FsDir {
                     Err(e) => {
                         let s = format!("{path:?} {e} {key}");
                         panic!("{}", s);
-                    },
+                    }
                 };
                 let hash = sym.file_name().unwrap().to_str().unwrap().to_string();
-                let dir = Self::load(dir_path.clone(), hash.to_owned()).unwrap().into_inner();
+                let dir = Self::load(dir_path.clone(), hash.to_owned())
+                    .unwrap()
+                    .into_inner();
                 out.dirs.push((dir, num));
             } else {
                 let dir = Dir::new();
@@ -277,23 +299,21 @@ impl ItemPath {
         out.insert(0, fs_top_dir);
 
         out
-
     }
 
     /// Creates a hardlink to an item in the leafdir
     fn save_item(self, key: String, item_path: PathBuf) -> Vec<FsDir> {
         tracing::trace!("inserting item: key: {key}, path: {item_path:?}");
 
-        let f: Box<dyn FnOnce(&mut Dir)> = Box::new(|dir: &mut Dir|{
-            match dir.insert_file(key, item_path) {
+        let f: Box<dyn FnOnce(&mut Dir)> =
+            Box::new(|dir: &mut Dir| match dir.insert_file(key, item_path) {
                 Some(old) => {
                     tracing::debug!("previous item: {old:?}")
-                },
+                }
                 None => {
                     tracing::trace!("item inserted for first time");
-                },
-            }
-        });
+                }
+            });
 
         self.modify(f)
     }
@@ -301,16 +321,15 @@ impl ItemPath {
     /// Removes a hardlink to an item in the leafdir
     fn remove_item(self, key: String) -> Vec<FsDir> {
         tracing::trace!("removing item: {key}");
-        let f: Box<dyn FnOnce(&mut Dir)> = Box::new(|dir: &mut Dir|{
-            match dir.contents.remove(&key) {
+        let f: Box<dyn FnOnce(&mut Dir)> =
+            Box::new(|dir: &mut Dir| match dir.contents.remove(&key) {
                 Some(old) => {
                     tracing::debug!("item removed: {old:?}");
-                },
+                }
                 None => {
                     tracing::warn!("tried to remove {key}, but it was not present");
-                },
-            } 
-        });
+                }
+            });
 
         self.modify(f)
     }
@@ -334,7 +353,7 @@ impl Deref for Content {
 }
 
 impl Content {
-    fn new(path: PathBuf) -> Self{
+    fn new(path: PathBuf) -> Self {
         if path.is_file() {
             Self::File(path)
         } else {
@@ -346,20 +365,16 @@ impl Content {
     /// this is because hardlinks take up less space, but cannot be used for directories
     fn create_file_reference(&self, link: PathBuf) {
         match self {
-            Self::File(original) => {
-                match fs::hard_link(original, link) {
-                    Ok(()) => {},
-                    Err(e) => {
-                        dbg!(e);
-                    },
+            Self::File(original) => match fs::hard_link(original, link) {
+                Ok(()) => {}
+                Err(e) => {
+                    dbg!(e);
                 }
             },
-            Self::Dir(original) => {
-                match symlink(original, link) {
-                    Ok(()) => {},
-                    Err(e) => {
-                        dbg!(e);
-                    },
+            Self::Dir(original) => match symlink(original, link) {
+                Ok(()) => {}
+                Err(e) => {
+                    dbg!(e);
                 }
             },
         }
@@ -367,7 +382,7 @@ impl Content {
 }
 
 #[derive(Debug)]
-struct Dir{
+struct Dir {
     contents: HashMap<String, Content>,
 }
 
@@ -404,7 +419,7 @@ impl Dir {
         self.contents.insert(key, Content::Dir(path));
     }
 
-    fn insert_file(&mut self, key: String, path: PathBuf) -> Option<Content>{
+    fn insert_file(&mut self, key: String, path: PathBuf) -> Option<Content> {
         self.contents.insert(key, Content::File(path))
     }
 
@@ -421,7 +436,6 @@ impl Dir {
         FsDir::load(dir_path, hash).unwrap()
     }
 }
-
 
 fn full_blob_path(blob_store: &Path, hash: &str) -> PathBuf {
     let mut topdir = String::new();

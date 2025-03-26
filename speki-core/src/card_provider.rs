@@ -22,8 +22,7 @@ pub struct Caches {
 
 impl Debug for Caches {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("Caches")
-            .finish()
+        f.debug_struct("Caches").finish()
     }
 }
 
@@ -41,7 +40,13 @@ impl Caches {
             return set.clone();
         }
 
-        let set: HashSet<String> = self.providers.cards.get_cache(key.clone()).await.into_iter().collect();
+        let set: HashSet<String> = self
+            .providers
+            .cards
+            .get_cache(key.clone())
+            .await
+            .into_iter()
+            .collect();
 
         let set = Arc::new(set);
         self.inner.write().unwrap().insert(key, set.clone());
