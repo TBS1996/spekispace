@@ -350,7 +350,7 @@ pub fn ColViewRender(props: CollectionEditor) -> Element {
 mod entry_selector {
     use super::*;
 
-    use speki_dto::LedgerItem;
+    use snapstore::LedgerItem;
 
     pub fn dependencies(col: Signal<Collection>) -> CardSelector {
         let f = MyClosure::new(move |card: CardEntry| {

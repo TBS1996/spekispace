@@ -1,11 +1,11 @@
 use super::*;
 use crate::{
     attribute::AttributeId, audio::AudioId, card_provider::CardProvider, ledger::CardEvent,
-    DepCacheKey, PropertyCache,
+    DepCacheKey, CardProperty, RefType,
 };
 use omtrent::TimeStamp;
 use serde::{Deserialize, Serialize};
-use speki_dto::LedgerItem;
+use snapstore::LedgerItem;
 use std::collections::{HashMap, HashSet};
 
 pub type CardId = Uuid;
@@ -392,12 +392,14 @@ pub fn normalize_string(str: &str) -> String {
 
 impl LedgerItem<CardEvent> for RawCard {
     type Error = ();
+    type RefType = RefType;
+    type PropertyType = CardProperty;
 
-    fn ref_cache(&self) -> HashMap<&'static str, HashSet<CardId>> {
-        let mut out: HashMap<&str, HashSet<Uuid>> = Default::default();
+    fn ref_cache(&self) -> HashMap<Self::RefType, HashSet<CardId>> {
+        let mut out: HashMap<Self::RefType, HashSet<Uuid>> = Default::default();
 
         for dep in &self.dependencies {
-            out.entry(&DepCacheKey::Dependent.to_str())
+            out.entry(RefType::Dependent)
                 .or_default()
                 .insert(*dep);
         }
@@ -406,18 +408,18 @@ impl LedgerItem<CardEvent> for RawCard {
             CardType::Normal { .. } => {}
             CardType::Unfinished { .. } => {}
             CardType::Instance { class, .. } => {
-                out.entry(&DepCacheKey::Instance.to_str())
+                out.entry(RefType::Instance)
                     .or_default()
                     .insert(*class);
             }
             CardType::Attribute { instance, .. } => {
-                out.entry(&DepCacheKey::AttrClass.to_str())
+                out.entry(RefType::AttrClass)
                     .or_default()
                     .insert(*instance);
             }
             CardType::Class { parent_class, .. } => {
                 if let Some(class) = parent_class {
-                    out.entry(&DepCacheKey::SubClass.to_str())
+                    out.entry(RefType::SubClass)
                         .or_default()
                         .insert(*class);
                 }
@@ -430,13 +432,13 @@ impl LedgerItem<CardEvent> for RawCard {
             match back {
                 BackSide::Text(_) => {}
                 BackSide::Card(id) => {
-                    out.entry(&DepCacheKey::BackRef.to_str())
+                    out.entry(RefType::BackRef)
                         .or_default()
                         .insert(*id);
                 }
                 BackSide::List(ids) => {
                     for id in ids {
-                        out.entry(&DepCacheKey::BackRef.to_str())
+                        out.entry(RefType::BackRef)
                             .or_default()
                             .insert(*id);
                     }
@@ -450,11 +452,11 @@ impl LedgerItem<CardEvent> for RawCard {
         out
     }
 
-    fn properties_cache(&self) -> HashSet<(&'static str, String)> {
-        let mut out: HashSet<(&'static str, String)> = Default::default();
-
+    fn properties_cache(&self) -> HashSet<(Self::PropertyType, String)> {
+        let mut out: HashSet<(Self::PropertyType, String)> = Default::default();
         for bigram in bigrams(&self.data.raw_front()) {
-            out.insert(PropertyCache::Bigram(bigram).to_parts());
+            let value = format!("{}{}", bigram[0], bigram[1]);
+            out.insert((CardProperty::Bigram, value));
         }
 
         match &self.data {
@@ -462,14 +464,15 @@ impl LedgerItem<CardEvent> for RawCard {
             CardType::Unfinished { .. } => {}
             CardType::Instance { .. } => {}
             CardType::Attribute { attribute, .. } => {
-                out.insert(PropertyCache::AttrId(*attribute).to_parts());
+                out.insert((CardProperty::AttrId, attribute.to_string()));
             }
             CardType::Class { .. } => {}
             CardType::Statement { .. } => {}
             CardType::Event { .. } => {}
         };
 
-        out.insert(PropertyCache::CardType(self.data.fieldless()).to_parts());
+        let val = format!("{:?}", self.data.fieldless());
+        out.insert((CardProperty::CardType, val));
 
         out
     }
@@ -521,6 +524,7 @@ impl LedgerItem<CardEvent> for RawCard {
     fn item_id(&self) -> CardId {
         self.id
     }
+    
 }
 
 #[derive(Serialize, Ord, PartialOrd, Eq, Hash, PartialEq, Debug, Clone)]

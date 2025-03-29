@@ -7,7 +7,7 @@ use std::{
 
 use async_recursion::async_recursion;
 use serde::{Deserialize, Serialize};
-use speki_dto::LedgerItem;
+use snapstore::LedgerItem;
 use tracing::{error, info, warn};
 use uuid::Uuid;
 
@@ -35,6 +35,8 @@ pub struct Collection {
 
 impl LedgerItem<CollectionEvent> for Collection {
     type Error = ();
+    type PropertyType = &'static str;
+    type RefType = &'static str;
 
     fn run_event(mut self, event: CollectionEvent) -> Result<Self, Self::Error> {
         match event.action {

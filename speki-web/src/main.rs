@@ -185,12 +185,12 @@ impl Route {
 #[component]
 fn Debug() -> Element {
     let card_hash = use_resource(move || async move {
-        let hash = APP.read().inner().provider.cards.state_hash().await;
+        let hash = APP.read().inner().provider.cards.state_hash().await.unwrap_or_default();
         hash
     });
 
     let review_hash = use_resource(move || async move {
-        let hash = APP.read().inner().provider.reviews.state_hash().await;
+        let hash = APP.read().inner().provider.reviews.state_hash().await.unwrap_or_default();
         hash
     });
 
@@ -207,17 +207,6 @@ fn Debug() -> Element {
             p {"cards hash: {card_hash.cloned().unwrap_or_default()}"}
             p {"history hash: {review_hash.cloned().unwrap_or_default()}"}
 
-        button {
-            onclick: move |_| {
-                spawn(async move {
-                    APP.read().inner().provider.cards.clear_state().await;
-                    APP.read().inner().provider.reviews.clear_state().await;
-                    hash2.restart();
-                    revhash2.restart();
-                });
-            },
-            "clear state!"
-        }
 
         button {
             onclick: move |_| {
@@ -243,15 +232,6 @@ fn Debug() -> Element {
             "import ledger i guess"
         }
 
-        button {
-            onclick: move |_| {
-                spawn(async move {
-                    let cards = APP.read().inner().provider.reviews.clone();
-                    cards.normalize_ledger();
-                });
-            },
-            "new ledger fmt"
-        }
     }
 
 

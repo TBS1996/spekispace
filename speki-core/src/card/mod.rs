@@ -10,8 +10,6 @@ use std::{
 use futures::executor::block_on;
 use serde::Deserializer;
 use serde_json::Value;
-use speki_dto::LedgerEvent;
-use speki_dto::LedgerItem;
 use tracing::info;
 use uuid::Uuid;
 

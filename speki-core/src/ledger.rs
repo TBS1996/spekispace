@@ -6,7 +6,7 @@ use crate::{
     CardType,
 };
 use serde::{Deserialize, Serialize};
-use speki_dto::LedgerEvent;
+use snapstore::LedgerEvent;
 
 pub fn decompose_history(history: History) -> Vec<ReviewEvent> {
     let mut actions = vec![];

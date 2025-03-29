@@ -40,16 +40,19 @@ impl App {
 
     #[cfg(feature = "desktop")]
     pub fn new() -> Self {
+        use std::path::Path;
+
         use speki_dto::Ledger;
         use speki_provider::{FsProvider, FsTime};
+        let root = Path::new("/home/tor/spekifs/snap3");
 
         Self(Arc::new(speki_core::App::new(
             speki_core::SimpleRecall,
             FsTime,
-            Ledger::new(Box::new(FsProvider::new("card"))),
-            Ledger::new(Box::new(FsProvider::new("history"))),
-            Ledger::new(Box::new(FsProvider::new("col"))),
-            Ledger::new(Box::new(FsProvider::new("meta"))),
+            Ledger::new(root),
+            Ledger::new(root),
+            Ledger::new(root),
+            Ledger::new(root),
         )))
     }
 

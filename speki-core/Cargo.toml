@@ -26,6 +26,10 @@ async-trait.workspace = true
 wasm-bindgen-futures.workspace = true
 deunicode = "1.6.0"
 
+[dev-dependencies]
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+
+
 [dependencies.gkquad]
 version = "0.0.4"
 default-features = false

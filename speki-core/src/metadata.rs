@@ -4,7 +4,7 @@ use serde::{
     de::{self, Deserializer},
     Deserialize, Serialize,
 };
-use speki_dto::LedgerItem;
+use snapstore::LedgerItem;
 use uuid::Uuid;
 
 use crate::{card::CardId, ledger::MetaEvent};
@@ -26,6 +26,8 @@ impl Metadata {
 
 impl LedgerItem<MetaEvent> for Metadata {
     type Error = ();
+    type PropertyType = &'static str;
+    type RefType = &'static str;
 
     fn run_event(mut self, event: MetaEvent) -> Result<Self, ()> {
         match event.action {

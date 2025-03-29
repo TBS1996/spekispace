@@ -8,7 +8,7 @@ use std::{
     sync::Arc,
 };
 
-use tracing::trace;
+use tracing::{info, trace};
 use walkdir::WalkDir;
 
 use crate::CacheKey;
@@ -42,6 +42,7 @@ impl SnapStorage for SnapFs {
         let all: ItemPath = top_map.all_dirs(&key);
         let x = all.save_item(key.to_owned(), item_path);
         let top_hash = x.first().unwrap().hash.clone();
+        info!("new generation after item insert: {top_hash}");
         top_hash
     }
 
@@ -76,6 +77,7 @@ impl SnapStorage for SnapFs {
     }
 
     fn insert_cache(&self, gen_hash: &str, cache_key: &CacheKey, item: &str) -> Hashed {
+        trace!("inserting cache on gen {gen_hash} item {item}");
         let item_blob_path = self.get_item_path(gen_hash, item);
         let path = FsDir::load(self.blob_path.clone(), gen_hash.to_owned()).unwrap();
         let itempath = path.all_dirs(&cache_key.to_string());
@@ -87,12 +89,14 @@ impl SnapStorage for SnapFs {
     }
 
     fn remove_cache(&self, gen_hash: &str, cache_key: &CacheKey, item: &str) -> Hashed {
+        trace!("removing cache on gen {gen_hash} item {item}");
         let topdir = FsDir::load(self.blob_path.clone(), gen_hash.to_string()).unwrap();
         let all = topdir.all_dirs(&cache_key.to_string());
         all.remove_item(item.to_owned()).first().unwrap().get_hash()
     }
 
     fn get(&self, hash: &str, key: &str) -> Option<Vec<u8>> {
+        trace!("try get item: {key} on hash: {hash}");
         let path = self.full_path(hash, key);
         fs::read(&path).ok()
     }
@@ -121,12 +125,18 @@ impl SnapFs {
     }
 
     fn get_item_path(&self, genn: &str, item_key: &str) -> PathBuf {
+        trace!("getting item path on gen: {genn} of item: {item_key}");
         let itemhash = self.get_item_hash(genn, item_key);
         self.the_full_blob_path(&itemhash)
     }
 
+    /// To get the itempath of a an item given the id and generation...
+    /// we have to first find the item through the store
     fn get_item_hash(&self, genn: &str, item: &str) -> Hashed {
-        read_link(self.full_path(genn, item))
+        let itempath = self.full_path(genn, item);
+        info!("itempath: {itempath:?}");
+        
+        read_link(itempath)
             .unwrap()
             .file_name()
             .unwrap()
@@ -140,6 +150,7 @@ impl SnapFs {
     }
 
     fn full_path(&self, _gen: &str, key: &str) -> PathBuf {
+        info!("get full path of key: {key} on gen : {_gen}");
         let mut path = self.the_full_blob_path(_gen);
         for cmp in get_key_components(key) {
             path = path.join(format!("{cmp}"));
@@ -175,6 +186,7 @@ impl Deref for FsDir {
 
 impl FsDir {
     fn load(dir_path: Arc<PathBuf>, hash: Hashed) -> Option<Self> {
+        info!("loading dir: {dir_path:?}");
         let path = full_blob_path(&dir_path, &hash);
         if !path.exists() {
             return None;
@@ -257,6 +269,8 @@ fn get_key_components(key: &str) -> Vec<String> {
     for _ in 0..3 {
         out.push(chars.next().unwrap().to_string());
     }
+
+    info!("key: {key}, components: {out:?}");
 
     out
 }
@@ -365,7 +379,7 @@ impl Content {
     /// this is because hardlinks take up less space, but cannot be used for directories
     fn create_file_reference(&self, link: PathBuf) {
         match self {
-            Self::File(original) => match fs::hard_link(original, link) {
+            Self::File(original) => match symlink(original, link) {
                 Ok(()) => {}
                 Err(e) => {
                     dbg!(e);
@@ -438,6 +452,7 @@ impl Dir {
 }
 
 fn full_blob_path(blob_store: &Path, hash: &str) -> PathBuf {
+    dbg!(hash);
     let mut topdir = String::new();
     let mut chars = hash.chars();
     topdir.push(chars.next().unwrap());

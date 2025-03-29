@@ -1,7 +1,7 @@
 use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
-use speki_dto::{LedgerEvent, LedgerItem};
+use snapstore::{LedgerEvent, LedgerItem};
 use uuid::Uuid;
 
 use crate::{
@@ -190,6 +190,8 @@ impl LedgerEvent for ReviewEvent {
 
 impl LedgerItem<ReviewEvent> for History {
     type Error = ();
+    type PropertyType = &'static str;
+    type RefType = &'static str;
 
     fn run_event(mut self, event: ReviewEvent) -> Result<Self, ()> {
         let review = Review {

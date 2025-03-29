@@ -29,6 +29,7 @@ eyre.workspace = true
 async-recursion.workspace = true
 speki-dto = { path = "../speki-dto" }
 speki-core = { path = "../speki-core" }
+snapstore.workspace = true
 
 # WebAssembly-specific dependencies (optional)
 wasm-bindgen = { workspace = true, optional = true }

@@ -6,7 +6,7 @@ use dioxus_logger::tracing::info;
 use ledger::{decompose_history, CardAction, CardEvent, CollectionEvent, Event, MetaEvent};
 use metadata::Metadata;
 use recall_rate::{History, ReviewEvent};
-use snapstore::{CacheKey, PropertyCacheKey};
+use snapstore::{CacheKey, PropertyCacheKey, RefCacheKey};
 use speki_dto::{Ledger, LedgerEntry, Storage, TimeProvider};
 use std::{
     collections::HashMap,
@@ -34,7 +34,13 @@ pub use omtrent::TimeStamp;
 pub use recall_rate::SimpleRecall;
 
 #[derive(Clone, PartialEq, PartialOrd, Hash, Eq, Debug)]
-pub enum DepCacheKey {
+pub struct DepCacheKey {
+    id: CardId,
+    ty: RefType,
+}
+
+#[derive(Clone, PartialEq, PartialOrd, Hash, Eq, Debug)]
+pub enum RefType {
     Dependent,
     Instance,
     BackRef,
@@ -42,45 +48,65 @@ pub enum DepCacheKey {
     AttrClass,
 }
 
-impl DepCacheKey {
-    pub fn to_str(&self) -> &'static str {
+impl AsRef<str> for RefType {
+    fn as_ref(&self) -> &str {
         match self {
-            DepCacheKey::Dependent => "dependents",
-            DepCacheKey::Instance => "instances",
-            DepCacheKey::BackRef => "backrefs",
-            DepCacheKey::SubClass => "subclasses",
-            DepCacheKey::AttrClass => "attrclass",
+            Self::Dependent => "dependents",
+            Self::Instance => "instances",
+            Self::BackRef => "backrefs",
+            Self::SubClass => "subclasses",
+            Self::AttrClass => "attrclass",
         }
+    }
+}
+
+impl RefType {
+    pub fn to_str(&self) -> &str {
+        self.as_ref()
+    }
+}
+
+impl From<DepCacheKey> for CacheKey {
+    fn from(value: DepCacheKey) -> Self {
+        CacheKey::ItemRef(RefCacheKey { reftype: value.ty.to_str().to_owned(), id: value.id.to_string() })
+
     }
 }
 
 #[derive(Clone, PartialEq, PartialOrd, Hash, Eq, Debug)]
-pub enum PropertyCache {
-    Bigram([char; 2]),
-    Suspended(bool),
-    CardType(CType),
-    AttrId(AttributeId),
+pub enum CardProperty {
+    Bigram,
+    Suspended,
+    CardType,
+    AttrId,
 }
 
-impl From<PropertyCache> for CacheKey {
-    fn from(value: PropertyCache) -> Self {
-        let (property, value) = value.to_parts();
-
-        CacheKey::Property(PropertyCacheKey { property, value })
-    }
-}
-
-impl PropertyCache {
-    /// Gets identifier and value of cache entry
-    pub fn to_parts(&self) -> (&'static str, String) {
+impl AsRef<str> for CardProperty {
+    fn as_ref(&self) -> &str {
         match self {
-            PropertyCache::Bigram([a, b]) => ("bigram", format!("{a}{b}")),
-            PropertyCache::Suspended(flag) => ("suspended", format!("{flag}")),
-            PropertyCache::CardType(ctype) => ("cardtype", format!("{ctype:?}")),
-            PropertyCache::AttrId(id) => ("attr_id", id.to_string()),
+            CardProperty::Bigram => "bigram",
+            CardProperty::Suspended => "suspended",
+            CardProperty::CardType => "cardtype",
+            CardProperty::AttrId => "attr_id",
         }
     }
 }
+
+/*
+impl CardProperty {
+    /// Gets identifier and value of cache entry
+    pub fn to_parts(&self) -> (&'static str, String) {
+        let proptype: &'static str = self.as_ref();
+
+        match self {
+            CardProperty::Bigram([a, b]) => (proptype, format!("{a}{b}")),
+            CardProperty::Suspended(flag) => (proptype, format!("{flag}")),
+            CardProperty::CardType(ctype) => (proptype, format!("{ctype:?}")),
+            CardProperty::AttrId(id) => (proptype, id.to_string()),
+        }
+    }
+}
+0*/
 
 pub trait RecallCalc {
     fn recall_rate(&self, reviews: &History, current_unix: Duration) -> Option<RecallRate>;
@@ -466,10 +492,91 @@ mod graphviz {
 
 #[cfg(test)]
 mod tests {
+    use std::{fs, path::{Path, PathBuf}};
+
+    use snapstore::{LedgerEvent, LedgerItem};
+    use tracing::Level;
+    use uuid::Uuid;
+    use std::ops::Deref;
+
     use super::*;
 
     fn app() -> App {
         //  App::new(recall_calc, time_provider, PureMem, history_provider, collections_provider, meta_provider)
         todo!()
     }
+
+    struct TestLedger<T: LedgerItem<E>, E: LedgerEvent>{ledger: Ledger<T, E>, root: PathBuf}
+
+    impl<T: LedgerItem<E>, E: LedgerEvent> TestLedger<T, E> {
+        fn new() -> Self {
+            let root = PathBuf::from("/home/tor/ledgertest").join(Uuid::new_v4().as_simple().to_string());
+            Self{ledger: Ledger::new(root.as_path()), root}
+        }
+    }
+
+    impl<T: LedgerItem<E>, E: LedgerEvent> Deref for TestLedger<T, E> {
+        type Target = Ledger<T, E>;
+
+        fn deref(&self) -> &Self::Target {
+            &self.ledger
+        }
+    }
+
+    impl<T: LedgerItem<E>, E: LedgerEvent> Drop for TestLedger<T, E> {
+        fn drop(&mut self) {
+            //fs::remove_dir_all(&self.root).unwrap()
+        }
+    }
+
+    fn new_card(front: &str, back: &str) -> CardEvent {
+        let ty = CardType::Normal { front: front.to_string(), back: back.to_string().into() };
+        CardEvent::new(Uuid::new_v4(), CardAction::UpsertCard(ty))
+    }
+
+
+
+
+    fn new_card_ledger() -> TestLedger<RawCard, CardEvent> {
+        TestLedger::new()
+    }
+
+    /// hmm 
+    /// so i guess the api should be, you just insert a ledger, it doesnt do anything until you try to get an item
+    /// itll then see theres unapplied entries, itll apply them and then use it
+    #[tokio::test]
+    async fn test_insert_retrieve(){
+        let _ = tracing_subscriber::fmt().with_max_level(Level::TRACE).try_init().unwrap();
+        let ledger = new_card_ledger();
+        let new_card = new_card("foo", "bar");
+        let id = new_card.id;
+        ledger.insert_ledger(new_card).await;
+
+        info!("fom test loading ledger");
+        let res = ledger.load(&id.to_string()).await.unwrap();
+        info!("finished: {res:?}");
+    }
+
+    #[tokio::test]
+    async fn test_ref_cache() {
+        let _ = tracing_subscriber::fmt().with_max_level(Level::TRACE).try_init().ok();
+        let ledger = new_card_ledger();
+        let card_a = new_card("a", "bar");
+        let a_id = card_a.id;
+        ledger.insert_ledger(card_a).await;
+
+
+        let card_b = new_card("b", "foo");
+        let b_id = card_b.id;
+        ledger.insert_ledger(card_b).await;
+
+        let refaction = CardEvent::new(a_id, CardAction::AddDependency(b_id));
+        ledger.insert_ledger(refaction).await;
+
+        let card_a = ledger.load(&a_id.to_string()).await.unwrap();
+
+        assert!(card_a.dependencies.contains(&b_id));
+    }
+
+
 }

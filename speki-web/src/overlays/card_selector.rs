@@ -1,12 +1,13 @@
 use std::{collections::BTreeMap, future::Future, pin::Pin, sync::Arc};
 
 use dioxus::prelude::*;
+use snapstore::{CacheKey, PropertyCacheKey};
 use speki_core::{
     card::{bigrams, normalize_string, CardId},
     card_provider::Caches,
     cardfilter::CardFilter,
     collection::{DynCard, MaybeDyn},
-    PropertyCache,
+    CardProperty,
 };
 use speki_web::{CardEntry, Node};
 use tracing::info;
@@ -140,7 +141,8 @@ impl CardSelector {
                             .inner()
                             .card_provider
                             .cache
-                            .get(PropertyCache::Bigram(bigram))
+                            //.get(CardProperty::Bigram(bigram))
+                            .get(CacheKey::Property(PropertyCacheKey{ property: CardProperty::Bigram.as_ref().to_string(), value: format!("{}{}", bigram[0], bigram[1]) }))
                             .await;
 
                         for id in indices.as_ref() {
