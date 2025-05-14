@@ -1,14 +1,19 @@
-use std::{
-    collections::{BTreeSet, HashMap, HashSet}, sync::{atomic::{AtomicU64, Ordering}, Arc}, time::Duration
-};
 use async_trait::async_trait;
 use js_sys::Promise;
 use serde::{de::DeserializeOwned, Serialize};
 use serde_json::Value;
+use speki_dto::RunLedger;
 use speki_dto::{LedgerEntry, LedgerEvent, ProviderId, Storage, TimeProvider};
+use std::{
+    collections::{BTreeSet, HashMap, HashSet},
+    sync::{
+        atomic::{AtomicU64, Ordering},
+        Arc,
+    },
+    time::Duration,
+};
 use tracing::info;
 use wasm_bindgen::prelude::*;
-use speki_dto::RunLedger;
 
 #[derive(Copy, Clone)]
 pub struct WasmTime;
@@ -26,9 +31,7 @@ pub struct DexieProvider {
 
 impl DexieProvider {
     pub fn new() -> Self {
-        Self {
-            id: None,
-        }
+        Self { id: None }
     }
 
     pub fn set_id(&mut self, id: ProviderId) {
@@ -67,13 +70,11 @@ impl<T: Serialize + DeserializeOwned + 'static> Storage<T> for DexieProvider {
         load_ids(space).await
     }
 
-
     async fn clear_space(&self, space: &str) {
         let space = JsValue::from_str(&space);
         clearSpace(&space);
     }
 }
-
 
 #[wasm_bindgen(module = "/dexie.js")]
 extern "C" {

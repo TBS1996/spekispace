@@ -1,14 +1,15 @@
 [workspace]
-members = ["speki-core", "speki-dto", "omtrent", "speki-web", "speki-provider"]
+members = ["speki-core", "omtrent", "speki-web", "speki-provider", "snapstore", "ledgerstore", "simpletime", "ledger_macros"]
 
 resolver = "2"
-
 
 [workspace.dependencies]
 speki-core = { path = "speki-core" }
 speki-provider = { path = "speki-provider" }
 omtrent = { path = "omtrent" }
-speki-dto = { path = "speki-dto" }
+snapstore = { path = "snapstore" }
+ledgerstore = { path = "ledgerstore" }
+simpletime = { path = "simpletime" }
 
 tokio = { version = "1", features = ["fs", "rt-multi-thread"] }
 serde = { version = "1.0", features = ["derive"] }
@@ -25,6 +26,7 @@ dioxus-logger = "0.6.1"
 wasm-bindgen = "0.2.95"
 gloo-utils = "0.2.0"
 js-sys = "0.3.72"
+walkdir = "2.5.0"
 serde-wasm-bindgen = "0.6.5"
 wasm-bindgen-futures = "0.4.45"
 web-sys = { version = "0.3.72", features = [
@@ -50,6 +52,7 @@ dirs = "5.0.1"
 gloo = "0.3"
 async-once-cell = "0.5.4"
 nonempty = "0.11.0"
+bincode = "1.3.3"
 
 [profile]
 

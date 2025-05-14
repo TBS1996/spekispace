@@ -2,27 +2,18 @@ use std::{fmt::Debug, sync::Arc};
 
 use dioxus::prelude::*;
 use speki_core::{
-    card::{BaseCard, CardId}, cardfilter::{CardFilter, FilterItem}, collection::{Collection, CollectionId}, ledger::CollectionEvent, AttributeDTO, Card
+    card::CardId,
+    collection::{Collection, CollectionId},
+    Card,
 };
 #[cfg(not(feature = "desktop"))]
 use speki_provider::{DexieProvider, WasmTime};
-use speki_web::{CardEntry, Node, NodeMetadata};
+use speki_web::{Node, NodeMetadata};
 use tracing::info;
 #[cfg(not(feature = "desktop"))]
 use wasm_bindgen::prelude::*;
 
-
-
-
-#[cfg(feature = "desktop")]
-use dioxus::desktop::use_window;
-
-
-use crate::{
-    nav::SYNCING,
-    TouchRec, APP,
-};
-
+use crate::APP;
 
 #[cfg(not(feature = "desktop"))]
 use crate::firebase::{AuthUser, FirestoreProvider};
@@ -47,16 +38,21 @@ impl App {
 
     #[cfg(feature = "desktop")]
     pub fn new() -> Self {
-        use speki_dto::Ledger;
-        use speki_provider::{FsProvider, FsTime};
+        use std::path::Path;
+
+        use ledgerstore::Ledger;
+        use speki_provider::FsTime;
+        //use speki_provider::{FsProvider, FsTime};
+        let root = Path::new("/home/tor/spekifs/snap4");
 
         Self(Arc::new(speki_core::App::new(
             speki_core::SimpleRecall,
             FsTime,
-            Ledger::new(Box::new(FsProvider::new())),
-            Ledger::new(Box::new(FsProvider::new())),
-            Ledger::new(Box::new(FsProvider::new())),
-            Ledger::new(Box::new(FsProvider::new())),
+            Ledger::new(root),
+            Ledger::new(root),
+            Ledger::new(root),
+            Ledger::new(root),
+            Ledger::new(root),
         )))
     }
 
@@ -68,40 +64,38 @@ impl App {
         self.0.card_provider.remove_card(id).await;
     }
 
-    pub async fn delete_collection(&self, id: CollectionId) {
-        let col = self.load_collection(id).await;
-        //self.0.provider.collections.delete(col).await;
-    }
-
     pub async fn fill_cache(&self) {
         self.0.fill_index_cache().await;
     }
 
-    pub async fn load_all(&self, filter: Option<CardFilter>) -> Vec<CardEntry> {
-        match filter {
-            Some(filter) => self.0.cards_filtered(filter).await,
-            None => self.0.load_all_cards().await,
-        }
-        .into_iter()
-        .map(|card| CardEntry::new(Arc::unwrap_or_clone(card)))
-        .collect()
+    pub async fn try_load_card(&self, id: CardId) -> Option<Signal<Card>> {
+        self.0
+            .load_card(id)
+            .await
+            .map(|c| Signal::new_in_scope(c, ScopeId::APP))
     }
 
-    pub async fn try_load_card(&self, id: CardId) -> Option<CardEntry> {
-        self.0.load_card(id).await.map(CardEntry::new)
+    pub fn load_card_sync(&self, id: CardId) -> Signal<Card> {
+        Signal::new_in_scope(
+            self.0
+                .load_card_sync(id)
+                .expect(&format!("unable to load card with id: {id}")),
+            ScopeId::APP,
+        )
     }
 
-    pub async fn load_card(&self, id: CardId) -> CardEntry {
-        CardEntry::new(
+    pub async fn load_card(&self, id: CardId) -> Signal<Card> {
+        Signal::new_in_scope(
             self.0
                 .load_card(id)
                 .await
                 .expect(&format!("unable to load card with id: {id}")),
+            ScopeId::APP,
         )
     }
 
     pub async fn load_collection(&self, id: CollectionId) -> Collection {
-        self.0.provider.collections.load(id).await.unwrap()
+        self.0.provider.collections.load(&id.to_string()).unwrap()
     }
 
     pub async fn load_collections(&self) -> Vec<Collection> {
@@ -109,13 +103,8 @@ impl App {
             .provider
             .collections
             .load_all()
-            .await
             .into_values()
             .collect()
-    }
-
-    pub async fn run_col_event(&self, event: CollectionEvent) {
-        todo!()
     }
 
     pub async fn new_instance(
@@ -144,9 +133,6 @@ impl Debug for App {
     }
 }
 
-
-
-
 /// **Check if an element is present (Web & Desktop)**
 pub fn is_element_present(id: &str) -> bool {
     #[cfg(feature = "web")]
@@ -165,7 +151,6 @@ pub fn is_element_present(id: &str) -> bool {
     panic!()
 }
 
-
 #[cfg(not(feature = "desktop"))]
 #[wasm_bindgen]
 extern "C" {
@@ -173,7 +158,7 @@ extern "C" {
     fn now() -> f64;
 }
 
-/* 
+/*
 pub async fn sync(agent: AuthUser) {
     let time_provider = APP.read().0.time_provider.clone();
     info!("starting sync!");

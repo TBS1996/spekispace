@@ -1,18 +1,12 @@
 #![allow(non_snake_case)]
 
-use std::{
-    collections::HashMap, path::PathBuf, sync::{
-        atomic::{AtomicBool, Ordering},
-        Arc, Mutex,
-    }
-};
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use dioxus::prelude::*;
 use dioxus_logger::tracing::{info, Level};
 #[cfg(not(feature = "desktop"))]
 use firebase::AuthUser;
 use pages::{ImportState, ReviewPage};
-use speki_core::{card::{BaseCard, RawCard}, import_card_ledger, import_history_ledger, ledger::decompose};
 
 use crate::{
     pages::{About, Add, Browse, Import, Menu, Review},
@@ -34,8 +28,6 @@ pub const DEFAULT_FILTER: &'static str =
 /// is true every time we change route, and is set back to false after the cyto instance is re-rendered
 pub static ROUTE_CHANGE: AtomicBool = AtomicBool::new(false);
 
-
-
 fn main() {
     dioxus_logger::init(Level::INFO).expect("failed to init logger");
     info!("starting app");
@@ -44,7 +36,6 @@ fn main() {
 
     dioxus::launch(TheApp);
 }
-
 
 #[component]
 pub fn TheApp() -> Element {
@@ -56,15 +47,14 @@ pub fn TheApp() -> Element {
     spawn(async move {
         #[cfg(not(feature = "desktop"))]
         {
-
-        if let Some(currauth) = firebase::current_sign_in().await {
-            *LOGIN_STATE.write() = Some(currauth);
-            info!("user logged in!");
-        } else {
-            info!("no user logged in!");
+            if let Some(currauth) = firebase::current_sign_in().await {
+                *LOGIN_STATE.write() = Some(currauth);
+                info!("user logged in!");
+            } else {
+                info!("no user logged in!");
+            }
         }
 
-        }
         APP.read().fill_cache().await;
     });
 
@@ -75,13 +65,12 @@ pub fn TheApp() -> Element {
         }
 
         div {
-            class: "bg-white min-h-screen",
+            class: "w-screen min-h-screen",
             Router::<Route> {}
         }
 
     }
 }
-
 
 #[derive(Debug, Copy, Clone)]
 pub struct TouchRec {
@@ -109,10 +98,9 @@ pub struct Point {
 static APP: GlobalSignal<App> = Signal::global(App::new);
 static IS_SHORT: GlobalSignal<bool> = Signal::global(|| screen_height_in_inches().unwrap() < 4.);
 static CURRENT_ROUTE: GlobalSignal<Route> = Signal::global(|| Route::Menu {});
+
 #[cfg(not(feature = "desktop"))]
 static LOGIN_STATE: GlobalSignal<Option<AuthUser>> = Signal::global(|| None);
-
-
 
 /// Estimates the screen height in inches.
 #[cfg(feature = "desktop")]
@@ -197,24 +185,27 @@ impl Route {
 
 #[component]
 fn Debug() -> Element {
-
-    let card_hash = use_resource(move  || async move {
-        let hash = APP.read().inner().provider.cards.storage_hash().await;
+    let card_hash = use_resource(move || async move {
+        let hash = APP
+            .read()
+            .inner()
+            .provider
+            .cards
+            .state_hash()
+            .unwrap_or_default();
         hash
     });
 
-    let review_hash = use_resource(move  || async move {
-        let hash = APP.read().inner().provider.reviews.storage_hash().await;
+    let review_hash = use_resource(move || async move {
+        let hash = APP
+            .read()
+            .inner()
+            .provider
+            .reviews
+            .state_hash()
+            .unwrap_or_default();
         hash
     });
-
-    let mut hash2 = card_hash.clone();
-    let mut hash3 = card_hash.clone();
-
-    let mut revhash2 = review_hash.clone();
-    let mut revhash3 = review_hash.clone();
-
-
 
     rsx! {
         div {
@@ -222,62 +213,6 @@ fn Debug() -> Element {
 
             p {"cards hash: {card_hash.cloned().unwrap_or_default()}"}
             p {"history hash: {review_hash.cloned().unwrap_or_default()}"}
-
-
-        button {
-            onclick: move |_| {
-                spawn(async move {
-                    APP.read().inner().provider.cards.clear_ledger().await
-                });
-            },
-            "clear ledgers!"
-        }
-
-
-        button {
-            onclick: move |_| {
-                spawn(async move {
-                    APP.read().inner().provider.cards.clear_state().await;
-                    APP.read().inner().provider.reviews.clear_state().await;
-                    hash2.restart();
-                    revhash2.restart();
-                });
-            },
-            "clear state!"
-        }
-
-        button {
-            onclick: move |_| {
-                spawn(async move {
-                    APP.read().inner().provider.cards.recompute_state_from_ledger().await;
-                    APP.read().inner().provider.reviews.recompute_state_from_ledger().await;
-                    hash3.restart();
-                    revhash3.restart();
-                });
-            },
-            "recompute state"
-        }
-
-        button {
-            onclick: move |_| {
-                spawn(async move {
-                    APP.read().inner().provider.check_decompose_lol().await;
-                });
-            },
-            "check derived events from all cards re-assemble to same card"
-        }
-        button {
-            onclick: move |_| {
-                spawn(async move {
-                    let cards = APP.read().inner().provider.cards.clone();
-                    import_card_ledger(cards).await;
-                    let ledger  = APP.read().inner().provider.reviews.clone();
-                    import_history_ledger(ledger).await;
-
-                });
-            },
-            "import ledger i guess"
-        }
     }
 
 

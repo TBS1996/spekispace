@@ -1,13 +1,13 @@
 use std::time::Duration;
 
+use ledgerstore::LedgerItem;
 use serde::{
     de::{self, Deserializer},
     Deserialize, Serialize,
 };
-use speki_dto::{RunLedger};
 use uuid::Uuid;
 
-use crate::{card::CardId, ledger::{MetaAction, MetaEvent}};
+use crate::{card::CardId, ledger::MetaEvent};
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize, Hash)]
 pub struct Metadata {
@@ -24,8 +24,10 @@ impl Metadata {
     }
 }
 
-impl RunLedger<MetaEvent> for Metadata {
+impl LedgerItem<MetaEvent> for Metadata {
     type Error = ();
+    type PropertyType = &'static str;
+    type RefType = &'static str;
 
     fn run_event(mut self, event: MetaEvent) -> Result<Self, ()> {
         match event.action {
@@ -35,25 +37,12 @@ impl RunLedger<MetaEvent> for Metadata {
         Ok(self)
     }
 
-    fn derive_events(&self) -> Vec<MetaEvent> {
-        let mut actions: Vec<MetaEvent> = vec![];
-
-        if self.suspended.is_suspended() {
-            actions.push(MetaEvent {
-                id: self.id,
-                action: MetaAction::Suspend(true)
-            });
-        }
-
-        actions
+    fn new_default(id: CardId) -> Self {
+        Self::new(id)
     }
-    
-    fn new_default(id: String) -> Self {
-        Self::new(id.parse().unwrap())
-    }
-    
-    fn item_id(&self) -> String {
-        self.id.to_string()
+
+    fn item_id(&self) -> CardId {
+        self.id
     }
 }
 

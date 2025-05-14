@@ -2,16 +2,20 @@ use std::{sync::Arc, time::Duration};
 
 use dioxus::prelude::*;
 use speki_core::{
-    audio::AudioId, card::CardId, ledger::{CardAction, CardEvent}, CardType, ClassCard, InstanceCard, NormalCard, UnfinishedCard
+    audio::AudioId,
+    card::CardId,
+    ledger::{CardAction, CardEvent},
+    Card, CardType,
 };
 
-use speki_web::{CardEntry, Node, NodeId, NodeMetadata};
+use speki_web::{Node, NodeId, NodeMetadata};
 use tracing::info;
 
 use crate::{
     components::{
         backside::BackPutRender, cardref::CardRefRender, frontside::FrontPutRender,
         graph::GraphRepRender, BackPut, CardRef, CardTy, DropDownMenu, FrontPut, GraphRep,
+        RenderDependents,
     },
     overlays::{
         card_selector::{CardSelector, MyClosure},
@@ -30,7 +34,7 @@ pub enum TempNode {
     New {
         id: NodeId,
         front: FrontPut,
-        dependencies: Signal<Vec<CardId>>,
+        dependencies: Signal<Vec<Signal<Card>>>,
         dependents: Signal<Vec<Node>>,
     },
 }
@@ -54,8 +58,11 @@ impl From<TempNode> for Node {
                 };
 
                 let dependents = dependents.cloned();
-                let dependencies: Vec<_> =
-                    dependencies.cloned().into_iter().map(Node::Card).collect();
+                let dependencies: Vec<_> = dependencies
+                    .cloned()
+                    .into_iter()
+                    .map(|c| Node::Card(c.read().id()))
+                    .collect();
 
                 Self::Nope {
                     node,
@@ -101,10 +108,11 @@ pub struct CardRep {
 /// container for all the structs you edit while creating/modifying a card
 #[derive(Props, Clone)]
 pub struct CardEditor {
-    front: FrontPut,
+    pub front: FrontPut,
     back: BackPut,
+    default_question: Signal<String>,
     concept: CardRef,
-    dependencies: Signal<Vec<CardId>>,
+    dependencies: Signal<Vec<Signal<Card>>>,
     allowed_cards: Vec<CardTy>,
 }
 
@@ -127,36 +135,49 @@ impl CardEditor {
                     return None;
                 }
 
-                CardType::Normal(NormalCard { front, back })
+                CardType::Normal { front, back }
             }
             CardTy::Class => {
                 let parent_class = self.concept.selected_card().cloned();
-                let back = backside.to_backside()?;
+                let back = backside.to_backside().filter(|x| !x.is_empty_text());
 
-                CardType::Class(ClassCard {
+                CardType::Class {
                     name: front,
                     back,
                     parent_class,
-                })
+                    default_question: {
+                        let s = self.default_question.cloned();
+                        if s.is_empty() {
+                            None
+                        } else {
+                            Some(s)
+                        }
+                    },
+                }
             }
             CardTy::Instance => {
                 let class = self.concept.selected_card().cloned()?;
                 let back = backside.to_backside();
 
-                CardType::Instance(InstanceCard {
+                CardType::Instance {
                     name: front,
                     back,
                     class,
-                })
+                }
             }
-            CardTy::Unfinished => CardType::Unfinished(UnfinishedCard { front }),
+            CardTy::Unfinished => CardType::Unfinished { front },
         };
 
         Some(CardRep {
             ty,
             front_audio: self.front.audio.cloned().map(|audio| audio.id),
             back_audio: self.back.audio.cloned().map(|audio| audio.id),
-            deps: self.dependencies.cloned(),
+            deps: self
+                .dependencies
+                .cloned()
+                .into_iter()
+                .map(|c| c.read().id())
+                .collect(),
         })
     }
 }
@@ -171,6 +192,87 @@ impl PartialEq for CardEditor {
     }
 }
 
+#[component]
+fn RenderDependencies(
+    card_text: Signal<String>,
+    card_id: Option<CardId>,
+    dependencies: Signal<Vec<Signal<Card>>>,
+    overlay: Signal<Option<OverlayEnum>>,
+) -> Element {
+    let show_graph = "opacity-100 visible";
+
+    let deps = dependencies.cloned();
+
+    rsx! {
+        div {
+            class: "flex flex-col {show_graph} w-full h-auto bg-white p-2 shadow-md rounded-md overflow-y-auto",
+
+
+            div {
+                class: "flex items-center justify-between mb-2",
+
+                h4 {
+                    class: "font-bold",
+                    "Dependencies"
+                }
+
+                    button {
+                        class: "p-1 hover:bg-gray-200 hover:border-gray-400 border border-transparent rounded-md transition-colors",
+                        onclick: move |_| {
+                            let currcard = card_text.cloned();
+                            let mut depsig = dependencies.clone();
+
+                            let fun = MyClosure::new(move |card: Signal<Card>| {
+                                async move {
+                                    depsig.write().push(card);
+                                }
+                            });
+
+                            spawn(async move {
+                                let front = currcard.clone();
+                                let mut props = CardSelector::dependency_picker(fun).with_default_search(front);
+                                if let Some(id)  = card_id {
+                                    props = props.with_forbidden_cards(vec![id]);
+                                }
+                                overlay.clone().set(Some(OverlayEnum::CardSelector(props)));
+                            });
+                        },
+                        "➕"
+                    }
+                }
+
+            for card in deps {
+                button {
+                    class: "mb-1 p-1 bg-gray-100 rounded-md text-left",
+                    onclick: move|_|{
+                        let card = card.clone();
+                        spawn(async move{
+                            let viewer = CardViewer::new_from_card(card, Default::default()).await;
+                            overlay.clone().set(Some(OverlayEnum::CardViewer(viewer)));
+                        });
+                    },
+                    "{card}"
+                }
+            }
+        }
+    }
+}
+
+/*
+
+idea:
+
+when selecting instannce
+
+it should come up all the attributes from the parent classes (recursively), like it'll ask the asnwer to those questions
+and if you answer it it'll create those attr cards
+
+like if `person` has attribute when was {} born, where was {} born,
+then when you add a new person instance it'll have those textfields for those questions so that you can create them easilyy that way
+
+
+*/
+
 #[derive(Props, Clone)]
 pub struct CardViewer {
     pub editor: CardEditor,
@@ -178,7 +280,7 @@ pub struct CardViewer {
     pub graph: GraphRep,
     pub save_hook: Option<MyClosure>,
     pub is_done: Signal<bool>,
-    pub old_card: Signal<Option<CardEntry>>,
+    pub old_card: Signal<Option<Card>>,
     pub old_meta: Signal<Option<NodeMetadata>>,
     pub tempnode: TempNode,
     pub overlay: Signal<Option<OverlayEnum>>,
@@ -225,11 +327,11 @@ impl CardViewer {
     fn select_closure(
         graph: GraphRep,
         front: FrontPut,
-        dependencies: Signal<Vec<CardId>>,
+        dependencies: Signal<Vec<Signal<Card>>>,
         dependents: Signal<Vec<Node>>,
         meta: Option<NodeMetadata>,
     ) -> MyClosure {
-        MyClosure::new(move |card: CardEntry| {
+        MyClosure::new(move |card: Signal<Card>| {
             let _graph = graph.clone();
             let _front = front.clone();
             let _meta = meta.clone();
@@ -239,8 +341,10 @@ impl CardViewer {
                 let front = _front.clone();
                 let deps = dependencies.clone();
                 let meta = _meta.clone();
-                deps.clone().write().retain(|dep| *dep != card.id());
-                refresh_graph(graph, front, deps, dependents.clone(), meta);
+                deps.clone()
+                    .write()
+                    .retain(|dep| dep.read().id() != card.read().id());
+                //refresh_graph(graph, front, deps, dependents.clone(), meta);
             }
         })
     }
@@ -248,12 +352,13 @@ impl CardViewer {
     fn deselect_closure(
         graph: GraphRep,
         front: FrontPut,
-        dependencies: Signal<Vec<CardId>>,
+        dependencies: Signal<Vec<Signal<Card>>>,
         dependents: Signal<Vec<Node>>,
     ) -> MyClosure {
-        MyClosure::new(move |card: CardEntry| {
+        MyClosure::new(move |card: Signal<Card>| {
             info!("ref card set ?");
-            dependencies.clone().write().push(card.id());
+            dependencies.clone().write().push(card);
+            /*
             refresh_graph(
                 graph.clone(),
                 front.clone(),
@@ -261,31 +366,33 @@ impl CardViewer {
                 dependents.clone(),
                 None,
             );
+            */
             async move {}
         })
     }
 
-    pub async fn new_from_card(card: CardEntry, graph: GraphRep) -> Self {
-        let tempnode = TempNode::Old(card.id());
+    pub async fn new_from_card(card: Signal<Card>, graph: GraphRep) -> Self {
+        let tempnode = TempNode::Old(card.read().id());
 
-        let raw_ty = card.card.read().get_ty();
+        let raw_ty = card.read().clone_base();
 
-        graph.new_set_card(card.clone());
+        graph.new_set_card(card.cloned());
 
         let front = {
-            let frnt = FrontPut::new(CardTy::from_ctype(card.card.read().get_ty().fieldless()));
-            if let Some(id) = card.card.read().front_audio_id() {
+            let frnt = FrontPut::new(CardTy::from_ctype(card.read().card_type()));
+            if let Some(id) = card.read().front_audio_id() {
                 //let audio = APP.read().inner().provider.audios.load_item(id).await;
                 //frnt.audio.clone().set(audio);
             }
-            frnt.text.clone().set(raw_ty.raw_front());
+            frnt.text.clone().set(raw_ty.data.raw_front());
             frnt
         };
 
         let back = {
-            let back = raw_ty.raw_back();
-            let bck = BackPut::new(raw_ty.backside()).with_dependents(tempnode.clone());
-            if let Some(id) = card.card.read().back_audio_id() {
+            let back = raw_ty.data.raw_back();
+            let bck =
+                BackPut::new(raw_ty.data.backside().cloned()).with_dependents(tempnode.clone());
+            if let Some(id) = card.read().back_audio_id() {
                 //let audio = APP.read().inner().provider.audios.load_item(id).await;
                 //bck.audio.clone().set(audio);
             }
@@ -303,7 +410,7 @@ impl CardViewer {
                 let concept = CardRef::new()
                     .with_dependents(tempnode.clone())
                     .with_allowed(vec![CardTy::Class]);
-                if let Some(class) = raw_ty.class() {
+                if let Some(class) = raw_ty.data.class() {
                     let class = APP.read().load_card(class).await;
                     concept.set_ref(class);
                 }
@@ -311,8 +418,14 @@ impl CardViewer {
                 concept
             };
 
-            let dependencies: Signal<Vec<CardId>> =
-                Signal::new_in_scope(card.dependencies().into_iter().collect(), ScopeId(3));
+            let dependencies: Signal<Vec<Signal<Card>>> = Signal::new_in_scope(
+                card.read()
+                    .dependencies()
+                    .into_iter()
+                    .map(|id| APP.read().load_card_sync(id))
+                    .collect(),
+                ScopeId(3),
+            );
 
             let f = Self::deselect_closure(
                 graph.clone(),
@@ -332,12 +445,22 @@ impl CardViewer {
             let bck = back.on_select(f.clone()).on_deselect(af.clone());
             let concept = concept.on_select(f.clone()).on_deselect(af.clone());
 
+            let default_question = if let CardType::Class {
+                default_question, ..
+            } = card.read().clone_base().data
+            {
+                default_question.unwrap_or_default()
+            } else {
+                String::new()
+            };
+
             CardEditor {
                 front,
                 back: bck,
                 concept,
                 dependencies,
                 allowed_cards: vec![],
+                default_question: Signal::new_in_scope(default_question, ScopeId::APP),
             }
         };
 
@@ -346,7 +469,7 @@ impl CardViewer {
             dependents,
             graph,
             is_done: Signal::new_in_scope(false, ScopeId(3)),
-            old_card: Signal::new_in_scope(Some(card), ScopeId(3)),
+            old_card: Signal::new_in_scope(Some(card.cloned()), ScopeId(3)),
             save_hook: None,
             tempnode,
             old_meta: Signal::new_in_scope(Some(meta), ScopeId::APP),
@@ -356,8 +479,8 @@ impl CardViewer {
 
     pub fn new() -> Self {
         let front = FrontPut::new(CardTy::Normal);
-        let dependencies: Signal<Vec<CardId>> =
-            Signal::new_in_scope(Default::default(), ScopeId(3));
+        let dependencies: Signal<Vec<Signal<Card>>> =
+            Signal::new_in_scope(Default::default(), ScopeId::APP);
         let dependents = Signal::new_in_scope(Default::default(), ScopeId(3));
         let graph = GraphRep::default().with_label(front.text.clone());
 
@@ -390,6 +513,7 @@ impl CardViewer {
                 concept,
                 dependencies,
                 allowed_cards: vec![],
+                default_question: Signal::new_in_scope(String::new(), ScopeId::APP),
             }
         };
 
@@ -424,6 +548,7 @@ impl CardViewer {
             return;
         }
 
+        /*
         refresh_graph(
             self.graph.clone(),
             self.editor.front.clone(),
@@ -431,10 +556,9 @@ impl CardViewer {
             self.dependents.clone(),
             self.old_meta.cloned(),
         );
+        */
     }
-
 }
-
 
 #[component]
 fn RenderInputs(props: CardViewer) -> Element {
@@ -446,6 +570,7 @@ fn RenderInputs(props: CardViewer) -> Element {
             InputElements {
                 front: props.editor.front.clone(),
                 back: props.editor.back.clone(),
+                default_question: props.editor.default_question.clone(),
                 concept: props.editor.concept.clone(),
                 overlay: props.overlay.clone(),
                 ty: ty.cloned(),
@@ -455,7 +580,6 @@ fn RenderInputs(props: CardViewer) -> Element {
         div {
             if let Some(card) = props.old_card.cloned() {
                 DeleteButton{card: card.id(), isdone: props.is_done.clone(), overlay: props.overlay.clone()}
-
                 Suspend { card: props.old_card.clone() }
             }
 
@@ -470,6 +594,7 @@ fn RenderInputs(props: CardViewer) -> Element {
 fn InputElements(
     front: FrontPut,
     back: BackPut,
+    default_question: Signal<String>,
     concept: CardRef,
     overlay: Signal<Option<OverlayEnum>>,
     ty: CardTy,
@@ -492,6 +617,7 @@ fn InputElements(
                 }
             },
             CardTy::Class => rsx! {
+
                 BackPutRender {
                     text: back.text.clone(),
                     dropdown: back.dropdown.clone(),
@@ -500,11 +626,18 @@ fn InputElements(
                     audio: back.audio.clone(),
                 }
 
+                input {
+                    class: "bg-white w-full border border-gray-300 rounded-md p-2 mb-4 text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent",
+                    value: "{default_question}",
+                    placeholder: "default question",
+                    oninput: move |evt| default_question.set(evt.value()),
+                }
+
 
                 if !is_short {
                     div {
                         class: "block text-gray-700 text-sm font-medium mb-2",
-                        style: "margin-right: 81px;",
+                        style: "margin-right: 82px;",
                         "Parent class"
 
                         CardRefRender{
@@ -582,7 +715,6 @@ fn InputElements(
     }
 }
 
-
 #[component]
 pub fn xCardViewerRender(props: CardViewer) -> Element {
     info!("render cardviewer");
@@ -631,9 +763,9 @@ fn hr_dur(dur: Duration) -> String {
 }
 
 #[component]
-fn DisplayHistory(history: MyHistory, now: Duration)  -> Element {
+fn DisplayHistory(history: MyHistory, now: Duration) -> Element {
     let output = if history.reviews.is_empty() {
-        format!("no review history")
+        format!("no review history!!")
     } else {
         let mut output = format!("review history: ");
         for review in history.reviews {
@@ -647,16 +779,17 @@ fn DisplayHistory(history: MyHistory, now: Duration)  -> Element {
     rsx! {
         p{"{output}"}
     }
-
 }
 
 #[component]
 pub fn CardViewerRender(props: CardViewer) -> Element {
     info!("render cardviewer");
 
+    let old_card: Option<CardId> = props.old_card.read().as_ref().map(|c| c.id());
+
     let history = {
         if let Some(card) = props.old_card.cloned() {
-            card.card.cloned().history().clone()
+            card.history().clone()
         } else {
             speki_core::recall_rate::History::new(Default::default())
         }
@@ -665,23 +798,24 @@ pub fn CardViewerRender(props: CardViewer) -> Element {
     let now = APP.read().inner().time_provider.current_time();
 
     rsx! {
-                div {
-                    class: "flex-none p-2 w-full max-w-[505] box-border order-2",
-                  //  style: "min-height: 0; max-height: 100%;",
-                  DisplayHistory { history, now }
+        div {
+            class: "flex-none p-2 box-border order-2",
+            DisplayHistory { history, now }
+            RenderInputs {
+                editor:props.editor.clone(),
+                dependents:props.dependents.clone(),
+                graph:props.graph.clone(),
+                save_hook:props.save_hook.clone(),
+                is_done:props.is_done.clone(),
+                old_card:props.old_card.clone(),
+                old_meta:props.old_meta.clone(),
+                tempnode:props.tempnode.clone(),
+                overlay:props.overlay.clone(),
+            }
 
-                    RenderInputs {
-                        editor:props.editor.clone(),
-                        dependents:props.dependents.clone(),
-                        graph:props.graph.clone(),
-                        save_hook:props.save_hook.clone(),
-                        is_done:props.is_done.clone(),
-                        old_card:props.old_card.clone(),
-                        old_meta:props.old_meta.clone(),
-                        tempnode:props.tempnode.clone(),
-                        overlay:props.overlay.clone(),
-                    }
-                }
+            RenderDependencies { card_text: props.editor.front.text.clone(), card_id: old_card, dependencies: props.editor.dependencies.clone(), overlay: props.overlay.clone()}
+            RenderDependents { card_id: old_card, overlay: props.overlay.clone(), hidden: false}
+        }
     }
 }
 
@@ -712,12 +846,12 @@ fn DeleteButton(
 }
 
 #[component]
-fn Suspend(card: Signal<Option<CardEntry>>) -> Element {
+fn Suspend(card: Signal<Option<Card>>) -> Element {
     let Some(card) = card.cloned() else {
         return rsx! {};
     };
 
-    let is_suspended = card.card.read().is_suspended();
+    let is_suspended = card.is_suspended();
     let txt = if is_suspended { "unsuspend" } else { "suspend" };
 
     rsx! {
@@ -726,7 +860,7 @@ fn Suspend(card: Signal<Option<CardEntry>>) -> Element {
             onclick: move |_| {
                 let mut card = card.clone();
                 spawn(async move {
-                    card.card.write().set_suspend(!is_suspended).await;
+                    card.set_suspend(!is_suspended).await;
                 });
             },
             "{txt}"
@@ -762,17 +896,17 @@ fn save_button(CardViewer: CardViewer) -> Element {
                 if let Some(card) = selv.editor.clone().into_cardrep() {
                     let selveste = selv.clone();
                     spawn(async move {
-                        use speki_core::ledger::Event as LedgerEvent;
 
-                        let mut events: Vec<LedgerEvent> = vec![];
+
+                        let mut events: Vec<CardEvent> = vec![];
 
                         let id = selveste.old_card.cloned().map(|card|card.id()).unwrap_or_else(CardId::new_v4);
-                        events.push(CardEvent::new(id, CardAction::UpsertCard(card.ty)).into());
-                        events.push(CardEvent::new(id, CardAction::SetFrontAudio (card.front_audio)).into());
-                        events.push(CardEvent::new(id, CardAction::SetBackAudio ( card.back_audio)).into());
+                        events.push(CardEvent::new(id, CardAction::UpsertCard(card.ty)));
+                        events.push(CardEvent::new(id, CardAction::SetFrontAudio (card.front_audio)));
+                        events.push(CardEvent::new(id, CardAction::SetBackAudio ( card.back_audio)));
 
                         for dep in card.deps {
-                            events.push(CardEvent::new(id, CardAction::AddDependency(dep)).into());
+                            events.push(CardEvent::new(id, CardAction::AddDependency(dep)));
                         }
 
                         if let Some(audio) = selv.editor.front.audio.cloned() {
@@ -783,18 +917,18 @@ fn save_button(CardViewer: CardViewer) -> Element {
                         }
 
                         for event in events {
-                            APP.read().inner().provider.run_event(event).await;
+                            APP.read().inner().provider.cards.insert_ledger(event);
                         }
 
-                        let card = APP.read().inner().card_provider().load(id).await.unwrap();
+                        let card = APP.read().inner().card_provider().load(id).unwrap();
                         let inner_card = Arc::unwrap_or_clone(card);
-                        let card = CardEntry::new(inner_card.clone());
+                        let card = Signal::new_in_scope(inner_card.clone(),  ScopeId::APP);
                         if let Some(hook) = selveste.save_hook.clone() {
                             hook.call(card).await;
                         }
-                        if let Some(mut card) = selveste.old_card.cloned() {
+                        if let Some(card) = selveste.old_card.cloned() {
                             info!("setting updated card: {:?}", inner_card);
-                            card.card.set(inner_card);
+                            //card.set(inner_card);
                         }
 
                         selveste.reset().await;
@@ -814,6 +948,7 @@ fn save_button(CardViewer: CardViewer) -> Element {
 #[component]
 fn add_dep(selv: CardViewer) -> Element {
     let selv = selv.clone();
+    let front = selv.editor.front.text.cloned();
     let overlay = selv.overlay.clone();
     rsx! {
         button {
@@ -823,13 +958,13 @@ fn add_dep(selv: CardViewer) -> Element {
                 let selv2 = selv.clone();
 
                 let fun = MyClosure::new(
-                    move |card: CardEntry| {
-                    selv.editor.dependencies.clone().write().push(card.id());
+                    move |card: Signal<Card>| {
+                    selv.editor.dependencies.clone().write().push(card);
                     selv.set_graph();
                     let old_card = selv.old_card.cloned();
                     async move {
                         if let Some(mut old_card) = old_card {
-                            old_card.card.write().add_dependency(card.id()).await;
+                            old_card.add_dependency(card.read().id()).await;
                         }
                     }
                 }
@@ -838,10 +973,11 @@ fn add_dep(selv: CardViewer) -> Element {
             );
 
                 info!("1 scope is ! {:?}", current_scope_id().unwrap());
+                let thefront = front.clone();
 
                 spawn(async move {
                     let dependent: Node = selv2.tempnode.clone().into();
-                    let props = CardSelector::dependency_picker(fun).with_dependents(vec![dependent]);
+                    let props = CardSelector::dependency_picker(fun).with_dependents(vec![dependent]).with_default_search(thefront.clone());
                     overlay.clone().set(Some(OverlayEnum::CardSelector(props)));
                     info!("2 scope is ! {:?}", current_scope_id().unwrap());
                 });

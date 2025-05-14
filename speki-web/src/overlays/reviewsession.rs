@@ -1,11 +1,17 @@
 use dioxus::prelude::*;
-use speki_web::CardEntry;
 use std::{collections::BTreeSet, rc::Rc, sync::Arc};
 
-use speki_core::{card::CardId, cardfilter::CardFilter, collection::{DynCard, MaybeCard}, recall_rate::Recall};
+use speki_core::{
+    card::CardId,
+    cardfilter::CardFilter,
+    collection::{DynCard, MaybeCard},
+    recall_rate::Recall,
+    Card,
+};
 use tracing::info;
 
 use crate::{
+    components::RenderDependents,
     overlays::{
         card_selector::{CardSelector, MyClosure},
         cardviewer::CardViewer,
@@ -19,18 +25,17 @@ use super::OverlayEnum;
 #[component]
 fn RecallButton(
     recall: Recall,
-    card: CardEntry,
+    card: Signal<Card>,
     mut queue: Signal<Queue>,
     mut show_backside: Signal<bool>,
     session: ReviewSession,
 ) -> Element {
-    let label = match recall {
-        Recall::None => "😡",
-        Recall::Late => "😠",
+    let _label = match recall {
+        Recall::None => "😞",
+        Recall::Late => "😐",
         Recall::Some => "🙂",
-        Recall::Perfect => "😁",
+        Recall::Perfect => "😃",
     };
-
 
     let label = match recall {
         Recall::None => "1",
@@ -41,41 +46,15 @@ fn RecallButton(
 
     rsx! {
         button {
-            class: "bg-white mt-6 inline-flex items-center justify-center text-white border-0 py-4 px-6 focus:outline-none hover:bg-gray-700 rounded md:mt-0 text-4xl leading-none",
+            class: "bg-blue-500 mt-6 inline-flex items-center justify-center text-white border-0 py-4 px-6 focus:outline-none hover:bg-blue-700 rounded text-4xl leading-none",
             onclick: move |_| {
                 let mut card = card.clone();
-                let session = session.clone();
                 spawn(async move{
                     info!("do review");
-                    card.card.write()
+                    card.write()
                         .add_review(recall)
                         .await;
-
-
-                    let related = {
-                        let mut dependencies = card.card.read().recursive_dependencies().await;
-                        let dependents = card.card.read().recursive_dependents().await;
-                        dependencies.extend(dependents);
-                        dependencies
-                    };
-
                     queue.write().next();
-                    let mut new_queue = queue.read().upcoming();
-                    new_queue.retain(|id|!related.contains(id));
-
-                    for id in related {
-                        if session.thecards.contains(&MaybeCard::Id(id)) {
-                            if let Some(card) = APP.read().try_load_card(id).await {
-                                if session.filter.filter(Arc::new(card.card.cloned())).await {
-                                    new_queue.push(id);
-                                }
-                            }
-                        }
-                    }
-
-                    queue.write().set_upcoming(new_queue);
-
-
                     show_backside.set(false);
                 });
             },
@@ -88,7 +67,7 @@ fn RecallButton(
 #[component]
 fn ReviewButtons(
     mut show_backside: Signal<bool>,
-    card: CardEntry,
+    card: Signal<Card>,
     queue: Signal<Queue>,
     session: ReviewSession,
 ) -> Element {
@@ -103,7 +82,7 @@ fn ReviewButtons(
 
                         show_backside.set(true);
 
-                        if let Some(audio) = card.card.read().back_audio() {
+                        if let Some(audio) = card.read().back_audio() {
                             play_audio(&audio.data, "audio/mpeg");
                     }
 
@@ -130,12 +109,11 @@ fn ReviewButtons(
     }
 }
 
-
 #[derive(Clone, PartialEq, Debug)]
 pub struct ReviewSession {
     cards: Vec<DynCard>,
     filter: CardFilter,
-    thecards: BTreeSet<MaybeCard>,
+    thecards: BTreeSet<Arc<Card>>,
 }
 
 impl ReviewSession {
@@ -150,27 +128,32 @@ impl ReviewSession {
         selv
     }
 
-    pub async fn expand(&self) -> BTreeSet<MaybeCard> {
+    pub async fn expand(&self) -> BTreeSet<Arc<Card>> {
         let provider = APP.read().inner().card_provider();
-        let mut out: BTreeSet<MaybeCard> = Default::default();
+        let mut out: BTreeSet<Arc<Card>> = Default::default();
 
         for card in &self.cards {
             let cards = card.evaluate(provider.clone()).await;
-            for card in cards {
-                match card {
-                    MaybeCard::Id(id) => {
-                        let card = provider.load(id).await.unwrap();
-                        if self.filter.filter(card.clone()).await {
-                            out.insert(MaybeCard::Card(card));
-                        }
-                    },
-                    MaybeCard::Card(card) => {
-                        if self.filter.filter(card.clone()).await {
-                            out.insert(MaybeCard::Card(card));
-                        }
-                    },
+            let cardqty = cards.len();
+            for (idx, card) in cards.into_iter().enumerate() {
+                if idx % 100 == 0 {
+                    info!("eval {}/{}", idx, cardqty);
                 }
-                
+                let card = match card {
+                    MaybeCard::Id(id) => provider.load(id).unwrap(),
+                    MaybeCard::Card(card) => card,
+                };
+
+                if self.filter.filter(card.clone()).await {
+                    out.insert(card.clone());
+                }
+
+                for dependency in card.recursive_dependencies().await {
+                    let card = provider.load(dependency).unwrap();
+                    if self.filter.filter(card.clone()).await {
+                        out.insert(card.clone());
+                    }
+                }
             }
         }
 
@@ -182,12 +165,12 @@ impl ReviewSession {
 pub fn ReviewRender(
     front: Resource<String>,
     back: String,
-    card: CardEntry,
+    card: Signal<Card>,
     queue: Signal<Queue>,
     show_backside: Signal<bool>,
     tot: Resource<usize>,
     overlay: Signal<Option<OverlayEnum>>,
-    dependencies: Resource<Vec<(CardEntry, Signal<Option<OverlayEnum>>)>>,
+    dependencies: Resource<Vec<Signal<Card>>>,
     session: ReviewSession,
 ) -> Element {
     let card2 = card.clone();
@@ -203,7 +186,7 @@ pub fn ReviewRender(
             " " => {
                 show_backside.clone().set(true);
 
-                if let Some(audio) = card.card.read().back_audio() {
+                if let Some(audio) = card.read().back_audio() {
                     play_audio(&audio.data, "audio/mpeg");
                 }
 
@@ -214,7 +197,7 @@ pub fn ReviewRender(
         queue.clone().write().next();
         show_backside.clone().set(false);
         spawn(async move {
-            card.card.write().add_review(recall).await;
+            card.write().add_review(recall).await;
         });
     };
 
@@ -237,7 +220,7 @@ pub fn ReviewRender(
                     }
 
                     div {
-                        class: "flex flex-col md:flex-row w-full h-full overflow-hidden",
+                        class: "flex flex-row md:flex-row w-full h-full overflow-hidden",
 
                         div {
                             class: "flex-1 w-full md:w-1/2 box-border order-1 md:order-2 relative",
@@ -248,7 +231,11 @@ pub fn ReviewRender(
                                 overlay: overlay.clone(),
                                 show_backside: show_backside.cloned(),
                                 queue: queue.clone(),
-
+                            }
+                            RenderDependents{
+                                card_id: Some(card.read().id()),
+                                overlay: overlay.clone(),
+                                hidden: !(*show_backside.read()),
                             }
                         }
 
@@ -291,7 +278,7 @@ impl Queue {
             let id = self.current().unwrap();
             spawn(async move {
                 if let Some(card) = APP.read().try_load_card(id).await {
-                    if let Some(audio) = card.clone().card.read().front_audio() {
+                    if let Some(audio) = card.clone().read().front_audio() {
                         play_audio(&audio.data, "audio/mpeg");
                     }
                 }
@@ -317,8 +304,8 @@ impl Queue {
 #[derive(Clone, Debug)]
 pub struct ReviewState {
     pub queue: Signal<Queue>,
-    pub card: Resource<Option<CardEntry>>,
-    pub dependencies: Resource<Vec<(CardEntry, Signal<Option<OverlayEnum>>)>>,
+    pub card: Resource<Option<Signal<Card>>>,
+    pub dependencies: Resource<Vec<Signal<Card>>>,
     pub tot_len: Resource<usize>,
     pub front: Resource<String>,
     pub back: Resource<String>,
@@ -343,7 +330,6 @@ impl ReviewState {
             thecards.push(card.id());
         }
 
-
         let overlay: Signal<Option<OverlayEnum>> = Signal::new_in_scope(None, ScopeId::APP);
         let queue: Signal<Queue> = Signal::new_in_scope(Queue::new(thecards), ScopeId::APP);
 
@@ -353,31 +339,28 @@ impl ReviewState {
         let card = ScopeId::APP.in_runtime(|| {
             use_resource(move || async move {
                 match queue.read().current() {
-                    Some(id) => {
-                        APP.read().try_load_card(id).await
-                    }
+                    Some(id) => APP.read().try_load_card(id).await,
                     None => None,
                 }
             })
         });
 
-        let dependencies: Resource<Vec<(CardEntry, Signal<Option<OverlayEnum>>)>> = ScopeId::APP
-            .in_runtime(|| {
-                use_resource(move || async move {
-                    if let Some(Some(card)) = card.cloned() {
-                        let mut deps: Vec<(CardEntry, Signal<Option<OverlayEnum>>)> = vec![];
+        let dependencies: Resource<Vec<Signal<Card>>> = ScopeId::APP.in_runtime(|| {
+            use_resource(move || async move {
+                if let Some(Some(card)) = card.cloned() {
+                    let mut deps: Vec<Signal<Card>> = vec![];
 
-                        for dep in &card.dependencies() {
-                            if let Some(dep) = APP.read().try_load_card(*dep).await{
-                                deps.push((dep, overlay.clone()));
-                            }
+                    for dep in &card.read().dependencies() {
+                        if let Some(dep) = APP.read().try_load_card(*dep).await {
+                            deps.push(dep);
                         }
-                        deps
-                    } else {
-                        vec![]
                     }
-                })
-            });
+                    deps
+                } else {
+                    vec![]
+                }
+            })
+        });
 
         let front = ScopeId::APP.in_runtime(|| {
             use_resource(move || async move {
@@ -392,12 +375,7 @@ impl ReviewState {
         let back = ScopeId::APP.in_runtime(|| {
             use_resource(move || async move {
                 match card.cloned() {
-                    Some(Some(card)) => card
-                        .card
-                        .read()
-                        .display_backside()
-                        .await
-                        .unwrap_or_default(),
+                    Some(Some(card)) => card.read().display_backside().to_string(),
                     _ => "".to_string(),
                 }
             })
@@ -422,7 +400,7 @@ impl ReviewState {
 
 #[component]
 fn Infobar(
-    card: CardEntry,
+    card: Signal<Card>,
     overlay: Signal<Option<OverlayEnum>>,
     tot: Resource<usize>,
     queue: Signal<Queue>,
@@ -463,8 +441,8 @@ fn Infobar(
 }
 
 #[component]
-fn Suspend(card: CardEntry, mut queue: Signal<Queue>) -> Element {
-    let is_suspended = card.card.read().is_suspended();
+fn Suspend(card: Signal<Card>, mut queue: Signal<Queue>) -> Element {
+    let is_suspended = card.read().is_suspended();
     let txt = if is_suspended { "unsuspend" } else { "suspend" };
 
     rsx! {
@@ -474,7 +452,7 @@ fn Suspend(card: CardEntry, mut queue: Signal<Queue>) -> Element {
                 let card = card.clone();
                 spawn(async move {
                     let mut card = card;
-                    card.card.write().set_suspend(!is_suspended).await;
+                    card.write().set_suspend(!is_suspended).await;
                     queue.write().next();
                 });
             },
@@ -485,8 +463,8 @@ fn Suspend(card: CardEntry, mut queue: Signal<Queue>) -> Element {
 
 #[component]
 fn RenderDependencies(
-    card: CardEntry,
-    dependencies: Resource<Vec<(CardEntry, Signal<Option<OverlayEnum>>)>>,
+    card: Signal<Card>,
+    dependencies: Resource<Vec<Signal<Card>>>,
     overlay: Signal<Option<OverlayEnum>>,
     show_backside: bool,
     queue: Signal<Queue>,
@@ -501,7 +479,8 @@ fn RenderDependencies(
 
     rsx! {
         div {
-            class: "flex flex-col {show_graph} absolute top-0 left-0 w-1/2 h-auto bg-white p-2 shadow-md rounded-md overflow-y-auto",
+            class: "flex flex-col {show_graph} w-full h-auto bg-white p-2 shadow-md rounded-md overflow-y-auto",
+
 
             div {
                 class: "flex items-center justify-between mb-2",
@@ -516,16 +495,17 @@ fn RenderDependencies(
                         onclick: move |_| {
                             let currcard = card.clone();
 
-                            let fun = MyClosure::new(move |card: CardEntry| {
+                            let fun = MyClosure::new(move |card: Signal<Card>| {
                                 let mut old_card = currcard.clone();
                                 async move {
-                                    old_card.card.write().add_dependency(card.id()).await;
+                                    old_card.write().add_dependency(card.read().id()).await;
                                     let _ = queue.write();
                                 }
                             });
 
                             spawn(async move {
-                                let props = CardSelector::dependency_picker(fun);
+                                let front = format!("{}{}", card.read().print(), card.read().display_backside());
+                                let props = CardSelector::dependency_picker(fun).with_default_search(front).with_forbidden_cards(vec![card.read().id()]);
                                 overlay.clone().set(Some(OverlayEnum::CardSelector(props)));
                             });
                         },
@@ -533,7 +513,7 @@ fn RenderDependencies(
                     }
                 }
 
-            for (card, overlay) in deps {
+            for card in deps {
                 button {
                     class: "mb-1 p-1 bg-gray-100 rounded-md text-left",
                     onclick: move|_|{
@@ -555,7 +535,7 @@ fn CardSides(
     front: Resource<String>,
     back: String,
     show_backside: Signal<bool>,
-    card: CardEntry,
+    card: Signal<Card>,
     queue: Signal<Queue>,
     session: ReviewSession,
 ) -> Element {

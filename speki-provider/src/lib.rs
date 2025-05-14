@@ -1,8 +1,11 @@
 #[cfg(feature = "fs")]
 mod fs;
 
+//#[cfg(feature = "fs")]
+//mod snapfs;
+
 #[cfg(feature = "fs")]
-pub use fs::{FsProvider, FsTime};
+pub use fs::FsTime;
 
 #[cfg(feature = "browserfs")]
 mod browserfs;

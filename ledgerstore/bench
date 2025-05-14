@@ -1,0 +1,15 @@
+how many new inodes used, with and without garbage collection (keep every 100) and caching
+
+before: 6248932
+
+after_no_gc: 6687947
+after_gc 6312874
+
+new_no_gc: 439015
+new_gc: 63942
+
+after_gc_no_cache: 6258853
+after_no_gc_no_cache: 6284745
+
+new_gc_no_cache: 9921
+new_no_gc_no_cache: 35813

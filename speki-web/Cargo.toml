@@ -27,8 +27,8 @@ strum.workspace = true
 fancy-regex.workspace = true
 eyre.workspace = true
 async-recursion.workspace = true
-speki-dto = { path = "../speki-dto" }
 speki-core = { path = "../speki-core" }
+ledgerstore.workspace = true
 
 # WebAssembly-specific dependencies (optional)
 wasm-bindgen = { workspace = true, optional = true }

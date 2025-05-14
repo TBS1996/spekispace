@@ -1,5 +1,3 @@
-use std::collections::BTreeSet;
-use std::fmt::Display;
 use std::{cell::RefCell, collections::HashMap, sync::Arc};
 
 use dioxus::prelude::*;
@@ -11,9 +9,6 @@ use uuid::Uuid;
 
 #[cfg(feature = "web")]
 use wasm_bindgen::prelude::*;
-
-#[cfg(feature = "desktop")]
-use dioxus::desktop::use_window;
 
 #[derive(Clone, Debug)]
 pub enum GraphAction {
@@ -124,76 +119,6 @@ fn cyan_color() -> String {
     String::from("#00FFFF")
 }
 
-#[derive(Clone, Debug)]
-pub struct CardEntry {
-    pub front: Resource<String>,
-    pub dependencies: Resource<BTreeSet<CardId>>,
-    pub card: Signal<Card>,
-}
-
-impl Ord for CardEntry {
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        let selv = self.card.read().id();
-        let other = other.card.read().id();
-        selv.cmp(&other)
-    }
-}
-
-impl PartialOrd for CardEntry {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        let selv = self.card.read().id();
-        let other = other.card.read().id();
-        selv.partial_cmp(&other)
-    }
-}
-
-impl Eq for CardEntry {}
-
-impl PartialEq for CardEntry {
-    fn eq(&self, other: &Self) -> bool {
-        self.card == other.card
-    }
-}
-
-impl Display for CardEntry {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.front.cloned().unwrap_or("...".to_string()))
-    }
-}
-
-impl CardEntry {
-    pub fn new(card: Card) -> Self {
-        let card = Signal::new_in_scope(card, ScopeId::APP);
-        let thecard = card.clone();
-        let front = ScopeId::APP.in_runtime(|| {
-            use_resource(move || async move {
-                let card = thecard.clone();
-                info!("front resource!!!!!!!!!!!!!");
-                card.cloned().print().await
-            })
-        });
-
-        let dependencies = ScopeId::APP.in_runtime(|| {
-            let card = card.clone();
-            use_resource(move || async move { card.read().dependencies().await })
-        });
-
-        Self {
-            front,
-            card,
-            dependencies,
-        }
-    }
-
-    pub fn id(&self) -> CardId {
-        self.card.read().id()
-    }
-
-    pub fn dependencies(&self) -> BTreeSet<CardId> {
-        self.dependencies.cloned().unwrap_or_default()
-    }
-}
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NodeMetadata {
     pub id: NodeId,
@@ -204,17 +129,17 @@ pub struct NodeMetadata {
 }
 
 impl NodeMetadata {
-    pub async fn from_card(card: CardEntry, is_origin: bool) -> Self {
-        let label = card.front.cloned().unwrap_or_default();
-        let color = match card.card.read().recall_rate() {
+    pub async fn from_card(card: Signal<Card>, is_origin: bool) -> Self {
+        let label = card.read().print();
+        let color = match card.read().recall_rate() {
             Some(rate) => rate_to_color(rate as f64 * 100.),
             None => cyan_color(),
         };
 
-        let ty = card.card.read().card_type().fieldless();
+        let ty = card.read().card_type();
 
         Self {
-            id: NodeId::new_from_card(card.card.read().id()),
+            id: NodeId::new_from_card(card.read().id()),
             label,
             color,
             ty,
@@ -222,8 +147,6 @@ impl NodeMetadata {
         }
     }
 }
-
-
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Node {
@@ -243,7 +166,6 @@ impl Node {
                 .await
                 .unwrap()
                 .dependents()
-                .await
                 .into_iter()
                 .map(|card| NodeId::Card(card.id()))
                 .collect(),
@@ -257,7 +179,6 @@ impl Node {
                 .await
                 .unwrap()
                 .dependencies()
-                .await
                 .into_iter()
                 .map(|id| NodeId::Card(id))
                 .collect(),

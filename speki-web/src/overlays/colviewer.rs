@@ -5,14 +5,15 @@ use super::{
 };
 use crate::{overlays::card_selector::MyClosure, APP};
 use dioxus::prelude::*;
-use speki_core::collection::{Collection, CollectionId, DynCard, MaybeCard, MaybeDyn};
-use speki_web::CardEntry;
+use speki_core::{
+    collection::{Collection, CollectionId, DynCard, MaybeCard, MaybeDyn},
+    ledger::{CollectionAction, CollectionEvent},
+};
 use std::{collections::BTreeMap, fmt::Display, sync::Arc};
 use tracing::info;
 use uuid::Uuid;
 
 /*
-
 two main parts
 
 one is the list of the collection
@@ -26,7 +27,6 @@ the other one has maybe like tabs ?
 
 one tab is just search for a specific card and choose it
 other is the various dynamic things like, choose dependents of cards, choose other collection etc...
-
 
 */
 
@@ -59,19 +59,19 @@ async fn name(dy: MaybeDyn) -> String {
     match dy {
         DynCard::Any => format!("all cards"),
         DynCard::Card(id) => {
-            let card = APP.read().load_card(id).await.card.read().print().await;
+            let card = APP.read().load_card(id).await.read().print();
             format!("{card}")
         }
         DynCard::Instances(id) => {
-            let card = APP.read().load_card(id).await.card.read().print().await;
+            let card = APP.read().load_card(id).await.read().print();
             format!("instances of {card}")
         }
         DynCard::Dependents(id) => {
-            let card = APP.read().load_card(id).await.card.read().print().await;
+            let card = APP.read().load_card(id).await.read().print();
             format!("dependents of {card}")
         }
         DynCard::RecDependents(id) => {
-            let card = APP.read().load_card(id).await.card.read().print().await;
+            let card = APP.read().load_card(id).await.read().print();
             format!("rec dependents of {card}")
         }
     }
@@ -147,9 +147,10 @@ impl CollectionEditor {
                         let id = card.id();
                         let entry = match card {
                             MaybeCard::Id(id) => MaybeEntry::No(id),
-                            MaybeCard::Card(card) => {
-                                MaybeEntry::Yes(CardEntry::new(Arc::unwrap_or_clone(card)))
-                            }
+                            MaybeCard::Card(card) => MaybeEntry::Yes(Signal::new_in_scope(
+                                Arc::unwrap_or_clone(card),
+                                ScopeId::APP,
+                            )),
                         };
 
                         out.insert(id, Signal::new_in_scope(entry, ScopeId::APP));
@@ -275,12 +276,18 @@ pub fn ColViewRender(props: CollectionEditor) -> Element {
                 let selv = selv.clone();
 
                 let name = selv.colname.cloned();
-                let mut col = selv.col.clone();
-                col.write().name = name;
-
                 spawn(async move {
-                    APP.read().run_col_event(todo!()).await;
-                    selv.done.clone().set(true);
+                    let id = selv.col.read().id;
+                    match APP.read().inner().provider.collections.load(&id.to_string()) {
+                        Some(col) =>{
+                            let old_name = col.name;
+                            if old_name != name {
+                                let event = CollectionEvent::new(id, CollectionAction::SetName(name));
+                                APP.read().inner().provider.run_event(event);
+                            }
+                        },
+                        None => {},
+                    };
                 });
 
 
@@ -293,9 +300,10 @@ pub fn ColViewRender(props: CollectionEditor) -> Element {
             class: "inline-flex items-center text-white bg-gray-800 border-0 py-1 px-3 focus:outline-none hover:bg-gray-700 rounded text-base",
             onclick: move |_| {
                 let selv = selv2.clone();
+                todo!();
                 spawn(async move {
-                    APP.read().delete_collection(selv.col.read().id).await;
-                    selv.done.clone().set(true);
+                    //APP.read().delete_collection(selv.col.read().id).await;
+                    //selv.done.clone().set(true);
                 });
 
 
@@ -352,14 +360,17 @@ pub fn ColViewRender(props: CollectionEditor) -> Element {
 mod entry_selector {
     use super::*;
 
-    use speki_dto::RunLedger;
-
+    use ledgerstore::LedgerItem;
+    use speki_core::Card;
 
     pub fn dependencies(col: Signal<Collection>) -> CardSelector {
-        let f = MyClosure::new(move |card: CardEntry| {
-            let mut col = col.clone();
-            col.write()
-                .insert_dyn(MaybeDyn::Dyn(DynCard::RecDependents(card.id())));
+        let f = MyClosure::new(move |card: Signal<Card>| {
+            let col = col.clone();
+            let id = col.read().id;
+            let action = MaybeDyn::Dyn(DynCard::RecDependents(card.read().id()));
+            let event = CollectionEvent::new(id, CollectionAction::InsertDyn(action));
+            APP.read().inner().provider.run_event(event);
+
             async move {}
         });
 
@@ -369,10 +380,12 @@ mod entry_selector {
     }
 
     pub fn instances(col: Signal<Collection>) -> CardSelector {
-        let f = MyClosure::new(move |card: CardEntry| {
-            let mut col = col.clone();
-            col.write()
-                .insert_dyn(MaybeDyn::Dyn(DynCard::Instances(card.id())));
+        let f = MyClosure::new(move |card: Signal<Card>| {
+            let col = col.clone();
+            let id = col.read().id;
+            let action = MaybeDyn::Dyn(DynCard::Instances(card.read().id()));
+            let event = CollectionEvent::new(id, CollectionAction::InsertDyn(action));
+            APP.read().inner().provider.run_event(event);
             async move {}
         });
 
@@ -381,22 +394,27 @@ mod entry_selector {
 
     pub async fn collection(col: Signal<Collection>) -> ItemSelector<Collection> {
         let mut cols = APP.read().load_collections().await;
-        cols.retain(|_col| _col.id.to_string() != col.read().item_id());
+        cols.retain(|_col| _col.id != col.read().item_id());
         info!("debug 4");
 
         let f = Box::new(move |chosen_col: Collection| {
-            let mut col = col.clone();
-            col.write().insert_dyn(MaybeDyn::Collection(chosen_col.id));
+            let col = col.clone();
+            let id = col.read().id;
+            let action = MaybeDyn::Collection(chosen_col.id);
+            let event = CollectionEvent::new(id, CollectionAction::InsertDyn(action));
+            APP.read().inner().provider.run_event(event);
         });
 
         ItemSelector::new(cols, Arc::new(f))
     }
 
     pub fn card(col: Signal<Collection>) -> CardSelector {
-        let f = MyClosure::new(move |card: CardEntry| {
-            let mut col = col.clone();
-            col.write()
-                .insert_dyn(MaybeDyn::Dyn(DynCard::Card(card.id())));
+        let f = MyClosure::new(move |card: Signal<Card>| {
+            let col = col.clone();
+            let id = col.read().id;
+            let action = MaybeDyn::Dyn(DynCard::Card(card.read().id()));
+            let event = CollectionEvent::new(id, CollectionAction::InsertDyn(action));
+            APP.read().inner().provider.run_event(event);
             async move {}
         });
 

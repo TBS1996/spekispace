@@ -1,552 +1,438 @@
-use std::collections::HashSet;
-use omtrent::TimeStamp;
-use speki_dto::{RunLedger};
-use serde::{Deserialize, Serialize};
 use super::*;
-use crate::{attribute::AttributeId, audio::AudioId, card_provider::CardProvider, ledger::CardEvent, App, Attribute, CacheKey};
+use crate::{
+    attribute::AttributeId, audio::AudioId, card_provider::CardProvider, ledger::CardEvent,
+    CardProperty, RefType,
+};
+use ledgerstore::LedgerItem;
+use omtrent::TimeStamp;
+use serde::{Deserialize, Serialize};
+use std::collections::{HashMap, HashSet};
 
 pub type CardId = Uuid;
 
-/// Represents the card without userdata, the part that can be freely shared among different users.
-#[derive(Clone, Serialize, Deserialize, Debug, Hash, PartialEq)]
-#[serde(from = "RawCard", into = "RawCard")]
-pub struct BaseCard {
-    pub id: CardId,
-    pub ty: CardType,
-    pub dependencies: BTreeSet<CardId>,
-    pub front_audio: Option<AudioId>,
-    pub back_audio: Option<AudioId>,
-}
-
-impl BaseCard {
-    pub fn new(ty: impl Into<CardType>) -> Self {
-        Self::new_with_id(CardId::new_v4(), ty)
-    }
-
-
-    pub fn back_side(&self) -> Option<&BackSide> {
-        match &self.ty {
-            CardType::Instance(instance) => instance.back.as_ref(),
-            CardType::Attribute(card) => Some(&card.back),
-            CardType::Normal(card) => Some(&card.back),
-            CardType::Class(card) => Some(&card.back),
-            CardType::Unfinished(_) => None?,
-            CardType::Statement(_) => None?,
-            CardType::Event(_) => None?,
-        }
-    }
-
-    pub fn new_with_id(id: impl Into<Option<CardId>>, ty: impl Into<CardType>) -> Self {
-        let id: Option<CardId> = id.into();
-        let id = id.unwrap_or_else(|| CardId::new_v4());
-
-        Self {
-            id,
-            ty: ty.into(),
-            dependencies: Default::default(),
-            front_audio: None,
-            back_audio: None,
-        }
-    }
-
-    /// Returns all dependencies of the card
-    pub async fn dependencies(&self) -> BTreeSet<CardId> {
-        let mut deps = self.dependencies.clone();
-        deps.extend(self.ty.get_dependencies().await);
-        deps
-    }
-}
-
-impl From<RawCard> for BaseCard {
-    fn from(raw: RawCard) -> Self {
-        Self {
-            id: raw.id,
-            ty: into_any(raw.data),
-            dependencies: raw.dependencies,
-            front_audio: raw.front_audio,
-            back_audio: raw.back_audio,
-        }
-    }
-}
-
-impl From<BaseCard> for RawCard {
-    fn from(card: BaseCard) -> Self {
-        RawCard {
-            id: card.id,
-            data: from_any(card.ty),
-            dependencies: card.dependencies,
-            tags: Default::default(),
-            front_audio: card.front_audio,
-            back_audio: card.back_audio,
-        }
-    }
-}
-
-#[async_trait::async_trait(?Send)]
-impl CardTrait for NormalCard {
-    async fn get_dependencies(&self) -> BTreeSet<CardId> {
-        let mut set: BTreeSet<CardId> = Default::default();
-        set.extend(self.back.dependencies().iter());
-        set
-    }
-}
-
-#[async_trait::async_trait(?Send)]
-impl CardTrait for InstanceCard {
-    async fn get_dependencies(&self) -> BTreeSet<CardId> {
-        let mut set = BTreeSet::default();
-        set.insert(self.class);
-        set
-    }
-}
-
-#[async_trait::async_trait(?Send)]
-impl CardTrait for AttributeCard {
-    async fn get_dependencies(&self) -> BTreeSet<CardId> {
-        let mut dependencies = BTreeSet::default();
-        dependencies.insert(self.instance);
-        dependencies.extend(self.back.dependencies().iter());
-        dependencies
-    }
-}
-
-#[async_trait::async_trait(?Send)]
-impl CardTrait for UnfinishedCard {
-    async fn get_dependencies(&self) -> BTreeSet<CardId> {
-        Default::default()
-    }
-}
-
-impl From<StatementCard> for CardType {
-    fn from(value: StatementCard) -> Self {
-        Self::Statement(value)
-    }
-}
-
-impl From<NormalCard> for CardType {
-    fn from(value: NormalCard) -> Self {
-        Self::Normal(value)
-    }
-}
-impl From<UnfinishedCard> for CardType {
-    fn from(value: UnfinishedCard) -> Self {
-        Self::Unfinished(value)
-    }
-}
-impl From<AttributeCard> for CardType {
-    fn from(value: AttributeCard) -> Self {
-        Self::Attribute(value)
-    }
-}
-impl From<InstanceCard> for CardType {
-    fn from(value: InstanceCard) -> Self {
-        Self::Instance(value)
-    }
-}
-impl From<ClassCard> for CardType {
-    fn from(value: ClassCard) -> Self {
-        Self::Class(value)
-    }
-}
-
-#[async_trait::async_trait(?Send)]
-impl CardTrait for ClassCard {
-    async fn get_dependencies(&self) -> BTreeSet<CardId> {
-        let mut dependencies: BTreeSet<CardId> = Default::default();
-        dependencies.extend(self.back.dependencies().iter());
-        if let Some(id) = self.parent_class {
-            dependencies.insert(id);
-        }
-        dependencies
-    }
-}
-
-/// An unfinished card
-#[derive(PartialEq, Debug, Clone, Serialize, Deserialize, Hash)]
-pub struct UnfinishedCard {
-    pub front: String,
-}
-
-/// Just a normal flashcard
-#[derive(PartialEq, Debug, Clone, Serialize, Deserialize, Hash)]
-pub struct NormalCard {
-    pub front: String,
-    pub back: BackSide,
-}
-
-/// A class, which is something that has specific instances of it, but is not a single thing in itself.
-/// A class might also have sub-classes, for example, the class chemical element has a sub-class isotope
-#[derive(PartialEq, Debug, Clone, Serialize, Deserialize, Hash)]
-pub struct ClassCard {
-    pub name: String,
-    pub back: BackSide,
-    pub parent_class: Option<CardId>,
-}
-
-/// An attribute describes a specific instance of a class. For example the class Person can have attribute "when was {} born?"
-/// this will be applied to all instances of the class and its subclasses
-#[derive(PartialEq, Debug, Clone, Serialize, Deserialize, Hash)]
-pub struct AttributeCard {
-    pub attribute: AttributeId,
-    pub back: BackSide,
-    pub instance: CardId,
-}
-
-impl AttributeCard {
-    pub async fn display_front(&self, provider: &CardProvider) -> String {
-        "omg an attribute".to_string()
-    }
-     /* 
-     let attr =    provider
-            .providers
-            .attrs
-            .load_item(self.attribute)
-            .await
-            .map(|dto| Attribute::from_dto(dto, provider.clone()));
-
-        let Some(attr) = attr else {
-            return format!("attribute not found ? {}", self.attribute);
-        };
-
-            attr
-            .name(self.instance)
-            .await
-            .unwrap_or_else(|| "oops, instance is deleted".to_string())
-    }
-    */
-}
-
-/// A specific instance of a class
-/// For example, the instance might be Elvis Presley where the concept would be "Person"
-/// the right answer is to know which class the instance belongs to
-#[derive(PartialEq, Debug, Clone, Serialize, Deserialize, Hash)]
-pub struct InstanceCard {
-    pub name: String,
-    pub back: Option<BackSide>,
-    pub class: CardId,
-}
-
-/// A statement is a fact which cant easily be represented with a flashcard,
-/// because asking the question implies the answer.
-///
-/// For example, "Can the anglerfish produce light?" is a dumb question because it's so rare for animals
-/// to produce light that the question wouldn't have been asked if it wasn't true.
-///
-/// For these questions we use a statementcard which will simply state the fact without asking you. We still
-/// need this card for dependency management since other questions might rely on you knowing this fact.
-/// Knowledge of these kinda facts will instead be measured indirectly with questions about this property
-///
-/// More formal definition of when a statement card is used:
-///
-/// 1. It represents a property of an instance or sub-class.
-/// 2. The set of the class it belongs to is large
-/// 3. The property in that set is rare, but not unique
-#[derive(PartialEq, Debug, Clone, Serialize, Deserialize, Hash)]
-pub struct StatementCard {
-    pub front: String,
-}
-
-#[async_trait::async_trait(?Send)]
-impl CardTrait for StatementCard {
-    async fn get_dependencies(&self) -> BTreeSet<CardId> {
-        Default::default()
-    }
-}
-
-#[derive(PartialEq, Debug, Clone, Serialize, Deserialize, Hash)]
-pub struct EventCard {
-    pub front: String,
-    pub start_time: TimeStamp,
-    pub end_time: Option<TimeStamp>,
-    pub parent_event: Option<CardId>,
-}
-
-impl EventCard {
-    /// Returns `true` if the other event fits within self-event's timeline
-    fn inner_valid_sub_event(&self, other: &Self) -> bool {
-        if other.start_time < self.start_time {
-            false
-        } else if let (Some(self_end), Some(other_end)) = (&self.end_time, &other.end_time) {
-            self_end > other_end
-        } else {
-            true
-        }
-    }
-
-    pub async fn valid_sub_event(&self, other: CardId, app: &App) -> bool {
-        let other = app.load_card(other).await.unwrap();
-
-        let CardType::Event(other) = other.base.ty else {
-            panic!("wrong type");
-        };
-
-        self.inner_valid_sub_event(&other)
-    }
-
-    pub async fn valid_parent_event(&self, parent: CardId, app: &App) -> bool {
-        let parent = app.load_card(parent).await.unwrap();
-        let CardType::Event(parent) = parent.base.ty else {
-            panic!("wrong type");
-        };
-
-        parent.inner_valid_sub_event(self)
-    }
-}
-
-impl From<EventCard> for CardType {
-    fn from(value: EventCard) -> Self {
-        Self::Event(value)
-    }
-}
-
-#[async_trait::async_trait(?Send)]
-impl CardTrait for EventCard {
-    async fn get_dependencies(&self) -> BTreeSet<CardId> {
-        let mut set: BTreeSet<CardId> = Default::default();
-
-        if let Some(id) = self.parent_event {
-            set.insert(id);
-        }
-
-        set
-    }
-}
-
-#[async_trait::async_trait(?Send)]
-pub trait CardTrait: Debug + Clone {
-    async fn get_dependencies(&self) -> BTreeSet<CardId>;
-}
-
 #[derive(PartialEq, Debug, Clone, Serialize, Deserialize, Hash)]
 pub enum CardType {
-    Instance(InstanceCard),
-    Normal(NormalCard),
-    Unfinished(UnfinishedCard),
-    Attribute(AttributeCard),
-    Class(ClassCard),
-    Statement(StatementCard),
-    Event(EventCard),
+    /// A specific instance of a class
+    /// For example, the instance might be Elvis Presley where the concept would be "Person"
+    Instance {
+        name: String,
+        back: Option<BackSide>,
+        class: CardId,
+    },
+    Normal {
+        front: String,
+        back: BackSide,
+    },
+    Unfinished {
+        front: String,
+    },
+    /// An attribute describes a specific instance of a class. For example the class Person can have attribute "when was {} born?"
+    /// this will be applied to all instances of the class and its subclasses
+    Attribute {
+        attribute: AttributeId,
+        back: BackSide,
+        instance: CardId,
+    },
+
+    /// A class, which is something that has specific instances of it, but is not a single thing in itself.
+    /// A class might also have sub-classes, for example, the class chemical element has a sub-class isotope
+    Class {
+        name: String,
+        back: Option<BackSide>,
+        parent_class: Option<CardId>,
+        default_question: Option<String>,
+    },
+
+    /// A statement is a fact which cant easily be represented with a flashcard,
+    /// because asking the question implies the answer.
+    ///
+    /// For example, "Can the anglerfish produce light?" is a dumb question because it's so rare for animals
+    /// to produce light that the question wouldn't have been asked if it wasn't true.
+    ///
+    /// For these questions we use a statementcard which will simply state the fact without asking you. We still
+    /// need this card for dependency management since other questions might rely on you knowing this fact.
+    /// Knowledge of these kinda facts will instead be measured indirectly with questions about this property
+    ///
+    /// More formal definition of when a statement card is used:
+    ///
+    /// 1. It represents a property of an instance or sub-class.
+    /// 2. The set of the class it belongs to is large
+    /// 3. The property in that set is rare, but not unique
+    Statement {
+        front: String,
+    },
+    /// gotta figure out if i want this to be a thing in itself or it can be handled with just attributes of an event class
+    Event {
+        front: String,
+        start_time: TimeStamp,
+        end_time: Option<TimeStamp>,
+        parent_event: Option<CardId>,
+    },
 }
 
 impl CardType {
     pub fn class(&self) -> Option<CardId> {
-        from_any(self.clone()).class()
+        match self {
+            CardType::Instance { class, .. } => Some(*class),
+            CardType::Normal { .. } => None,
+            CardType::Unfinished { .. } => None,
+            CardType::Attribute { .. } => None,
+            CardType::Class { parent_class, .. } => *parent_class,
+            CardType::Statement { .. } => None,
+            CardType::Event { .. } => None,
+        }
+    }
+
+    pub fn backside(&self) -> Option<&BackSide> {
+        match self {
+            CardType::Instance { back, .. } => back.as_ref(),
+            CardType::Normal { back, .. } => Some(&back),
+            CardType::Unfinished { .. } => None,
+            CardType::Attribute { back, .. } => Some(&back),
+            CardType::Class { back, .. } => back.as_ref(),
+            CardType::Statement { .. } => None,
+            CardType::Event { .. } => None,
+        }
     }
 
     pub fn raw_front(&self) -> String {
-        from_any(self.clone()).front.unwrap_or_default()
+        match self.clone() {
+            CardType::Instance { name, .. } => name,
+            CardType::Normal { front, .. } => front,
+            CardType::Unfinished { front } => front,
+            CardType::Attribute { .. } => format!("attr card"),
+            CardType::Class { name, .. } => name,
+            CardType::Statement { front } => front,
+            CardType::Event { front, .. } => front,
+        }
     }
 
     pub fn raw_back(&self) -> String {
-        from_any(self.clone())
-            .back
-            .map(|b| b.to_string())
-            .unwrap_or_default()
+        self.backside().map(|x| x.to_string()).unwrap_or_default()
     }
 
     pub async fn get_dependencies(&self) -> BTreeSet<CardId> {
         match self {
-            CardType::Instance(card) => card.get_dependencies().await,
-            CardType::Normal(card) => card.get_dependencies().await,
-            CardType::Unfinished(card) => card.get_dependencies().await,
-            CardType::Attribute(card) => card.get_dependencies().await,
-            CardType::Class(card) => card.get_dependencies().await,
-            CardType::Statement(card) => card.get_dependencies().await,
-            CardType::Event(card) => card.get_dependencies().await,
+            CardType::Instance { class, back, .. } => {
+                let mut dependencies: BTreeSet<CardId> = Default::default();
+                dependencies.insert(*class);
+                dependencies.extend(
+                    back.clone()
+                        .map(|x| x.dependencies())
+                        .unwrap_or_default()
+                        .iter(),
+                );
+                dependencies
+            }
+            CardType::Normal { .. } => Default::default(),
+            CardType::Unfinished { .. } => Default::default(),
+            CardType::Attribute { back, instance, .. } => {
+                let mut dependencies: BTreeSet<CardId> = Default::default();
+                dependencies.insert(*instance);
+                dependencies.extend(back.dependencies().iter());
+                dependencies
+            }
+            CardType::Class {
+                back, parent_class, ..
+            } => {
+                let mut dependencies: BTreeSet<CardId> = Default::default();
+                dependencies.extend(back.as_ref().map(|x| x.dependencies()).unwrap_or_default());
+                if let Some(id) = parent_class {
+                    dependencies.insert(*id);
+                }
+                dependencies
+            }
+            CardType::Statement { .. } => Default::default(),
+            CardType::Event { .. } => todo!(),
         }
     }
 
-    pub async fn display_front(&self, provider: &CardProvider) -> String {
+    pub fn display_front(&self, provider: &CardProvider) -> String {
         match self {
-            CardType::Instance(card) => card.name.clone(),
-            CardType::Normal(card) => card.front.clone(),
-            CardType::Unfinished(card) => card.front.clone(),
-            CardType::Attribute(card) => card.display_front(provider).await,
-            CardType::Class(card) => card.name.clone(),
-            CardType::Statement(card) => card.front.clone(),
-            CardType::Event(card) => card.front.clone(),
-        }
-    }
-    pub fn backside(&self) -> Option<BackSide> {
-        match self.clone() {
-            CardType::Instance(InstanceCard { back, .. }) => back,
-            CardType::Normal(NormalCard { back, .. }) => Some(back),
-            CardType::Unfinished(_) => None,
-            CardType::Attribute(AttributeCard { back, .. }) => Some(back),
-            CardType::Class(ClassCard { back, .. }) => Some(back),
-            CardType::Statement(_) => None,
-            CardType::Event(_) => None,
-        }
-    }
+            CardType::Instance {
+                name, class, back, ..
+            } => {
+                let (class_name, default_question) = match provider
+                    .providers
+                    .cards
+                    .load(class.to_string().as_str())
+                    .unwrap()
+                    .data
+                {
+                    CardType::Class {
+                        default_question,
+                        name,
+                        ..
+                    } => (name, default_question),
+                    _ => panic!(),
+                };
 
-    fn mut_backside(&mut self) -> Option<&mut BackSide> {
-        match self {
-            CardType::Instance(InstanceCard { back, .. }) => back.as_mut(),
-            CardType::Normal(NormalCard { back, .. }) => Some(back),
-            CardType::Unfinished(_) => None,
-            CardType::Attribute(AttributeCard { back, .. }) => Some(back),
-            CardType::Class(ClassCard { back, .. }) => Some(back),
-            CardType::Statement(_) => None,
-            CardType::Event(_) => None,
-        }
-    }
-
-    // if a card is deleted that is being referenced we might have to change the card type
-    pub fn remove_dep(&mut self, id: CardId) {
-        if let Some(back) = self.mut_backside() {
-            back.invalidate_if_has_ref(id);
-        }
-
-        match self {
-            CardType::Instance(InstanceCard {
-                ref name,
-                ref back,
-                class,
-            }) => {
-                if *class == id {
-                    match back.clone() {
-                        Some(backside) => {
-                            *self = Self::Normal(NormalCard {
-                                front: name.clone(),
-                                back: backside,
-                            })
-                        }
-                        None => {
-                            *self = Self::Unfinished(UnfinishedCard {
-                                front: name.clone(),
-                            })
+                match default_question {
+                    Some(q) => q.replace("{}", &name),
+                    None => {
+                        if back.is_some() {
+                            format!("{} ({})", name, class_name)
+                        } else {
+                            name.to_string()
                         }
                     }
                 }
             }
-            CardType::Normal(_) => {}
-            CardType::Unfinished(_) => {}
-            CardType::Attribute(_) => {}
-            CardType::Class(ClassCard {
-                name,
-                back,
-                parent_class,
-            }) => {
-                if *parent_class == Some(id) {
-                    *self = Self::Class(ClassCard {
-                        name: name.clone(),
-                        back: back.clone(),
-                        parent_class: None,
-                    });
-                }
+            CardType::Normal { front, .. } => front.clone(),
+            CardType::Unfinished { front, .. } => front.clone(),
+            CardType::Attribute {
+                attribute,
+                instance,
+                ..
+            } => {
+                let attr = provider
+                    .providers
+                    .attrs
+                    .load(attribute.to_string().as_str())
+                    .unwrap();
+
+                attr.name(*instance, provider.clone())
             }
-            CardType::Statement(_) => {}
-            CardType::Event(_) => {}
-        };
+            CardType::Class {
+                name, parent_class, ..
+            } => match parent_class {
+                Some(class) => {
+                    let parent = provider
+                        .providers
+                        .cards
+                        .load(class.to_string().as_str())
+                        .unwrap()
+                        .data
+                        .raw_front();
+                    format!("{name} ({parent})")
+                }
+                None => name.to_string(),
+            },
+            CardType::Statement { front, .. } => front.clone(),
+            CardType::Event { front, .. } => front.clone(),
+        }
     }
 
     pub fn type_name(&self) -> &str {
         match self {
-            CardType::Unfinished(_) => "unfinished",
-            CardType::Statement(_) => "statement",
-            CardType::Attribute(_) => "attribute",
-            CardType::Instance(_) => "instance",
-            CardType::Normal(_) => "normal",
-            CardType::Class(_) => "class",
-            CardType::Event(_) => "event",
+            CardType::Unfinished { .. } => "unfinished",
+            CardType::Statement { .. } => "statement",
+            CardType::Attribute { .. } => "attribute",
+            CardType::Instance { .. } => "instance",
+            CardType::Normal { .. } => "normal",
+            CardType::Class { .. } => "class",
+            CardType::Event { .. } => "event",
         }
     }
 
     /// This is mainly just so i dont forget to update the CType when the AnyType changes
     pub fn fieldless(&self) -> CType {
         match self {
-            CardType::Instance(_) => CType::Instance,
-            CardType::Normal(_) => CType::Normal,
-            CardType::Unfinished(_) => CType::Unfinished,
-            CardType::Attribute(_) => CType::Attribute,
-            CardType::Class(_) => CType::Class,
-            CardType::Statement(_) => CType::Statement,
-            CardType::Event(_) => CType::Event,
+            CardType::Instance { .. } => CType::Instance,
+            CardType::Normal { .. } => CType::Normal,
+            CardType::Unfinished { .. } => CType::Unfinished,
+            CardType::Attribute { .. } => CType::Attribute,
+            CardType::Class { .. } => CType::Class,
+            CardType::Statement { .. } => CType::Statement,
+            CardType::Event { .. } => CType::Event,
         }
     }
 
     pub fn is_class(&self) -> bool {
-        matches!(self, Self::Class(_))
+        matches!(self, Self::Class { .. })
     }
     pub fn is_instance(&self) -> bool {
-        matches!(self, Self::Instance(_))
+        matches!(self, Self::Instance { .. })
     }
     pub fn is_finished(&self) -> bool {
-        !matches!(self, Self::Unfinished(_))
+        !matches!(self, Self::Unfinished { .. })
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, Hash)]
+pub struct RawCard {
+    pub id: Uuid,
+    pub data: CardType,
+    #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
+    pub dependencies: BTreeSet<Uuid>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub tags: BTreeMap<String, String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub front_audio: Option<AudioId>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub back_audio: Option<AudioId>,
+}
+
+impl RawCard {
+    // if a card is deleted that is being referenced we might have to change the card type
+    pub fn remove_dep(&mut self, id: CardId) {
+        todo!()
+        /*
+        if let Some(back) = self.data.mut_backside() {
+            back.invalidate_if_has_ref(id);
+        }
+
+        match self {
+            CardType::Instance{
+                ref name,
+                ref back,
+                class,
+            } => {
+                if *class == id {
+                    match back.clone() {
+                        Some(backside) => {
+                            *self = Self::Normal{
+                                front: name.clone(),
+                                back: backside,
+                            }
+                        }
+                        None => {
+                            *self = Self::Unfinished{
+                                front: name.clone(),
+                            }
+                        }
+                    }
+                }
+            }
+            CardType::Normal{..} => {}
+            CardType::Unfinished{..} => {}
+            CardType::Attribute{..} => {}
+            CardType::Class{
+                name,
+                back,
+                parent_class,
+            } => {
+                if *parent_class == Some(id) {
+                    *self = Self::Class{
+                        name: name.clone(),
+                        back: back.clone(),
+                        parent_class: None,
+                    };
+                }
+            }
+            CardType::Statement{..} => {}
+            CardType::Event{..} => {}
+        };
+        */
     }
 
-    pub fn set_backside(self, new_back: BackSide) -> Self {
-        match self {
-            x @ CardType::Event(_) => x,
-            x @ CardType::Instance(_) => x,
-            x @ CardType::Statement(_) => x,
-            CardType::Normal(NormalCard { front, .. }) => NormalCard {
-                front,
-                back: new_back,
-            }
-            .into(),
-            CardType::Unfinished(UnfinishedCard { front }) => NormalCard {
-                front,
-                back: new_back,
-            }
-            .into(),
-            CardType::Attribute(AttributeCard {
-                attribute,
-                instance: concept_card,
-                ..
-            }) => AttributeCard {
-                attribute,
-                back: new_back,
-                instance: concept_card,
-            }
-            .into(),
-            Self::Class(class) => ClassCard {
-                name: class.name,
-                back: new_back,
-                parent_class: class.parent_class,
-            }
-            .into(),
+    /// Returns the class this card belongs to (if any)
+    pub fn parent_class(&self) -> Option<CardId> {
+        match self.data {
+            CardType::Instance { class, .. } => Some(class),
+            CardType::Normal { .. } => None,
+            CardType::Unfinished { .. } => None,
+            CardType::Attribute { .. } => None,
+            CardType::Class { parent_class, .. } => parent_class,
+            CardType::Statement { .. } => None,
+            CardType::Event { .. } => None,
         }
     }
-}
 
-#[derive(Serialize, Deserialize, Default, Debug, Clone)]
-struct RawType {
-    ty: CType,
-    front: Option<String>,
-    back: Option<BackSide>,
-    class: Option<Uuid>,
-    instance: Option<Uuid>,
-    attribute: Option<Uuid>,
-    start_time: Option<String>,
-    end_time: Option<String>,
-    parent_event: Option<Uuid>,
-}
+    pub fn mut_backside(&mut self) -> Option<&mut BackSide> {
+        match &mut self.data {
+            CardType::Instance { back, .. } => back.as_mut(),
+            CardType::Normal { back, .. } => Some(back),
+            CardType::Unfinished { .. } => None,
+            CardType::Attribute { back, .. } => Some(back),
+            CardType::Class { back, .. } => back.as_mut(),
+            CardType::Statement { .. } => None,
+            CardType::Event { .. } => todo!(),
+        }
+    }
 
-impl RawType {
-    pub fn class(&self) -> Option<Uuid> {
-        self.class.clone()
+    pub fn ref_backside(&self) -> Option<&BackSide> {
+        match &self.data {
+            CardType::Instance { back, .. } => back.as_ref(),
+            CardType::Normal { back, .. } => Some(back),
+            CardType::Unfinished { .. } => None,
+            CardType::Attribute { back, .. } => Some(back),
+            CardType::Class { back, .. } => back.as_ref(),
+            CardType::Statement { .. } => None,
+            CardType::Event { .. } => None,
+        }
+    }
+
+    /// Returns all dependencies of the card
+    pub fn dependencies(&self) -> BTreeSet<CardId> {
+        let mut deps = self.dependencies.clone();
+        if let Some(back) = self.ref_backside() {
+            deps.extend(back.dependencies());
+        }
+
+        match &self.data {
+            CardType::Instance { class, .. } => {
+                deps.insert(*class);
+            }
+            CardType::Normal { .. } => {}
+            CardType::Unfinished { .. } => {}
+            CardType::Attribute { instance, .. } => {
+                deps.insert(*instance);
+            }
+            CardType::Class { parent_class, .. } => {
+                if let Some(class) = parent_class {
+                    deps.insert(*class);
+                }
+            }
+            CardType::Statement { .. } => {}
+            CardType::Event { .. } => {}
+        }
+
+        deps
+    }
+
+    pub fn set_backside(mut self, new_back: BackSide) -> Self {
+        let data = match self.data.clone() {
+            x @ CardType::Event { .. } => x,
+            CardType::Instance {
+                name,
+                back: _,
+                class,
+            } => CardType::Instance {
+                name,
+                back: Some(new_back),
+                class,
+            },
+            x @ CardType::Statement { .. } => x,
+
+            CardType::Normal { front, back: _ } => CardType::Normal {
+                front,
+                back: new_back,
+            },
+            CardType::Unfinished { front } => CardType::Normal {
+                front,
+                back: new_back,
+            },
+            CardType::Attribute {
+                attribute,
+                instance: concept_card,
+                back: _,
+            } => CardType::Attribute {
+                attribute,
+                back: new_back,
+                instance: concept_card,
+            },
+            CardType::Class {
+                name,
+                back: _,
+                parent_class,
+                default_question,
+            } => CardType::Class {
+                name,
+                back: Some(new_back),
+                parent_class,
+                default_question,
+            },
+        };
+
+        self.data = data;
+        self
     }
 }
 
-#[derive(Serialize, Deserialize, Default, Debug, Clone)]
-pub struct RawCard {
-    id: Uuid,
-    #[serde(flatten)]
-    data: RawType,
-    #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
-    dependencies: BTreeSet<Uuid>,
-    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
-    tags: BTreeMap<String, String>,
-    #[serde(default)]
-    front_audio: Option<AudioId>,
-    #[serde(default)]
-    back_audio: Option<AudioId>,
-}
-
-pub fn bigrams(text: &str) -> Vec<[char;2]> {
+pub fn bigrams(text: &str) -> Vec<[char; 2]> {
     normalize_string(text)
-    .chars()
+        .chars()
         .collect::<Vec<_>>()
         .windows(2)
         .map(|w| [w[0], w[1]])
@@ -554,74 +440,102 @@ pub fn bigrams(text: &str) -> Vec<[char;2]> {
 }
 
 pub fn normalize_string(str: &str) -> String {
-        deunicode::deunicode(str)
+    deunicode::deunicode(str)
         .to_lowercase()
         .chars()
-        .filter(|c| c.is_ascii_alphanumeric()) 
+        .filter(|c| c.is_ascii_alphanumeric())
         .collect()
 }
 
-impl RunLedger<CardEvent> for BaseCard {
+impl LedgerItem<CardEvent> for RawCard {
     type Error = ();
-    fn caches(&self) -> HashSet<String>{
-        let mut out: HashSet<String> = Default::default();
+    type RefType = RefType;
+    type PropertyType = CardProperty;
+
+    fn ref_cache(&self) -> HashMap<Self::RefType, HashSet<CardId>> {
+        let mut out: HashMap<Self::RefType, HashSet<Uuid>> = Default::default();
 
         for dep in &self.dependencies {
-            out.insert(CacheKey::Dependent(*dep).to_string());
+            out.entry(RefType::Dependent).or_default().insert(*dep);
         }
 
-        for bigram in bigrams(&self.ty.raw_front()) {
-            out.insert(CacheKey::Bigram(bigram).to_string());
-        }
-
-        match &self.ty {
-            CardType::Instance(InstanceCard { class, .. }) => {
-                out.insert(CacheKey::Instance(*class).to_string());
-            },
-            CardType::Normal(card) => {},
-            CardType::Unfinished(card) => {},
-            CardType::Attribute(AttributeCard {attribute, instance, ..}) => {
-                out.insert(CacheKey::AttrClass(*instance).to_string());
-                out.insert(CacheKey::AttrId(*attribute).to_string());
-
-            },
-            CardType::Class(ClassCard {parent_class, ..}) => {
+        match &self.data {
+            CardType::Normal { .. } => {}
+            CardType::Unfinished { .. } => {}
+            CardType::Instance { class, .. } => {
+                out.entry(RefType::Instance).or_default().insert(*class);
+                out.entry(RefType::Dependent).or_default().insert(*class);
+            }
+            CardType::Attribute { instance, .. } => {
+                out.entry(RefType::AttrClass).or_default().insert(*instance);
+                out.entry(RefType::Dependent).or_default().insert(*instance);
+            }
+            CardType::Class { parent_class, .. } => {
                 if let Some(class) = parent_class {
-                    out.insert(CacheKey::SubClass(*class).to_string());
+                    out.entry(RefType::SubClass).or_default().insert(*class);
+                    out.entry(RefType::Dependent).or_default().insert(*class);
                 }
-            },
-            CardType::Statement(card) => {},
-            CardType::Event(card) => {},
+            }
+            CardType::Statement { .. } => {}
+            CardType::Event { .. } => {}
         };
 
-        
-
-        if let Some(back) = self.ty.backside() {
+        if let Some(back) = &self.data.backside() {
             match back {
-                BackSide::Text(_) => {},
+                BackSide::Text(_) => {}
                 BackSide::Card(id) => {
-                    out.insert(CacheKey::BackRef(id).to_string());
-                },
+                    out.entry(RefType::BackRef).or_default().insert(*id);
+                    out.entry(RefType::Dependent).or_default().insert(*id);
+                }
                 BackSide::List(ids) => {
                     for id in ids {
-                        out.insert(CacheKey::BackRef(id).to_string());
+                        out.entry(RefType::BackRef).or_default().insert(*id);
+                        out.entry(RefType::Dependent).or_default().insert(*id);
                     }
-                },
-                BackSide::Time(_) => {},
-                BackSide::Trivial => {},
-                BackSide::Invalid => {},
+                }
+                BackSide::Time(_) => {}
+                BackSide::Trivial => {}
+                BackSide::Invalid => {}
             }
         }
 
-        out.insert(CacheKey::CardType(self.ty.fieldless()).to_string());
+        out
+    }
+
+    fn properties_cache(&self) -> HashSet<(Self::PropertyType, String)> {
+        let mut out: HashSet<(Self::PropertyType, String)> = Default::default();
+
+        for bigram in bigrams(&self.data.raw_front()) {
+            let value = format!("{}{}", bigram[0], bigram[1]);
+            out.insert((CardProperty::Bigram, value));
+        }
+
+        match &self.data {
+            CardType::Normal { .. } => {}
+            CardType::Unfinished { .. } => {}
+            CardType::Instance { .. } => {}
+            CardType::Attribute { attribute, .. } => {
+                out.insert((CardProperty::AttrId, attribute.to_string()));
+            }
+            CardType::Class { .. } => {}
+            CardType::Statement { .. } => {}
+            CardType::Event { .. } => {}
+        };
+
+        let val = format!("{:?}", self.data.fieldless());
+        out.insert((CardProperty::CardType, val));
 
         out
     }
-    
-    fn new_default(id: String) -> Self {
+
+    fn new_default(id: CardId) -> Self {
         Self {
-            id: id.parse().unwrap(),
-            ty: CardType::Normal(NormalCard { front: "uninit".to_string(), back: BackSide::Text("uninit".to_string()) }),
+            id,
+            data: CardType::Normal {
+                front: "uninit".to_string(),
+                back: BackSide::Text("uninit".to_string()),
+            },
+            tags: Default::default(),
             dependencies: Default::default(),
             front_audio: Default::default(),
             back_audio: Default::default(),
@@ -631,67 +545,47 @@ impl RunLedger<CardEvent> for BaseCard {
     fn run_event(mut self, event: CardEvent) -> Result<Self, ()> {
         for action in event.action {
             match action {
-                CardAction::SetFrontAudio ( audio ) => {
+                CardAction::SetDefaultQuestion(default) => match &mut self.data {
+                    CardType::Class {
+                        ref mut default_question,
+                        ..
+                    } => *default_question = default,
+                    _ => return Err(()),
+                },
+
+                CardAction::SetFrontAudio(audio) => {
                     self.front_audio = audio;
-                },
-                CardAction::SetBackAudio ( audio ) => {
+                }
+                CardAction::SetBackAudio(audio) => {
                     self.back_audio = audio;
-                },
-                CardAction::UpsertCard ( ty ) => {
-                    self.ty = ty;
-                },
-                CardAction::DeleteCard => {},
-                CardAction::AddDependency ( dependency ) => {
+                }
+                CardAction::UpsertCard(ty) => {
+                    self.data = ty;
+                }
+                CardAction::DeleteCard => {}
+                CardAction::AddDependency(dependency) => {
                     self.dependencies.insert(dependency);
-                },
-                CardAction::RemoveDependency ( dependency ) => {
+                }
+                CardAction::RemoveDependency(dependency) => {
                     self.dependencies.remove(&dependency);
-                    self.ty.remove_dep(dependency);
-                },
-                CardAction::SetBackRef ( reff ) => {
+                    self.remove_dep(dependency);
+                }
+                CardAction::SetBackRef(reff) => {
                     let backside = BackSide::Card(reff);
-                    self.ty = self.ty.set_backside(backside);
-                },
+                    self = self.set_backside(backside);
+                }
             }
         }
 
         Ok(self)
     }
 
-    fn derive_events(&self) -> Vec<CardEvent> {
-        let mut actions = vec![];
-
-        let action = CardAction::UpsertCard (self.ty.clone() );
-        actions.push(action);
-
-        if let Some(audio) = self.front_audio {
-            let action = CardAction::SetFrontAudio ( Some(audio));
-            actions.push(action);
-        }
-
-        if let Some(audio) = self.back_audio {
-            let action = CardAction::SetFrontAudio ( Some(audio));
-            actions.push(action);
-        }
-
-
-        for dep in &self.dependencies {
-            let action = CardAction::AddDependency (*dep);
-            actions.push(action);
-        }
-
-        let id = self.id;
-
-        actions.into_iter().map(|action|CardEvent::new(id, action)).collect()
-    }
-    
-    fn item_id(&self) -> String {
-        self.id.to_string()
+    fn item_id(&self) -> CardId {
+        self.id
     }
 }
 
-
-#[derive(Ord, PartialOrd, Eq, Hash, PartialEq, Debug, Clone)]
+#[derive(Serialize, Ord, PartialOrd, Eq, Hash, PartialEq, Debug, Clone)]
 pub enum BackSide {
     Text(String),
     Card(CardId),
@@ -699,6 +593,29 @@ pub enum BackSide {
     Time(TimeStamp),
     Trivial, // Answer is obvious, used when card is more of a dependency anchor
     Invalid, // A reference card was deleted
+}
+
+#[derive(Serialize, Deserialize, Ord, PartialOrd, Eq, Hash, PartialEq, Debug, Clone)]
+pub enum BarSide {
+    Text(String),
+    Card(CardId),
+    List(Vec<CardId>),
+    Time(TimeStamp),
+    Trivial,
+    Invalid,
+}
+
+impl From<BarSide> for BackSide {
+    fn from(value: BarSide) -> Self {
+        match value {
+            BarSide::Text(val) => BackSide::Text(val),
+            BarSide::Card(val) => BackSide::Card(val),
+            BarSide::List(val) => BackSide::List(val),
+            BarSide::Time(val) => BackSide::Time(val),
+            BarSide::Trivial => BackSide::Trivial,
+            BarSide::Invalid => BackSide::Invalid,
+        }
+    }
 }
 
 impl Default for BackSide {
@@ -760,10 +677,14 @@ impl BackSide {
     }
 
     pub fn to_string(&self) -> String {
-        let mut s = serde_json::to_string(self).unwrap();
-        s.remove(0);
-        s.pop();
-        s
+        match self {
+            BackSide::Text(s) => s.clone(),
+            BackSide::Card(id) => id.to_string(),
+            BackSide::List(ids) => format!("{ids:?}"),
+            BackSide::Time(ts) => format!("{ts}"),
+            BackSide::Trivial => "<trivial>".to_string(),
+            BackSide::Invalid => "<invalid>".to_string(),
+        }
     }
 
     pub fn dependencies(&self) -> BTreeSet<CardId> {
@@ -810,29 +731,7 @@ impl<'de> Deserialize<'de> for BackSide {
             }
             Value::Bool(_) => Ok(BackSide::Trivial),
             Value::String(s) => Ok(s.into()),
-            _ => Err(serde::de::Error::custom("Expected a string or an array")),
-        }
-    }
-}
-
-impl Serialize for BackSide {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        match *self {
-            BackSide::Trivial => serializer.serialize_bool(false),
-            BackSide::Invalid => serializer.serialize_str(Self::INVALID_STR),
-            BackSide::Time(ref t) => serializer.serialize_str(&t.serialize()),
-            BackSide::Text(ref s) => serializer.serialize_str(s),
-            BackSide::Card(ref id) => serializer.serialize_str(&id.to_string()),
-            BackSide::List(ref ids) => {
-                let mut seq = serializer.serialize_seq(Some(ids.len()))?;
-                for id in ids {
-                    seq.serialize_element(&id.to_string())?;
-                }
-                seq.end()
-            }
+            val => Ok(serde_json::from_value::<BarSide>(val).unwrap().into()),
         }
     }
 }
@@ -853,106 +752,16 @@ pub enum CType {
     Event,
 }
 
-fn into_any(raw: RawType) -> CardType {
-    match raw.ty {
-        CType::Instance => InstanceCard {
-            name: raw.front.unwrap(),
-            class: raw.class.unwrap(),
-            back: raw.back,
+impl CType {
+    pub fn supports_backside(&self) -> bool {
+        match self {
+            CType::Instance => true,
+            CType::Normal => true,
+            CType::Class => true,
+            CType::Attribute => true,
+            CType::Unfinished => false,
+            CType::Statement => false,
+            CType::Event => false,
         }
-        .into(),
-        CType::Normal => NormalCard {
-            front: raw.front.unwrap(),
-            back: raw.back.unwrap(),
-        }
-        .into(),
-        CType::Unfinished => UnfinishedCard {
-            front: raw.front.unwrap(),
-        }
-        .into(),
-        CType::Attribute => AttributeCard {
-            attribute: raw.attribute.unwrap(),
-            back: raw.back.unwrap(),
-            instance: raw.instance.unwrap(),
-        }
-        .into(),
-        CType::Class => ClassCard {
-            name: raw.front.unwrap(),
-            back: raw.back.unwrap(),
-            parent_class: raw.class,
-        }
-        .into(),
-        CType::Statement => StatementCard {
-            front: raw.front.unwrap(),
-        }
-        .into(),
-        CType::Event => EventCard {
-            front: raw.front.unwrap(),
-            start_time: raw
-                .start_time
-                .clone()
-                .map(TimeStamp::from_string)
-                .flatten()
-                .unwrap_or_default(),
-            end_time: raw.end_time.clone().map(TimeStamp::from_string).flatten(),
-            parent_event: raw.parent_event,
-        }
-        .into(),
     }
 }
-
-fn from_any(ty: CardType) -> RawType {
-    let mut raw = RawType::default();
-    let fieldless = ty.fieldless();
-    raw.ty = fieldless;
-
-    match ty {
-        CardType::Instance(InstanceCard { name, class, back }) => {
-            raw.class = Some(class);
-            raw.front = Some(name);
-            raw.back = back;
-        }
-        CardType::Normal(NormalCard { front, back }) => {
-            raw.front = Some(front);
-            raw.back = Some(back);
-        }
-        CardType::Unfinished(UnfinishedCard { front }) => {
-            raw.front = Some(front);
-        }
-        CardType::Attribute(AttributeCard {
-            attribute,
-            back,
-            instance,
-        }) => {
-            raw.attribute = Some(attribute);
-            raw.back = Some(back);
-            raw.instance = Some(instance);
-        }
-        CardType::Class(ClassCard {
-            name,
-            back,
-            parent_class,
-        }) => {
-            raw.front = Some(name);
-            raw.back = Some(back);
-            raw.class = parent_class;
-        }
-        CardType::Statement(StatementCard { front }) => {
-            raw.front = Some(front);
-        }
-        CardType::Event(EventCard {
-            front,
-            start_time,
-            end_time,
-            parent_event,
-        }) => {
-            raw.front = Some(front);
-            raw.start_time = Some(start_time.serialize());
-            raw.end_time = end_time.map(|t| t.serialize());
-            raw.parent_event = parent_event;
-        }
-    };
-
-    raw
-}
-

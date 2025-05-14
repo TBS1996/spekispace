@@ -72,6 +72,7 @@ pub struct CardFilter {
     pub suspended: Option<bool>,
     pub pending: Option<bool>,
     pub lapses: Option<NumOp>,
+    pub isolated: Option<bool>,
 }
 
 impl CardFilter {
@@ -85,6 +86,7 @@ impl CardFilter {
             suspended,
             pending,
             lapses,
+            isolated,
         } = self.clone();
 
         if let Some(NumOp { ord, num }) = recall {
@@ -193,6 +195,13 @@ impl CardFilter {
             }
         }
 
+        if let Some(flag) = isolated {
+            let no_edges = card.dependencies().is_empty() && card.dependents().is_empty();
+            if flag != no_edges {
+                return false;
+            }
+        }
+
         true
     }
 }
@@ -205,4 +214,3 @@ pub struct FilterItem {
     id: Uuid,
     filters: CardFilter,
 }
-

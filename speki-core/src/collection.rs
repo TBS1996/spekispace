@@ -1,14 +1,22 @@
 use std::{
-    cmp::Ordering, collections::{BTreeSet, HashSet}, fmt::Display, sync::Arc, time::Duration
+    cmp::Ordering,
+    collections::{BTreeSet, HashSet},
+    fmt::Display,
+    sync::Arc,
 };
 
 use async_recursion::async_recursion;
+use ledgerstore::LedgerItem;
 use serde::{Deserialize, Serialize};
-use speki_dto::RunLedger;
 use tracing::{error, info, warn};
 use uuid::Uuid;
 
-use crate::{card::CardId, card_provider::CardProvider, ledger::{CollectionAction, CollectionEvent}, Card};
+use crate::{
+    card::CardId,
+    card_provider::CardProvider,
+    ledger::{CollectionAction, CollectionEvent},
+    Card,
+};
 
 pub type CollectionId = Uuid;
 
@@ -25,37 +33,34 @@ pub struct Collection {
     pub dyncards: Vec<MaybeDyn>,
 }
 
-
-impl RunLedger<CollectionEvent> for Collection {
+impl LedgerItem<CollectionEvent> for Collection {
     type Error = ();
+    type PropertyType = &'static str;
+    type RefType = &'static str;
 
     fn run_event(mut self, event: CollectionEvent) -> Result<Self, Self::Error> {
         match event.action {
+            CollectionAction::Delete => {}
             CollectionAction::SetName(s) => self.name = s,
             CollectionAction::InsertDyn(val) => self.dyncards.push(val),
             CollectionAction::RemoveDyn(val) => {
-                self.dyncards.retain(|x|x != &val);
+                self.dyncards.retain(|x| x != &val);
             }
         }
-
 
         Ok(self)
     }
 
-    fn derive_events(&self) -> Vec<CollectionEvent> {
-        todo!()
-    }
-
-    fn new_default(id: String) -> Self {
+    fn new_default(id: CollectionId) -> Self {
         Self {
-            id: id.parse().unwrap(),
+            id,
             name: "uninit".to_string(),
             dyncards: Default::default(),
         }
     }
 
-    fn item_id(&self) -> String {
-        self.id.to_string()
+    fn item_id(&self) -> CollectionId {
+        self.id
     }
 }
 
@@ -96,9 +101,7 @@ impl Collection {
 
         for card in &self.dyncards {
             let xprovider = provider.clone();
-            futs.push(async move {
-                card.evaluate(xprovider).await
-            });
+            futs.push(async move { card.evaluate(xprovider).await });
         }
 
         for x in futures::future::join_all(futs).await {
@@ -120,12 +123,12 @@ impl Collection {
 
                 match card {
                     MaybeCard::Id(id) => {
-                        let Some(card) = provider.load(id).await else {
+                        let Some(card) = provider.load(id) else {
                             warn!("unable to find card with id: {}", id);
                             return out;
                         };
                         for dep in card.recursive_dependencies().await {
-                            let dep = provider.load(dep).await.unwrap();
+                            let dep = provider.load(dep).unwrap();
                             out.push(dep);
                         }
                         out.push(card);
@@ -133,7 +136,7 @@ impl Collection {
                     }
                     MaybeCard::Card(card) => {
                         for dep in card.recursive_dependencies().await {
-                            let dep = provider.load(dep).await.unwrap();
+                            let dep = provider.load(dep).unwrap();
                             out.push(dep);
                         }
                         out.push(card);
@@ -145,7 +148,7 @@ impl Collection {
             futs.push(fut);
         }
 
-        for cards in futures::future::join_all(futs).await{
+        for cards in futures::future::join_all(futs).await {
             out.extend(cards);
         }
 
@@ -170,7 +173,7 @@ impl MaybeDyn {
             MaybeDyn::Dyn(card) => vec![*card],
             MaybeDyn::Collection(id) => {
                 seen_cols.insert(*id);
-                let Some(col) = provider.providers.collections.load(*id).await else {
+                let Some(col) = provider.providers.collections.load(&id.to_string()) else {
                     return vec![];
                 };
 
@@ -187,10 +190,14 @@ impl MaybeDyn {
 
     pub async fn evaluate(&self, provider: CardProvider) -> Vec<MaybeCard> {
         let mut out = vec![];
-        for card in self.expand(provider.clone(), Default::default()).await {
+
+        let cards = self.expand(provider.clone(), Default::default()).await;
+
+        for card in cards {
             info!("dyn card to evaluate: {:?}", card);
             out.extend(card.evaluate(provider.clone()).await);
         }
+
         out
     }
 }
@@ -242,13 +249,13 @@ impl DynCard {
                 .collect(),
             DynCard::Card(id) => vec![MaybeCard::Id(*id)],
             DynCard::Instances(id) => {
-                let Some(card) = provider.load(*id).await else {
+                let Some(card) = provider.load(*id) else {
                     error!("failed to load card with id: {id}");
                     return vec![];
                 };
                 let mut output = vec![];
 
-                for card in card.dependents().await {
+                for card in card.dependents() {
                     if card.is_instance_of(*id) {
                         output.push(MaybeCard::Card(card));
                     }
@@ -256,25 +263,24 @@ impl DynCard {
 
                 output
             }
-            DynCard::Dependents(id) => {
-                match provider
-                    .load(*id)
-                    .await
-                    {
-                        Some(card) => card.dependents().await.into_iter().map(|x|MaybeCard::Card(x)).collect(),
-                        None =>  vec![],
-                    }
-                }
+            DynCard::Dependents(id) => match provider.load(*id) {
+                Some(card) => card
+                    .dependents()
+                    .into_iter()
+                    .map(|x| MaybeCard::Card(x))
+                    .collect(),
+                None => vec![],
+            },
 
             DynCard::RecDependents(id) => {
-                let ids = match provider.load(*id).await {
-                    Some(x) => x.recursive_dependents().await,
+                let ids = match provider.load(*id) {
+                    Some(x) => x.recursive_dependents(),
                     None => return vec![],
                 };
                 let mut out = vec![];
 
                 for id in ids {
-                    let card = provider.load(id).await.unwrap();
+                    let card = provider.load(id).unwrap();
                     out.push(MaybeCard::Card(card));
                 }
 
@@ -283,4 +289,3 @@ impl DynCard {
         }
     }
 }
-

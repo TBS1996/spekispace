@@ -1,18 +1,24 @@
 use std::{fmt::Debug, sync::Arc};
 
 use dioxus::prelude::*;
-use speki_core::{cardfilter::CardFilter, collection::{Collection, DynCard}};
+use speki_core::{
+    cardfilter::CardFilter,
+    collection::{Collection, DynCard},
+    ledger::{CollectionAction, CollectionEvent},
+};
 use tracing::info;
+use uuid::Uuid;
 
 use crate::{
     components::{FilterComp, FilterEditor},
     overlays::{
-        colviewer::CollectionEditor, reviewsession::{ReviewSession, ReviewState}, textinput::TextInput, Overender,
-        OverlayEnum,
+        colviewer::CollectionEditor,
+        reviewsession::{ReviewSession, ReviewState},
+        textinput::TextInput,
+        Overender, OverlayEnum,
     },
     APP, IS_SHORT,
 };
-
 
 #[derive(Clone)]
 pub struct ReviewPage {
@@ -49,15 +55,13 @@ impl ReviewPage {
             let mut futs = vec![];
 
             for col in _cols {
-                futs.push(
-                    async move {
-                        let dist = RecallDist::new(col.clone()).await;
-                        (col, dist)
-                    }
-                );
+                futs.push(async move {
+                    let dist = RecallDist::new(col.clone()).await;
+                    (col, dist)
+                });
             }
 
-            for (col, dist) in futures::future::join_all(futs).await{
+            for (col, dist) in futures::future::join_all(futs).await {
                 out.push((col, dist));
             }
 
@@ -77,7 +81,7 @@ pub fn Review() -> Element {
     let class = if IS_SHORT.cloned() {
         "flex flex-col items-center h-screen space-y-4 justify-center"
     } else {
-        "flex flex-col items-start h-screen space-y-4 pl-32"
+        "flex flex-col items-start min-h-screen space-y-4 justify-start pl-32"
     };
 
     let overlay = state.overlay.clone();
@@ -162,7 +166,8 @@ impl RecallDist {
     }
 
     async fn new(col: Collection) -> Self {
-        let mut selv = Self::default();
+        let selv = Self::default();
+        return selv;
 
         for card in col.expand(APP.read().inner().card_provider()).await {
             *match card.recall_rate() {
@@ -262,11 +267,11 @@ fn RenderCols(
                 onclick: move |_| {
                     let done = Signal::new_in_scope(false, ScopeId::APP);
                     let f = move |name: String| {
-                        let col = Collection::new(name);
                         info!("new collection made!");
                         spawn(async move {
                             info!("saving it!");
-                            APP.read().run_col_event(todo!()).await;
+                            let event = CollectionEvent::new(Uuid::new_v4(), CollectionAction::SetName(name));
+                            APP.read().inner().provider.run_event(event);
                             done.clone().set(true);
                             info!("saved it!");
                         });

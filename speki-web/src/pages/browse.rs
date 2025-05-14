@@ -2,20 +2,31 @@ use dioxus::prelude::*;
 use tracing::info;
 
 use crate::{
-    overlays::card_selector::{CardSelector, CardSelectorRender},
-    overlays::Overender,
+    overlays::{
+        card_selector::{CardSelector, CardSelectorRender},
+        Overender,
+    },
+    APP,
 };
 
 #[derive(Clone)]
 pub struct BrowseState {
     pub browse_page: CardSelector,
+    pub prev_cardstate: Option<String>,
 }
 
 static BROWSE_STATE: GlobalSignal<BrowseState> = Signal::global(BrowseState::new);
 
 #[component]
 pub fn Browse() -> Element {
-    let browse_state = BROWSE_STATE.cloned();
+    let mut browse_state = BROWSE_STATE.cloned();
+
+    let card_state = APP.read().inner().provider.cards.state_hash();
+    if browse_state.prev_cardstate != card_state {
+        *BROWSE_STATE.write() = BrowseState::new();
+        browse_state = BROWSE_STATE.cloned();
+    }
+
     let overlay = browse_state.browse_page.overlay.clone();
 
     rsx! {
@@ -46,7 +57,11 @@ impl BrowseState {
         info!("creating browse state!");
 
         let browse_page = CardSelector::new(true, vec![]).with_title("Browse cards".to_string());
+        let prev_cardstate = APP.read().inner().provider.cards.state_hash();
 
-        Self { browse_page }
+        Self {
+            browse_page,
+            prev_cardstate,
+        }
     }
 }

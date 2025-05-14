@@ -1,13 +1,20 @@
-use std::{collections::BTreeMap, future::Future, pin::Pin, sync::Arc};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    future::Future,
+    pin::Pin,
+    sync::Arc,
+};
 
 use dioxus::prelude::*;
 use speki_core::{
-    card::{bigrams, normalize_string, CardId}, card_provider::Caches, cardfilter::CardFilter, collection::{DynCard, MaybeDyn}, CacheKey
+    card::{bigrams, normalize_string, CardId},
+    cardfilter::CardFilter,
+    collection::{DynCard, MaybeDyn},
+    Card, CardProperty,
 };
-use speki_web::{CardEntry, Node};
+use speki_web::Node;
 use tracing::info;
 use uuid::Uuid;
-
 
 use crate::components::graph::GraphRep;
 
@@ -20,7 +27,7 @@ use crate::{
 use super::{colviewer::CollectionEditor, OverlayEnum};
 
 pub fn overlay_card_viewer(overlay: Signal<Option<OverlayEnum>>) -> MyClosure {
-    MyClosure::new(move |card: CardEntry| async move {
+    MyClosure::new(move |card: Signal<Card>| async move {
         let graph = GraphRep::new().with_hook(overlay_card_viewer(overlay.clone()));
         let viewer = CardViewer::new_from_card(card, graph).await;
         overlay.clone().set(Some(OverlayEnum::CardViewer(viewer)));
@@ -29,12 +36,12 @@ pub fn overlay_card_viewer(overlay: Signal<Option<OverlayEnum>>) -> MyClosure {
 
 #[derive(Clone)]
 pub enum MaybeEntry {
-    Yes(CardEntry),
+    Yes(Signal<Card>),
     No(CardId),
 }
 
 impl MaybeEntry {
-    pub async fn entry(&mut self) -> Option<CardEntry> {
+    pub async fn entry(&mut self) -> Option<Signal<Card>> {
         let id = match self {
             Self::Yes(card) => return Some(card.clone()),
             Self::No(id) => id,
@@ -45,6 +52,17 @@ impl MaybeEntry {
         Some(card)
     }
 }
+
+/*
+
+idea: like a default search thing when you dont have anything in search bar
+
+for example, if you click add dependency, and you dont have anything in search bar
+the hidden search thing will be the front of the card that youre adding dependency to
+
+this will mean a lot of times you dont have to even search
+
+*/
 
 #[derive(Props, Clone)]
 pub struct CardSelector {
@@ -59,8 +77,10 @@ pub struct CardSelector {
     pub filtermemo: Memo<Option<CardFilter>>,
     pub overlay: Signal<Option<OverlayEnum>>,
     pub collection: CollectionEditor,
-    pub cards: Resource<Vec<CardEntry>>,
+    pub cards: Resource<Vec<Signal<Card>>>,
     pub col_cards: Resource<BTreeMap<Uuid, Signal<MaybeEntry>>>,
+    pub default_search: Signal<Option<String>>,
+    pub forbidden_cards: Signal<BTreeSet<CardId>>,
 }
 
 impl Default for CardSelector {
@@ -69,13 +89,12 @@ impl Default for CardSelector {
     }
 }
 
-fn bigram_sort(text: &str, cache: Caches) -> Vec<CardId> {
-    vec![]
-}
-
 impl CardSelector {
     pub fn new(with_memo: bool, allowed_cards: Vec<CardTy>) -> Self {
         let allowed_cards = Signal::new_in_scope(allowed_cards, ScopeId::APP);
+        let default_search: Signal<Option<String>> = Signal::new_in_scope(None, ScopeId::APP);
+        let forbidden_cards: Signal<BTreeSet<CardId>> =
+            Signal::new_in_scope(Default::default(), ScopeId::APP);
 
         let filtereditor = FilterEditor::new_permissive();
 
@@ -94,14 +113,22 @@ impl CardSelector {
                         suspended: editor.suspended.get_value(),
                         pending: editor.pending.get_value(),
                         lapses: editor.lapses.get_value(),
+                        isolated: editor.isolated.get_value(),
                     })
                 })
             }
         });
 
         let search = Signal::new_in_scope(String::new(), ScopeId::APP);
-        let normalized_search =
-            ScopeId::APP.in_runtime(move || use_memo(move || normalize_string(&search.read())));
+        let normalized_search = ScopeId::APP.in_runtime(move || {
+            use_memo(move || {
+                let searched = search.read();
+                match (default_search.read().as_ref(), searched.is_empty()) {
+                    (Some(s), true) => normalize_string(s.as_str()),
+                    (_, _) => normalize_string(&searched),
+                }
+            })
+        });
 
         let overlay: Signal<Option<OverlayEnum>> =
             Signal::new_in_scope(Default::default(), ScopeId::APP);
@@ -120,71 +147,91 @@ impl CardSelector {
 
                 async move {
                     let allowed_cards = allowed_cards.clone();
-                    let mut filtered_cards: Vec<CardEntry> = Default::default();
+                    let mut filtered_cards: Vec<(u32, Signal<Card>)> = Default::default();
 
                     let Some(cards) = cards.as_ref() else {
                         info!("fuck! :O ");
-                        return filtered_cards;
+                        return vec![];
                     };
 
                     info!("so many cards! {}", cards.len());
 
-                    let mut matching_cards: BTreeMap<Uuid, u32> = BTreeMap::new();
+                    let sorted_cards: Vec<(u32, CardId)> = if search.chars().count() < 2 {
+                        cards.iter().map(|x| (0, *x.0)).collect()
+                    } else {
+                        let mut matching_cards: BTreeMap<Uuid, u32> = BTreeMap::new();
+                        let bigrams = bigrams(search.as_ref());
 
-                    for bigram in bigrams(search.as_ref()) {
-                        let indices = APP.read().inner().card_provider.cache.get(CacheKey::Bigram(bigram)).await;
+                        for bigram in bigrams {
+                            let indices = APP
+                                .read()
+                                .inner()
+                                .card_provider
+                                .providers
+                                .cards
+                                .get_prop_cache(
+                                    CardProperty::Bigram,
+                                    format!("{}{}", bigram[0], bigram[1]),
+                                );
 
-                        for id in indices.as_ref() {
-                            let id: Uuid = id.parse().unwrap();
-                            if cards.contains_key(&id) {
-                                *matching_cards.entry(id).or_insert(0) += 1;
+                            for id in indices {
+                                let id: Uuid = id.parse().unwrap();
+                                if cards.contains_key(&id) {
+                                    *matching_cards.entry(id).or_insert(0) += 1;
+                                }
                             }
                         }
-                    }
 
+                        info!("sorting cards");
+                        let mut sorted_cards: Vec<_> = matching_cards.into_iter().collect();
+                        sorted_cards.sort_by(|a, b| b.1.cmp(&a.1));
+                        sorted_cards.into_iter().map(|c| (c.1, c.0)).collect()
+                    };
 
-                    info!("sorting cards");
-                    let mut sorted_cards: Vec<_> = matching_cards.into_iter().collect();
-                    sorted_cards.sort_by(|a, b| b.1.cmp(&a.1));
+                    info!("{} cards sorted", sorted_cards.len());
 
+                    for (matches, card) in sorted_cards {
+                        let entry = cards.get(&card).unwrap();
+                        let card = entry.write_silent().entry().await.unwrap();
 
-                    if search.is_empty() {
-                        sorted_cards = cards.iter().take(100).map(|id| (*id.0, 0)).collect();
-                    } else if search.chars().count() == 1 {
-                        sorted_cards = cards.iter().take(100).map(|id| (*id.0, 0)).collect();
-                    }
-
-                    info!("cards sorted");
-
-                    for card in sorted_cards {
-                        let entry = cards.get(&card.0).unwrap();
-                        let Some(card) = entry.write_silent().entry().await else {
+                        if forbidden_cards.read().contains(&card.read().id()) {
                             continue;
-                        };
+                        }
 
-                        if filtered_cards.len() > 100 {
+                        if filtered_cards.len() > 300 {
                             break;
                         }
 
                         if allowed_cards.is_empty()
-                            || allowed_cards.read().contains(&CardTy::from_ctype(
-                                card.card.read().get_ty().fieldless(),
-                            ))
+                            || allowed_cards
+                                .read()
+                                .contains(&CardTy::from_ctype(card.read().card_type()))
                         {
                             let flag = match filtermemo.cloned() {
-                                Some(filter) => filter.filter(Arc::new(card.card.cloned())).await,
+                                Some(filter) => filter.filter(Arc::new(card.cloned())).await,
                                 None => true,
                             };
 
                             if flag {
-                                filtered_cards.push(card);
+                                filtered_cards.push((matches, card));
                             }
                         }
                     }
 
                     info!("done filtering :)");
 
-                    filtered_cards
+                    filtered_cards.sort_by(|a, b| {
+                        let ord_key = b.0.cmp(&a.0);
+                        if ord_key == std::cmp::Ordering::Equal {
+                            let card_a = a.1.read();
+                            let card_b = b.1.read();
+                            card_a.print().len().cmp(&card_b.print().len())
+                        } else {
+                            ord_key
+                        }
+                    });
+
+                    filtered_cards.into_iter().map(|x| x.1).collect()
                 }
             })
         });
@@ -207,6 +254,8 @@ impl CardSelector {
             overlay,
             collection,
             col_cards,
+            default_search,
+            forbidden_cards,
         }
     }
 
@@ -241,6 +290,16 @@ impl CardSelector {
         self
     }
 
+    pub fn with_forbidden_cards(mut self, cards: impl IntoIterator<Item = CardId>) -> Self {
+        self.forbidden_cards.write().extend(cards);
+        self
+    }
+
+    pub fn with_default_search(mut self, search: String) -> Self {
+        self.default_search.set(Some(search));
+        self
+    }
+
     pub fn with_dependents(self, deps: Vec<Node>) -> Self {
         self.dependents.clone().write().extend(deps);
         self
@@ -265,13 +324,13 @@ impl PartialEq for CardSelector {
 
 #[derive(Clone)]
 pub struct MyClosure(
-    pub Arc<Box<dyn Fn(CardEntry) -> Pin<Box<dyn Future<Output = ()> + 'static>> + 'static>>,
+    pub Arc<Box<dyn Fn(Signal<Card>) -> Pin<Box<dyn Future<Output = ()> + 'static>> + 'static>>,
 );
 
 impl MyClosure {
     pub fn new<F, Fut>(func: F) -> Self
     where
-        F: Fn(CardEntry) -> Fut + 'static,
+        F: Fn(Signal<Card>) -> Fut + 'static,
         Fut: Future<Output = ()> + 'static,
     {
         MyClosure(Arc::new(Box::new(move |card| {
@@ -279,7 +338,7 @@ impl MyClosure {
         })))
     }
 
-    pub async fn call(&self, card: CardEntry) {
+    pub async fn call(&self, card: Signal<Card>) {
         (self.0)(card).await;
     }
 }
@@ -295,7 +354,7 @@ pub fn CardSelectorRender(
     title: String,
     search: Signal<String>,
     on_card_selected: MyClosure,
-    cards: Resource<Vec<CardEntry>>,
+    cards: Resource<Vec<Signal<Card>>>,
     allow_new: bool,
     done: Signal<bool>,
     dependents: Signal<Vec<Node>>,
@@ -371,7 +430,7 @@ fn NewcardButton(
 
                 let done = done.clone();
                 let closure = closure.clone();
-                let hook = MyClosure::new(move |card: CardEntry| {
+                let hook = MyClosure::new(move |card: Signal<Card>| {
                     let closure = closure.clone();
 
                     async move {
@@ -398,7 +457,7 @@ fn NewcardButton(
 
 #[component]
 fn TableRender(
-    cards: Resource<Vec<CardEntry>>,
+    cards: Resource<Vec<Signal<Card>>>,
     on_card_selected: MyClosure,
     done: Signal<bool>,
 ) -> Element {
@@ -442,8 +501,8 @@ fn TableRender(
                                 },
 
                                 td { class: "border border-gray-300 px-4 py-2 w-2/3", "{card}" }
-                                td { class: "border border-gray-300 px-4 py-2 w-1/12", "{card.card.read().recall_rate().unwrap_or_default():.2}" }
-                                td { class: "border border-gray-300 px-4 py-2 w-1/12", "{card.card.read().maturity().unwrap_or_default():.1}" }
+                                td { class: "border border-gray-300 px-4 py-2 w-1/12", "{card.read().recall_rate().unwrap_or_default():.2}" }
+                                td { class: "border border-gray-300 px-4 py-2 w-1/12", "{card.read().maturity().unwrap_or_default():.1}" }
                             }
                         }
                     }

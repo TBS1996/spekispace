@@ -1,7 +1,7 @@
 use std::time::Duration;
 
+use ledgerstore::{LedgerEvent, LedgerItem};
 use serde::{Deserialize, Serialize};
-use speki_dto::{LedgerEvent, RunLedger};
 use uuid::Uuid;
 
 use crate::{
@@ -93,7 +93,6 @@ pub struct History {
     pub reviews: Vec<Review>,
 }
 
-
 impl History {
     pub fn inner(&self) -> &Vec<Review> {
         &self.reviews
@@ -150,7 +149,7 @@ impl History {
 
     pub fn push(&mut self, review: Review) {
         self.reviews.push(review);
-        self.reviews.sort_by_key(|r|r.timestamp);
+        self.reviews.sort_by_key(|r| r.timestamp);
     }
 
     pub fn insert_many(&mut self, reviews: impl IntoIterator<Item = Review>) {
@@ -176,21 +175,23 @@ pub struct Review {
 
 #[derive(Debug, Clone, Serialize, Deserialize, Hash)]
 pub struct ReviewEvent {
-pub    id: CardId,
- pub   grade: Recall,
-  pub  timestamp: Duration,
+    pub id: CardId,
+    pub grade: Recall,
+    pub timestamp: Duration,
 }
 
-
 impl LedgerEvent for ReviewEvent {
-    fn id(&self) -> String {
-        self.id.to_string()
+    type Key = CardId;
+
+    fn id(&self) -> CardId {
+        self.id
     }
 }
 
-
-impl RunLedger<ReviewEvent> for History {
+impl LedgerItem<ReviewEvent> for History {
     type Error = ();
+    type PropertyType = &'static str;
+    type RefType = &'static str;
 
     fn run_event(mut self, event: ReviewEvent) -> Result<Self, ()> {
         let review = Review {
@@ -204,31 +205,14 @@ impl RunLedger<ReviewEvent> for History {
         Ok(self)
     }
 
-    fn derive_events(&self) -> Vec<ReviewEvent> {
-        let mut actions: Vec<ReviewEvent> = vec![];
-
-        for review in &self.reviews {
-            let event = ReviewEvent {
-                id: self.id,
-                grade: review.grade,
-                timestamp: review.timestamp,
-            };
-
-            actions.push(event);
-        }
-
-        actions
+    fn new_default(id: CardId) -> Self {
+        Self::new(id)
     }
-    
-    fn new_default(id: String) -> Self {
-        Self::new(id.parse().unwrap())
-    }
-    
-    fn item_id(&self) -> String {
-        self.id.to_string()
+
+    fn item_id(&self) -> CardId {
+        self.id
     }
 }
-
 
 #[derive(
     Ord, PartialOrd, Eq, PartialEq, Hash, Deserialize, Serialize, Debug, Default, Clone, Copy,

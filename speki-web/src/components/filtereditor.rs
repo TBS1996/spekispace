@@ -22,6 +22,7 @@ pub struct FilterEditor {
     pub finished: BoolEntry,
     pub suspended: BoolEntry,
     pub pending: BoolEntry,
+    pub isolated: BoolEntry,
 }
 
 impl FilterEditor {
@@ -37,11 +38,11 @@ impl FilterEditor {
 fn default_filter() -> CardFilter {
     CardFilter {
         recall: Some(NumOp {
-            num: 0.8,
+            num: 0.9,
             ord: MyNumOrd::Less,
         }),
         rec_recall: Some(NumOp {
-            num: 0.8,
+            num: 0.9,
             ord: MyNumOrd::Greater,
         }),
         stability: None,
@@ -53,6 +54,7 @@ fn default_filter() -> CardFilter {
         suspended: Some(false),
         pending: None,
         lapses: None,
+        isolated: None,
     }
 }
 
@@ -167,6 +169,7 @@ impl FilterEditor {
         let finished = BoolEntry::from_bool("finished", filter.finished);
         let suspended = BoolEntry::from_bool("suspended", filter.suspended);
         let pending = BoolEntry::from_bool("pending", filter.pending);
+        let isolated = BoolEntry::from_bool("isolated", filter.pending);
 
         Self {
             filter_name,
@@ -178,6 +181,7 @@ impl FilterEditor {
             finished,
             suspended,
             pending,
+            isolated,
         }
     }
 
@@ -195,6 +199,7 @@ impl FilterEditor {
                 suspended: selv.suspended.get_value(),
                 pending: selv.pending.get_value(),
                 lapses: selv.lapses.get_value(),
+                isolated: selv.isolated.get_value(),
             }
         })
     }
@@ -209,6 +214,7 @@ impl FilterEditor {
             suspended: self.suspended.get_value(),
             pending: self.pending.get_value(),
             lapses: self.lapses.get_value(),
+            isolated: self.isolated.get_value(),
         }
     }
 }
@@ -225,6 +231,7 @@ pub fn FilterComp(editor: FilterEditor) -> Element {
         finished,
         suspended,
         pending,
+        isolated,
     } = editor;
     rsx! {
         div {
@@ -238,6 +245,7 @@ pub fn FilterComp(editor: FilterEditor) -> Element {
             BoolEntryRender { name: finished.name.clone(), opt: finished.opt.clone() },
             BoolEntryRender { name: suspended.name.clone(), opt: suspended.opt.clone() },
             BoolEntryRender { name: pending.name.clone(), opt: pending.opt.clone() },
+            BoolEntryRender { name: isolated.name.clone(), opt: isolated.opt.clone() },
         }
     }
 }
