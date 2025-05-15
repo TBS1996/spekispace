@@ -1,4 +1,6 @@
 use dioxus::prelude::*;
+use either::Either;
+use nonempty::NonEmpty;
 use std::{collections::BTreeSet, rc::Rc, sync::Arc};
 
 use speki_core::{
@@ -164,7 +166,7 @@ impl ReviewSession {
 #[component]
 pub fn ReviewRender(
     front: Resource<String>,
-    back: String,
+    back: Either<String, NonEmpty<CardId>>,
     card: Signal<Card>,
     queue: Signal<Queue>,
     show_backside: Signal<bool>,
@@ -243,7 +245,7 @@ pub fn ReviewRender(
                             class: "flex-none w-full md:w-1/2 p-4 box-border overflow-y-auto overflow-x-hidden order-2 md:order-1",
                             style: "min-height: 0; max-height: 100%;",
                              CardSides {
-                                front, back, queue, card, show_backside, session
+                                front, back, queue, card, show_backside, session, overlay: overlay.clone()
                              }
                         }
                     }
@@ -308,7 +310,7 @@ pub struct ReviewState {
     pub dependencies: Resource<Vec<Signal<Card>>>,
     pub tot_len: Resource<usize>,
     pub front: Resource<String>,
-    pub back: Resource<String>,
+    pub back: Memo<Either<String, NonEmpty<CardId>>>,
     pub show_backside: Signal<bool>,
     pub is_done: Memo<bool>,
     pub overlay: Signal<Option<OverlayEnum>>,
@@ -373,11 +375,12 @@ impl ReviewState {
         });
 
         let back = ScopeId::APP.in_runtime(|| {
-            use_resource(move || async move {
-                match card.cloned() {
-                    Some(Some(card)) => card.read().display_backside().to_string(),
-                    _ => "".to_string(),
-                }
+            use_memo(move || match card.cloned() {
+                Some(Some(card)) => match card.read().back_refs() {
+                    Some(refs) => Either::Right(refs),
+                    None => Either::Left(card.read().display_backside().to_owned()),
+                },
+                _ => Either::Left(String::new()),
             })
         });
 
@@ -533,17 +536,30 @@ fn RenderDependencies(
 #[component]
 fn CardSides(
     front: Resource<String>,
-    back: String,
+    back: Either<String, NonEmpty<CardId>>,
     show_backside: Signal<bool>,
     card: Signal<Card>,
     queue: Signal<Queue>,
     session: ReviewSession,
+    overlay: Signal<Option<OverlayEnum>>,
 ) -> Element {
     let backside_visibility_class = if show_backside() {
         "opacity-100 visible"
     } else {
         "opacity-0 invisible"
     };
+
+    let (txt, ids): (String, Vec<Signal<Card>>) = match back {
+        Either::Left(s) => (s, vec![]),
+        Either::Right(ids) => (
+            String::new(),
+            ids.into_iter()
+                .map(|id| APP.read().load_card_sync(id))
+                .collect(),
+        ),
+    };
+
+    let is_string = !txt.is_empty();
 
     rsx! {
         div {
@@ -562,9 +578,26 @@ fn CardSides(
                     style: "margin-top: 4px; margin-bottom: 12px;",
                 }
 
-                p {
-                    class: "text-lg text-gray-700 text-center mb-4 {backside_visibility_class}",
-                    "{back}"
+                if is_string {
+                    p {
+                        class: "text-lg text-gray-700 text-center mb-4 {backside_visibility_class}",
+                        "{txt}"
+                    }
+                } else {
+                    for card in ids {
+                        button {
+                            class: "text-lg text-gray-700 text-center mb-4 {backside_visibility_class} underline underline-offset-2 decoration-gray-300 hover:decoration-gray-500 hover:text-gray-900 cursor-pointer bg-transparent border-none p-0 transition duration-150 ease-in-out",
+
+                            onclick: move |_| {
+                                spawn(async move {
+                                    let props = CardViewer::new_from_card(card, Default::default()).await;
+                                    overlay.clone().set(Some(OverlayEnum::CardViewer(props)));
+                                });
+                            },
+                            "{card.read().print()}"
+                        }
+
+                    }
                 }
             }
 

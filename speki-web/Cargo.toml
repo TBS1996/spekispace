@@ -29,6 +29,8 @@ eyre.workspace = true
 async-recursion.workspace = true
 speki-core = { path = "../speki-core" }
 ledgerstore.workspace = true
+either.workspace = true
+nonempty.workspace = true
 
 # WebAssembly-specific dependencies (optional)
 wasm-bindgen = { workspace = true, optional = true }

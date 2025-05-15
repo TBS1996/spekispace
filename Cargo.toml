@@ -11,6 +11,7 @@ snapstore = { path = "snapstore" }
 ledgerstore = { path = "ledgerstore" }
 simpletime = { path = "simpletime" }
 
+either = "1.15.0"
 tokio = { version = "1", features = ["fs", "rt-multi-thread"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0.128"

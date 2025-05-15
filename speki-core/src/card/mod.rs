@@ -7,6 +7,7 @@ use std::{
     time::Duration,
 };
 
+use nonempty::NonEmpty;
 use serde::Deserializer;
 use serde_json::Value;
 use tracing::info;
@@ -397,6 +398,20 @@ impl Card {
 
     pub fn display_backside(&self) -> &str {
         &self.backside
+    }
+
+    pub fn back_refs(&self) -> Option<NonEmpty<CardId>> {
+        match self.back_side() {
+            Some(bs) => match bs {
+                BackSide::Card(id) => Some(NonEmpty::from_vec(vec![*id]).unwrap()),
+                BackSide::List(ids) => Some(NonEmpty::from_vec(ids.clone()).unwrap()),
+                BackSide::Text(_) => None,
+                BackSide::Time(_) => None,
+                BackSide::Trivial => None,
+                BackSide::Invalid => None,
+            },
+            None => None,
+        }
     }
 
     pub fn history(&self) -> &History {

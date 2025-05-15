@@ -20,6 +20,19 @@ use crate::{
     APP, IS_SHORT,
 };
 
+/*
+
+idea:
+allow a card to have to be typed out
+
+also, free text should be able to embed ids directly into it
+
+like a text can be instead of 'it uses https', itll be 'it uses [382..]' where that
+refer to the id of https.
+
+
+*/
+
 #[derive(Clone)]
 pub struct ReviewPage {
     filter: FilterEditor,
