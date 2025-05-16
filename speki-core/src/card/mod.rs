@@ -69,7 +69,7 @@ impl Debug for Card {
         s.push_str(&format!("{:?}\n", self.base.data.type_name()));
         s.push_str(&format!("{:?}\n", self.base.data.raw_front()));
 
-        write!(f, "{}", s)
+        write!(f, "{s}")
     }
 }
 
@@ -187,7 +187,7 @@ impl Card {
                 BackSide::Text(s) => s.clone(),
                 BackSide::Card(id) => raw_front(*id),
                 BackSide::List(ids) => {
-                    let mut out = format!("-> [");
+                    let mut out = "-> [".to_string();
 
                     for id in ids {
                         let s = raw_front(*id);
@@ -196,7 +196,7 @@ impl Card {
                     }
                     out.pop();
                     out.pop();
-                    out.push_str("]");
+                    out.push(']');
                     out
                 }
                 BackSide::Time(ts) => ts.to_string(),
@@ -207,10 +207,10 @@ impl Card {
 
         let backside = match &base.data {
             CardType::Instance { back, class, .. } => match back.as_ref() {
-                Some(back) => from_back(&back),
+                Some(back) => from_back(back),
                 None => raw_front(*class),
             },
-            CardType::Normal { back, .. } => from_back(&back),
+            CardType::Normal { back, .. } => from_back(back),
             CardType::Unfinished { .. } => "<unfinished>".to_string(),
             CardType::Attribute { .. } => "<attribute>".to_string(),
             CardType::Class {
@@ -230,8 +230,8 @@ impl Card {
                     .unwrap()
                     .data
                     .raw_front(),
-                (Some(back), None) => from_back(&back),
-                (_, _) => format!(""),
+                (Some(back), None) => from_back(back),
+                (_, _) => String::new(),
             },
             CardType::Statement { .. } => "<statement>".to_string(),
             CardType::Event { .. } => "<event>".to_string(),

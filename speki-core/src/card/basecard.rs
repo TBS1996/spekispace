@@ -86,9 +86,9 @@ impl CardType {
     pub fn backside(&self) -> Option<&BackSide> {
         match self {
             CardType::Instance { back, .. } => back.as_ref(),
-            CardType::Normal { back, .. } => Some(&back),
+            CardType::Normal { back, .. } => Some(back),
             CardType::Unfinished { .. } => None,
-            CardType::Attribute { back, .. } => Some(&back),
+            CardType::Attribute { back, .. } => Some(back),
             CardType::Class { back, .. } => back.as_ref(),
             CardType::Statement { .. } => None,
             CardType::Event { .. } => None,
@@ -100,7 +100,7 @@ impl CardType {
             CardType::Instance { name, .. } => name,
             CardType::Normal { front, .. } => front,
             CardType::Unfinished { front } => front,
-            CardType::Attribute { .. } => format!("attr card"),
+            CardType::Attribute { .. } => "attr card".to_string(),
             CardType::Class { name, .. } => name,
             CardType::Statement { front } => front,
             CardType::Event { front, .. } => front,
@@ -168,10 +168,10 @@ impl CardType {
                 };
 
                 match default_question {
-                    Some(q) => q.replace("{}", &name),
+                    Some(q) => q.replace("{}", name),
                     None => {
                         if back.is_some() {
-                            format!("{} ({})", name, class_name)
+                            format!("{name} ({class_name})")
                         } else {
                             name.to_string()
                         }

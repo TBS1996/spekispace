@@ -35,12 +35,12 @@ impl CacheFs {
         let blob_path = Arc::new(root.join("blobs"));
         fs::create_dir_all(&*blob_path).unwrap();
 
-        let selv = Self {
+        
+
+        Self {
             blob_path,
             key_components,
-        };
-
-        selv
+        }
     }
 
     fn get_key_components(&self, key: &str) -> Vec<char> {
@@ -347,9 +347,9 @@ impl SnapFs {
         let blob_path = Arc::new(root.join("blobs"));
         fs::create_dir_all(&*blob_path).unwrap();
 
-        let selv = Self { blob_path };
+        
 
-        selv
+        Self { blob_path }
     }
 
     pub fn the_full_blob_path(&self, hash: &str) -> PathBuf {
@@ -556,8 +556,8 @@ impl Deref for Content {
 
     fn deref(&self) -> &Self::Target {
         match self {
-            Content::File(p) => &p,
-            Content::Dir(p) => &p,
+            Content::File(p) => p,
+            Content::Dir(p) => p,
         }
     }
 }
@@ -583,7 +583,7 @@ impl Content {
     /// this is because hardlinks take up less space, but cannot be used for directories
     fn create_file_reference(&self, link: PathBuf) {
         match self {
-            Self::File(original) => match hard_link(&original, &link) {
+            Self::File(original) => match hard_link(original, &link) {
                 Ok(()) => {}
                 Err(e) => {
                     dbg!(original, link, e);
@@ -620,7 +620,7 @@ impl Dir {
             let mut hash = Hashed::default();
             for (_, val) in self.contents.iter() {
                 let entry_hash = val.file_name().unwrap().to_str().unwrap();
-                hash.push_str(&entry_hash);
+                hash.push_str(entry_hash);
             }
 
             get_hash(&hash)

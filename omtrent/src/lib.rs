@@ -86,7 +86,7 @@ impl TimeStamp {
             Some(d) => cty * 10 + d,
             None => {
                 if cty > 10 {
-                    return format!("{}00s", cty);
+                    return format!("{cty}00s");
                 } else {
                     return format!("{}{} century {}", cty + 1, Self::suffix(cty + 1), era);
                 }
@@ -104,9 +104,9 @@ impl TimeStamp {
             Some(y) => decade * 10 + y,
             None => {
                 if decade % 10 == 0 {
-                    return format!("First decade of the {}0s {}", decade, era);
+                    return format!("First decade of the {decade}0s {era}");
                 } else {
-                    return format!("{}0s {}", decade, era);
+                    return format!("{decade}0s {era}");
                 }
             }
         };
@@ -114,7 +114,7 @@ impl TimeStamp {
         let month = match self.month {
             Some(m) => m,
             None => {
-                return format!("{} {}", year, era);
+                return format!("{year} {era}");
             }
         };
 
@@ -212,25 +212,25 @@ impl TimeStamp {
         s.push_str(&self.year.map(|c| c.to_string()).unwrap_or("*".to_string()));
 
         if let Some(month) = self.month {
-            s.push_str(&format!("-{:02}", month));
+            s.push_str(&format!("-{month:02}"));
         } else {
             return s;
         };
 
         if let Some(day) = self.day {
-            s.push_str(&format!("-{:02}", day));
+            s.push_str(&format!("-{day:02}"));
         } else {
             return s;
         };
 
         if let Some(hour) = self.hour {
-            s.push_str(&format!(" {:02}", hour));
+            s.push_str(&format!(" {hour:02}"));
         } else {
             return s;
         };
 
         if let Some(minute) = self.minute {
-            s.push_str(&format!(":{:02}", minute));
+            s.push_str(&format!(":{minute:02}"));
         }
 
         s

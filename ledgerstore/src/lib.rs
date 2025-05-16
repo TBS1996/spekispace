@@ -224,10 +224,7 @@ impl<T: LedgerItem<E>, E: LedgerEvent> Ledger<T, E> {
     /// This will go through the entire state and create a hash for it
     fn rebuild_cache(&self, state_hash: &str) -> Option<CacheHash> {
         let caches: HashSet<(CacheKey, String)> = self
-            .load_all_on_state(state_hash)
-            .into_iter()
-            .map(|(_, item)| item.caches())
-            .flatten()
+            .load_all_on_state(state_hash).into_values().flat_map(|item| item.caches())
             .collect();
 
         let cache_map: HashMap<CacheKey, Vec<String>> = {
@@ -271,14 +268,14 @@ impl<T: LedgerItem<E>, E: LedgerEvent> Ledger<T, E> {
             }
 
             if let Some(cachehash) = cache_hash.as_ref() {
-                let before = self.cache.get_cache(&cachehash, &key);
+                let before = self.cache.get_cache(cachehash, &key);
                 if !before.is_empty() {
                     dbg!(&before);
                     dbg!(&key);
                 }
             }
 
-            let mut inserted: Vec<String> = item.iter().map(|x| x.clone()).collect();
+            let mut inserted: Vec<String> = item.to_vec();
             let (top, _leaf) = self.cache.save_cache(cache_hash.as_deref(), &key, item);
             cache_hash = Some(top);
             let mut retrieved = self
@@ -287,7 +284,7 @@ impl<T: LedgerItem<E>, E: LedgerEvent> Ledger<T, E> {
             inserted.sort();
             retrieved.sort();
 
-            if &inserted != &retrieved {
+            if inserted != retrieved {
                 dbg!(&key);
                 dbg!(inserted, retrieved);
             }
@@ -326,13 +323,13 @@ impl<T: LedgerItem<E>, E: LedgerEvent> Ledger<T, E> {
         for (key, item) in insert {
             let (hash, _c) = self
                 .cache
-                .save_cache(Some(&cache_hash), &key, vec![item.to_string()]);
+                .save_cache(Some(&cache_hash), key, vec![item.to_string()]);
             cache_hash = hash;
         }
 
         info!("starting removing of caches");
         for (key, item) in remove {
-            let (hash, _c) = self.cache.remove_cache(&cache_hash, &key, item);
+            let (hash, _c) = self.cache.remove_cache(&cache_hash, key, item);
             cache_hash = hash;
         }
 
@@ -389,7 +386,7 @@ impl<T: LedgerItem<E>, E: LedgerEvent> Ledger<T, E> {
         let curr = self.ledger.read().unwrap();
         dbg!(last_snap_idx);
         let hash = curr.get(last_snap_idx).unwrap().hash();
-        format!("{}-{}", hash, last_snap_idx)
+        format!("{hash}-{last_snap_idx}")
     }
 
     fn new_paths_after_snapshot(&self, index: usize) -> HashSet<Content> {
@@ -412,7 +409,7 @@ impl<T: LedgerItem<E>, E: LedgerEvent> Ledger<T, E> {
 
     pub fn load_all_on_state(&self, hash: &str) -> HashMap<String, T> {
         self.snap
-            .get_all(&hash)
+            .get_all(hash)
             .into_iter()
             .map(|(key, val)| (key, serde_json::from_slice(&val).unwrap()))
             .collect()
@@ -523,10 +520,8 @@ impl<T: LedgerItem<E>, E: LedgerEvent> Ledger<T, E> {
                     continue;
                 } else if entry.index == index + self.gc_keep {
                     break;
-                } else {
-                    if self.try_get_state_hash(&entry.hash()).is_some() {
-                        curr_clean.states.insert(entry.hash());
-                    }
+                } else if self.try_get_state_hash(&entry.hash()).is_some() {
+                    curr_clean.states.insert(entry.hash());
                 }
             }
 
@@ -672,13 +667,12 @@ impl<T: LedgerItem<E>, E: LedgerEvent> Ledger<T, E> {
 
             timed!(self.append_ref(idx, new_contents));
 
-            if entry.index % self.gc_keep == 0 {
-                if self.gc_keep < entry.index {
+            if entry.index % self.gc_keep == 0
+                && self.gc_keep < entry.index {
                     let (content, states) = self.garbage_collection(entry.index - self.gc_keep);
                     to_delete.extend(content);
                     cleanup_states.extend(states);
                 }
-            }
         }
 
         let state_root = Arc::new(self.root.join("states"));
@@ -705,7 +699,7 @@ impl<T: LedgerItem<E>, E: LedgerEvent> Ledger<T, E> {
 
     fn load_ledger(space: &Path) -> Vec<LedgerEntry<E>> {
         let mut foo: Vec<(usize, LedgerEntry<E>)> = {
-            let map: HashMap<String, Vec<u8>> = load_file_contents(&space);
+            let map: HashMap<String, Vec<u8>> = load_file_contents(space);
             let mut foo: Vec<(usize, LedgerEntry<E>)> = Default::default();
 
             if map.is_empty() {
@@ -856,7 +850,7 @@ fn append_line_to_file(path: &std::path::Path, lines: Vec<&str>) -> std::io::Res
     let mut file = OpenOptions::new().create(true).append(true).open(path)?;
 
     for line in lines {
-        writeln!(file, "{}", line)?;
+        writeln!(file, "{line}")?;
     }
 
     Ok(())

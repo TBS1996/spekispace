@@ -132,7 +132,7 @@ impl Collection {
                             out.push(dep);
                         }
                         out.push(card);
-                        return out;
+                        out
                     }
                     MaybeCard::Card(card) => {
                         for dep in card.recursive_dependencies().await {
@@ -140,7 +140,7 @@ impl Collection {
                             out.push(dep);
                         }
                         out.push(card);
-                        return out;
+                        out
                     }
                 }
             };
@@ -267,7 +267,7 @@ impl DynCard {
                 Some(card) => card
                     .dependents()
                     .into_iter()
-                    .map(|x| MaybeCard::Card(x))
+                    .map(MaybeCard::Card)
                     .collect(),
                 None => vec![],
             },

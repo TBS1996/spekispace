@@ -124,7 +124,7 @@ impl CollectionProvider {
     }
 
     pub async fn load(&self, id: CollectionId) -> Option<Collection> {
-        return None;
+        None
     }
 
     pub async fn load_all(&self) -> HashMap<CollectionId, Collection> {
@@ -284,7 +284,7 @@ impl App {
     pub async fn add_card_with_id(&self, front: String, back: impl Into<BackSide>, id: CardId) {
         let back = back.into();
         let data = CardType::Normal { front, back };
-        let event = CardEvent::new(id, CardAction::UpsertCard(data.into()));
+        let event = CardEvent::new(id, CardAction::UpsertCard(data));
         self.provider.run_event(event);
     }
 
@@ -293,7 +293,7 @@ impl App {
         let data = CardType::Normal { front, back };
 
         let id = CardId::new_v4();
-        let event = CardEvent::new(id, CardAction::UpsertCard(data.into()));
+        let event = CardEvent::new(id, CardAction::UpsertCard(data));
         self.provider.run_event(event);
         id
     }
@@ -301,7 +301,7 @@ impl App {
     pub async fn add_unfinished(&self, front: String) -> CardId {
         let data = CardType::Unfinished { front };
         let id = CardId::new_v4();
-        let event = CardEvent::new(id, CardAction::UpsertCard(data.into()));
+        let event = CardEvent::new(id, CardAction::UpsertCard(data));
         self.provider.run_event(event);
         id
     }
@@ -384,7 +384,7 @@ mod graphviz {
     fn rate_to_color(rate: f64) -> String {
         let red = ((1.0 - rate / 100.0) * 255.0) as u8;
         let green = (rate / 100.0 * 255.0) as u8;
-        format!("#{:02X}{:02X}00", red, green) // RGB color in hex
+        format!("#{red:02X}{green:02X}00") // RGB color in hex
     }
 
     fn cyan_color() -> String {

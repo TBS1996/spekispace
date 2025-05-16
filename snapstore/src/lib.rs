@@ -114,7 +114,7 @@ impl CacheKey {
     pub fn to_string(&self) -> String {
         match self {
             Self::Property(PropertyCacheKey { property, value }) => format!("{property}:{value}"),
-            Self::ItemRef(RefCacheKey { reftype, id }) => format!("{reftype}:{}", id),
+            Self::ItemRef(RefCacheKey { reftype, id }) => format!("{reftype}:{id}"),
         }
     }
 }

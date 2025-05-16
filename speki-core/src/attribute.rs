@@ -146,7 +146,7 @@ pub mod parse {
         for raw in raw_records.records {
             match toml::from_str::<CardTemplate>(&raw.content) {
                 Ok(template) => templates.push(template),
-                Err(e) => eprintln!("Skipping malformed record: {}", e),
+                Err(e) => eprintln!("Skipping malformed record: {e}"),
             }
         }
 
