@@ -91,12 +91,6 @@ pub fn Review() -> Element {
     let editor = state.filter.clone();
     tracing::info!("memo lol: {:?}", &state.cardfilter);
 
-    let class = if IS_SHORT.cloned() {
-        "flex flex-col items-center h-screen space-y-4 justify-center"
-    } else {
-        "flex flex-col items-start min-h-screen space-y-4 justify-start pl-32"
-    };
-
     let overlay = state.overlay.clone();
 
     rsx! {
@@ -104,7 +98,7 @@ pub fn Review() -> Element {
             overlay,
             root: rsx!{
                 div {
-                    class: "{class}",
+                    class: "flex flex-col items-start min-h-screen space-y-4 justify-start pl-32 w-full",
                     RenderCols{
                         filter: state.filter.to_filter(),
                         collections: state.collections.clone(),
@@ -179,8 +173,8 @@ impl RecallDist {
     }
 
     async fn new(col: Collection) -> Self {
-        let selv = Self::default();
-        return selv;
+        let mut selv = Self::default();
+        //return selv;
 
         for card in col.expand(APP.read().inner().card_provider()).await {
             *match card.recall_rate() {
@@ -236,11 +230,11 @@ fn RenderCols(
                     });
                 },
                 "review all"
-            }
+                }
 
             for (col, dist, filter) in colfil {
                 div {
-                    class: "flex flex-col mb-8",
+                    class: "flex flex-row mb-8",
                     div {
                     class: "flex flex-row",
                         button {

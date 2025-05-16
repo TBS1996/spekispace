@@ -533,6 +533,12 @@ impl CardViewer {
         selv
     }
 
+    pub fn with_dependency(mut self, dep: CardId) -> Self {
+        let card = APP.read().load_card_sync(dep);
+        self.editor.dependencies.push(card);
+        self
+    }
+
     async fn reset(&self) {
         self.editor.front.reset();
         self.editor.back.reset();

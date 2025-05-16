@@ -13,13 +13,13 @@ pub use dropdown::DropDownMenu;
 pub use filtereditor::*;
 pub use frontside::{CardTy, FrontPut};
 pub use graph::GraphRep;
-use speki_core::{card::CardId, RefType};
+use speki_core::{card::CardId, Card, RefType};
 
 use dioxus::prelude::*;
 use tracing::info;
 
 use crate::{
-    overlays::{cardviewer::CardViewer, OverlayEnum},
+    overlays::{card_selector::MyClosure, cardviewer::CardViewer, OverlayEnum},
     APP,
 };
 
@@ -76,8 +76,17 @@ pub fn RenderDependents(
                     button {
                         class: "p-1 hover:bg-gray-200 hover:border-gray-400 border border-transparent rounded-md transition-colors",
                         onclick: move |_| {
-                            info!("todooo");
+                            let Some(id) = card_id else {
+                                return;
+                            };
+
+                            spawn(async move {
+                                let props = CardViewer::new().with_dependency(id);
+                                overlay.clone().set(Some(OverlayEnum::CardViewer(props)));
+                            });
                         },
+
+
                         "➕"
                     }
                 }
