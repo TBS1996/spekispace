@@ -235,7 +235,7 @@ pub fn ReviewRender(
                                 queue: queue.clone(),
                             }
                             RenderDependents{
-                                card_id: Some(card.read().id()),
+                                card_id: card.read().id(),
                                 overlay: overlay.clone(),
                                 hidden: !(*show_backside.read()),
                             }

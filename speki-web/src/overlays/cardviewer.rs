@@ -820,7 +820,9 @@ pub fn CardViewerRender(props: CardViewer) -> Element {
             }
 
             RenderDependencies { card_text: props.editor.front.text.clone(), card_id: old_card, dependencies: props.editor.dependencies.clone(), overlay: props.overlay.clone()}
-            RenderDependents { card_id: old_card, overlay: props.overlay.clone(), hidden: false}
+            if let Some(card_id) = old_card {
+                RenderDependents { card_id, overlay: props.overlay.clone(), hidden: false}
+            }
         }
     }
 }
