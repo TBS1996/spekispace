@@ -235,7 +235,8 @@ pub fn FilterComp(editor: FilterEditor) -> Element {
     } = editor;
     rsx! {
         div {
-            class: "p-4 bg-white rounded-lg shadow-md flex flex-col gap-y-2 max-w-sm",
+            class: "mr-4 p-4 bg-white rounded-lg shadow-md flex flex-col gap-y-2 max-w-sm",
+
 
             FloatEntryRender { input: rec_recall.input.clone(), ord: rec_recall.ord.clone(), name: rec_recall.name.clone() },
             FloatEntryRender { input: recall.input.clone(), ord: recall.ord.clone(), name: recall.name.clone() },

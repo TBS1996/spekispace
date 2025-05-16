@@ -98,13 +98,13 @@ pub fn Review() -> Element {
             overlay,
             root: rsx!{
                 div {
-                    class: "flex flex-col items-start min-h-screen space-y-4 justify-start pl-32 w-full",
+                    class: "flex flex-row items-start min-h-screen space-y-4 justify-start w-full",
+                    FilterComp {editor}
                     RenderCols{
                         filter: state.filter.to_filter(),
                         collections: state.collections.clone(),
                         overlay: state.overlay.clone(),
                     }
-                    FilterComp {editor}
                 }
             }
         }
@@ -219,33 +219,48 @@ fn RenderCols(
         div {
        //     class: "flex flex-col max-w-[550px] mr-5",
 
-            button {
-                class: "inline-flex items-center text-white bg-gray-800 border-0 py-1 px-3 focus:outline-none hover:bg-gray-700 rounded text-base mb-8",
-                onclick: move |_| {
-                    let filter = filter.clone();
-                    spawn(async move {
-                        let session = ReviewSession::new(vec![DynCard::Any], filter).await;
-                        let revses = OverlayEnum::Review(ReviewState::new(session));
-                        overlay.clone().set(Some(revses));
-                    });
-                },
-                "review all"
+            div {
+                button {
+                    class: "inline-flex items-center text-white bg-gray-800 border-0 py-1 px-3 focus:outline-none hover:bg-gray-700 rounded text-base mb-8",
+                    onclick: move |_| {
+                        let filter = filter.clone();
+                        spawn(async move {
+                            let session = ReviewSession::new(vec![DynCard::Any], filter).await;
+                            let revses = OverlayEnum::Review(ReviewState::new(session));
+                            overlay.clone().set(Some(revses));
+                        });
+                    },
+                    "review all"
+                    }
+
+                button {
+                    class: "inline-flex items-center text-white bg-blue-700 border-0 py-1 px-3 focus:outline-none hover:bg-blue-900 rounded text-base mb-5",
+                    onclick: move |_| {
+                        let done = Signal::new_in_scope(false, ScopeId::APP);
+                        let f = move |name: String| {
+                            info!("new collection made!");
+                            spawn(async move {
+                                info!("saving it!");
+                                let event = CollectionEvent::new(Uuid::new_v4(), CollectionAction::SetName(name));
+                                APP.read().inner().provider.run_event(event);
+                                done.clone().set(true);
+                                info!("saved it!");
+                            });
+                            info!("bye");
+                        };
+
+                        let txt = OverlayEnum::Text(TextInput::new("add collection".to_string(), Arc::new(Box::new(f)), done));
+                        overlay.clone().set(Some(txt));
+                    },
+                    "add collection"
                 }
+            }
 
             for (col, dist, filter) in colfil {
                 div {
-                    class: "flex flex-row mb-8",
+                    class: "flex flex-col mb-4",
                     div {
                     class: "flex flex-row",
-                        button {
-                            onclick: move |_|{
-                                spawn(async move {
-                                    let viewer = OverlayEnum::Colviewer(CollectionEditor::new(col.id).await);
-                                    overlay.clone().set(Some(viewer));
-                                });
-                            },
-                            "✏️"
-                        }
                         button {
                             class: "inline-flex items-center text-white bg-gray-800 border-0 py-1 px-3 focus:outline-none hover:bg-gray-700 rounded text-base mb-2",
                             onclick: move |_| {
@@ -263,33 +278,22 @@ fn RenderCols(
                             },
                             "{col.name}"
                         }
+                        button {
+                            class: "ml-auto inline-flex items-center text-white bg-blue-700 border-0 py-1 px-3 focus:outline-none hover:bg-blue-900 rounded text-base mb-5",
+                            onclick: move |_|{
+                                spawn(async move {
+                                    let viewer = OverlayEnum::Colviewer(CollectionEditor::new(col.id).await);
+                                    overlay.clone().set(Some(viewer));
+                                });
+                            },
+                            "edit"
+                        }
                     }
 
                     RecallBar { dist  }
                 }
             }
 
-            button {
-                class: "inline-flex items-center text-white bg-blue-700 border-0 py-1 px-3 focus:outline-none hover:bg-blue-900 rounded text-base mb-5",
-                onclick: move |_| {
-                    let done = Signal::new_in_scope(false, ScopeId::APP);
-                    let f = move |name: String| {
-                        info!("new collection made!");
-                        spawn(async move {
-                            info!("saving it!");
-                            let event = CollectionEvent::new(Uuid::new_v4(), CollectionAction::SetName(name));
-                            APP.read().inner().provider.run_event(event);
-                            done.clone().set(true);
-                            info!("saved it!");
-                        });
-                        info!("bye");
-                    };
-
-                    let txt = OverlayEnum::Text(TextInput::new("add collection".to_string(), Arc::new(Box::new(f)), done));
-                    overlay.clone().set(Some(txt));
-                },
-                "add collection"
-            }
         }
     }
 }
