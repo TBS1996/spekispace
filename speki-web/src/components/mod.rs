@@ -13,13 +13,12 @@ pub use dropdown::DropDownMenu;
 pub use filtereditor::*;
 pub use frontside::{CardTy, FrontPut};
 pub use graph::GraphRep;
-use speki_core::{card::CardId, Card, RefType};
+use speki_core::{card::CardId, collection::DynCard, RefType};
 
 use dioxus::prelude::*;
-use tracing::info;
 
 use crate::{
-    overlays::{card_selector::MyClosure, cardviewer::CardViewer, OverlayEnum},
+    overlays::{card_selector::CardSelector, cardviewer::CardViewer, OverlayEnum},
     APP,
 };
 
@@ -35,7 +34,9 @@ pub fn RenderDependents(
         "opacity-0 invisible"
     };
 
-    let (deps, too_many) = {
+    let max_limit = 10;
+
+    let (deps, qty) = {
         let mut inner = vec![];
 
         let dep_ids = APP
@@ -45,17 +46,21 @@ pub fn RenderDependents(
             .cards
             .get_ref_cache(RefType::Dependent, card_id);
 
-        if dep_ids.len() > 10 {
-            (vec![], true)
+        let qty = dep_ids.len();
+
+        if dep_ids.len() > max_limit {
+            (vec![], qty)
         } else {
             for id in dep_ids {
                 let id: CardId = id.parse().unwrap();
                 let card = APP.read().load_card_sync(id);
                 inner.push(card);
             }
-            (inner, false)
+            (inner, qty)
         }
     };
+
+    let too_many = qty > max_limit;
 
     rsx! {
         div {
@@ -85,7 +90,16 @@ pub fn RenderDependents(
                 }
 
             if too_many {
-                "theres like, a lot of dependents"
+                button {
+                    class: "mb-1 p-1 bg-gray-100 rounded-md text-left",
+                    onclick: move|_|{
+                        spawn(async move{
+                            let props = CardSelector::new(false, Default::default()).with_dyncards(vec![DynCard::Dependents(card_id)]);
+                            overlay.clone().set(Some(OverlayEnum::CardSelector(props)));
+                        });
+                    },
+                    "view {qty} dependents"
+                }
             } else {
                 for card in deps {
                     button {

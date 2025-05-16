@@ -6,10 +6,11 @@ use std::{
 };
 
 use dioxus::prelude::*;
+use ledgerstore::LedgerItem;
 use speki_core::{
     card::{bigrams, normalize_string, CardId},
     cardfilter::CardFilter,
-    collection::{DynCard, MaybeDyn},
+    collection::{Collection, DynCard, MaybeDyn},
     Card, CardProperty,
 };
 use speki_web::Node;
@@ -257,6 +258,14 @@ impl CardSelector {
             default_search,
             forbidden_cards,
         }
+    }
+
+    pub fn with_dyncards(mut self, dyns: Vec<DynCard>) -> Self {
+        let dyns: Vec<MaybeDyn> = dyns.into_iter().map(|d| MaybeDyn::Dyn(d)).collect();
+        let mut col = Collection::new_default(Uuid::nil());
+        col.dyncards = dyns;
+        self.collection.col.set(col);
+        self
     }
 
     pub fn ref_picker(fun: MyClosure, dependents: Vec<Node>) -> Self {
