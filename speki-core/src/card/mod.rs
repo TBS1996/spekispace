@@ -2,11 +2,14 @@ use core::f32;
 use std::{
     cmp::{Ord, Ordering, PartialEq},
     collections::{BTreeMap, BTreeSet, HashSet},
+    default,
     fmt::Debug,
+    ops::Deref,
     sync::Arc,
     time::Duration,
 };
 
+use either::Either;
 use nonempty::NonEmpty;
 use serde::Deserializer;
 use serde_json::Value;
@@ -24,6 +27,91 @@ use crate::{
 
 pub type RecallRate = f32;
 
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct EvalText {
+    cmps: Vec<Either<String, (String, CardId)>>,
+    eval: String,
+}
+
+impl EvalText {
+    pub fn components(&self) -> &Vec<Either<String, (String, CardId)>> {
+        &self.cmps
+    }
+
+    pub fn just_some_string(s: String) -> Self {
+        Self {
+            cmps: vec![Either::Left(s.clone())],
+            eval: s,
+        }
+    }
+
+    pub fn from_backside(b: &BackSide, provider: &CardProvider) -> Self {
+        match b {
+            BackSide::Text(txt) => Self::from_textdata(txt.clone(), provider),
+            BackSide::Card(id) => {
+                let eval = provider.load(*id).unwrap().frontside.to_string();
+                Self {
+                    cmps: vec![Either::Right((eval.clone(), *id))],
+                    eval,
+                }
+            }
+            BackSide::List(ids) => {
+                let mut txt = TextData::default();
+
+                for id in ids {
+                    txt.inner_mut().push(Either::Right(TextLink {
+                        id: *id,
+                        alias: None,
+                    }));
+                    txt.inner_mut().push(Either::Left(", ".to_string()));
+                }
+
+                txt.inner_mut().pop();
+
+                Self::from_textdata(txt, provider)
+            }
+            BackSide::Time(ts) => Self::just_some_string(ts.to_string()),
+            BackSide::Trivial => Self::just_some_string("<trivial>".to_string()),
+            BackSide::Invalid => Self::just_some_string("<invalid>".to_string()),
+        }
+    }
+
+    pub fn from_textdata(txt: TextData, provider: &CardProvider) -> Self {
+        let mut cmps = vec![];
+        let eval = txt.evaluate(provider);
+
+        for cmp in txt.inner() {
+            match cmp {
+                Either::Left(s) => cmps.push(Either::Left(s.to_string())),
+                Either::Right(TextLink { id, alias }) => match alias {
+                    Some(alias) => {
+                        cmps.push(Either::Right((alias.to_string(), *id)));
+                    }
+                    None => {
+                        match provider.load(*id) {
+                            Some(card) => {
+                                let name = card.frontside.to_string();
+                                cmps.push(Either::Right((name, *id)));
+                            }
+                            None => panic!(),
+                        };
+                    }
+                },
+            }
+        }
+
+        Self { cmps, eval }
+    }
+}
+
+impl Deref for EvalText {
+    type Target = String;
+
+    fn deref(&self) -> &Self::Target {
+        &self.eval
+    }
+}
+
 mod basecard;
 
 pub use basecard::*;
@@ -33,8 +121,8 @@ pub struct Card {
     id: CardId,
     front_audio: Option<Audio>,
     back_audio: Option<Audio>,
-    frontside: String,
-    backside: String,
+    frontside: EvalText,
+    backside: EvalText,
     base: RawCard,
     metadata: Metadata,
     history: History,
@@ -182,59 +270,45 @@ impl Card {
                 .raw_front()
         };
 
-        let from_back = |back: &BackSide| -> String {
-            match back {
-                BackSide::Text(s) => s.evaluate(&card_provider),
-                BackSide::Card(id) => raw_front(*id),
-                BackSide::List(ids) => {
-                    let mut out = "-> [".to_string();
-
-                    for id in ids {
-                        let s = raw_front(*id);
-                        out.push_str(&s);
-                        out.push_str(", ");
-                    }
-                    out.pop();
-                    out.pop();
-                    out.push(']');
-                    out
-                }
-                BackSide::Time(ts) => ts.to_string(),
-                BackSide::Trivial => "<trivial>".to_string(),
-                BackSide::Invalid => "<invalid>".to_string(),
-            }
-        };
+        let from_back =
+            |back: &BackSide| -> EvalText { EvalText::from_backside(back, &card_provider) };
 
         let backside = match &base.data {
             CardType::Instance { back, class, .. } => match back.as_ref() {
                 Some(back) => from_back(back),
-                None => raw_front(*class),
+                None => EvalText::just_some_string(raw_front(*class)),
             },
             CardType::Normal { back, .. } => from_back(back),
-            CardType::Unfinished { .. } => "<unfinished>".to_string(),
-            CardType::Attribute { .. } => "<attribute>".to_string(),
+            CardType::Unfinished { .. } => EvalText::just_some_string("<unfinished>".to_string()),
+            CardType::Attribute { .. } => EvalText::just_some_string("<attribute>".to_string()),
             CardType::Class {
                 back, parent_class, ..
             } => match (back, parent_class) {
-                (Some(theback), Some(pcl)) if theback.is_empty_text() => card_provider
-                    .providers
-                    .cards
-                    .load(pcl.to_string().as_str())
-                    .unwrap()
-                    .data
-                    .raw_front(),
-                (None, Some(pcl)) => card_provider
-                    .providers
-                    .cards
-                    .load(pcl.to_string().as_str())
-                    .unwrap()
-                    .data
-                    .raw_front(),
+                (Some(theback), Some(pcl)) if theback.is_empty_text() => {
+                    EvalText::just_some_string(
+                        card_provider
+                            .providers
+                            .cards
+                            .load(pcl.to_string().as_str())
+                            .unwrap()
+                            .data
+                            .raw_front(),
+                    )
+                }
+                (None, Some(pcl)) => EvalText::just_some_string(
+                    card_provider
+                        .providers
+                        .cards
+                        .load(pcl.to_string().as_str())
+                        .unwrap()
+                        .data
+                        .raw_front(),
+                ),
                 (Some(back), None) => from_back(back),
-                (_, _) => String::new(),
+                (_, _) => EvalText::default(),
             },
-            CardType::Statement { .. } => "<statement>".to_string(),
-            CardType::Event { .. } => "<event>".to_string(),
+            CardType::Statement { .. } => EvalText::just_some_string("<statement>".to_string()),
+            CardType::Event { .. } => EvalText::just_some_string("<event>".to_string()),
         };
 
         let frontside = base.data.display_front(&card_provider);
@@ -453,7 +527,11 @@ impl Card {
     }
 
     pub fn print(&self) -> String {
-        self.frontside.clone()
+        self.frontside.to_string()
+    }
+
+    pub fn front_side(&self) -> &EvalText {
+        &self.frontside
     }
 
     pub fn is_pending(&self) -> bool {

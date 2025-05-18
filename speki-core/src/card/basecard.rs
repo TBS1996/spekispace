@@ -25,6 +25,14 @@ impl TextData {
         self.0.is_empty()
     }
 
+    pub fn inner(&self) -> &Vec<Either<String, TextLink>> {
+        &self.0
+    }
+
+    pub fn inner_mut(&mut self) -> &mut Vec<Either<String, TextLink>> {
+        &mut self.0
+    }
+
     pub fn evaluate(&self, provider: &CardProvider) -> String {
         let mut out = String::new();
 
@@ -128,9 +136,9 @@ impl TextData {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Ord, PartialOrd)]
-struct TextLink {
-    id: CardId,
-    alias: Option<String>,
+pub struct TextLink {
+    pub id: CardId,
+    pub alias: Option<String>,
 }
 
 impl Serialize for TextData {
@@ -289,7 +297,7 @@ impl CardType {
         }
     }
 
-    pub fn display_front(&self, provider: &CardProvider) -> String {
+    pub fn display_front(&self, provider: &CardProvider) -> EvalText {
         match self {
             CardType::Instance {
                 name, class, back, ..
@@ -309,22 +317,27 @@ impl CardType {
                     _ => panic!(),
                 };
 
-                let name = &name.evaluate(provider);
+                let thename = &name.evaluate(provider);
                 let class_name = &class_name.evaluate(provider);
 
                 match default_question {
-                    Some(q) => q.evaluate(provider).replace("{}", name),
+                    Some(q) => {
+                        let s = q.evaluate(provider).replace("{}", thename);
+                        EvalText::just_some_string(s)
+                    }
+
                     None => {
                         if back.is_some() {
-                            format!("{name} ({class_name})")
+                            let s = format!("{thename} ({class_name})");
+                            EvalText::just_some_string(s)
                         } else {
-                            name.to_string()
+                            EvalText::from_textdata(name.clone(), provider)
                         }
                     }
                 }
             }
-            CardType::Normal { front, .. } => front.evaluate(provider),
-            CardType::Unfinished { front, .. } => front.evaluate(provider),
+            CardType::Normal { front, .. } => EvalText::from_textdata(front.clone(), provider),
+            CardType::Unfinished { front, .. } => EvalText::from_textdata(front.clone(), provider),
             CardType::Attribute {
                 attribute,
                 instance,
@@ -336,12 +349,13 @@ impl CardType {
                     .load(attribute.to_string().as_str())
                     .unwrap();
 
-                attr.name(*instance, provider.clone())
+                let f = attr.name(*instance, provider.clone());
+                EvalText::just_some_string(f)
             }
             CardType::Class {
                 name, parent_class, ..
             } => {
-                let name = name.evaluate(provider);
+                let thename = name.evaluate(provider);
                 match parent_class {
                     Some(class) => {
                         let parent = provider
@@ -351,13 +365,14 @@ impl CardType {
                             .unwrap()
                             .data
                             .raw_front();
-                        format!("{name} ({parent})")
+
+                        EvalText::just_some_string(format!("{thename} ({parent})"))
                     }
-                    None => name.to_string(),
+                    None => EvalText::from_textdata(name.clone(), provider),
                 }
             }
-            CardType::Statement { front, .. } => front.evaluate(provider),
-            CardType::Event { front, .. } => front.evaluate(provider),
+            CardType::Statement { front, .. } => EvalText::from_textdata(front.clone(), provider),
+            CardType::Event { front, .. } => EvalText::from_textdata(front.clone(), provider),
         }
     }
 

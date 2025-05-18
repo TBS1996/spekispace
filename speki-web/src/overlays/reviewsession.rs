@@ -4,7 +4,7 @@ use nonempty::NonEmpty;
 use std::{collections::BTreeSet, rc::Rc, sync::Arc};
 
 use speki_core::{
-    card::CardId,
+    card::{CardId, EvalText},
     cardfilter::CardFilter,
     collection::{DynCard, MaybeCard},
     recall_rate::Recall,
@@ -165,7 +165,7 @@ impl ReviewSession {
 
 #[component]
 pub fn ReviewRender(
-    front: Resource<String>,
+    front: Memo<EvalText>,
     back: Either<String, NonEmpty<CardId>>,
     card: Signal<Card>,
     queue: Signal<Queue>,
@@ -309,7 +309,7 @@ pub struct ReviewState {
     pub card: Resource<Option<Signal<Card>>>,
     pub dependencies: Resource<Vec<Signal<Card>>>,
     pub tot_len: Resource<usize>,
-    pub front: Resource<String>,
+    pub front: Memo<EvalText>,
     pub back: Memo<Either<String, NonEmpty<CardId>>>,
     pub show_backside: Signal<bool>,
     pub is_done: Memo<bool>,
@@ -365,11 +365,11 @@ impl ReviewState {
         });
 
         let front = ScopeId::APP.in_runtime(|| {
-            use_resource(move || async move {
+            use_memo(move || {
                 info!("updating front card resource in review!");
                 match card.cloned() {
-                    Some(Some(card)) => card.to_string(),
-                    _ => "".to_string(),
+                    Some(Some(card)) => card.read().front_side().clone(),
+                    _ => EvalText::default(),
                 }
             })
         });
@@ -535,7 +535,7 @@ fn RenderDependencies(
 
 #[component]
 fn CardSides(
-    front: Resource<String>,
+    front: Memo<EvalText>,
     back: Either<String, NonEmpty<CardId>>,
     show_backside: Signal<bool>,
     card: Signal<Card>,
@@ -565,10 +565,42 @@ fn CardSides(
         div {
             class: "flex flex-col items-center w-full",
 
-            p {
-                class: "text-lg text-gray-800 text-center mb-10",
-                "{front.cloned().unwrap_or_default()}"
+
+            div {
+                class: "mb-10",
+                div {
+                    class: "text-lg text-gray-700 text-center",
+                    p {
+                        for cmp in front.read().components().clone() {
+                            match cmp {
+                                Either::Left(s) => {
+                                    rsx! {
+                                        span { " {s}" }  // space before to separate from previous word
+                                    }
+                                }
+                                Either::Right((s, id)) => {
+                                    rsx! {
+                                        button {
+                                            class: "inline underline text-blue-600 hover:text-blue-800",
+                                            onclick: move |_| {
+                                                spawn(async move {
+                                                    let card = APP.read().load_card_sync(id);
+                                                    let props = CardViewer::new_from_card(card, Default::default()).await;
+                                                    overlay.clone().set(Some(OverlayEnum::CardViewer(props)));
+                                                });
+                                            },
+                                            " {s}"  // space before for readability
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
             }
+
+
+
 
             div {
                 class: "flex flex-col w-full items-center",
