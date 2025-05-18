@@ -4292,6 +4292,7 @@ dependencies = [
  "deunicode",
  "dioxus-logger",
  "eyre",
+ "fancy-regex",
  "futures",
  "gkquad",
  "ledgerstore",

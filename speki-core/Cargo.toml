@@ -25,6 +25,7 @@ async-trait.workspace = true
 wasm-bindgen-futures.workspace = true
 deunicode = "1.6.0"
 nonempty.workspace = true
+fancy-regex.workspace = true
 
 [dev-dependencies]
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }

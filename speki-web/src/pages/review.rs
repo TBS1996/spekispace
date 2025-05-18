@@ -17,7 +17,7 @@ use crate::{
         textinput::TextInput,
         Overender, OverlayEnum,
     },
-    APP, IS_SHORT,
+    APP,
 };
 
 /*
@@ -29,6 +29,87 @@ also, free text should be able to embed ids directly into it
 
 like a text can be instead of 'it uses https', itll be 'it uses [382..]' where that
 refer to the id of https.
+
+
+priority idea:
+
+to figure out which cards have higher/lower priority:
+
+show the user two random cards, ask which is higher priority (or about same)
+figure out automatically what makes certain cards more important than others based on their dependency graph
+
+like some kinda smart algorithm that figures out commonalities by why certain cards more important than other cards.
+based on this, it can estimtae which cards more important than others based on which dependencies/dependents they have
+
+
+hmm i guess if A depends on B, and B depends on C, then by definition, C is _at least_ more important than A though.
+that could be another constraint.
+
+in a way you can say if A and B depends on C then C's priority is at least the sum of A and B? this would imply some kinda absolute score of priority rather
+than just a priority queue like in supermemo.
+
+idk what this value would represent though. maybe like the utility of knowing it, like, how much would your life improve by you knowing this. or maybe how much you'd pay to know it.
+
+i guess i dont have to expose the value or anything.
+
+maybe just give by default a value of 1.0 to all cards. then it'll based on the a bunch of constraints just calculate all the values so theyre consistent with each other.
+
+like on the "A and B depends on C" thing then it could be something like value of A is 0.5, value of B is 0.5, value of C is 1.0. or 1,1,2. doesn't matter.
+speki would just make a bunch of relative constraints and then figure out the score in a way that is consistent but the value doesn't represent anything by itself.
+
+so, constraints:
+
+1. a card's value must be equal or higher than the sum of all its transitive dependents.
+2. if user rates A to be more valuable than B, then A's value must be higher than B.
+3. make a best-effort value estimate based on patterns from user rating of cards.
+
+for example, since i work at cognite all the cards that have 'cognite' as a dependency would be rated very highly by me on the toss-ups.
+it'll figure out that cards with cognite as a dependency are pretty important.
+so when i add a new card and put cognite as a dependency, it'll automatically be ranked highly because of this.
+
+if i later on a toss-up rank it lower than some non-cognite thing then ofc that would be respected.
+
+so the algorithm, i guess on first pass, use the "weights" based on dependencies to give each card a value.
+then, maybe take all the toss-ups to rank the specific cards ranked higher or lower than each other
+then maybe ensure the constraint about value must be higher than sum of its transitive dependents
+
+but how to handle conflicts?
+
+if user ranks A higher than B, B higher than C, and C higher than A? in that case i think must ask for clarification somehow and based on that delete some invalid comparison.
+maybe then ask for 3 at a time? like rank A, B, and C. can i resolve a chain larger than 3 without asking for more than 3 at a time? this might not represent an invalid
+choice by the user if some time have passed and the priorities simply have changed.
+
+
+conflict can also occur if user ranks A more important than B, even though A depends on B. in that case it's a user error, since by definition it's more important to know the dependencies first.
+
+
+ok waitt so lets see
+
+glossary: high-level items, stuff that many things depends on
+low-level, like the leaf stuff that have few dependents.
+
+the pair-wise comparisons will let the user rate mainly low-level stuff
+from this, we can figure out certain patterns like that things with for example cognite as dependency are rated more high in general
+when you add a new item with cognite as dependency the "first guess" is that it has higher priority
+
+that way you kinda have a two-way flow of value stream. user rates low-level things, we figure out which high-level stuff is more important, then new low-level things get priority based on that.
+
+so the algo, yeah, it'll do a first-pass as i mentioned earlier to assign just based on that, then add those pairwise and dependency constraints.
+
+im thinking the value of an object can still be valued higher than the sum of its dependents though, it can happen since the user can rank an item higher than another item even though its dependents arent that important.
+this would represent the utility of the knowledge beyond the dependents it enables, like how important it is by itself to know it, and/or dependents that the user have not added as cards (yet).
+
+however, it's a hard constraint that it can't be worth _less_ than its dependents.
+
+ok the algo should try to put every ranked item in a list ordered by the rankings, where the constraint is, no cycles like A > B > C > A. and the dependency thing like A > B where A depends on B.
+this list wouldn't store the values at all, it's merely ordered.
+
+the step after this would be to assign actual values.
+
+the first step here to add that ML inference based on patterns of their dependencies, like for all cards not just the ones in that list?
+then some normalization stuff like ensuring the constraints wrt sum of dependents and the pairwise thing
+
+actually im a bit unsure how to proceed here.
 
 
 */

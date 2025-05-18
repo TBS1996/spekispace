@@ -1,12 +1,18 @@
 use super::*;
 use crate::{
-    attribute::AttributeId, audio::AudioId, card_provider::CardProvider, ledger::CardEvent,
+    attribute::AttributeId,
+    audio::AudioId,
+    card_provider::{self, CardProvider},
+    ledger::CardEvent,
     CardProperty, RefType,
 };
 use ledgerstore::LedgerItem;
 use omtrent::TimeStamp;
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet};
+use std::{
+    collections::{HashMap, HashSet},
+    mem::replace,
+};
 
 pub type CardId = Uuid;
 
@@ -147,6 +153,41 @@ impl CardType {
         }
     }
 
+    fn regex_replace(provider: &CardProvider, input: &str) -> String {
+        let mut result = String::new();
+        let mut buffer: Vec<char> = vec![];
+        let mut is_inside = false;
+
+        for c in input.chars() {
+            if c == '[' {
+                is_inside = true;
+            } else if c == ']' && is_inside {
+                is_inside = false;
+                let inner: String = std::mem::take(&mut buffer).into_iter().collect();
+                let replacement = match inner.parse::<CardId>() {
+                    Ok(id) => match provider.load(id) {
+                        Some(card) => card.frontside.clone(),
+                        None => format!("<invalid card reference>"),
+                    },
+                    Err(_) => format!("[{}]", inner),
+                };
+                result.push_str(&replacement);
+            } else {
+                if is_inside {
+                    buffer.push(c);
+                } else {
+                    result.push(c);
+                }
+            }
+        }
+
+        for c in buffer {
+            result.push(c);
+        }
+
+        result
+    }
+
     pub fn display_front(&self, provider: &CardProvider) -> String {
         match self {
             CardType::Instance {
@@ -178,8 +219,8 @@ impl CardType {
                     }
                 }
             }
-            CardType::Normal { front, .. } => front.clone(),
-            CardType::Unfinished { front, .. } => front.clone(),
+            CardType::Normal { front, .. } => Self::regex_replace(provider, &front),
+            CardType::Unfinished { front, .. } => Self::regex_replace(provider, &front),
             CardType::Attribute {
                 attribute,
                 instance,
