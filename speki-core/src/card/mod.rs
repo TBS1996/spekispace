@@ -530,6 +530,9 @@ impl Card {
         self.frontside.to_string()
     }
 
+    pub fn backside(&self) -> &EvalText {
+        &self.backside
+    }
     pub fn front_side(&self) -> &EvalText {
         &self.frontside
     }

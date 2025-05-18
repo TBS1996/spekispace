@@ -166,7 +166,7 @@ impl ReviewSession {
 #[component]
 pub fn ReviewRender(
     front: Memo<EvalText>,
-    back: Either<String, NonEmpty<CardId>>,
+    back: Memo<EvalText>,
     card: Signal<Card>,
     queue: Signal<Queue>,
     show_backside: Signal<bool>,
@@ -310,7 +310,7 @@ pub struct ReviewState {
     pub dependencies: Resource<Vec<Signal<Card>>>,
     pub tot_len: Resource<usize>,
     pub front: Memo<EvalText>,
-    pub back: Memo<Either<String, NonEmpty<CardId>>>,
+    pub back: Memo<EvalText>,
     pub show_backside: Signal<bool>,
     pub is_done: Memo<bool>,
     pub overlay: Signal<Option<OverlayEnum>>,
@@ -376,11 +376,8 @@ impl ReviewState {
 
         let back = ScopeId::APP.in_runtime(|| {
             use_memo(move || match card.cloned() {
-                Some(Some(card)) => match card.read().back_refs() {
-                    Some(refs) => Either::Right(refs),
-                    None => Either::Left(card.read().display_backside().to_owned()),
-                },
-                _ => Either::Left(String::new()),
+                Some(Some(card)) => card.read().backside().clone(),
+                _ => EvalText::default(),
             })
         });
 
@@ -534,9 +531,44 @@ fn RenderDependencies(
 }
 
 #[component]
+fn RenderEvalText(eval: Memo<EvalText>, overlay: Signal<Option<OverlayEnum>>) -> Element {
+    rsx! {
+        div {
+            class: "text-lg text-gray-700 text-center",
+            p {
+                for cmp in eval.read().components().clone() {
+                    match cmp {
+                        Either::Left(s) => {
+                            rsx! {
+                                span { " {s}" }
+                            }
+                        }
+                        Either::Right((s, id)) => {
+                            rsx! {
+                                button {
+                                    class: "inline underline text-blue-600 hover:text-blue-800",
+                                    onclick: move |_| {
+                                        spawn(async move {
+                                            let card = APP.read().load_card_sync(id);
+                                            let props = CardViewer::new_from_card(card, Default::default()).await;
+                                            overlay.clone().set(Some(OverlayEnum::CardViewer(props)));
+                                        });
+                                    },
+                                    " {s}"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[component]
 fn CardSides(
     front: Memo<EvalText>,
-    back: Either<String, NonEmpty<CardId>>,
+    back: Memo<EvalText>,
     show_backside: Signal<bool>,
     card: Signal<Card>,
     queue: Signal<Queue>,
@@ -549,18 +581,6 @@ fn CardSides(
         "opacity-0 invisible"
     };
 
-    let (txt, ids): (String, Vec<Signal<Card>>) = match back {
-        Either::Left(s) => (s, vec![]),
-        Either::Right(ids) => (
-            String::new(),
-            ids.into_iter()
-                .map(|id| APP.read().load_card_sync(id))
-                .collect(),
-        ),
-    };
-
-    let is_string = !txt.is_empty();
-
     rsx! {
         div {
             class: "flex flex-col items-center w-full",
@@ -568,69 +588,22 @@ fn CardSides(
 
             div {
                 class: "mb-10",
-                div {
-                    class: "text-lg text-gray-700 text-center",
-                    p {
-                        for cmp in front.read().components().clone() {
-                            match cmp {
-                                Either::Left(s) => {
-                                    rsx! {
-                                        span { " {s}" }  // space before to separate from previous word
-                                    }
-                                }
-                                Either::Right((s, id)) => {
-                                    rsx! {
-                                        button {
-                                            class: "inline underline text-blue-600 hover:text-blue-800",
-                                            onclick: move |_| {
-                                                spawn(async move {
-                                                    let card = APP.read().load_card_sync(id);
-                                                    let props = CardViewer::new_from_card(card, Default::default()).await;
-                                                    overlay.clone().set(Some(OverlayEnum::CardViewer(props)));
-                                                });
-                                            },
-                                            " {s}"  // space before for readability
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
+                RenderEvalText { eval: front, overlay: overlay.clone() }
             }
 
 
 
 
             div {
-                class: "flex flex-col w-full items-center",
+                class: "flex flex-col w-full items-center {backside_visibility_class}",
 
                 div {
                     class: "w-2/4 h-0.5 bg-gray-300",
                     style: "margin-top: 4px; margin-bottom: 12px;",
                 }
 
-                if is_string {
-                    p {
-                        class: "text-lg text-gray-700 text-center mb-4 {backside_visibility_class}",
-                        "{txt}"
-                    }
-                } else {
-                    for card in ids {
-                        button {
-                            class: "text-lg text-gray-700 text-center mb-4 {backside_visibility_class} underline underline-offset-2 decoration-gray-300 hover:decoration-gray-500 hover:text-gray-900 cursor-pointer bg-transparent border-none p-0 transition duration-150 ease-in-out",
+                RenderEvalText { eval: back, overlay: overlay.clone() }
 
-                            onclick: move |_| {
-                                spawn(async move {
-                                    let props = CardViewer::new_from_card(card, Default::default()).await;
-                                    overlay.clone().set(Some(OverlayEnum::CardViewer(props)));
-                                });
-                            },
-                            "{card.read().print()}"
-                        }
-
-                    }
-                }
             }
 
             div {
