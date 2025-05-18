@@ -285,6 +285,15 @@ impl CardSelector {
             .new_on_card_selected(f)
     }
 
+    pub fn link_picker(f: MyClosure) -> Self {
+        Self {
+            title: "create link".to_string(),
+            on_card_selected: f,
+            allow_new: true,
+            ..Self::new(false, vec![])
+        }
+    }
+
     pub fn dependency_picker(f: MyClosure) -> Self {
         Self {
             title: "set dependency".to_string(),
