@@ -271,7 +271,7 @@ impl App {
     ) -> CardId {
         let back = back.map(|back| back.into());
         let data = CardType::Instance {
-            name: front,
+            name: TextData::from_raw(&front),
             back,
             class,
         };
@@ -283,14 +283,20 @@ impl App {
 
     pub async fn add_card_with_id(&self, front: String, back: impl Into<BackSide>, id: CardId) {
         let back = back.into();
-        let data = CardType::Normal { front, back };
+        let data = CardType::Normal {
+            front: TextData::from_raw(&front),
+            back,
+        };
         let event = CardEvent::new(id, CardAction::UpsertCard(data));
         self.provider.run_event(event);
     }
 
     pub async fn add_card(&self, front: String, back: impl Into<BackSide>) -> CardId {
         let back = back.into();
-        let data = CardType::Normal { front, back };
+        let data = CardType::Normal {
+            front: TextData::from_raw(&front),
+            back,
+        };
 
         let id = CardId::new_v4();
         let event = CardEvent::new(id, CardAction::UpsertCard(data));
@@ -446,7 +452,7 @@ mod tests {
 
     fn new_card_with_id(front: &str, back: &str, id: CardId) -> CardEvent {
         let ty = CardType::Normal {
-            front: front.to_string(),
+            front: TextData::from_raw(front),
             back: back.to_string().into(),
         };
         CardEvent::new(id, CardAction::UpsertCard(ty))

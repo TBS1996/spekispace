@@ -135,14 +135,17 @@ impl CardEditor {
                     return None;
                 }
 
-                CardType::Normal { front, back }
+                CardType::Normal {
+                    front: TextData::from_raw(&front),
+                    back,
+                }
             }
             CardTy::Class => {
                 let parent_class = self.concept.selected_card().cloned();
                 let back = backside.to_backside().filter(|x| !x.is_empty_text());
 
                 CardType::Class {
-                    name: front,
+                    name: TextData::from_raw(&front),
                     back,
                     parent_class,
                     default_question: {
@@ -150,7 +153,7 @@ impl CardEditor {
                         if s.is_empty() {
                             None
                         } else {
-                            Some(s)
+                            Some(TextData::from_raw(&s))
                         }
                     },
                 }
@@ -160,7 +163,7 @@ impl CardEditor {
                 let back = backside.to_backside();
 
                 CardType::Instance {
-                    name: front,
+                    name: TextData::from_raw(&front),
                     back,
                     class,
                 }
@@ -451,7 +454,7 @@ impl CardViewer {
                 default_question, ..
             } = card.read().clone_base().data
             {
-                default_question.unwrap_or_default()
+                default_question.unwrap_or_default().to_raw()
             } else {
                 String::new()
             };

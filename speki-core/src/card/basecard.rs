@@ -11,7 +11,7 @@ use std::collections::{HashMap, HashSet};
 
 pub type CardId = Uuid;
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Default)]
 pub struct TextData(Vec<Either<String, TextLink>>);
 
 impl TextData {
@@ -147,12 +147,12 @@ pub enum CardType {
     /// A specific instance of a class
     /// For example, the instance might be Elvis Presley where the concept would be "Person"
     Instance {
-        name: String,
+        name: TextData,
         back: Option<BackSide>,
         class: CardId,
     },
     Normal {
-        front: String,
+        front: TextData,
         back: BackSide,
     },
     Unfinished {
@@ -169,10 +169,10 @@ pub enum CardType {
     /// A class, which is something that has specific instances of it, but is not a single thing in itself.
     /// A class might also have sub-classes, for example, the class chemical element has a sub-class isotope
     Class {
-        name: String,
+        name: TextData,
         back: Option<BackSide>,
         parent_class: Option<CardId>,
-        default_question: Option<String>,
+        default_question: Option<TextData>,
     },
 
     /// A statement is a fact which cant easily be represented with a flashcard,
@@ -191,11 +191,11 @@ pub enum CardType {
     /// 2. The set of the class it belongs to is large
     /// 3. The property in that set is rare, but not unique
     Statement {
-        front: String,
+        front: TextData,
     },
     /// gotta figure out if i want this to be a thing in itself or it can be handled with just attributes of an event class
     Event {
-        front: String,
+        front: TextData,
         start_time: TimeStamp,
         end_time: Option<TimeStamp>,
         parent_event: Option<CardId>,
@@ -229,13 +229,13 @@ impl CardType {
 
     pub fn raw_front(&self) -> String {
         match self.clone() {
-            CardType::Instance { name, .. } => name,
-            CardType::Normal { front, .. } => front,
+            CardType::Instance { name, .. } => name.to_raw(),
+            CardType::Normal { front, .. } => front.to_raw(),
             CardType::Unfinished { front } => front.to_raw(),
             CardType::Attribute { .. } => "attr card".to_string(),
-            CardType::Class { name, .. } => name,
-            CardType::Statement { front } => front,
-            CardType::Event { front, .. } => front,
+            CardType::Class { name, .. } => name.to_raw(),
+            CardType::Statement { front } => front.to_raw(),
+            CardType::Event { front, .. } => front.to_raw(),
         }
     }
 
@@ -299,8 +299,11 @@ impl CardType {
                     _ => panic!(),
                 };
 
+                let name = &name.evaluate(provider);
+                let class_name = &class_name.evaluate(provider);
+
                 match default_question {
-                    Some(q) => q.replace("{}", name),
+                    Some(q) => q.evaluate(provider).replace("{}", name),
                     None => {
                         if back.is_some() {
                             format!("{name} ({class_name})")
@@ -310,7 +313,7 @@ impl CardType {
                     }
                 }
             }
-            CardType::Normal { front, .. } => front.clone(),
+            CardType::Normal { front, .. } => front.evaluate(provider),
             CardType::Unfinished { front, .. } => front.evaluate(provider),
             CardType::Attribute {
                 attribute,
@@ -327,21 +330,24 @@ impl CardType {
             }
             CardType::Class {
                 name, parent_class, ..
-            } => match parent_class {
-                Some(class) => {
-                    let parent = provider
-                        .providers
-                        .cards
-                        .load(class.to_string().as_str())
-                        .unwrap()
-                        .data
-                        .raw_front();
-                    format!("{name} ({parent})")
+            } => {
+                let name = name.evaluate(provider);
+                match parent_class {
+                    Some(class) => {
+                        let parent = provider
+                            .providers
+                            .cards
+                            .load(class.to_string().as_str())
+                            .unwrap()
+                            .data
+                            .raw_front();
+                        format!("{name} ({parent})")
+                    }
+                    None => name.to_string(),
                 }
-                None => name.to_string(),
-            },
-            CardType::Statement { front, .. } => front.clone(),
-            CardType::Event { front, .. } => front.clone(),
+            }
+            CardType::Statement { front, .. } => front.evaluate(provider),
+            CardType::Event { front, .. } => front.evaluate(provider),
         }
     }
 
@@ -496,7 +502,9 @@ impl RawCard {
             CardType::Instance { class, .. } => {
                 deps.insert(*class);
             }
-            CardType::Normal { .. } => {}
+            CardType::Normal { front, .. } => {
+                deps.extend(front.card_ids());
+            }
             CardType::Unfinished { front } => {
                 deps.extend(front.card_ids());
             }
@@ -508,8 +516,12 @@ impl RawCard {
                     deps.insert(*class);
                 }
             }
-            CardType::Statement { .. } => {}
-            CardType::Event { .. } => {}
+            CardType::Statement { front } => {
+                deps.extend(front.card_ids());
+            }
+            CardType::Event { front, .. } => {
+                deps.extend(front.card_ids());
+            }
         }
 
         deps
@@ -534,7 +546,7 @@ impl RawCard {
                 back: new_back,
             },
             CardType::Unfinished { front } => CardType::Normal {
-                front: front.to_raw(),
+                front,
                 back: new_back,
             },
             CardType::Attribute {
@@ -666,7 +678,7 @@ impl LedgerItem<CardEvent> for RawCard {
         Self {
             id,
             data: CardType::Normal {
-                front: "uninit".to_string(),
+                front: TextData::from_raw("uninit"),
                 back: BackSide::Text("uninit".to_string()),
             },
             tags: Default::default(),
@@ -683,7 +695,7 @@ impl LedgerItem<CardEvent> for RawCard {
                     CardType::Class {
                         ref mut default_question,
                         ..
-                    } => *default_question = default,
+                    } => *default_question = default.map(|s| TextData::from_raw(&s)),
                     _ => return Err(()),
                 },
 
