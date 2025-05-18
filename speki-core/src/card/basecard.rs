@@ -34,6 +34,19 @@ impl TextData {
         out
     }
 
+    pub fn card_ids(&self) -> Vec<CardId> {
+        let mut out = vec![];
+
+        for cmp in &self.0 {
+            match cmp {
+                Either::Left(_) => {}
+                Either::Right(TextLink { id, .. }) => out.push(*id),
+            }
+        }
+
+        out
+    }
+
     pub fn from_raw(input: &str) -> Self {
         let mut result = Vec::new();
         let mut buffer = String::new();
@@ -484,7 +497,9 @@ impl RawCard {
                 deps.insert(*class);
             }
             CardType::Normal { .. } => {}
-            CardType::Unfinished { .. } => {}
+            CardType::Unfinished { front } => {
+                deps.extend(front.card_ids());
+            }
             CardType::Attribute { instance, .. } => {
                 deps.insert(*instance);
             }
