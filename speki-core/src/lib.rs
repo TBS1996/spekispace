@@ -1,5 +1,5 @@
 use attribute::AttrEvent;
-use card::{BackSide, CardId, RawCard, RecallRate};
+use card::{BackSide, CardId, RawCard, RecallRate, TextData};
 use card_provider::CardProvider;
 use cardfilter::CardFilter;
 use collection::{Collection, CollectionId};
@@ -299,7 +299,9 @@ impl App {
     }
 
     pub async fn add_unfinished(&self, front: String) -> CardId {
-        let data = CardType::Unfinished { front };
+        let data = CardType::Unfinished {
+            front: TextData::from_raw(&front),
+        };
         let id = CardId::new_v4();
         let event = CardEvent::new(id, CardAction::UpsertCard(data));
         self.provider.run_event(event);

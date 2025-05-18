@@ -305,6 +305,12 @@ dropbox? google drive?
 
 the strict blockchain thing may be a bit strict. instead of enforcing one after another, we should have a way to see which cards a new entry changes or references or whatever. so when merging diff ledgers from diff sources it can figure out if there's some kind of merge conflict or not.
 
+## ledgerpruning
+
+maybe a way to remove unnecessary entries?
+for example if an entry doesn't actually change the state at all, we can just remove it.
+trivial to check. just check if the hash is the same after it's applied.
+
 
 # main graph
 

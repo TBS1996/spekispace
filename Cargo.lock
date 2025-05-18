@@ -4291,6 +4291,7 @@ dependencies = [
  "async-trait",
  "deunicode",
  "dioxus-logger",
+ "either",
  "eyre",
  "fancy-regex",
  "futures",

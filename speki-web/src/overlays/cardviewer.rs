@@ -3,7 +3,7 @@ use std::{sync::Arc, time::Duration};
 use dioxus::prelude::*;
 use speki_core::{
     audio::AudioId,
-    card::CardId,
+    card::{CardId, TextData},
     ledger::{CardAction, CardEvent},
     Card, CardType,
 };
@@ -165,7 +165,9 @@ impl CardEditor {
                     class,
                 }
             }
-            CardTy::Unfinished => CardType::Unfinished { front },
+            CardTy::Unfinished => CardType::Unfinished {
+                front: TextData::from_raw(&front),
+            },
         };
 
         Some(CardRep {

@@ -1,20 +1,133 @@
 use super::*;
 use crate::{
-    attribute::AttributeId,
-    audio::AudioId,
-    card_provider::{self, CardProvider},
-    ledger::CardEvent,
+    attribute::AttributeId, audio::AudioId, card_provider::CardProvider, ledger::CardEvent,
     CardProperty, RefType,
 };
+use either::Either;
 use ledgerstore::LedgerItem;
 use omtrent::TimeStamp;
-use serde::{Deserialize, Serialize};
-use std::{
-    collections::{HashMap, HashSet},
-    mem::replace,
-};
+use serde::{Deserialize, Serialize, Serializer};
+use std::collections::{HashMap, HashSet};
 
 pub type CardId = Uuid;
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct TextData(Vec<Either<String, TextLink>>);
+
+impl TextData {
+    pub fn evaluate(&self, provider: &CardProvider) -> String {
+        let mut out = String::new();
+
+        for cmp in &self.0 {
+            match cmp {
+                Either::Left(s) => out.push_str(&s),
+                Either::Right(TextLink { id, alias }) => match alias {
+                    Some(alias) => out.push_str(&alias),
+                    None => match provider.load(*id) {
+                        Some(card) => out.push_str(&card.frontside),
+                        None => out.push_str("<invalid card ref>"),
+                    },
+                },
+            }
+        }
+
+        out
+    }
+
+    pub fn from_raw(input: &str) -> Self {
+        let mut result = Vec::new();
+        let mut buffer = String::new();
+        let mut chars = input.chars().peekable();
+
+        while let Some(c) = chars.next() {
+            if c == '[' && chars.peek() == Some(&'[') {
+                chars.next(); // consume the second '['
+
+                // Push any text before this link
+                if !buffer.is_empty() {
+                    result.push(Either::Left(std::mem::take(&mut buffer)));
+                }
+
+                // Parse until closing "]]"
+                let mut link_buf = String::new();
+                while let Some(ch) = chars.next() {
+                    if ch == ']' && chars.peek() == Some(&']') {
+                        chars.next(); // consume second ']'
+                        break;
+                    } else {
+                        link_buf.push(ch);
+                    }
+                }
+
+                let parts: Vec<&str> = link_buf.splitn(2, '|').collect();
+                let (id_str, alias_opt) = if parts.len() == 2 {
+                    (parts[0], Some(parts[1].to_string()))
+                } else {
+                    (parts[0], None)
+                };
+
+                match id_str.parse::<CardId>() {
+                    Ok(id) => result.push(Either::Right(TextLink {
+                        id,
+                        alias: alias_opt,
+                    })),
+                    Err(_) => result.push(Either::Left(format!("[[{}]]", link_buf))),
+                }
+            } else {
+                buffer.push(c);
+            }
+        }
+
+        if !buffer.is_empty() {
+            result.push(Either::Left(buffer));
+        }
+
+        Self(result)
+    }
+
+    pub fn to_raw(&self) -> String {
+        let mut out = String::new();
+
+        for cmp in &self.0 {
+            let s = match cmp {
+                Either::Left(s) => s.to_string(),
+                Either::Right(TextLink { id, alias }) => match alias {
+                    Some(alias) => format!("[[{id}|{alias}]]"),
+                    None => format!("[[{id}]]"),
+                },
+            };
+
+            out.push_str(&s);
+        }
+
+        out
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+struct TextLink {
+    id: CardId,
+    alias: Option<String>,
+}
+
+impl Serialize for TextData {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_str(&self.to_raw())
+    }
+}
+
+impl<'de> Deserialize<'de> for TextData {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        Ok(TextData::from_raw(&s))
+    }
+}
 
 #[derive(PartialEq, Debug, Clone, Serialize, Deserialize, Hash)]
 pub enum CardType {
@@ -30,7 +143,7 @@ pub enum CardType {
         back: BackSide,
     },
     Unfinished {
-        front: String,
+        front: TextData,
     },
     /// An attribute describes a specific instance of a class. For example the class Person can have attribute "when was {} born?"
     /// this will be applied to all instances of the class and its subclasses
@@ -105,7 +218,7 @@ impl CardType {
         match self.clone() {
             CardType::Instance { name, .. } => name,
             CardType::Normal { front, .. } => front,
-            CardType::Unfinished { front } => front,
+            CardType::Unfinished { front } => front.to_raw(),
             CardType::Attribute { .. } => "attr card".to_string(),
             CardType::Class { name, .. } => name,
             CardType::Statement { front } => front,
@@ -153,41 +266,6 @@ impl CardType {
         }
     }
 
-    fn regex_replace(provider: &CardProvider, input: &str) -> String {
-        let mut result = String::new();
-        let mut buffer: Vec<char> = vec![];
-        let mut is_inside = false;
-
-        for c in input.chars() {
-            if c == '[' {
-                is_inside = true;
-            } else if c == ']' && is_inside {
-                is_inside = false;
-                let inner: String = std::mem::take(&mut buffer).into_iter().collect();
-                let replacement = match inner.parse::<CardId>() {
-                    Ok(id) => match provider.load(id) {
-                        Some(card) => card.frontside.clone(),
-                        None => format!("<invalid card reference>"),
-                    },
-                    Err(_) => format!("[{}]", inner),
-                };
-                result.push_str(&replacement);
-            } else {
-                if is_inside {
-                    buffer.push(c);
-                } else {
-                    result.push(c);
-                }
-            }
-        }
-
-        for c in buffer {
-            result.push(c);
-        }
-
-        result
-    }
-
     pub fn display_front(&self, provider: &CardProvider) -> String {
         match self {
             CardType::Instance {
@@ -219,8 +297,8 @@ impl CardType {
                     }
                 }
             }
-            CardType::Normal { front, .. } => Self::regex_replace(provider, &front),
-            CardType::Unfinished { front, .. } => Self::regex_replace(provider, &front),
+            CardType::Normal { front, .. } => front.clone(),
+            CardType::Unfinished { front, .. } => front.evaluate(provider),
             CardType::Attribute {
                 attribute,
                 instance,
@@ -441,7 +519,7 @@ impl RawCard {
                 back: new_back,
             },
             CardType::Unfinished { front } => CardType::Normal {
-                front,
+                front: front.to_raw(),
                 back: new_back,
             },
             CardType::Attribute {
