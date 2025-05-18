@@ -203,7 +203,7 @@ impl BackPut {
             BackOpts::Text => {
                 let s = self.text.cloned();
                 info!("text is: {s}");
-                Some(BackSide::Text(s))
+                Some(BackSide::Text(s.into()))
             }
         }
     }

@@ -11,10 +11,20 @@ use std::collections::{HashMap, HashSet};
 
 pub type CardId = Uuid;
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Default)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Default, Ord, PartialOrd)]
 pub struct TextData(Vec<Either<String, TextLink>>);
 
+impl From<String> for TextData {
+    fn from(value: String) -> Self {
+        Self::from_raw(&value)
+    }
+}
+
 impl TextData {
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+
     pub fn evaluate(&self, provider: &CardProvider) -> String {
         let mut out = String::new();
 
@@ -117,7 +127,7 @@ impl TextData {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Ord, PartialOrd)]
 struct TextLink {
     id: CardId,
     alias: Option<String>,
@@ -679,7 +689,7 @@ impl LedgerItem<CardEvent> for RawCard {
             id,
             data: CardType::Normal {
                 front: TextData::from_raw("uninit"),
-                back: BackSide::Text("uninit".to_string()),
+                back: BackSide::Text("uninit".to_string().into()),
             },
             tags: Default::default(),
             dependencies: Default::default(),
@@ -733,7 +743,7 @@ impl LedgerItem<CardEvent> for RawCard {
 
 #[derive(Serialize, Ord, PartialOrd, Eq, Hash, PartialEq, Debug, Clone)]
 pub enum BackSide {
-    Text(String),
+    Text(TextData),
     Card(CardId),
     List(Vec<CardId>),
     Time(TimeStamp),
@@ -754,7 +764,7 @@ pub enum BarSide {
 impl From<BarSide> for BackSide {
     fn from(value: BarSide) -> Self {
         match value {
-            BarSide::Text(val) => BackSide::Text(val),
+            BarSide::Text(val) => BackSide::Text(val.into()),
             BarSide::Card(val) => BackSide::Card(val),
             BarSide::List(val) => BackSide::List(val),
             BarSide::Time(val) => BackSide::Time(val),
@@ -779,7 +789,7 @@ impl From<String> for BackSide {
         } else if s.as_str() == Self::INVALID_STR {
             Self::Invalid
         } else {
-            Self::Text(s)
+            Self::Text(s.into())
         }
     }
 }
@@ -824,7 +834,7 @@ impl BackSide {
 
     pub fn to_string(&self) -> String {
         match self {
-            BackSide::Text(s) => s.clone(),
+            BackSide::Text(s) => s.to_raw(),
             BackSide::Card(id) => id.to_string(),
             BackSide::List(ids) => format!("{ids:?}"),
             BackSide::Time(ts) => format!("{ts}"),
@@ -836,7 +846,9 @@ impl BackSide {
     pub fn dependencies(&self) -> BTreeSet<CardId> {
         let mut set = BTreeSet::default();
         match self {
-            BackSide::Text(_) => {}
+            BackSide::Text(s) => {
+                set.extend(s.card_ids());
+            }
             BackSide::Card(card_id) => {
                 let _ = set.insert(*card_id);
             }

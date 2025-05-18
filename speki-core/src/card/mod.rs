@@ -184,7 +184,7 @@ impl Card {
 
         let from_back = |back: &BackSide| -> String {
             match back {
-                BackSide::Text(s) => s.clone(),
+                BackSide::Text(s) => s.evaluate(&card_provider),
                 BackSide::Card(id) => raw_front(*id),
                 BackSide::List(ids) => {
                     let mut out = "-> [".to_string();
