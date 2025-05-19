@@ -103,9 +103,7 @@ pub fn FrontPutRender(
     audio: Signal<Option<Audio>>,
     mut overlay: Signal<Option<OverlayEnum>>,
 ) -> Element {
-    use speki_core::Card;
-
-    use crate::overlays::card_selector::{CardSelector, MyClosure};
+    use crate::components::set_card_link;
 
     let placeholder = if IS_SHORT.cloned() { "Front side" } else { "" };
 
@@ -125,26 +123,9 @@ pub fn FrontPutRender(
                     value: "{text}",
                     oninput: move |evt| text.set(evt.value()),
                     onmouseup: move |_| {
-                        spawn(async move {
-                            let mut eval = document::eval(r#"
-                                const sel = window.getSelection();
-                                dioxus.send(sel ? sel.toString() : "NO_SELECTION");
-                            "#);
-
-                            if let Ok(val) = eval.recv::<String>().await {
-                                if val.len() < 2 {
-                                    return;
-                                }
-                                let f = MyClosure::new(move |card: Signal<Card>| {
-                                    let s = format!("[[{}]]", card.read().id());
-                                    text.clone().set(text.cloned().replace(&val, &s));
-                                    async move{}
-
-                                });
-                                let props = CardSelector::new(false, vec![]).new_on_card_selected(f);
-                                overlay.set(Some(OverlayEnum::CardSelector(props)));
-                            }
-                        });
+                        let text = text.clone();
+                        let overlay = overlay.clone();
+                        set_card_link(text, overlay);
                     },
                 }
 

@@ -586,7 +586,6 @@ fn RenderInputs(props: CardViewer) -> Element {
                 overlay: props.overlay.clone(),
                 ty: ty.cloned(),
             }
-
         }
         div {
             if let Some(card) = props.old_card.cloned() {
@@ -595,7 +594,6 @@ fn RenderInputs(props: CardViewer) -> Element {
             }
 
             add_dep { selv: props.clone() }
-            add_link { selv: props.clone() }
 
             save_button { CardViewer: props.clone() }
         }
@@ -924,39 +922,6 @@ fn save_button(CardViewer: CardViewer) -> Element {
             } else {
                 "save"
             }
-        }
-    }
-}
-
-#[component]
-fn add_link(selv: CardViewer) -> Element {
-    let selv = selv.clone();
-    let front = selv.editor.front.text.cloned();
-    let overlay = selv.overlay.clone();
-    rsx! {
-        button {
-            class: "mt-2 inline-flex items-center text-white bg-gray-800 border-0 py-1 px-3 focus:outline-none hover:bg-gray-700 rounded text-base md:mt-0",
-            onclick: move |_| {
-                let selv = selv.clone();
-
-                let fun = MyClosure::new(
-                    move |card: Signal<Card>| {
-                    let s = format!("[[{}]]", card.read().id());
-                    selv.editor.front.clone().text.write().push_str(&s);
-                    async move {}
-                }
-            );
-
-                info!("1 scope is ! {:?}", current_scope_id().unwrap());
-                let thefront = front.clone();
-
-                spawn(async move {
-                    let props = CardSelector::link_picker(fun).with_default_search(thefront.clone());
-                    overlay.clone().set(Some(OverlayEnum::CardSelector(props)));
-                    info!("2 scope is ! {:?}", current_scope_id().unwrap());
-                });
-            },
-            "add link"
         }
     }
 }

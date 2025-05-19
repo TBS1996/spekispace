@@ -13,12 +13,16 @@ pub use dropdown::DropDownMenu;
 pub use filtereditor::*;
 pub use frontside::{CardTy, FrontPut};
 pub use graph::GraphRep;
-use speki_core::{card::CardId, collection::DynCard, RefType};
+use speki_core::{card::CardId, collection::DynCard, Card, RefType};
 
 use dioxus::prelude::*;
 
 use crate::{
-    overlays::{card_selector::CardSelector, cardviewer::CardViewer, OverlayEnum},
+    overlays::{
+        card_selector::{CardSelector, MyClosure},
+        cardviewer::CardViewer,
+        OverlayEnum,
+    },
     APP,
 };
 
@@ -117,4 +121,34 @@ pub fn RenderDependents(
             }
         }
     }
+}
+
+pub fn set_card_link(text: Signal<String>, mut overlay: Signal<Option<OverlayEnum>>) {
+    let mut eval = document::eval(
+        r#"
+        const sel = window.getSelection();
+        dioxus.send(sel ? sel.toString() : "NO_SELECTION");
+    "#,
+    );
+
+    spawn(async move {
+        if let Ok(val) = eval.recv::<String>().await {
+            if val.len() < 2 {
+                return;
+            }
+
+            let theval = val.clone();
+            let f = MyClosure::new(move |card: Signal<Card>| {
+                let s = format!("[[{}]]", card.read().id());
+                text.clone().set(text.cloned().replace(&val, &s));
+                async move {}
+            });
+
+            let props = CardSelector::new(false, vec![])
+                .new_on_card_selected(f)
+                .with_default_search(theval)
+                .with_allow_new(true);
+            overlay.set(Some(OverlayEnum::CardSelector(props)));
+        }
+    });
 }

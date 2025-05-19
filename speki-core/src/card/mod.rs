@@ -2,7 +2,6 @@ use core::f32;
 use std::{
     cmp::{Ord, Ordering, PartialEq},
     collections::{BTreeMap, BTreeSet, HashSet},
-    default,
     fmt::Debug,
     ops::Deref,
     sync::Arc,
@@ -38,11 +37,8 @@ impl EvalText {
         &self.cmps
     }
 
-    pub fn just_some_string(s: String) -> Self {
-        Self {
-            cmps: vec![Either::Left(s.clone())],
-            eval: s,
-        }
+    pub fn just_some_string(s: String, provider: &CardProvider) -> Self {
+        Self::from_textdata(TextData::from_raw(&s), provider)
     }
 
     pub fn from_backside(b: &BackSide, provider: &CardProvider) -> Self {
@@ -70,9 +66,9 @@ impl EvalText {
 
                 Self::from_textdata(txt, provider)
             }
-            BackSide::Time(ts) => Self::just_some_string(ts.to_string()),
-            BackSide::Trivial => Self::just_some_string("<trivial>".to_string()),
-            BackSide::Invalid => Self::just_some_string("<invalid>".to_string()),
+            BackSide::Time(ts) => Self::just_some_string(ts.to_string(), provider),
+            BackSide::Trivial => Self::just_some_string("<trivial>".to_string(), provider),
+            BackSide::Invalid => Self::just_some_string("<invalid>".to_string(), provider),
         }
     }
 
@@ -121,6 +117,7 @@ pub struct Card {
     id: CardId,
     front_audio: Option<Audio>,
     back_audio: Option<Audio>,
+    name: EvalText,
     frontside: EvalText,
     backside: EvalText,
     base: RawCard,
@@ -276,11 +273,15 @@ impl Card {
         let backside = match &base.data {
             CardType::Instance { back, class, .. } => match back.as_ref() {
                 Some(back) => from_back(back),
-                None => EvalText::just_some_string(raw_front(*class)),
+                None => EvalText::just_some_string(raw_front(*class), &card_provider),
             },
             CardType::Normal { back, .. } => from_back(back),
-            CardType::Unfinished { .. } => EvalText::just_some_string("<unfinished>".to_string()),
-            CardType::Attribute { .. } => EvalText::just_some_string("<attribute>".to_string()),
+            CardType::Unfinished { .. } => {
+                EvalText::just_some_string("<unfinished>".to_string(), &card_provider)
+            }
+            CardType::Attribute { .. } => {
+                EvalText::just_some_string("<attribute>".to_string(), &card_provider)
+            }
             CardType::Class {
                 back, parent_class, ..
             } => match (back, parent_class) {
@@ -293,6 +294,7 @@ impl Card {
                             .unwrap()
                             .data
                             .raw_front(),
+                        &card_provider,
                     )
                 }
                 (None, Some(pcl)) => EvalText::just_some_string(
@@ -303,20 +305,27 @@ impl Card {
                         .unwrap()
                         .data
                         .raw_front(),
+                    &card_provider,
                 ),
                 (Some(back), None) => from_back(back),
                 (_, _) => EvalText::default(),
             },
-            CardType::Statement { .. } => EvalText::just_some_string("<statement>".to_string()),
-            CardType::Event { .. } => EvalText::just_some_string("<event>".to_string()),
+            CardType::Statement { .. } => {
+                EvalText::just_some_string("<statement>".to_string(), &card_provider)
+            }
+            CardType::Event { .. } => {
+                EvalText::just_some_string("<event>".to_string(), &card_provider)
+            }
         };
 
         let frontside = base.data.display_front(&card_provider);
+        let name = EvalText::from_textdata(base.data.name(&card_provider), &card_provider);
 
         Self {
             id,
             frontside,
             base,
+            name,
             backside,
             metadata,
             history,
@@ -533,6 +542,14 @@ impl Card {
     pub fn backside(&self) -> &EvalText {
         &self.backside
     }
+    pub fn name(&self) -> &EvalText {
+        &self.name
+    }
+
+    pub fn name_textdata(&self) -> TextData {
+        self.base.data.name(&self.card_provider)
+    }
+
     pub fn front_side(&self) -> &EvalText {
         &self.frontside
     }

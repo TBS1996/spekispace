@@ -21,6 +21,12 @@ impl From<String> for TextData {
 }
 
 impl TextData {
+    pub fn extend(&mut self, other: Self) {
+        for cmp in other.0 {
+            self.0.push(cmp);
+        }
+    }
+
     pub fn is_empty(&self) -> bool {
         self.0.is_empty()
     }
@@ -42,7 +48,7 @@ impl TextData {
                 Either::Right(TextLink { id, alias }) => match alias {
                     Some(alias) => out.push_str(&alias),
                     None => match provider.load(*id) {
-                        Some(card) => out.push_str(&card.frontside),
+                        Some(card) => out.push_str(&card.name),
                         None => out.push_str("<invalid card ref>"),
                     },
                 },
@@ -297,6 +303,31 @@ impl CardType {
         }
     }
 
+    pub fn name(&self, provider: &CardProvider) -> TextData {
+        match self {
+            CardType::Instance { name, .. } => name.clone(),
+            CardType::Normal { front, .. } => front.clone(),
+            CardType::Unfinished { front, .. } => front.clone(),
+            CardType::Attribute {
+                attribute,
+                instance,
+                ..
+            } => {
+                let attr = provider
+                    .providers
+                    .attrs
+                    .load(attribute.to_string().as_str())
+                    .unwrap();
+
+                let f = attr.name(*instance, provider.clone());
+                TextData::from_raw(&f)
+            }
+            CardType::Class { name, .. } => name.clone(),
+            CardType::Statement { front, .. } => front.clone(),
+            CardType::Event { front, .. } => front.clone(),
+        }
+    }
+
     pub fn display_front(&self, provider: &CardProvider) -> EvalText {
         match self {
             CardType::Instance {
@@ -323,13 +354,13 @@ impl CardType {
                 match default_question {
                     Some(q) => {
                         let s = q.evaluate(provider).replace("{}", thename);
-                        EvalText::just_some_string(s)
+                        EvalText::just_some_string(s, provider)
                     }
 
                     None => {
                         if back.is_some() {
                             let s = format!("{thename} ({class_name})");
-                            EvalText::just_some_string(s)
+                            EvalText::just_some_string(s, provider)
                         } else {
                             EvalText::from_textdata(name.clone(), provider)
                         }
@@ -350,27 +381,19 @@ impl CardType {
                     .unwrap();
 
                 let f = attr.name(*instance, provider.clone());
-                EvalText::just_some_string(f)
+                EvalText::just_some_string(f, provider)
             }
             CardType::Class {
                 name, parent_class, ..
-            } => {
-                let thename = name.evaluate(provider);
-                match parent_class {
-                    Some(class) => {
-                        let parent = provider
-                            .providers
-                            .cards
-                            .load(class.to_string().as_str())
-                            .unwrap()
-                            .data
-                            .raw_front();
-
-                        EvalText::just_some_string(format!("{thename} ({parent})"))
-                    }
-                    None => EvalText::from_textdata(name.clone(), provider),
+            } => match parent_class {
+                Some(class) => {
+                    let parent = provider.load(*class).unwrap().name_textdata();
+                    let mut name = name.clone();
+                    name.extend(parent.clone());
+                    EvalText::from_textdata(name, provider)
                 }
-            }
+                None => EvalText::from_textdata(name.clone(), provider),
+            },
             CardType::Statement { front, .. } => EvalText::from_textdata(front.clone(), provider),
             CardType::Event { front, .. } => EvalText::from_textdata(front.clone(), provider),
         }

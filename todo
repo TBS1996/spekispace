@@ -311,6 +311,18 @@ maybe a way to remove unnecessary entries?
 for example if an entry doesn't actually change the state at all, we can just remove it.
 trivial to check. just check if the hash is the same after it's applied.
 
+# typed answer
+
+each card should have a possibility to say that the answer must be an instance or sub-class of a certain class.
+
+# derived classes for instances
+
+some classes can be derived for a certain classes' instances.
+
+like if you have class "function", you can say that there's also a class "function argument", when you define an instance of function, a new class can be generated which is "function arguments for {instance}".
+hmm
+so function argument is a a class by itself. and then you can say each instance of "function" generate a new sub-class of "function argument" which would be like "function argument for {class instance}".
+
 
 # main graph
 

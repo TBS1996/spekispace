@@ -332,6 +332,11 @@ impl CardSelector {
         self.title = title;
         self
     }
+
+    pub fn with_allow_new(mut self, allow_new: bool) -> Self {
+        self.allow_new = allow_new;
+        self
+    }
 }
 
 impl PartialEq for CardSelector {
