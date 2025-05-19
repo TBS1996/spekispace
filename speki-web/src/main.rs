@@ -33,6 +33,8 @@ pub const DEFAULT_FILTER: &'static str =
 /// is true every time we change route, and is set back to false after the cyto instance is re-rendered
 pub static ROUTE_CHANGE: AtomicBool = AtomicBool::new(false);
 
+use dioxus::desktop::{Config, LogicalSize, WindowBuilder};
+
 fn main() {
     dioxus_logger::init(Level::INFO).expect("failed to init logger");
     info!("starting app");
@@ -40,6 +42,33 @@ fn main() {
     info!("omg very scope id: {id:?}");
 
     dioxus::launch(TheApp);
+}
+
+#[component]
+fn TestApp() -> Element {
+    let selected_text = use_signal(|| "nothing yet".to_string());
+
+    rsx! {
+        div {
+            onmouseup: move |_| {
+                let mut selected_text = selected_text.clone();
+                spawn(async move {
+                    let mut eval = document::eval(r#"
+                        const sel = window.getSelection();
+                        dioxus.send(sel ? sel.toString() : "NO_SELECTION");
+                    "#);
+
+                    if let Ok(val) = eval.recv::<String>().await {
+                        selected_text.set(val);
+                    }
+                });
+            },
+            "Select some text in this box.",
+            p {
+                "You selected: {selected_text}"
+            }
+        }
+    }
 }
 
 #[component]

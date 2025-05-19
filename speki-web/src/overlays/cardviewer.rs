@@ -614,7 +614,7 @@ fn InputElements(
     let is_short = IS_SHORT.cloned();
 
     rsx! {
-        FrontPutRender { dropdown: front.dropdown.clone(), text: front.text.clone(), audio: front.audio.clone() }
+        FrontPutRender { dropdown: front.dropdown.clone(), text: front.text.clone(), audio: front.audio.clone(), overlay: overlay.clone() }
 
         match ty {
             CardTy::Unfinished => rsx! {},

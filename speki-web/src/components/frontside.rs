@@ -11,6 +11,7 @@ use crate::components::audioupload::AudioUpload;
 
 use crate::{
     components::{dropdown::DropComponent, DropDownMenu},
+    overlays::OverlayEnum,
     IS_SHORT,
 };
 
@@ -65,14 +66,47 @@ pub struct FrontPut {
     pub audio: Signal<Option<Audio>>,
 }
 
+/*
+
+    let selected_text = use_signal(|| "nothing yet".to_string());
+
+    rsx! {
+        div {
+            onmouseup: move |_| {
+                let mut selected_text = selected_text.clone();
+                spawn(async move {
+                    let mut eval = document::eval(r#"
+                        const sel = window.getSelection();
+                        dioxus.send(sel ? sel.toString() : "NO_SELECTION");
+                    "#);
+
+                    if let Ok(val) = eval.recv::<String>().await {
+                        selected_text.set(val);
+                    }
+                });
+            },
+            "Select some text in this box.",
+            p {
+                "You selected: {selected_text}"
+            }
+        }
+    }
+
+*/
+
 #[cfg(feature = "desktop")]
 #[component]
 #[cfg(feature = "desktop")]
 pub fn FrontPutRender(
     dropdown: DropDownMenu<CardTy>,
-    text: Signal<String>,
+    mut text: Signal<String>,
     audio: Signal<Option<Audio>>,
+    mut overlay: Signal<Option<OverlayEnum>>,
 ) -> Element {
+    use speki_core::Card;
+
+    use crate::overlays::card_selector::{CardSelector, MyClosure};
+
     let placeholder = if IS_SHORT.cloned() { "Front side" } else { "" };
 
     rsx! {
@@ -90,6 +124,28 @@ pub fn FrontPutRender(
                     placeholder: "{placeholder}",
                     value: "{text}",
                     oninput: move |evt| text.set(evt.value()),
+                    onmouseup: move |_| {
+                        spawn(async move {
+                            let mut eval = document::eval(r#"
+                                const sel = window.getSelection();
+                                dioxus.send(sel ? sel.toString() : "NO_SELECTION");
+                            "#);
+
+                            if let Ok(val) = eval.recv::<String>().await {
+                                if val.len() < 2 {
+                                    return;
+                                }
+                                let f = MyClosure::new(move |card: Signal<Card>| {
+                                    let s = format!("[[{}]]", card.read().id());
+                                    text.clone().set(text.cloned().replace(&val, &s));
+                                    async move{}
+
+                                });
+                                let props = CardSelector::new(false, vec![]).new_on_card_selected(f);
+                                overlay.set(Some(OverlayEnum::CardSelector(props)));
+                            }
+                        });
+                    },
                 }
 
 

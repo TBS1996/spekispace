@@ -35,6 +35,10 @@ pub fn BackPutRender(
     overlay: Signal<Option<OverlayEnum>>,
     audio: Signal<Option<Audio>>,
 ) -> Element {
+    use speki_core::Card;
+
+    use crate::overlays::card_selector::CardSelector;
+
     rsx! {
         div {
             class: "block text-gray-700 text-sm font-medium max-w-full",
@@ -59,6 +63,29 @@ pub fn BackPutRender(
                 value: "{sig}",
                 placeholder: "{placeholder}",
                 oninput: move |evt| sig.set(evt.value()),
+                onmouseup: move |_| {
+                    spawn(async move {
+                        let mut eval = document::eval(r#"
+                            const sel = window.getSelection();
+                            dioxus.send(sel ? sel.toString() : "NO_SELECTION");
+                        "#);
+
+                        if let Ok(val) = eval.recv::<String>().await {
+                            if val.len() < 2 {
+                                return;
+                            }
+                            let f = MyClosure::new(move |card: Signal<Card>| {
+                                let s = format!("[[{}]]", card.read().id());
+                                text.clone().set(text.cloned().replace(&val, &s));
+                                async move{}
+
+                            });
+                            let props = CardSelector::new(false, vec![]).new_on_card_selected(f);
+                            overlay.set(Some(OverlayEnum::CardSelector(props)));
+                        }
+                    });
+                },
+
             }
         }
                         },

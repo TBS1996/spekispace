@@ -1,3 +1,4 @@
+use dioxus::desktop::{Config, LogicalSize, WindowBuilder};
 use dioxus::prelude::*;
 use either::Either;
 use nonempty::NonEmpty;
