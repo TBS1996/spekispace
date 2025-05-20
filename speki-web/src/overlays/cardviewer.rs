@@ -394,13 +394,17 @@ impl CardViewer {
         };
 
         let back = {
-            let back = raw_ty.data.raw_back();
             let bck =
                 BackPut::new(raw_ty.data.backside().cloned()).with_dependents(tempnode.clone());
             if let Some(id) = card.read().back_audio_id() {
                 //let audio = APP.read().inner().provider.audios.load_item(id).await;
                 //bck.audio.clone().set(audio);
             }
+
+            let back = match raw_ty.data.backside() {
+                Some(b) if b.is_text() => b.to_string(),
+                _ => String::new(),
+            };
 
             bck.text.clone().set(back);
             bck

@@ -220,6 +220,7 @@ pub enum CardType {
     Statement {
         front: TextData,
     },
+
     /// gotta figure out if i want this to be a thing in itself or it can be handled with just attributes of an event class
     Event {
         front: TextData,
@@ -889,6 +890,10 @@ impl BackSide {
         if has_ref {
             *self = Self::Invalid;
         }
+    }
+
+    pub fn is_text(&self) -> bool {
+        matches!(self, Self::Text(_))
     }
 
     pub fn is_ref(&self) -> bool {

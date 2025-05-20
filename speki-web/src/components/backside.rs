@@ -159,11 +159,8 @@ impl BackPut {
         let default = default.unwrap_or_default();
         let ref_card = CardRef::new();
         if let Some(card) = default.as_card() {
-            let refc = ref_card.clone();
-            spawn(async move {
-                let card = APP.read().load_card(card).await;
-                refc.set_ref(card);
-            });
+            let card = APP.read().load_card_sync(card);
+            ref_card.set_ref(card);
         }
 
         let backopt = if default.is_ref() {
