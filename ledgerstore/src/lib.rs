@@ -64,14 +64,14 @@ pub trait LedgerItem<E: LedgerEvent + Debug>:
     /// The property keys are predefined, hence theyre static str
     /// the String is the Value which could be anything.
     /// For example ("suspended", true).
-    fn properties_cache(&self, ledger: &Ledger<Self, E>) -> HashSet<(Self::PropertyType, String)>
+    fn properties_cache(&self, ledger: CacheGetter<Self>) -> HashSet<(Self::PropertyType, String)>
     where
         Self: LedgerItem<E>,
     {
         Default::default()
     }
 
-    fn caches(&self, ledger: &Ledger<Self, E>) -> HashSet<(CacheKey, String)>
+    fn caches(&self, ledger: CacheGetter<Self>) -> HashSet<(CacheKey, String)>
     where
         Self: LedgerItem<E>,
     {
@@ -162,6 +162,29 @@ ledgers represent the same thing? like how review ID refer to cardId ?
 
 */
 
+pub struct CacheGetter<T: DeserializeOwned> {
+    inner: SnapFs,
+    hash: Option<String>,
+    _phantom: PhantomData<T>,
+}
+
+impl<T: DeserializeOwned> CacheGetter<T> {
+    pub fn load(&self, id: &str) -> Option<T> {
+        let data = self.inner.get(self.hash.as_ref()?, id)?;
+        Some(serde_json::from_slice(&data).unwrap())
+    }
+}
+
+impl<T: DeserializeOwned> Clone for CacheGetter<T> {
+    fn clone(&self) -> Self {
+        Self {
+            inner: self.inner.clone(),
+            hash: self.hash.clone(),
+            _phantom: self._phantom.clone(),
+        }
+    }
+}
+
 #[derive(Clone)]
 pub struct Ledger<T: LedgerItem<E>, E: LedgerEvent> {
     ledger: Arc<RwLock<Vec<LedgerEntry<E>>>>,
@@ -229,12 +252,20 @@ impl<T: LedgerItem<E>, E: LedgerEvent> Ledger<T, E> {
         self.cache.get_cache(&cache_hash, cache_key)
     }
 
+    fn cachegetter(&self, hash: impl Into<Option<String>>) -> CacheGetter<T> {
+        CacheGetter {
+            inner: self.snap.clone(),
+            hash: hash.into(),
+            _phantom: PhantomData,
+        }
+    }
+
     /// This will go through the entire state and create a hash for it
     fn rebuild_cache(&self, state_hash: &str) -> Option<CacheHash> {
         let caches: HashSet<(CacheKey, String)> = self
             .load_all_on_state(state_hash)
             .into_values()
-            .flat_map(|item| item.caches(self))
+            .flat_map(|item| item.caches(self.cachegetter(state_hash.to_owned())))
             .collect();
 
         let cache_map: HashMap<CacheKey, Vec<String>> = {
@@ -783,15 +814,17 @@ impl<T: LedgerItem<E>, E: LedgerEvent> Ledger<T, E> {
             None => T::new_default(event.id()),
         };
 
+        let cachegetter = self.cachegetter(state_hash.map(ToOwned::to_owned));
+
         let old_cache = if !new_item {
-            timed!(item.caches(self))
+            timed!(item.caches(cachegetter.clone()))
         } else {
             Default::default()
         };
 
         let id = item.item_id();
         let item = timed!(item.run_event(event.clone()).unwrap());
-        let new_caches = item.caches(self);
+        let new_caches = item.caches(cachegetter);
         let item = serde_json::to_vec(&item).unwrap();
         let (state_hash, new_contents) = timed!(self.snap.save(state_hash, &id.to_string(), item));
 

@@ -7,7 +7,7 @@ use crate::{
     CardProperty, RefType,
 };
 use either::Either;
-use ledgerstore::{Ledger, LedgerItem};
+use ledgerstore::{CacheGetter, Ledger, LedgerItem};
 use omtrent::TimeStamp;
 use serde::{Deserialize, Serialize, Serializer};
 use std::collections::{HashMap, HashSet};
@@ -645,7 +645,7 @@ pub fn normalize_string(str: &str) -> String {
 }
 
 use fancy_regex::Regex;
-fn resolve_text(txt: String, ledger: &Ledger<RawCard, CardEvent>, re: &Regex) -> String {
+fn resolve_text(txt: String, ledger: &CacheGetter<RawCard>, re: &Regex) -> String {
     let uuids: Vec<String> = re
         .find_iter(&txt)
         .filter_map(Result::ok)
@@ -654,7 +654,7 @@ fn resolve_text(txt: String, ledger: &Ledger<RawCard, CardEvent>, re: &Regex) ->
 
     let mut s: String = re.replace_all(&txt, "").to_string();
     for id in uuids {
-        let txt = ledger.load_last_applied(&id).unwrap().data.raw_front();
+        let txt = ledger.load(&id).unwrap().data.raw_front();
         s.push_str(&resolve_text(txt, ledger, re));
     }
 
@@ -663,7 +663,7 @@ fn resolve_text(txt: String, ledger: &Ledger<RawCard, CardEvent>, re: &Regex) ->
 
 /// replaces all uuids on frontside of card with the frontside of the card referenced by uuid.
 /// just appends it, doesn't preserve order, this is just to collect bigrams.
-fn resolve_card(card: &RawCard, ledger: &Ledger<RawCard, CardEvent>) -> String {
+fn resolve_card(card: &RawCard, ledger: &CacheGetter<RawCard>) -> String {
     let uuid_regex = Regex::new(
         r"\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\b",
     )
@@ -727,13 +727,10 @@ impl LedgerItem<CardEvent> for RawCard {
         out
     }
 
-    fn properties_cache(
-        &self,
-        ledger: &Ledger<RawCard, CardEvent>,
-    ) -> HashSet<(Self::PropertyType, String)> {
+    fn properties_cache(&self, cache: CacheGetter<Self>) -> HashSet<(Self::PropertyType, String)> {
         let mut out: HashSet<(Self::PropertyType, String)> = Default::default();
 
-        let resolved_text = resolve_card(self, ledger);
+        let resolved_text = resolve_card(self, &cache);
 
         for bigram in bigrams(&resolved_text) {
             let value = format!("{}{}", bigram[0], bigram[1]);
