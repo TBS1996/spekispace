@@ -1,4 +1,3 @@
-
 use ledgerstore::{LedgerEvent, LedgerItem};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;

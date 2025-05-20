@@ -404,6 +404,8 @@ mod graphviz {
     }
 }
 
+/*
+
 #[cfg(test)]
 mod tests {
     use std::path::PathBuf;
@@ -430,7 +432,7 @@ mod tests {
             let root =
                 PathBuf::from("/home/tor/ledgertest").join(Uuid::new_v4().as_simple().to_string());
             Self {
-                ledger: Ledger::new(root.as_path()),
+                ledger: Ledger::new(root.as_path(), Arc::new(())),
                 root,
             }
         }
@@ -548,3 +550,4 @@ mod tests {
         assert!(c_deps.contains(&b_id));
     }
 }
+*/

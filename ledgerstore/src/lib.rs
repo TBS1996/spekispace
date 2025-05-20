@@ -35,6 +35,8 @@ pub trait LedgerEvent:
     }
 }
 
+//pub struct Ledger<T: LedgerItem<E, S>, E: LedgerEvent, S: Clone = ()> {
+
 /// Represents how a ledger mutates or creates an item.
 pub trait LedgerItem<E: LedgerEvent + Debug>:
     Serialize + DeserializeOwned + Hash + 'static
@@ -62,17 +64,23 @@ pub trait LedgerItem<E: LedgerEvent + Debug>:
     /// The property keys are predefined, hence theyre static str
     /// the String is the Value which could be anything.
     /// For example ("suspended", true).
-    fn properties_cache(&self) -> HashSet<(Self::PropertyType, String)> {
+    fn properties_cache(&self, ledger: &Ledger<Self, E>) -> HashSet<(Self::PropertyType, String)>
+    where
+        Self: LedgerItem<E>,
+    {
         Default::default()
     }
 
-    fn caches(&self) -> HashSet<(CacheKey, String)> {
+    fn caches(&self, ledger: &Ledger<Self, E>) -> HashSet<(CacheKey, String)>
+    where
+        Self: LedgerItem<E>,
+    {
         trace!("fetching caches for item: {:?}", self.item_id());
 
         let mut out: HashSet<(CacheKey, String)> = Default::default();
         let id = self.item_id().to_string();
 
-        for (property, value) in self.properties_cache() {
+        for (property, value) in self.properties_cache(ledger) {
             let key = PropertyCacheKey {
                 property: property.as_ref().to_owned(),
                 value,
@@ -224,7 +232,9 @@ impl<T: LedgerItem<E>, E: LedgerEvent> Ledger<T, E> {
     /// This will go through the entire state and create a hash for it
     fn rebuild_cache(&self, state_hash: &str) -> Option<CacheHash> {
         let caches: HashSet<(CacheKey, String)> = self
-            .load_all_on_state(state_hash).into_values().flat_map(|item| item.caches())
+            .load_all_on_state(state_hash)
+            .into_values()
+            .flat_map(|item| item.caches(self))
             .collect();
 
         let cache_map: HashMap<CacheKey, Vec<String>> = {
@@ -447,6 +457,14 @@ impl<T: LedgerItem<E>, E: LedgerEvent> Ledger<T, E> {
         self._state_hash(ledger.as_slice())
     }
 
+    pub fn load_last_applied(&self, id: &str) -> Option<T> {
+        let (last_applied, _) = self.applied_status(self.ledger.read().unwrap().as_slice());
+        match self.snap.get(&last_applied?, id) {
+            Some(item) => serde_json::from_slice(&item).unwrap(),
+            None => None,
+        }
+    }
+
     pub fn load(&self, id: &str) -> Option<T> {
         trace!("load item from ledger: {id}");
         let state = self.state_hash()?;
@@ -621,15 +639,20 @@ impl<T: LedgerItem<E>, E: LedgerEvent> Ledger<T, E> {
         }
     }
 
-    fn _state_hash(&self, ledger: &[LedgerEntry<E>]) -> Option<StateHash> {
+    /// Returns last applied entry, and list of entries not applied yet.
+    fn applied_status(
+        &self,
+        ledger: &[LedgerEntry<E>],
+    ) -> (Option<StateHash>, Vec<LedgerEntry<E>>) {
         trace!("_state_hash @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@");
+        let mut unapplied_entries: Vec<LedgerEntry<E>> = vec![];
+
         if ledger.is_empty() {
             trace!("ledger is empty");
-            return None;
+            return (None, unapplied_entries);
         }
 
         let ledger = ledger.iter().rev();
-        let mut unapplied_entries = vec![];
 
         let mut last_applied = None;
 
@@ -639,17 +662,21 @@ impl<T: LedgerItem<E>, E: LedgerEvent> Ledger<T, E> {
                 last_applied = Some(state_hash);
                 break;
             } else {
-                unapplied_entries.push(entry);
+                unapplied_entries.push(entry.clone());
             }
         }
+
+        return (last_applied, unapplied_entries);
+    }
+
+    fn _state_hash(&self, ledger: &[LedgerEntry<E>]) -> Option<StateHash> {
+        let (mut last_applied, mut unapplied_entries) = self.applied_status(ledger);
 
         if unapplied_entries.is_empty() {
             return last_applied;
         }
 
         trace!("unapplied entries: {unapplied_entries:?}");
-
-        let mut last_applied = last_applied;
 
         let mut to_delete: HashSet<Content> = Default::default();
         let mut cleanup_states: HashSet<LedgerHash> = Default::default();
@@ -667,12 +694,11 @@ impl<T: LedgerItem<E>, E: LedgerEvent> Ledger<T, E> {
 
             timed!(self.append_ref(idx, new_contents));
 
-            if entry.index % self.gc_keep == 0
-                && self.gc_keep < entry.index {
-                    let (content, states) = self.garbage_collection(entry.index - self.gc_keep);
-                    to_delete.extend(content);
-                    cleanup_states.extend(states);
-                }
+            if entry.index % self.gc_keep == 0 && self.gc_keep < entry.index {
+                let (content, states) = self.garbage_collection(entry.index - self.gc_keep);
+                to_delete.extend(content);
+                cleanup_states.extend(states);
+            }
         }
 
         let state_root = Arc::new(self.root.join("states"));
@@ -758,14 +784,14 @@ impl<T: LedgerItem<E>, E: LedgerEvent> Ledger<T, E> {
         };
 
         let old_cache = if !new_item {
-            timed!(item.caches())
+            timed!(item.caches(self))
         } else {
             Default::default()
         };
 
         let id = item.item_id();
         let item = timed!(item.run_event(event.clone()).unwrap());
-        let new_caches = item.caches();
+        let new_caches = item.caches(self);
         let item = serde_json::to_vec(&item).unwrap();
         let (state_hash, new_contents) = timed!(self.snap.save(state_hash, &id.to_string(), item));
 

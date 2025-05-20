@@ -7,11 +7,7 @@ use crate::{
     Card, Provider, Recaller, RefType, TimeGetter,
 };
 use dioxus_logger::tracing::{info, trace};
-use std::{
-    collections::BTreeSet,
-    fmt::Debug,
-    sync::Arc,
-};
+use std::{collections::BTreeSet, fmt::Debug, sync::Arc};
 
 #[derive(Clone)]
 pub struct CardProvider {
@@ -116,7 +112,6 @@ impl CardProvider {
 
     pub fn new(provider: Provider, time_provider: TimeGetter, recaller: Recaller) -> Self {
         Self {
-            //cards: Default::default(),
             time_provider,
             recaller,
             providers: provider,
