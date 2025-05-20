@@ -86,7 +86,7 @@ impl EvalText {
                     None => {
                         match provider.load(*id) {
                             Some(card) => {
-                                let name = card.frontside.to_string();
+                                let name = card.name.to_string();
                                 cmps.push(Either::Right((name, *id)));
                             }
                             None => panic!(),
