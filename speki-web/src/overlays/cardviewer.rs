@@ -158,7 +158,7 @@ pub struct CardEditor {
     concept: CardRef,
     dependencies: Signal<Vec<Signal<Card>>>,
     allowed_cards: Vec<CardTy>,
-    attrs: Vec<(AttributeId, Signal<String>)>,
+    attrs: Signal<Vec<(AttributeId, Signal<String>)>>,
 }
 
 impl CardEditor {
@@ -222,8 +222,16 @@ impl CardEditor {
             ty,
             attrs: self
                 .attrs
+                .cloned()
                 .into_iter()
-                .map(|(id, pattern)| (id, pattern.cloned()))
+                .filter_map(|(id, pattern)| {
+                    let pattern = pattern.cloned();
+                    if pattern.contains("{}") {
+                        Some((id, pattern))
+                    } else {
+                        None
+                    }
+                })
                 .collect(),
             namespace: self.namespace.selected_card().cloned(),
             front_audio: self.front.audio.cloned().map(|audio| audio.id),
@@ -546,7 +554,7 @@ impl CardViewer {
 
             CardEditor {
                 front,
-                attrs,
+                attrs: Signal::new_in_scope(attrs, ScopeId::APP),
                 namespace,
                 back: bck,
                 concept,
@@ -703,13 +711,16 @@ fn InputElements(
     ty: CardTy,
     card_id: Option<CardId>,
     namespace: CardRef,
-    attrs: Vec<(AttributeId, Signal<String>)>,
+    attrs: Signal<Vec<(AttributeId, Signal<String>)>>,
 ) -> Element {
     let is_short = IS_SHORT.cloned();
 
     let has_attrs = !attrs.is_empty();
 
     dbg!(&attrs);
+
+    let is_class = matches!(ty, CardTy::Class);
+    let inner_attrs = attrs.cloned();
 
     rsx! {
         FrontPutRender { dropdown: front.dropdown.clone(), text: front.text.clone(), audio: front.audio.clone(), overlay: overlay.clone() }
@@ -821,15 +832,30 @@ fn InputElements(
         }
 
         if has_attrs {
-            for (_id, mut pattern) in attrs {
-                input {
-                    class: "bg-white w-full border border-gray-300 rounded-md p-2 mb-4 text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent",
-                    value: "{pattern}",
-                    placeholder: "default question",
-                    oninput: move |evt| pattern.set(evt.value()),
+            p {"attributes"}
+            div {
+                class: "max-h-64 overflow-y-auto",
+                for (_id, mut pattern) in inner_attrs {
+                    input {
+                        class: "bg-white w-full border border-gray-300 rounded-md p-2 mb-4 text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent",
+                        value: "{pattern}",
+                        placeholder: "default question",
+                        oninput: move |evt| pattern.set(evt.value()),
+                    }
                 }
-
             }
+        }
+
+
+        if is_class {
+            button {
+                class: "mt-2 inline-flex items-center text-white bg-gray-800 border-0 py-1 px-3 focus:outline-none hover:bg-gray-700 rounded text-base md:mt-0",
+                onclick: move |_| {
+                    attrs.write().push((AttributeId::new_v4(), Signal::new_in_scope("{}".to_string(), ScopeId::APP)));
+                },
+                "add attribute"
+
+             }
         }
     }
 }
