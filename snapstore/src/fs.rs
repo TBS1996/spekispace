@@ -1,8 +1,10 @@
 use std::{
     collections::{HashMap, HashSet},
+    fmt::Display,
     fs::{self, hard_link},
     hash::Hash,
     io,
+    marker::PhantomData,
     ops::Deref,
     os::unix::fs::symlink,
     path::{Path, PathBuf},
@@ -25,9 +27,10 @@ todo: add tests showing that rebuild and modify will end up with same hash
 */
 
 #[derive(Clone)]
-pub struct CacheFs {
+pub struct CacheFs<K: Display = CacheKey> {
     pub blob_path: Arc<PathBuf>,
     pub key_components: usize,
+    _phantom: PhantomData<K>,
 }
 
 impl CacheFs {
@@ -35,11 +38,10 @@ impl CacheFs {
         let blob_path = Arc::new(root.join("blobs"));
         fs::create_dir_all(&*blob_path).unwrap();
 
-        
-
         Self {
             blob_path,
             key_components,
+            _phantom: PhantomData,
         }
     }
 
@@ -346,8 +348,6 @@ impl SnapFs {
     pub fn new(root: PathBuf) -> Self {
         let blob_path = Arc::new(root.join("blobs"));
         fs::create_dir_all(&*blob_path).unwrap();
-
-        
 
         Self { blob_path }
     }

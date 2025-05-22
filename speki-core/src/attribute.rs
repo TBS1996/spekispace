@@ -1,3 +1,5 @@
+use std::collections::{HashMap, HashSet};
+
 use ledgerstore::{LedgerEvent, LedgerItem};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -73,6 +75,10 @@ impl LedgerItem<AttrEvent> for Attribute {
         }
 
         Ok(self)
+    }
+
+    fn ref_cache(&self) -> HashMap<Self::RefType, HashSet<AttributeId>> {
+        todo!()
     }
 
     fn new_default(id: AttributeId) -> Self {

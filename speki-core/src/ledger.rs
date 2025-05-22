@@ -57,6 +57,7 @@ pub enum CardAction {
     SetBackRef(CardId),
     DeleteCard,
     SetDefaultQuestion(Option<String>),
+    SetNamespace(Option<CardId>),
 }
 
 pub enum HistoryEvent {

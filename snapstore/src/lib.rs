@@ -80,7 +80,7 @@ pub type CacheHash = Hashed;
 /// The added paths used for garbage collection.
 pub type HashAndContents = (Hashed, Vec<Content>);
 
-use std::fmt::Debug;
+use std::fmt::{Debug, Display};
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::{
@@ -110,12 +110,14 @@ pub enum CacheKey {
     ItemRef(RefCacheKey),
 }
 
-impl CacheKey {
-    pub fn to_string(&self) -> String {
-        match self {
+impl Display for CacheKey {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let s = match self {
             Self::Property(PropertyCacheKey { property, value }) => format!("{property}:{value}"),
             Self::ItemRef(RefCacheKey { reftype, id }) => format!("{reftype}:{id}"),
-        }
+        };
+
+        write!(f, "{}", s)
     }
 }
 

@@ -115,6 +115,7 @@ pub use basecard::*;
 #[derive(Clone)]
 pub struct Card {
     id: CardId,
+    namespace: Option<CardId>,
     front_audio: Option<Audio>,
     back_audio: Option<Audio>,
     name: EvalText,
@@ -318,10 +319,22 @@ impl Card {
             }
         };
 
-        let frontside = base.data.display_front(&card_provider);
+        let mut frontside = base.data.display_front(&card_provider);
+
+        if let Some(namespace) = base.namespace {
+            let txt = TextLink::new(namespace);
+            frontside
+                .inner_mut()
+                .insert(0, Either::Left(": ".to_string()));
+            frontside.inner_mut().insert(0, Either::Right(txt));
+        }
+
+        let frontside = EvalText::from_textdata(frontside, &card_provider);
+
         let name = EvalText::from_textdata(base.data.name(&card_provider), &card_provider);
 
         Self {
+            namespace: base.namespace,
             id,
             frontside,
             base,
@@ -334,6 +347,10 @@ impl Card {
             front_audio,
             back_audio,
         }
+    }
+
+    pub fn namespace(&self) -> Option<CardId> {
+        self.namespace
     }
 
     pub fn is_finished(&self) -> bool {

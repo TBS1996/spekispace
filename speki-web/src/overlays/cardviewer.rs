@@ -25,6 +25,46 @@ use crate::{
     APP, IS_SHORT,
 };
 
+#[component]
+pub fn CardViewerRender(props: CardViewer) -> Element {
+    info!("render cardviewer");
+
+    let old_card: Option<CardId> = props.old_card.read().as_ref().map(|c| c.id());
+
+    let history = {
+        if let Some(card) = props.old_card.cloned() {
+            card.history().clone()
+        } else {
+            speki_core::recall_rate::History::new(Default::default())
+        }
+    };
+
+    let now = APP.read().inner().time_provider.current_time();
+
+    rsx! {
+        div {
+            class: "flex-none p-2 box-border order-2",
+            DisplayHistory { history, now }
+            RenderInputs {
+                editor:props.editor.clone(),
+                dependents:props.dependents.clone(),
+                graph:props.graph.clone(),
+                save_hook:props.save_hook.clone(),
+                is_done:props.is_done.clone(),
+                old_card:props.old_card.clone(),
+                old_meta:props.old_meta.clone(),
+                tempnode:props.tempnode.clone(),
+                overlay:props.overlay.clone(),
+            }
+
+            RenderDependencies { card_text: props.editor.front.text.clone(), card_id: old_card, dependencies: props.editor.dependencies.clone(), overlay: props.overlay.clone()}
+            if let Some(card_id) = old_card {
+                RenderDependents { card_id, overlay: props.overlay.clone(), hidden: false}
+            }
+        }
+    }
+}
+
 /// Abstraction over a card that might exist or not yet.
 /// like when you add a new dependency and before you save it you add a dependency to that again
 /// then we need a way to represent on the graph the prev card even tho it's not saved
@@ -100,6 +140,7 @@ fn refresh_graph(
 /// while the careditor can always be in an unfinished state
 pub struct CardRep {
     ty: CardType,
+    namespace: Option<CardId>,
     front_audio: Option<AudioId>,
     back_audio: Option<AudioId>,
     deps: Vec<CardId>,
@@ -109,6 +150,7 @@ pub struct CardRep {
 #[derive(Props, Clone)]
 pub struct CardEditor {
     pub front: FrontPut,
+    namespace: CardRef,
     back: BackPut,
     default_question: Signal<String>,
     concept: CardRef,
@@ -175,6 +217,7 @@ impl CardEditor {
 
         Some(CardRep {
             ty,
+            namespace: self.namespace.selected_card().cloned(),
             front_audio: self.front.audio.cloned().map(|audio| audio.id),
             back_audio: self.back.audio.cloned().map(|audio| audio.id),
             deps: self
@@ -427,6 +470,17 @@ impl CardViewer {
                 concept
             };
 
+            let namespace = {
+                let namespace = CardRef::new();
+
+                if let Some(card) = card.read().namespace() {
+                    let card = APP.read().load_card(card).await;
+                    namespace.set_ref(card);
+                }
+
+                namespace
+            };
+
             let dependencies: Signal<Vec<Signal<Card>>> = Signal::new_in_scope(
                 card.read()
                     .dependencies()
@@ -465,6 +519,7 @@ impl CardViewer {
 
             CardEditor {
                 front,
+                namespace,
                 back: bck,
                 concept,
                 dependencies,
@@ -518,6 +573,7 @@ impl CardViewer {
 
             CardEditor {
                 front,
+                namespace: CardRef::new(),
                 back,
                 concept,
                 dependencies,
@@ -579,6 +635,7 @@ impl CardViewer {
 fn RenderInputs(props: CardViewer) -> Element {
     info!("render inputs");
     let ty = props.editor.front.dropdown.selected.clone();
+    let card_id = props.old_card.read().as_ref().map(|c| c.id());
 
     rsx! {
         div {
@@ -589,6 +646,8 @@ fn RenderInputs(props: CardViewer) -> Element {
                 concept: props.editor.concept.clone(),
                 overlay: props.overlay.clone(),
                 ty: ty.cloned(),
+                card_id,
+                namespace: props.editor.namespace.clone(),
             }
         }
         div {
@@ -612,11 +671,29 @@ fn InputElements(
     concept: CardRef,
     overlay: Signal<Option<OverlayEnum>>,
     ty: CardTy,
+    card_id: Option<CardId>,
+    namespace: CardRef,
 ) -> Element {
     let is_short = IS_SHORT.cloned();
 
     rsx! {
         FrontPutRender { dropdown: front.dropdown.clone(), text: front.text.clone(), audio: front.audio.clone(), overlay: overlay.clone() }
+
+        div {
+            class: "block text-gray-700 text-sm font-medium mb-2",
+            style: "margin-right: 82px;",
+
+            CardRefRender{
+                card_display: namespace.display.clone(),
+                selected_card: namespace.card.clone(),
+                placeholder: "choose namespace",
+                on_select: namespace.on_select.clone(),
+                on_deselect: namespace.on_deselect.clone(),
+                dependent: namespace.dependent.clone(),
+                allowed: namespace.allowed.clone(),
+                overlay: overlay.clone(),
+            },
+        }
 
         match ty {
             CardTy::Unfinished => rsx! {},
@@ -647,40 +724,21 @@ fn InputElements(
                     oninput: move |evt| default_question.set(evt.value()),
                 }
 
+                div {
+                    class: "block text-gray-700 text-sm font-medium mb-2",
+                    style: "margin-right: 82px;",
+                    "Parent class"
 
-                if !is_short {
-                    div {
-                        class: "block text-gray-700 text-sm font-medium mb-2",
-                        style: "margin-right: 82px;",
-                        "Parent class"
-
-                        CardRefRender{
-                            card_display: concept.display.clone(),
-                            selected_card: concept.card.clone(),
-                            placeholder: "pick parent class",
-                            on_select: concept.on_select.clone(),
-                            on_deselect: concept.on_deselect.clone(),
-                            dependent: concept.dependent.clone(),
-                            allowed: concept.allowed.clone(),
-                            overlay: overlay.clone(),
-                        },
-                    }
-                } else {
-                    div {
-                        class: "block text-gray-700 text-sm font-medium",
-                        style: "margin-right: 81px;",
-
-                        CardRefRender{
-                            card_display: concept.display.clone(),
-                            selected_card: concept.card.clone(),
-                            placeholder: "pick parent class",
-                            on_select: concept.on_select.clone(),
-                            on_deselect: concept.on_deselect.clone(),
-                            dependent: concept.dependent.clone(),
-                            allowed: concept.allowed.clone(),
-                    overlay: overlay.clone(),
-                        },
-                    }
+                    CardRefRender{
+                        card_display: concept.display.clone(),
+                        selected_card: concept.card.clone(),
+                        placeholder: "pick parent class",
+                        on_select: concept.on_select.clone(),
+                        on_deselect: concept.on_deselect.clone(),
+                        dependent: concept.dependent.clone(),
+                        allowed: concept.allowed.clone(),
+                        overlay: overlay.clone(),
+                    },
                 }
             },
             CardTy::Instance => rsx! {
@@ -761,46 +819,6 @@ fn DisplayHistory(history: MyHistory, now: Duration) -> Element {
 
     rsx! {
         p{"{output}"}
-    }
-}
-
-#[component]
-pub fn CardViewerRender(props: CardViewer) -> Element {
-    info!("render cardviewer");
-
-    let old_card: Option<CardId> = props.old_card.read().as_ref().map(|c| c.id());
-
-    let history = {
-        if let Some(card) = props.old_card.cloned() {
-            card.history().clone()
-        } else {
-            speki_core::recall_rate::History::new(Default::default())
-        }
-    };
-
-    let now = APP.read().inner().time_provider.current_time();
-
-    rsx! {
-        div {
-            class: "flex-none p-2 box-border order-2",
-            DisplayHistory { history, now }
-            RenderInputs {
-                editor:props.editor.clone(),
-                dependents:props.dependents.clone(),
-                graph:props.graph.clone(),
-                save_hook:props.save_hook.clone(),
-                is_done:props.is_done.clone(),
-                old_card:props.old_card.clone(),
-                old_meta:props.old_meta.clone(),
-                tempnode:props.tempnode.clone(),
-                overlay:props.overlay.clone(),
-            }
-
-            RenderDependencies { card_text: props.editor.front.text.clone(), card_id: old_card, dependencies: props.editor.dependencies.clone(), overlay: props.overlay.clone()}
-            if let Some(card_id) = old_card {
-                RenderDependents { card_id, overlay: props.overlay.clone(), hidden: false}
-            }
-        }
     }
 }
 
@@ -889,6 +907,7 @@ fn save_button(CardViewer: CardViewer) -> Element {
                         events.push(CardEvent::new(id, CardAction::UpsertCard(card.ty)));
                         events.push(CardEvent::new(id, CardAction::SetFrontAudio (card.front_audio)));
                         events.push(CardEvent::new(id, CardAction::SetBackAudio ( card.back_audio)));
+                        events.push(CardEvent::new(id, CardAction::SetNamespace ( card.namespace)));
 
                         for dep in card.deps {
                             events.push(CardEvent::new(id, CardAction::AddDependency(dep)));

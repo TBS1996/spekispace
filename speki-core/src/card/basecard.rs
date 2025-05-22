@@ -150,6 +150,12 @@ pub struct TextLink {
     pub alias: Option<String>,
 }
 
+impl TextLink {
+    pub fn new(id: CardId) -> Self {
+        Self { id, alias: None }
+    }
+}
+
 impl Serialize for TextData {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
@@ -332,7 +338,7 @@ impl CardType {
         }
     }
 
-    pub fn display_front(&self, provider: &CardProvider) -> EvalText {
+    pub fn display_front(&self, provider: &CardProvider) -> TextData {
         match self {
             CardType::Instance {
                 name, class, back, ..
@@ -358,21 +364,21 @@ impl CardType {
                 match default_question {
                     Some(q) => {
                         let s = q.evaluate(provider).replace("{}", thename);
-                        EvalText::just_some_string(s, provider)
+                        TextData::from_raw(&s)
                     }
 
                     None => {
                         if back.is_some() {
                             let s = format!("{thename} ({class_name})");
-                            EvalText::just_some_string(s, provider)
+                            TextData::from_raw(&s)
                         } else {
-                            EvalText::from_textdata(name.clone(), provider)
+                            name.clone()
                         }
                     }
                 }
             }
-            CardType::Normal { front, .. } => EvalText::from_textdata(front.clone(), provider),
-            CardType::Unfinished { front, .. } => EvalText::from_textdata(front.clone(), provider),
+            CardType::Normal { front, .. } => front.clone(),
+            CardType::Unfinished { front, .. } => front.clone(),
             CardType::Attribute {
                 attribute,
                 instance,
@@ -385,7 +391,7 @@ impl CardType {
                     .unwrap();
 
                 let f = attr.name(*instance, provider.clone());
-                EvalText::just_some_string(f, provider)
+                TextData::from_raw(&f)
             }
             CardType::Class {
                 name, parent_class, ..
@@ -394,12 +400,12 @@ impl CardType {
                     let parent = provider.load(*class).unwrap().name_textdata();
                     let mut name = name.clone();
                     name.extend(parent.clone());
-                    EvalText::from_textdata(name, provider)
+                    name
                 }
-                None => EvalText::from_textdata(name.clone(), provider),
+                None => name.clone(),
             },
-            CardType::Statement { front, .. } => EvalText::from_textdata(front.clone(), provider),
-            CardType::Event { front, .. } => EvalText::from_textdata(front.clone(), provider),
+            CardType::Statement { front, .. } => front.clone(),
+            CardType::Event { front, .. } => front.clone(),
         }
     }
 
@@ -442,6 +448,10 @@ impl CardType {
 #[derive(Serialize, Deserialize, Debug, Clone, Hash)]
 pub struct RawCard {
     pub id: Uuid,
+    /// The context of which the name of the card makes sense. For example, instead of writing `kubernetes node`, you can just
+    /// write `node` and put kubernetes as the namespace. This avoids unnecessarily long names for disambiguation.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub namespace: Option<CardId>,
     pub data: CardType,
     #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
     pub dependencies: BTreeSet<Uuid>,
@@ -759,6 +769,7 @@ impl LedgerItem<CardEvent> for RawCard {
     fn new_default(id: CardId) -> Self {
         Self {
             id,
+            namespace: None,
             data: CardType::Normal {
                 front: TextData::from_raw("uninit"),
                 back: BackSide::Text("uninit".to_string().into()),
@@ -791,6 +802,9 @@ impl LedgerItem<CardEvent> for RawCard {
                     self.data = ty;
                 }
                 CardAction::DeleteCard => {}
+                CardAction::SetNamespace(ns) => {
+                    self.namespace = ns;
+                }
                 CardAction::AddDependency(dependency) => {
                     self.dependencies.insert(dependency);
                 }
