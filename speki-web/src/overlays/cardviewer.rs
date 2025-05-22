@@ -2,6 +2,7 @@ use std::{sync::Arc, time::Duration};
 
 use dioxus::prelude::*;
 use speki_core::{
+    attribute::RefAttr,
     audio::AudioId,
     card::{CardId, TextData},
     ledger::{CardAction, CardEvent},
@@ -675,6 +676,21 @@ fn InputElements(
     namespace: CardRef,
 ) -> Element {
     let is_short = IS_SHORT.cloned();
+
+    let attrs: Vec<speki_core::Attribute> = match card_id {
+        Some(id) => {
+            let ledger = APP.read().inner().provider.attrs.clone();
+
+            ledger
+                .get_ref_cache(RefAttr::Class, id)
+                .into_iter()
+                .map(|attr_id| ledger.load(&attr_id).unwrap())
+                .collect()
+        }
+        None => vec![],
+    };
+
+    dbg!(&attrs);
 
     rsx! {
         FrontPutRender { dropdown: front.dropdown.clone(), text: front.text.clone(), audio: front.audio.clone(), overlay: overlay.clone() }

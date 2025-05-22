@@ -106,7 +106,7 @@ impl LedgerItem<AttrEvent> for Attribute {
         let mut set: HashMap<Self::RefType, HashSet<AttributeId>> = Default::default();
         set.insert(RefAttr::Class, [self.class].into_iter().collect());
         set.insert(RefAttr::Back, self.back_type.into_iter().collect());
-        todo!()
+        set
     }
 
     fn new_default(id: AttributeId) -> Self {
