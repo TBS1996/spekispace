@@ -5,7 +5,7 @@ use cardfilter::CardFilter;
 use collection::{Collection, CollectionId};
 use dioxus_logger::tracing::info;
 use ledger::{CardAction, CardEvent, CollectionEvent, Event, MetaEvent};
-use ledgerstore::{CacheKey, RefCacheKey};
+use ledgerstore::CacheKey;
 use ledgerstore::{Ledger, TimeProvider};
 use metadata::Metadata;
 use recall_rate::{History, ReviewEvent};
@@ -64,10 +64,10 @@ impl RefType {
 
 impl From<DepCacheKey> for CacheKey {
     fn from(value: DepCacheKey) -> Self {
-        CacheKey::ItemRef(RefCacheKey {
+        CacheKey::ItemRef {
             reftype: value.ty.to_str().to_owned(),
             id: value.id.to_string(),
-        })
+        }
     }
 }
 

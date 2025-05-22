@@ -90,31 +90,17 @@ use std::{
 
 use fs::Content;
 
-/// A key used to get all the items whose `property` matches `value`.
 #[derive(Debug, Clone, Hash, Eq, PartialEq, Ord, PartialOrd)]
-pub struct PropertyCacheKey {
-    pub property: String,
-    pub value: String,
-}
-
-/// A key used to get all items who references current item with reference type `reftype`.
-#[derive(Debug, Clone, Hash, Eq, PartialEq, Ord, PartialOrd)]
-pub struct RefCacheKey {
-    pub reftype: String,
-    pub id: String,
-}
-
-#[derive(Debug, Clone, Hash, Eq, PartialEq, Ord, PartialOrd)]
-pub enum CacheKey {
-    Property(PropertyCacheKey),
-    ItemRef(RefCacheKey),
+pub enum CacheKey<PK: Display + Clone = String, RK: Display + Clone = String> {
+    Property { property: PK, value: String },
+    ItemRef { reftype: RK, id: String },
 }
 
 impl Display for CacheKey {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let s = match self {
-            Self::Property(PropertyCacheKey { property, value }) => format!("{property}:{value}"),
-            Self::ItemRef(RefCacheKey { reftype, id }) => format!("{reftype}:{id}"),
+            Self::Property { property, value } => format!("{property}:{value}"),
+            Self::ItemRef { reftype, id } => format!("{reftype}:{id}"),
         };
 
         write!(f, "{}", s)

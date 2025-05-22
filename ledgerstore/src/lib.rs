@@ -20,7 +20,7 @@ use uuid::Uuid;
 
 pub mod ledger_cache;
 
-pub use snapstore::{CacheKey, PropertyCacheKey, RefCacheKey};
+pub use snapstore::CacheKey;
 
 /// Represents a single event in the ledger.
 pub trait LedgerEvent:
@@ -81,21 +81,24 @@ pub trait LedgerItem<E: LedgerEvent + Debug>:
         let id = self.item_id().to_string();
 
         for (property, value) in self.properties_cache(ledger) {
-            let key = PropertyCacheKey {
-                property: property.as_ref().to_owned(),
-                value,
-            };
-            out.insert((CacheKey::Property(key), id.clone()));
+            out.insert((
+                CacheKey::Property {
+                    property: property.as_ref().to_string(),
+                    value,
+                },
+                id.clone(),
+            ));
         }
 
         for (reftype, ids) in self.ref_cache() {
             for ref_id in ids {
-                let key = RefCacheKey {
-                    reftype: reftype.as_ref().to_owned(),
-                    id: ref_id.to_string(),
-                };
-
-                out.insert((CacheKey::ItemRef(key.clone()), id.to_string()));
+                out.insert((
+                    CacheKey::ItemRef {
+                        reftype: reftype.as_ref().to_string(),
+                        id: ref_id.to_string(),
+                    },
+                    id.to_string(),
+                ));
             }
         }
 
@@ -507,19 +510,19 @@ impl<T: LedgerItem<E>, E: LedgerEvent> Ledger<T, E> {
     }
 
     pub fn get_prop_cache(&self, key: T::PropertyType, value: String) -> Vec<String> {
-        let key = CacheKey::Property(PropertyCacheKey {
+        let key = CacheKey::Property {
             property: key.as_ref().to_string(),
             value,
-        });
+        };
 
         self.get_cache(key)
     }
 
     pub fn get_ref_cache(&self, key: T::RefType, id: E::Key) -> Vec<String> {
-        let key = CacheKey::ItemRef(RefCacheKey {
+        let key = CacheKey::ItemRef {
             reftype: key.as_ref().to_string(),
             id: id.to_string(),
-        });
+        };
 
         self.get_cache(key)
     }

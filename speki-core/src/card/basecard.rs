@@ -14,6 +14,7 @@ use std::collections::{HashMap, HashSet};
 
 pub type CardId = Uuid;
 
+/// Text which might contain card references.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Default, Ord, PartialOrd)]
 pub struct TextData(Vec<Either<String, TextLink>>);
 

@@ -1,7 +1,11 @@
-use std::collections::{HashMap, HashSet};
+use std::{
+    collections::{HashMap, HashSet},
+    fmt::Display,
+};
 
 use ledgerstore::{LedgerEvent, LedgerItem};
 use serde::{Deserialize, Serialize};
+use tracing::Instrument;
 use uuid::Uuid;
 
 use crate::{card::CardId, card_provider::CardProvider};
@@ -58,9 +62,30 @@ impl LedgerEvent for AttrEvent {
     }
 }
 
+#[derive(Clone, Debug, Copy, Hash, Eq, PartialEq)]
+pub enum RefAttr {
+    Class,
+    Back,
+}
+
+impl Display for RefAttr {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.as_ref())
+    }
+}
+
+impl AsRef<str> for RefAttr {
+    fn as_ref(&self) -> &str {
+        match self {
+            RefAttr::Class => "class",
+            RefAttr::Back => "back",
+        }
+    }
+}
+
 impl LedgerItem<AttrEvent> for Attribute {
     type Error = ();
-    type RefType = String;
+    type RefType = RefAttr;
     type PropertyType = String;
 
     fn run_event(mut self, event: AttrEvent) -> Result<Self, Self::Error> {
@@ -78,6 +103,9 @@ impl LedgerItem<AttrEvent> for Attribute {
     }
 
     fn ref_cache(&self) -> HashMap<Self::RefType, HashSet<AttributeId>> {
+        let mut set: HashMap<Self::RefType, HashSet<AttributeId>> = Default::default();
+        set.insert(RefAttr::Class, [self.class].into_iter().collect());
+        set.insert(RefAttr::Back, self.back_type.into_iter().collect());
         todo!()
     }
 
