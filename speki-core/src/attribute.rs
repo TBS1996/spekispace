@@ -50,8 +50,8 @@ pub enum AttrAction {
 
 #[derive(Serialize, Deserialize, Clone, Debug, Hash)]
 pub struct AttrEvent {
-    id: AttributeId,
-    action: AttrAction,
+    pub id: AttributeId,
+    pub action: AttrAction,
 }
 
 impl LedgerEvent for AttrEvent {

@@ -1,12 +1,12 @@
-use std::{sync::Arc, time::Duration};
+use std::{collections::HashMap, sync::Arc, time::Duration};
 
 use dioxus::prelude::*;
 use speki_core::{
-    attribute::RefAttr,
+    attribute::{AttrAction, AttrEvent, RefAttr},
     audio::AudioId,
     card::{CardId, TextData},
     ledger::{CardAction, CardEvent},
-    Card, CardType,
+    AttributeId, Card, CardType,
 };
 
 use speki_web::{Node, NodeId, NodeMetadata};
@@ -145,6 +145,7 @@ pub struct CardRep {
     front_audio: Option<AudioId>,
     back_audio: Option<AudioId>,
     deps: Vec<CardId>,
+    attrs: HashMap<AttributeId, String>,
 }
 
 /// container for all the structs you edit while creating/modifying a card
@@ -157,6 +158,7 @@ pub struct CardEditor {
     concept: CardRef,
     dependencies: Signal<Vec<Signal<Card>>>,
     allowed_cards: Vec<CardTy>,
+    attrs: Vec<(AttributeId, Signal<String>)>,
 }
 
 impl CardEditor {
@@ -218,6 +220,11 @@ impl CardEditor {
 
         Some(CardRep {
             ty,
+            attrs: self
+                .attrs
+                .into_iter()
+                .map(|(id, pattern)| (id, pattern.cloned()))
+                .collect(),
             namespace: self.namespace.selected_card().cloned(),
             front_audio: self.front.audio.cloned().map(|audio| audio.id),
             back_audio: self.back.audio.cloned().map(|audio| audio.id),
@@ -471,6 +478,25 @@ impl CardViewer {
                 concept
             };
 
+            let attrs: Vec<(AttributeId, Signal<String>)> = if card.read().is_class() {
+                let ledger = APP.read().inner().provider.attrs.clone();
+
+                let attrs: Vec<speki_core::Attribute> = ledger
+                    .get_ref_cache(RefAttr::Class, card.read().id())
+                    .into_iter()
+                    .map(|attr_id| ledger.load(&attr_id).unwrap())
+                    .collect();
+
+                let mut map: Vec<(AttributeId, Signal<String>)> = Default::default();
+
+                for attr in attrs {
+                    map.push((attr.id, Signal::new_in_scope(attr.pattern, ScopeId::APP)));
+                }
+                map
+            } else {
+                Default::default()
+            };
+
             let namespace = {
                 let namespace = CardRef::new();
 
@@ -520,6 +546,7 @@ impl CardViewer {
 
             CardEditor {
                 front,
+                attrs,
                 namespace,
                 back: bck,
                 concept,
@@ -580,6 +607,7 @@ impl CardViewer {
                 dependencies,
                 allowed_cards: vec![],
                 default_question: Signal::new_in_scope(String::new(), ScopeId::APP),
+                attrs: Default::default(),
             }
         };
 
@@ -649,6 +677,7 @@ fn RenderInputs(props: CardViewer) -> Element {
                 ty: ty.cloned(),
                 card_id,
                 namespace: props.editor.namespace.clone(),
+                attrs: props.editor.attrs.clone(),
             }
         }
         div {
@@ -674,21 +703,11 @@ fn InputElements(
     ty: CardTy,
     card_id: Option<CardId>,
     namespace: CardRef,
+    attrs: Vec<(AttributeId, Signal<String>)>,
 ) -> Element {
     let is_short = IS_SHORT.cloned();
 
-    let attrs: Vec<speki_core::Attribute> = match card_id {
-        Some(id) => {
-            let ledger = APP.read().inner().provider.attrs.clone();
-
-            ledger
-                .get_ref_cache(RefAttr::Class, id)
-                .into_iter()
-                .map(|attr_id| ledger.load(&attr_id).unwrap())
-                .collect()
-        }
-        None => vec![],
-    };
+    let has_attrs = !attrs.is_empty();
 
     dbg!(&attrs);
 
@@ -799,6 +818,18 @@ fn InputElements(
                     }
                 }
             },
+        }
+
+        if has_attrs {
+            for (_id, mut pattern) in attrs {
+                input {
+                    class: "bg-white w-full border border-gray-300 rounded-md p-2 mb-4 text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent",
+                    value: "{pattern}",
+                    placeholder: "default question",
+                    oninput: move |evt| pattern.set(evt.value()),
+                }
+
+            }
         }
     }
 }
@@ -938,6 +969,13 @@ fn save_button(CardViewer: CardViewer) -> Element {
 
                         for event in events {
                             APP.read().inner().provider.cards.insert_ledger(event);
+                        }
+
+                        for (attr, pattern) in card.attrs.into_iter() {
+                            APP.read().inner().provider.attrs.insert_ledger(AttrEvent{
+                                id: attr,
+                                action: AttrAction::UpSert { pattern, class: id},
+                            });
                         }
 
                         let card = APP.read().inner().card_provider().load(id).unwrap();
