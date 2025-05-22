@@ -26,14 +26,16 @@ todo: add tests showing that rebuild and modify will end up with same hash
 
 */
 
+//pub enum CacheKey<> {
+
 #[derive(Clone)]
-pub struct CacheFs<K: Display = CacheKey> {
+pub struct CacheFs<PK: Display + Clone = String, RK: Display + Clone = String> {
     pub blob_path: Arc<PathBuf>,
     pub key_components: usize,
-    _phantom: PhantomData<K>,
+    _phantom: PhantomData<(PK, RK)>,
 }
 
-impl CacheFs {
+impl<PK: Display + Clone, RK: Display + Clone> CacheFs<PK, RK> {
     pub fn new(root: PathBuf, key_components: usize) -> Self {
         let blob_path = Arc::new(root.join("blobs"));
         fs::create_dir_all(&*blob_path).unwrap();
@@ -84,7 +86,7 @@ impl CacheFs {
     pub fn save_cache(
         &self,
         gen_hash: Option<&str>,
-        key: &CacheKey,
+        key: &CacheKey<PK, RK>,
         mut items: Vec<String>,
     ) -> HashAndContents {
         items.sort();
@@ -156,7 +158,7 @@ impl CacheFs {
     pub fn remove_cache(
         &self,
         gen_hash: &str,
-        cache_key: &CacheKey,
+        cache_key: &CacheKey<PK, RK>,
         item: &str,
     ) -> HashAndContents {
         let mut prev_items: HashSet<String> =
@@ -180,7 +182,7 @@ impl CacheFs {
         self.save_on_gen(key, Some(gen_hash), &item_hash)
     }
 
-    pub fn get_cache(&self, gen_hash: &str, cache_key: &CacheKey) -> Vec<String> {
+    pub fn get_cache(&self, gen_hash: &str, cache_key: &CacheKey<PK, RK>) -> Vec<String> {
         let path = self.full_path(gen_hash, &cache_key.to_string());
         let mut out = vec![];
 

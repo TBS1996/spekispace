@@ -96,7 +96,7 @@ pub enum CacheKey<PK: Display + Clone = String, RK: Display + Clone = String> {
     ItemRef { reftype: RK, id: String },
 }
 
-impl Display for CacheKey {
+impl<PK: Clone + Display, RK: Clone + Display> Display for CacheKey<PK, RK> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let s = match self {
             Self::Property { property, value } => format!("{property}:{value}"),

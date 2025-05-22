@@ -3,6 +3,7 @@ use serde::{Deserialize, Deserializer, Serialize, de::DeserializeOwned};
 use simpletime::timed;
 use snapstore::fs::{CacheFs, Content, SnapFs};
 use snapstore::{Key, SnapStorage};
+use std::fmt::Display;
 use std::fs::{self};
 use std::io::Write;
 use std::os::unix::fs::symlink;
@@ -42,8 +43,8 @@ pub trait LedgerItem<E: LedgerEvent + Debug>:
     Serialize + DeserializeOwned + Hash + 'static
 {
     type Error: Debug;
-    type RefType: AsRef<str>;
-    type PropertyType: AsRef<str>;
+    type RefType: AsRef<str> + Display + Clone + Hash + PartialEq + Eq;
+    type PropertyType: AsRef<str> + Display + Clone + Hash + PartialEq + Eq;
 
     fn run_event(self, event: E) -> Result<Self, Self::Error>;
 
@@ -71,30 +72,28 @@ pub trait LedgerItem<E: LedgerEvent + Debug>:
         Default::default()
     }
 
-    fn caches(&self, ledger: CacheGetter<Self>) -> HashSet<(CacheKey, String)>
+    fn caches(
+        &self,
+        ledger: CacheGetter<Self>,
+    ) -> HashSet<(CacheKey<Self::PropertyType, Self::RefType>, String)>
     where
         Self: LedgerItem<E>,
     {
         trace!("fetching caches for item: {:?}", self.item_id());
 
-        let mut out: HashSet<(CacheKey, String)> = Default::default();
+        let mut out: HashSet<(CacheKey<Self::PropertyType, Self::RefType>, String)> =
+            Default::default();
         let id = self.item_id().to_string();
 
         for (property, value) in self.properties_cache(ledger) {
-            out.insert((
-                CacheKey::Property {
-                    property: property.as_ref().to_string(),
-                    value,
-                },
-                id.clone(),
-            ));
+            out.insert((CacheKey::Property { property, value }, id.clone()));
         }
 
         for (reftype, ids) in self.ref_cache() {
             for ref_id in ids {
                 out.insert((
                     CacheKey::ItemRef {
-                        reftype: reftype.as_ref().to_string(),
+                        reftype: reftype.clone(),
                         id: ref_id.to_string(),
                     },
                     id.to_string(),
@@ -192,7 +191,7 @@ impl<T: DeserializeOwned> Clone for CacheGetter<T> {
 pub struct Ledger<T: LedgerItem<E>, E: LedgerEvent> {
     ledger: Arc<RwLock<Vec<LedgerEntry<E>>>>,
     snap: SnapFs,
-    cache: CacheFs,
+    cache: CacheFs<T::PropertyType, T::RefType>,
     root: Arc<PathBuf>,
     _phantom: PhantomData<T>,
     gc_keep: usize,
@@ -247,7 +246,11 @@ impl<T: LedgerItem<E>, E: LedgerEvent> Ledger<T, E> {
     /// but if you rebuild entire kw store from ledger then updating cache for each gen takes too long
     /// so in htat case it'll just rebuild entire ledger then create a new cache snapshot  from scratch
     /// but in normal mode when one event run at a time it'll update the cachestate incrementally
-    fn get_the_cache(&self, state_hash: &str, cache_key: &CacheKey) -> Vec<Key> {
+    fn get_the_cache(
+        &self,
+        state_hash: &str,
+        cache_key: &CacheKey<T::PropertyType, T::RefType>,
+    ) -> Vec<Key> {
         let Some(cache_hash) = self.get_cache_hash(state_hash) else {
             return vec![];
         };
@@ -265,14 +268,15 @@ impl<T: LedgerItem<E>, E: LedgerEvent> Ledger<T, E> {
 
     /// This will go through the entire state and create a hash for it
     fn rebuild_cache(&self, state_hash: &str) -> Option<CacheHash> {
-        let caches: HashSet<(CacheKey, String)> = self
+        let caches: HashSet<(CacheKey<T::PropertyType, T::RefType>, String)> = self
             .load_all_on_state(state_hash)
             .into_values()
             .flat_map(|item| item.caches(self.cachegetter(state_hash.to_owned())))
             .collect();
 
-        let cache_map: HashMap<CacheKey, Vec<String>> = {
-            let mut cache_map: HashMap<CacheKey, Vec<String>> = Default::default();
+        let cache_map: HashMap<CacheKey<T::PropertyType, T::RefType>, Vec<String>> = {
+            let mut cache_map: HashMap<CacheKey<T::PropertyType, T::RefType>, Vec<String>> =
+                Default::default();
             for (idx, (key, item)) in caches.into_iter().enumerate() {
                 if idx % 1000 == 0 {
                     info!("inserted {}/{}", idx, cache_map.len());
@@ -287,17 +291,18 @@ impl<T: LedgerItem<E>, E: LedgerEvent> Ledger<T, E> {
         for key in cache_map.clone() {
             let stringified = key.0.to_string();
             if !stringied_keys.insert(stringified.clone()) {
-                dbg!(key.0, stringified);
+                //dbg!(key.0, stringified);
                 panic!();
             }
         }
 
-        let mut stringied_keys: HashMap<String, CacheKey> = Default::default();
+        let mut stringied_keys: HashMap<String, CacheKey<T::PropertyType, T::RefType>> =
+            Default::default();
 
         for key in cache_map.clone() {
             let stringified = key.0.to_string();
             if let Some(old_key) = stringied_keys.insert(stringified.clone(), key.0.clone()) {
-                dbg!(old_key, key.0, stringified);
+                ///dbg!(old_key, key.0, stringified);
                 panic!();
             }
         }
@@ -315,7 +320,7 @@ impl<T: LedgerItem<E>, E: LedgerEvent> Ledger<T, E> {
                 let before = self.cache.get_cache(cachehash, &key);
                 if !before.is_empty() {
                     dbg!(&before);
-                    dbg!(&key);
+                    //dbg!(&key);
                 }
             }
 
@@ -329,7 +334,7 @@ impl<T: LedgerItem<E>, E: LedgerEvent> Ledger<T, E> {
             retrieved.sort();
 
             if inserted != retrieved {
-                dbg!(&key);
+                //dbg!(&key);
                 dbg!(inserted, retrieved);
             }
         }
@@ -341,8 +346,8 @@ impl<T: LedgerItem<E>, E: LedgerEvent> Ledger<T, E> {
         &self,
         prev_state_hash: Option<&str>,
         next_state_hash: &str,
-        mut insert: Vec<&(CacheKey, String)>,
-        remove: Vec<&(CacheKey, String)>,
+        mut insert: Vec<&(CacheKey<T::PropertyType, T::RefType>, String)>,
+        remove: Vec<&(CacheKey<T::PropertyType, T::RefType>, String)>,
     ) {
         info!("modify cache!");
 
@@ -511,7 +516,7 @@ impl<T: LedgerItem<E>, E: LedgerEvent> Ledger<T, E> {
 
     pub fn get_prop_cache(&self, key: T::PropertyType, value: String) -> Vec<String> {
         let key = CacheKey::Property {
-            property: key.as_ref().to_string(),
+            property: key,
             value,
         };
 
@@ -520,19 +525,19 @@ impl<T: LedgerItem<E>, E: LedgerEvent> Ledger<T, E> {
 
     pub fn get_ref_cache(&self, key: T::RefType, id: E::Key) -> Vec<String> {
         let key = CacheKey::ItemRef {
-            reftype: key.as_ref().to_string(),
+            reftype: key,
             id: id.to_string(),
         };
 
         self.get_cache(key)
     }
 
-    fn get_cache(&self, cache_key: impl Into<CacheKey>) -> Vec<String> {
+    fn get_cache(&self, cache_key: CacheKey<T::PropertyType, T::RefType>) -> Vec<String> {
         let Some(hash) = self.state_hash() else {
             return vec![];
         };
 
-        self.get_the_cache(&hash, &cache_key.into())
+        self.get_the_cache(&hash, &cache_key)
     }
 
     /// Hmm maybe we can have a textfile containg all the paths to keep, like those on every 1000 snapshot, so garbage collection will be esasy
@@ -832,8 +837,10 @@ impl<T: LedgerItem<E>, E: LedgerEvent> Ledger<T, E> {
         let (state_hash, new_contents) = timed!(self.snap.save(state_hash, &id.to_string(), item));
 
         let added_caches = new_caches.difference(&old_cache);
-        let added_caches: Vec<&(CacheKey, String)> = added_caches.collect();
-        let removed_caches: Vec<&(CacheKey, String)> = old_cache.difference(&new_caches).collect();
+        let added_caches: Vec<&(CacheKey<T::PropertyType, T::RefType>, String)> =
+            added_caches.collect();
+        let removed_caches: Vec<&(CacheKey<T::PropertyType, T::RefType>, String)> =
+            old_cache.difference(&new_caches).collect();
 
         info!("done running event, new statehash: {state_hash}");
 

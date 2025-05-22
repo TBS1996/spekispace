@@ -9,6 +9,7 @@ use ledgerstore::CacheKey;
 use ledgerstore::{Ledger, TimeProvider};
 use metadata::Metadata;
 use recall_rate::{History, ReviewEvent};
+use std::fmt::Display;
 use std::{collections::HashMap, fmt::Debug, sync::Arc, time::Duration};
 use tracing::trace;
 
@@ -44,6 +45,12 @@ pub enum RefType {
     AttrClass,
 }
 
+impl Display for RefType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.as_ref())
+    }
+}
+
 impl AsRef<str> for RefType {
     fn as_ref(&self) -> &str {
         match self {
@@ -77,6 +84,12 @@ pub enum CardProperty {
     Suspended,
     CardType,
     AttrId,
+}
+
+impl Display for CardProperty {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.as_ref())
+    }
 }
 
 impl AsRef<str> for CardProperty {
