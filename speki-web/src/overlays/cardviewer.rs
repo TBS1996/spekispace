@@ -615,7 +615,7 @@ impl CardViewer {
                 dependencies,
                 allowed_cards: vec![],
                 default_question: Signal::new_in_scope(String::new(), ScopeId::APP),
-                attrs: Default::default(),
+                attrs: Signal::new_in_scope(Default::default(), ScopeId::APP),
             }
         };
 
