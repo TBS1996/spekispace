@@ -9,13 +9,15 @@ use either::Either;
 use speki_core::{
     attribute::{AttrAction, AttrEvent, RefAttr},
     audio::AudioId,
-    card::{Attrv2, CardId, TextData},
+    card::{Attrv2, BackSide, CardId, TextData},
+    collection::DynCard,
     ledger::{CardAction, CardEvent},
     AttributeId, Card, CardProperty, CardType, RefType,
 };
 
 use speki_web::{Node, NodeId, NodeMetadata};
 use tracing::info;
+use uuid::Uuid;
 
 use crate::{
     components::{
@@ -140,6 +142,11 @@ fn refresh_graph(
     graph.new_set_card_rep(node, dependencies.cloned(), dependents.cloned());
 }
 
+struct AttrRep {
+    id: AttributeId,
+    answer: BackSide,
+}
+
 /// All th einfo needed to create the actual card, similar to the cardeditor struct
 /// except that this is guaranteed to have all the info needed to create a card
 /// while the careditor can always be in an unfinished state
@@ -150,6 +157,7 @@ pub struct CardRep {
     back_audio: Option<AudioId>,
     deps: Vec<CardId>,
     attrs: HashMap<AttributeId, (String, Option<CardId>)>,
+    answered_attrs: Vec<AttrAnswer>,
 }
 
 #[derive(Clone, Debug)]
@@ -158,15 +166,16 @@ enum AttrAnswer {
     /// answer can be modified but not changed
     Old {
         id: CardId,
+        attr_id: AttributeId,
         question: String,
-        answer: Signal<BackPut>,
+        answer: Either<BackPut, CardRef>,
     },
     /// There's not already one, so you can create it.
     /// the id now referes the attribute not the card.
     New {
-        attr_id: AttributeId,
+        attr_id: Attrv2,
         question: String,
-        answer: Signal<Option<BackPut>>,
+        answer: Signal<Option<Either<BackPut, CardRef>>>,
     },
 }
 
@@ -178,13 +187,20 @@ impl PartialEq for AttrAnswer {
                     id: l_id,
                     question: l_question,
                     answer: l_answer,
+                    attr_id: l_attr_id,
                 },
                 Self::Old {
                     id: r_id,
                     question: r_question,
                     answer: r_answer,
+                    attr_id: r_attr_id,
                 },
-            ) => l_id == r_id && l_question == r_question && l_answer == r_answer,
+            ) => {
+                l_id == r_id
+                    && l_question == r_question
+                    && l_answer == r_answer
+                    && l_attr_id == r_attr_id
+            }
             (
                 Self::New {
                     attr_id: l_attr_id,
@@ -313,6 +329,7 @@ impl CardEditor {
                     }
                 })
                 .collect(),
+            answered_attrs: self.attr_answers.cloned(),
             namespace: self.namespace.selected_card().cloned(),
             front_audio: self.front.audio.cloned().map(|audio| audio.id),
             back_audio: self.back.audio.cloned().map(|audio| audio.id),
@@ -514,7 +531,12 @@ impl CardViewer {
         })
     }
 
-    pub async fn new_from_card(card: Signal<Card>, graph: GraphRep) -> Self {
+    pub async fn new_from_card(mut card: Signal<Card>, graph: GraphRep) -> Self {
+        if card.read().is_attribute() {
+            let instance = card.read().attribute_instance();
+            card = APP.read().load_card_sync(instance);
+        }
+
         let tempnode = TempNode::Old(card.read().id());
 
         let raw_ty = card.read().clone_base();
@@ -570,8 +592,6 @@ impl CardViewer {
             let attrs = if card.read().is_instance() {
                 let curr_card = card.clone();
 
-                let classes = curr_card.read().attributes();
-
                 let mut attrs: Vec<Attrv2> = curr_card.read().attributes().unwrap_or_default();
 
                 let provider = APP.read().inner().card_provider.clone();
@@ -594,12 +614,32 @@ impl CardViewer {
                 let mut output: Vec<AttrAnswer> = vec![];
 
                 for card in attr_cards_based_on_instance {
+                    let attr_id = card.attr_id().unwrap();
+                    let instance = card.attribute_instance();
+                    let instance = APP.read().inner().card_provider.load(instance).unwrap();
+                    let attr = instance.get_attr(attr_id).unwrap();
+
+                    let answer = match attr.back_type {
+                        Some(card_id) => {
+                            let selected_card = card.back_side().unwrap().as_card().unwrap();
+                            let filter = DynCard::Instances(card_id);
+                            let mut cref = CardRef::new();
+                            cref.filter = Some(vec![filter]);
+                            cref.set_ref_id(selected_card);
+                            Either::Right(cref)
+                        }
+                        None => {
+                            let b = BackPut::new(card.clone_base().data.backside().cloned());
+                            Either::Left(b)
+                        }
+                    };
+
                     let question = card.front_side().to_string();
-                    let answer = BackPut::new(card.clone_base().data.backside().cloned());
                     let val = AttrAnswer::Old {
+                        attr_id: card.attr_id().unwrap(),
                         id: card.id(),
                         question,
-                        answer: Signal::new_in_scope(answer, ScopeId::APP),
+                        answer,
                     };
                     output.push(val);
                 }
@@ -610,7 +650,7 @@ impl CardViewer {
                     let question = attr.pattern.replace("{}", &instance);
 
                     let val = AttrAnswer::New {
-                        attr_id: attr.id,
+                        attr_id: attr,
                         question,
                         answer: Signal::new_in_scope(None, ScopeId::APP),
                     };
@@ -980,42 +1020,65 @@ fn InputElements(
                     for answer in attr_answers.iter() {
                         match answer.clone() {
                             AttrAnswer::Old {question, answer,..} => {
-                                rsx! {
-                                    p {"{question}"}
-                                    BackPutRender {
-                                        text: answer.read().text.clone(),
-                                        dropdown: answer.read().dropdown.clone(),
-                                        ref_card: answer.read().ref_card.clone(),
-                                        overlay: overlay.clone(),
-                                        audio: answer.read().audio.clone(),
-                                    }
+                                match answer {
+                                    Either::Left(answer) => {
+                                        rsx! {
+                                            p {"{question}"}
+                                            BackPutRender {
+                                                text: answer.text.clone(),
+                                                dropdown: answer.dropdown.clone(),
+                                                ref_card: answer.ref_card.clone(),
+                                                overlay: overlay.clone(),
+                                                audio: answer.audio.clone(),
+                                            }
+                                        }
+
+                                    },
+                                    Either::Right(answer) => {
+                                        rsx! {
+                                            p {"{question}"}
+                                            CardRefRender {
+                                                selected_card: answer.selected_card(),
+                                                placeholder: "pick ittt",
+                                                overlay: overlay.clone(),
+                                                allowed: vec![CardTy::Instance],
+                                                filter: answer.filter.clone(),
+                                             }
+                                        }
+                                    },
                                 }
                             },
-                            AttrAnswer::New {question, mut answer,..} => {
+                            AttrAnswer::New {question, mut answer, attr_id} => {
                                 rsx! {
                                     match answer.clone().as_ref() {
-                                        Some(backside) => {
-                                            rsx! {
-                                                p{"{question}"}
-                                                div {
-                                                    class: "flex flex-row",
-                                                    button {
-                                                        onclick: move |_| {
-                                                            answer.set(None);
-                                                        },
-                                                        "x"
+                                        Some(answer) => {
+                                            match answer.clone() {
+                                                Either::Left(answer) => {
+                                                    rsx! {
+                                                        p {"{question}"}
+                                                        BackPutRender {
+                                                            text: answer.text.clone(),
+                                                            dropdown: answer.dropdown.clone(),
+                                                            ref_card: answer.ref_card.clone(),
+                                                            overlay: overlay.clone(),
+                                                            audio: answer.audio.clone(),
+                                                        }
                                                     }
 
-                                                BackPutRender {
-                                                text: backside.text.clone(),
-                                                dropdown: backside.dropdown.clone(),
-                                                ref_card: backside.ref_card.clone(),
-                                                overlay: overlay.clone(),
-                                                audio: backside.audio.clone(),
+                                                },
+                                                Either::Right(answer) => {
+                                                    rsx! {
+                                                        p {"{question}"}
+                                                        CardRefRender {
+                                                            selected_card: answer.selected_card(),
+                                                            placeholder: "pick ittt",
+                                                            overlay: overlay.clone(),
+                                                            allowed: vec![CardTy::Instance],
+                                                            filter: answer.filter.clone(),
+                                                        }
+                                                    }
+                                                },
                                             }
-
-                                                }
-                                        }
                                         }
                                         None => {
                                             rsx! {
@@ -1025,7 +1088,17 @@ fn InputElements(
                                                     button {
                                                     class: "mt-2 inline-flex items-center text-white bg-gray-800 border-0 py-1 px-3 focus:outline-none hover:bg-gray-700 rounded text-base md:mt-0",
                                                     onclick: move |_| {
-                                                        answer.set(Some(BackPut::new(None)));
+                                                        match attr_id.back_type {
+                                                            Some(id) => {
+                                                               let mut cref = CardRef::new();
+                                                               cref.filter = Some(vec![DynCard::Instances(id)]);
+                                                               answer.set(Some(Either::Right(cref)))
+                                                            },
+                                                            None => {
+                                                               answer.set(Some(Either::Left(BackPut::new(None))));
+
+                                                            },
+                                                        }
                                                     },
                                                     "add answer"
                                                 }
@@ -1216,6 +1289,57 @@ fn save_button(CardViewer: CardViewer) -> Element {
 
                         for event in events {
                             APP.read().inner().provider.cards.insert_ledger(event);
+                        }
+
+                        for answer in card.answered_attrs {
+                            match answer {
+                                AttrAnswer::New { attr_id, question: _, answer } => {
+                                    if let Some(answer) = answer.cloned() {
+
+                                    match answer {
+                                        Either::Left(answer) => {
+                                            if let Some(back) = answer.to_backside() {
+                                                let data = CardType::Attribute { attribute: attr_id.id, back: back, instance: id };
+                                                let action = CardAction::UpsertCard(data);
+                                                let event = CardEvent::new(CardId::new_v4(), action);
+                                                APP.read().inner().provider.cards.insert_ledger(event);
+                                            }
+                                        },
+                                        Either::Right(answer) => {
+                                            let card = answer.selected_card().cloned().unwrap();
+                                            let back = BackSide::Card(card);
+                                            let data = CardType::Attribute { attribute: attr_id.id, back: back, instance: id };
+                                            let action = CardAction::UpsertCard(data);
+                                            let event = CardEvent::new(CardId::new_v4(), action);
+                                            APP.read().inner().provider.cards.insert_ledger(event);
+                                        },
+                                    }
+                                    }
+                                },
+                                AttrAnswer::Old { id: attr_card_id, question: _, answer, attr_id } => {
+                                    let prev_back = APP.read().inner().card_provider.providers.cards.load(id.to_string().as_str()).unwrap().ref_backside().cloned().unwrap();
+                                    match answer {
+                                        Either::Left(answer) => {
+                                            if let Some(back) = answer.to_backside() {
+                                                if back != prev_back {
+                                                    let data = CardType::Attribute { attribute: attr_id, back: back, instance: id };
+                                                    let action = CardAction::UpsertCard(data);
+                                                    let event = CardEvent::new(attr_card_id, action);
+                                                    APP.read().inner().provider.cards.insert_ledger(event);
+                                                }
+                                            }
+                                        },
+                                        Either::Right(answer) => {
+                                            let card = answer.selected_card().cloned().unwrap();
+                                            let back = BackSide::Card(card);
+                                            let data = CardType::Attribute { attribute: attr_id, back: back, instance: id };
+                                            let action = CardAction::UpsertCard(data);
+                                            let event = CardEvent::new(attr_card_id, action);
+                                            APP.read().inner().provider.cards.insert_ledger(event);
+                                        },
+                                    }
+                                },
+                            }
                         }
 
                         let card = APP.read().inner().card_provider().load(id).unwrap();

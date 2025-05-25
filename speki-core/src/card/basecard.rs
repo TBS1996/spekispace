@@ -332,30 +332,8 @@ impl CardType {
             CardType::Instance { name, .. } => name.clone(),
             CardType::Normal { front, .. } => front.clone(),
             CardType::Unfinished { front, .. } => front.clone(),
-            CardType::Attribute {
-                attribute,
-                instance,
-                ..
-            } => {
-                let class: CardId = provider
-                    .get_prop_cache(CardProperty::Attr, attribute.to_string())
-                    .first()
-                    .unwrap()
-                    .parse()
-                    .unwrap();
-
-                let class = provider.load(class).unwrap();
-                let attr = class.get_attr(*attribute).unwrap();
-                let instance = provider
-                    .load(*instance)
-                    .unwrap()
-                    .data
-                    .name_fixed_ledger(provider);
-                let instance = instance.to_raw();
-
-                let new = attr.pattern.replace("{}", &instance);
-
-                TextData::from_raw(&new)
+            CardType::Attribute { .. } => {
+                panic!()
             }
             CardType::Class { name, .. } => name.clone(),
             CardType::Statement { front, .. } => front.clone(),
@@ -443,7 +421,6 @@ impl CardType {
                 instance,
                 ..
             } => {
-                
                 let class: CardId = provider
                     .providers
                     .cards
@@ -452,19 +429,16 @@ impl CardType {
                     .unwrap()
                     .parse()
                     .unwrap();
-                
 
                 let class = provider.load(class).unwrap();
-                
+
                 let attr = class.get_attr(*attribute).unwrap();
-                
+
                 let instance = provider.load(*instance).unwrap().name_textdata();
-                
+
                 let instance = instance.to_raw();
-                
 
                 let new = attr.pattern.replace("{}", &instance);
-                
 
                 TextData::from_raw(&new)
             }

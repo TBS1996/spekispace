@@ -190,6 +190,10 @@ impl Card {
 
         let mut output = vec![];
 
+        if let CardType::Class { attrs, .. } = &self.base.data {
+            output.extend(attrs.clone());
+        }
+
         for class in self.parent_classes() {
             let card = self
                 .card_provider
@@ -234,7 +238,7 @@ impl Card {
     }
 
     pub fn get_attr(&self, id: AttributeId) -> Option<Attrv2> {
-        self.base.get_attr(id)
+        self.attributes()?.into_iter().find(|attr| attr.id == id)
     }
 
     pub fn attr_id(&self) -> Option<AttributeId> {
@@ -242,6 +246,16 @@ impl Card {
             Some(*attribute)
         } else {
             None
+        }
+    }
+
+    /// gets the instance that this attribute card is based on.
+    pub fn attribute_instance(&self) -> CardId {
+        if let CardType::Attribute { instance, .. } = self.base.data {
+            instance
+        } else {
+            dbg!(self);
+            panic!("card must be of type attribute");
         }
     }
 
@@ -434,6 +448,10 @@ impl Card {
 
     pub fn is_finished(&self) -> bool {
         !matches!(&self.base.data, CardType::Unfinished { .. })
+    }
+
+    pub fn is_attribute(&self) -> bool {
+        matches!(&self.base.data, CardType::Attribute { .. })
     }
 
     pub fn is_instance(&self) -> bool {

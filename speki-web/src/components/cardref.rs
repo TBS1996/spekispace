@@ -166,6 +166,10 @@ impl CardRef {
         self.card.clone()
     }
 
+    pub fn set_ref_id(&self, card: CardId) {
+        self.card.clone().set(Some(card));
+    }
+
     pub fn set_ref(&self, card: Signal<Card>) {
         let id = card.read().id();
         self.card.clone().set(Some(id));

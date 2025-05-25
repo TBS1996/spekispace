@@ -44,6 +44,7 @@ impl App {
         use speki_provider::FsTime;
         //use speki_provider::{FsProvider, FsTime};
         let root = Path::new("/home/tor/spekifs/snap4");
+        let root = Path::new("/home/tor/spekifs/testing");
 
         Self(Arc::new(speki_core::App::new(
             speki_core::SimpleRecall,
@@ -68,7 +69,6 @@ impl App {
     }
 
     pub async fn try_load_card(&self, id: CardId) -> Option<Signal<Card>> {
-        
         self.0
             .load_card(id)
             .await

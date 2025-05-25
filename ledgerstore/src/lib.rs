@@ -178,36 +178,6 @@ impl<T: LedgerItem<E>, E: LedgerEvent> FixedLedger<T, E> {
             None => None,
         }
     }
-
-    pub fn get_prop_cache(&self, key: T::PropertyType, value: String) -> Vec<String> {
-        let key = CacheKey::Property {
-            property: key,
-            value,
-        };
-
-        self.get_cache(key)
-    }
-
-    pub fn get_ref_cache(&self, key: T::RefType, id: E::Key) -> Vec<String> {
-        let key = CacheKey::ItemRef {
-            reftype: key,
-            id: id.to_string(),
-        };
-
-        self.get_cache(key)
-    }
-
-    fn get_cache(&self, cache_key: CacheKey<T::PropertyType, T::RefType>) -> Vec<String> {
-        let Some(hash) = self.hash.as_ref() else {
-            return vec![];
-        };
-
-        let Some(cache_hash) = self.inner.get_cache_hash(&hash) else {
-            return vec![];
-        };
-
-        self.inner.cache.get_cache(&cache_hash, &cache_key)
-    }
 }
 
 #[derive(Clone)]
@@ -232,7 +202,11 @@ impl<T: LedgerItem<E>, E: LedgerEvent> Ledger<T, E> {
     fn insert_cache_map(&self, cache_hash: &str, state_hash: &str) {
         let original = self.cache.the_full_blob_path(cache_hash);
         let link = self.cache_map().join(state_hash);
-        symlink(original, link).unwrap();
+        if let Err(e) = symlink(&original, &link) {
+            dbg!(original);
+            dbg!(link);
+            dbg!(e);
+        }
     }
 
     fn try_get_cache_hash(&self, state_hash: &str) -> Option<CacheHash> {
@@ -325,7 +299,6 @@ impl<T: LedgerItem<E>, E: LedgerEvent> Ledger<T, E> {
         for key in cache_map.clone() {
             let stringified = key.0.to_string();
             if let Some(old_key) = stringied_keys.insert(stringified.clone(), key.0.clone()) {
-                ///
                 panic!();
             }
         }
@@ -373,6 +346,10 @@ impl<T: LedgerItem<E>, E: LedgerEvent> Ledger<T, E> {
     ) {
         info!("modify cache!");
 
+        if insert.is_empty() && remove.is_empty() {
+            return;
+        }
+
         let mut cache_hash = match prev_state_hash {
             Some(prev_state) => match self.try_get_cache_hash(prev_state) {
                 Some(cache_hash) => cache_hash,
@@ -385,7 +362,7 @@ impl<T: LedgerItem<E>, E: LedgerEvent> Ledger<T, E> {
             None => match insert.pop() {
                 Some((key, item)) => self.cache.save_cache(None, key, vec![item.to_string()]).0,
                 None => {
-                    panic!("if no prev state hash there shouldnt be any removal of caches")
+                    panic!();
                 }
             },
         };
