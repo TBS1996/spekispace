@@ -446,7 +446,7 @@ mod tests {
         for edge in graph.edge_references() {
             let source = graph.node_weight(edge.source()).unwrap().id.clone();
             let target = graph.node_weight(edge.target()).unwrap().id.clone();
-            dbg!((source, target));
+            
         }
 
         // After reduction

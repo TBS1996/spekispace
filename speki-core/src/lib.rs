@@ -1,5 +1,5 @@
 use attribute::AttrEvent;
-use card::{BackSide, CardId, RawCard, RecallRate, TextData};
+use card::{Attrv2, BackSide, CardId, RawCard, RecallRate, TextData};
 use card_provider::CardProvider;
 use cardfilter::CardFilter;
 use collection::{Collection, CollectionId};
@@ -84,6 +84,8 @@ pub enum CardProperty {
     Suspended,
     CardType,
     AttrId,
+    /// mapping of attributeid -> CardId
+    Attr,
 }
 
 impl Display for CardProperty {
@@ -99,6 +101,7 @@ impl AsRef<str> for CardProperty {
             CardProperty::Suspended => "suspended",
             CardProperty::CardType => "cardtype",
             CardProperty::AttrId => "attr_id",
+            CardProperty::Attr => "attr",
         }
     }
 }
@@ -152,7 +155,6 @@ pub struct Provider {
     pub reviews: Ledger<History, ReviewEvent>,
     pub collections: Ledger<Collection, CollectionEvent>,
     pub metadata: Ledger<Metadata, MetaEvent>,
-    pub attrs: Ledger<Attribute, AttrEvent>,
     pub time: TimeGetter,
 }
 
@@ -163,7 +165,6 @@ impl Provider {
             Event::History(event) => self.reviews.insert_ledger(event),
             Event::Card(event) => self.cards.insert_ledger(event),
             Event::Collection(event) => self.collections.insert_ledger(event),
-            Event::Attr(event) => self.attrs.insert_ledger(event),
         }
     }
 }
@@ -192,7 +193,6 @@ impl App {
         history_provider: Ledger<History, ReviewEvent>,
         collections_provider: Ledger<Collection, CollectionEvent>,
         meta_provider: Ledger<Metadata, MetaEvent>,
-        attr_provider: Ledger<Attribute, AttrEvent>,
     ) -> Self
     where
         A: RecallCalc + 'static + Send,
@@ -208,9 +208,29 @@ impl App {
             reviews: history_provider,
             collections: collections_provider,
             metadata: meta_provider,
-            attrs: attr_provider,
             time: time_provider.clone(),
         };
+
+        /*
+        let mut map: HashMap<CardId, Vec<Attrv2>> = Default::default();
+        for attribute in provider.attrs.load_all().into_values() {
+            let attr = Attrv2 {
+                id: attribute.id,
+                pattern: attribute.pattern,
+                back_type: attribute.back_type,
+            };
+
+            map.entry(attribute.class).or_default().push(attr);
+        }
+
+        for (card, attributes) in map {
+            for attr in attributes {
+                let action = CardAction::InsertAttr(attr);
+                let event = CardEvent::new(card, action);
+                provider.cards.insert_ledger(event);
+            }
+        }
+        */
 
         let card_provider =
             CardProvider::new(provider.clone(), time_provider.clone(), recaller.clone());
@@ -518,7 +538,7 @@ mod tests {
             .map(|x| x.parse().unwrap())
             .collect();
 
-        dbg!(&bi);
+
         assert!(bi.contains(&card_a.id))
     }
 
@@ -550,8 +570,8 @@ mod tests {
         let card_a = ledger.load(&a_id.to_string()).unwrap();
         let card_b = ledger.load(&b_id.to_string()).unwrap();
 
-        dbg!(&card_a);
-        dbg!(&card_b);
+
+
 
         let c_deps: Vec<CardId> = ledger
             .get_ref_cache(RefType::Dependent, c_id)

@@ -8,6 +8,9 @@ use std::{
     time::Duration,
 };
 
+pub mod basecard;
+pub use basecard::*;
+
 use either::Either;
 use nonempty::NonEmpty;
 use serde::Deserializer;
@@ -21,7 +24,7 @@ use crate::{
     ledger::{CardAction, CardEvent, MetaEvent},
     metadata::Metadata,
     recall_rate::{History, Recall, ReviewEvent, SimpleRecall},
-    RecallCalc, Recaller, RefType, TimeGetter,
+    AttributeId, RecallCalc, Recaller, RefType, TimeGetter,
 };
 
 pub type RecallRate = f32;
@@ -74,6 +77,7 @@ impl EvalText {
 
     pub fn from_textdata(txt: TextData, provider: &CardProvider) -> Self {
         let mut cmps = vec![];
+
         let eval = txt.evaluate(provider);
 
         for cmp in txt.inner() {
@@ -108,9 +112,18 @@ impl Deref for EvalText {
     }
 }
 
-mod basecard;
+/*
 
-pub use basecard::*;
+hmm maybe we can go back to having generics here?
+like a marker generic only. doesn't actually do anything.
+
+we can have these empty unit structs, like Attribute, Class, Normal
+
+and one called Any
+
+and then we can simply set Any to be the default generic so it won't actually affect any existing code.
+
+*/
 
 #[derive(Clone)]
 pub struct Card {
@@ -153,7 +166,7 @@ impl Debug for Card {
         let mut s = String::new();
         s.push_str(&format!("{:?}\n", self.id));
         s.push_str(&format!("{:?}\n", self.base.data.type_name()));
-        s.push_str(&format!("{:?}\n", self.base.data.raw_front()));
+        s.push_str(&format!("{:?}\n", "omg"));
 
         write!(f, "{s}")
     }
@@ -168,6 +181,72 @@ impl std::fmt::Display for Card {
 impl Card {
     pub fn clone_base(&self) -> RawCard {
         self.base.clone()
+    }
+
+    pub fn attributes(&self) -> Option<Vec<Attrv2>> {
+        if !self.is_instance() && !self.is_class() {
+            return None;
+        };
+
+        let mut output = vec![];
+
+        for class in self.parent_classes() {
+            let card = self
+                .card_provider
+                .providers
+                .cards
+                .load(&class.to_string())
+                .unwrap();
+            if let CardType::Class { attrs, .. } = card.data {
+                output.extend(attrs);
+            }
+        }
+
+        Some(output)
+    }
+
+    pub fn parent_class(&self) -> Option<CardId> {
+        match &self.base.data {
+            CardType::Instance { class, .. } => Some(*class),
+            CardType::Normal { .. } => None,
+            CardType::Unfinished { .. } => None,
+            CardType::Attribute { .. } => None,
+            CardType::Class { parent_class, .. } => *parent_class,
+            CardType::Statement { .. } => None,
+            CardType::Event { .. } => None,
+        }
+    }
+
+    pub fn parent_classes(&self) -> Vec<CardId> {
+        let mut classes = vec![];
+
+        fn inner(selv: &Card, classes: &mut Vec<CardId>) {
+            if let Some(id) = selv.parent_class() {
+                classes.push(id);
+                let card = selv.card_provider.load(id).unwrap();
+                inner(&card, classes);
+            }
+        }
+
+        inner(self, &mut classes);
+
+        classes
+    }
+
+    pub fn get_attr(&self, id: AttributeId) -> Option<Attrv2> {
+        self.base.get_attr(id)
+    }
+
+    pub fn attr_id(&self) -> Option<AttributeId> {
+        if let CardType::Attribute { attribute, .. } = &self.base.data {
+            Some(*attribute)
+        } else {
+            None
+        }
+    }
+
+    pub fn uses_attr_id(&self, id: AttributeId) -> bool {
+        self.attr_id().is_some_and(|attr_id| attr_id == id)
     }
 
     pub fn front_audio(&self) -> Option<&Audio> {
@@ -355,6 +434,10 @@ impl Card {
 
     pub fn is_finished(&self) -> bool {
         !matches!(&self.base.data, CardType::Unfinished { .. })
+    }
+
+    pub fn is_instance(&self) -> bool {
+        matches!(&self.base.data, CardType::Instance { .. })
     }
 
     pub fn is_class(&self) -> bool {

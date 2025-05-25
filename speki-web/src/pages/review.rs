@@ -111,6 +111,20 @@ then some normalization stuff like ensuring the constraints wrt sum of dependent
 
 actually im a bit unsure how to proceed here.
 
+hmm maybe i can insert every card in that queue, like if an item haven't been compared then they'll all be put in the middle.
+or wait no not straight up in the middle but in the middle of constraints, like an item might due to dependency cant be in middle but have to be between M..N then put it in the middle between M and N.
+it could be a list of buckets in a way, like where in each bucket theres no comparison thing that imply one is greater than the other
+then use the ml inference to give a value to rank each item in each bucket with each other or smth
+
+max(bucket[1]) < min(bucket[2]) is a constraint though
+
+then the third pass is to ensure that sum(dependents(card)) <= value(card)
+
+hmm wrt bucket, i guess it's more accurate to say, each card that we have explicitly ranked, is like a singleton bucket, then between two such singletons is either no bucket, or the bucket of all non-rankde items that fit between those two?
+wait no lol, cause the bucket can be between two singletons that arent next to each other ofc
+
+
+
 
 */
 

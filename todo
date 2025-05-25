@@ -324,6 +324,15 @@ hmm
 so function argument is a a class by itself. and then you can say each instance of "function" generate a new sub-class of "function argument" which would be like "function argument for {class instance}".
 
 
+hmm, how about like, invocation of terraform resources
+you could say there's a class of all terraform resources
+then a class of all invocations of a resource? 
+or a class of all invocations of a certain type of terraform resource?
+or a class of all invocations of a certain type of tf resource within a certain repository?
+
+in a way, it's more of a set. like we can define a set which is meant to just be a subset of certain classes or smth. idk.
+
+
 # main graph
 
 

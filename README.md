@@ -40,3 +40,9 @@ Speki tries it's best to follow the DRY principle from programming. meaning, whe
 
 In speki, you'd simply create a new instance of german noun, write the name "haus",be presented with an gender attribute, choose among the 3 options (instances of the class "german grammatical gender"), and a card will be generated with the full question and answer.
 
+
+##  Speki's influences: Supermemo, Obsidian, Wikidata.
+
+### Supermemo
+
+Supermemo 

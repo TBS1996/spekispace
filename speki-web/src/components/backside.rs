@@ -17,14 +17,13 @@ use crate::{
 /// Component to create the backside of a card
 ///
 /// backside can be either text or a reference to another card
-#[derive(PartialEq, Clone)]
+#[derive(PartialEq, Clone, Debug)]
 pub struct BackPut {
     pub text: Signal<String>,
     pub dropdown: DropDownMenu<BackOpts>,
     pub ref_card: CardRef,
     pub audio: Signal<Option<Audio>>,
 }
-
 #[cfg(not(feature = "web"))]
 #[component]
 #[cfg(not(feature = "web"))]
@@ -40,6 +39,7 @@ pub fn BackPutRender(
     rsx! {
         div {
             class: "block text-gray-700 text-sm font-medium max-w-full",
+
             if !IS_SHORT() {
                 "Back:"
             }
@@ -49,43 +49,54 @@ pub fn BackPutRender(
 
                 div {
                     class: "flex-grow overflow-hidden",
-                    { match *dropdown.selected.read() {
-                        BackOpts::Text => {
 
+                    {
+                        match *dropdown.selected.read() {
+                            BackOpts::Text => {
+                                let placeholder = if IS_SHORT.cloned() {
+                                    "Back side"
+                                } else {
+                                    ""
+                                };
+                                let mut sig = text.clone();
 
-        let placeholder = if IS_SHORT.cloned() { "Back side" } else { "" };
-        let mut sig = text.clone();
-        rsx! {
-            input {
-                class: "bg-white w-full border border-gray-300 rounded-md p-2 mb-4 text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent",
-                value: "{sig}",
-                placeholder: "{placeholder}",
-                oninput: move |evt| sig.set(evt.value()),
-                onmouseup: move |_| {
-                    let text = text.clone();
-                    let overlay = overlay.clone();
-                    set_card_link(text, overlay);
-                },
-            }
-        }
-                        },
-                        BackOpts::Card => rsx!{ CardRefRender{
-                            card_display: ref_card.display.clone(),
-                            selected_card: ref_card.card.clone(),
-                            placeholder: ref_card.placeholder.cloned(),
-                            on_select: ref_card.on_select.clone(),
-                            on_deselect: ref_card.on_deselect.clone(),
-                            dependent: ref_card.dependent.clone(),
-                            allowed: ref_card.allowed.clone(),
-                            overlay,
-                        }},
-                    }}
+                                rsx! {
+                                    input {
+                                        class: "bg-white w-full border border-gray-300 rounded-md p-2 mb-4 text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent",
+                                        value: "{sig}",
+                                        placeholder: "{placeholder}",
+                                        oninput: move |evt| sig.set(evt.value()),
+                                        onmouseup: move |_| {
+                                            let text = text.clone();
+                                            let overlay = overlay.clone();
+                                            set_card_link(text, overlay);
+                                        },
+                                    }
+                                }
+                            },
+                            BackOpts::Card => rsx! {
+                                CardRefRender {
+                                    selected_card: ref_card.card.clone(),
+                                    placeholder: ref_card.placeholder.cloned(),
+                                    on_select: ref_card.on_select.clone(),
+                                    on_deselect: ref_card.on_deselect.clone(),
+                                    dependent: ref_card.dependent.clone(),
+                                    allowed: ref_card.allowed.clone(),
+                                    filter: ref_card.filter.clone(),
+                                    overlay,
+                                }
+                            },
+                        }
+                    }
                 }
 
                 div {
                     class: "flex-shrink-0",
                     style: "width: 65px;",
-                    DropComponent {options: dropdown.options.clone(), selected: dropdown.selected.clone()}
+                    DropComponent {
+                        options: dropdown.options.clone(),
+                        selected: dropdown.selected.clone(),
+                    }
                 }
             }
         }

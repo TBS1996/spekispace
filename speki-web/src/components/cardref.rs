@@ -1,7 +1,7 @@
 use std::fmt::Debug;
 
 use dioxus::prelude::*;
-use speki_core::{card::CardId, Card, CardType};
+use speki_core::{card::CardId, collection::DynCard, Card, CardType};
 use tracing::info;
 
 use super::CardTy;
@@ -19,8 +19,7 @@ const PLACEHOLDER: &'static str = "pick card...";
 #[derive(PartialEq, Clone)]
 pub struct CardRef {
     pub card: Signal<Option<CardId>>,
-    pub display: Signal<String>,
-    pub filter: Option<Callback<CardType, bool>>,
+    pub filter: Option<Vec<DynCard>>,
     pub dependent: Option<TempNode>,
     pub allowed: Vec<CardTy>,
     pub on_select: Option<MyClosure>,
@@ -32,7 +31,6 @@ impl Debug for CardRef {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("CardRef")
             .field("card", &self.card)
-            .field("display", &self.display)
             .field("placeholder", &self.placeholder)
             .finish()
     }
@@ -40,16 +38,28 @@ impl Debug for CardRef {
 
 #[component]
 pub fn CardRefRender(
-    card_display: Signal<String>,
     selected_card: Signal<Option<CardId>>,
     placeholder: &'static str,
+    overlay: Signal<Option<OverlayEnum>>,
+    allowed: Vec<CardTy>,
     on_select: Option<MyClosure>,
     on_deselect: Option<MyClosure>,
     dependent: Option<TempNode>,
-    allowed: Vec<CardTy>,
-    overlay: Signal<Option<OverlayEnum>>,
+    filter: Option<Vec<DynCard>>,
 ) -> Element {
     let is_selected = selected_card.read().is_some();
+
+    let card_display: Memo<String> = ScopeId::APP.in_runtime(|| {
+        use_memo(move || match selected_card.read().as_ref() {
+            Some(card_id) => APP
+                .read()
+                .load_card_sync(*card_id)
+                .read()
+                .name()
+                .to_string(),
+            None => String::new(),
+        })
+    });
 
     rsx! {
         div {
@@ -72,8 +82,6 @@ pub fn CardRefRender(
 
                         let id = card.read().id();
                         selected_card.clone().set(Some(id));
-                        let display = card.to_string();
-                        card_display.clone().set(display);
                         }
                     });
 
@@ -83,8 +91,11 @@ pub fn CardRefRender(
                         .unwrap_or_default();
 
                     let allowed = allowed.clone();
-                        let props = CardSelector::ref_picker(fun, dependents)
-                            .with_allowed_cards(allowed);
+                    let mut props = CardSelector::ref_picker(fun, dependents)
+                        .with_allowed_cards(allowed);
+                    if let Some(filter)  = filter.clone() {
+                        props = props.with_dyncards(filter);
+                    }
 
                         overlay.clone().set(Some(OverlayEnum::CardSelector(props)));
                 },
@@ -105,7 +116,6 @@ pub fn CardRefRender(
                             }
 
                             selected_card.clone().set(None);
-                            card_display.clone().set(Default::default());
                         });
                     },
                     "X",
@@ -119,7 +129,6 @@ impl CardRef {
     pub fn new() -> Self {
         Self {
             card: Signal::new_in_scope(Default::default(), ScopeId(3)),
-            display: Signal::new_in_scope(Default::default(), ScopeId(3)),
             filter: None,
             dependent: None,
             allowed: vec![],
@@ -151,7 +160,6 @@ impl CardRef {
 
     pub fn reset(&self) {
         self.card.clone().set(None);
-        self.display.clone().set(Default::default());
     }
 
     pub fn selected_card(&self) -> Signal<Option<CardId>> {
@@ -161,7 +169,5 @@ impl CardRef {
     pub fn set_ref(&self, card: Signal<Card>) {
         let id = card.read().id();
         self.card.clone().set(Some(id));
-        let display = card.to_string();
-        self.display.clone().set(display);
     }
 }

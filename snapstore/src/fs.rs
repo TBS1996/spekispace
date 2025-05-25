@@ -183,17 +183,20 @@ impl<PK: Display + Clone, RK: Display + Clone> CacheFs<PK, RK> {
     }
 
     pub fn get_cache(&self, gen_hash: &str, cache_key: &CacheKey<PK, RK>) -> Vec<String> {
+        
         let path = self.full_path(gen_hash, &cache_key.to_string());
         let mut out = vec![];
 
         if !path.exists() {
             return vec![];
         }
+        
 
         for line in fs::read_to_string(&path).unwrap().lines() {
             let line: String = line.parse().unwrap();
             out.push(line);
         }
+        
 
         out
     }
@@ -398,7 +401,7 @@ impl FsDir {
         trace!("loading dir: {dir_path:?}");
         let path = full_blob_path(&dir_path, &hash);
         if !path.exists() {
-            dbg!(&path);
+            
             return None;
         }
 
@@ -588,13 +591,13 @@ impl Content {
             Self::File(original) => match hard_link(original, &link) {
                 Ok(()) => {}
                 Err(e) => {
-                    dbg!(original, link, e);
+                    
                 }
             },
             Self::Dir(original) => match symlink(original, link) {
                 Ok(()) => {}
                 Err(e) => {
-                    dbg!(e);
+                    
                 }
             },
         }

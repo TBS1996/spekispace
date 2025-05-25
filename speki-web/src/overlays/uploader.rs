@@ -177,7 +177,6 @@ pub fn UploadRender(props: Uploader) -> Element {
                         class: "block text-gray-700 text-sm font-medium max-w-[100px] mx-auto",
                         style: "margin-right: 81px;",
                         CardRefRender{
-                            card_display: concept.display.clone(),
                             selected_card: concept.card.clone(),
                             placeholder: "pick class of instance",
                             on_select: concept.on_select.clone(),

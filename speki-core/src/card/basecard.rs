@@ -7,7 +7,7 @@ use crate::{
     CardProperty, RefType,
 };
 use either::Either;
-use ledgerstore::{CacheGetter, Ledger, LedgerItem};
+use ledgerstore::{FixedLedger, Ledger, LedgerItem};
 use omtrent::TimeStamp;
 use serde::{Deserialize, Serialize, Serializer};
 use std::collections::{HashMap, HashSet};
@@ -176,6 +176,17 @@ impl<'de> Deserialize<'de> for TextData {
     }
 }
 
+/// An attribute of a class is pre-made questions that can be asked about any of the classes' instances.
+/// For example, all instances of `Person` can have the quesiton "when was {} born?"
+///
+/// Instances refer to both direct instances of the class, and instances of any sub-classes of the class.
+#[derive(PartialEq, Debug, Clone, Serialize, Deserialize, Hash)]
+pub struct Attrv2 {
+    pub id: AttributeId,
+    pub pattern: String,
+    pub back_type: Option<CardId>,
+}
+
 #[derive(PartialEq, Debug, Clone, Serialize, Deserialize, Hash)]
 pub enum CardType {
     /// A specific instance of a class
@@ -207,6 +218,8 @@ pub enum CardType {
         back: Option<BackSide>,
         parent_class: Option<CardId>,
         default_question: Option<TextData>,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        attrs: Vec<Attrv2>,
     },
 
     /// A statement is a fact which cant easily be represented with a flashcard,
@@ -314,6 +327,42 @@ impl CardType {
         }
     }
 
+    pub fn name_fixed_ledger(&self, provider: &FixedLedger<RawCard, CardEvent>) -> TextData {
+        match self {
+            CardType::Instance { name, .. } => name.clone(),
+            CardType::Normal { front, .. } => front.clone(),
+            CardType::Unfinished { front, .. } => front.clone(),
+            CardType::Attribute {
+                attribute,
+                instance,
+                ..
+            } => {
+                let class: CardId = provider
+                    .get_prop_cache(CardProperty::Attr, attribute.to_string())
+                    .first()
+                    .unwrap()
+                    .parse()
+                    .unwrap();
+
+                let class = provider.load(class).unwrap();
+                let attr = class.get_attr(*attribute).unwrap();
+                let instance = provider
+                    .load(*instance)
+                    .unwrap()
+                    .data
+                    .name_fixed_ledger(provider);
+                let instance = instance.to_raw();
+
+                let new = attr.pattern.replace("{}", &instance);
+
+                TextData::from_raw(&new)
+            }
+            CardType::Class { name, .. } => name.clone(),
+            CardType::Statement { front, .. } => front.clone(),
+            CardType::Event { front, .. } => front.clone(),
+        }
+    }
+
     pub fn name(&self, provider: &CardProvider) -> TextData {
         match self {
             CardType::Instance { name, .. } => name.clone(),
@@ -324,14 +373,23 @@ impl CardType {
                 instance,
                 ..
             } => {
-                let attr = provider
+                let class: CardId = provider
                     .providers
-                    .attrs
-                    .load(attribute.to_string().as_str())
+                    .cards
+                    .get_prop_cache(CardProperty::Attr, attribute.to_string())
+                    .first()
+                    .unwrap()
+                    .parse()
                     .unwrap();
 
-                let f = attr.name(*instance, provider.clone());
-                TextData::from_raw(&f)
+                let class = provider.load(class).unwrap();
+                let attr = class.get_attr(*attribute).unwrap();
+                let instance = provider.load(*instance).unwrap().name_textdata();
+                let instance = instance.to_raw();
+
+                let new = attr.pattern.replace("{}", &instance);
+
+                TextData::from_raw(&new)
             }
             CardType::Class { name, .. } => name.clone(),
             CardType::Statement { front, .. } => front.clone(),
@@ -385,14 +443,30 @@ impl CardType {
                 instance,
                 ..
             } => {
-                let attr = provider
+                
+                let class: CardId = provider
                     .providers
-                    .attrs
-                    .load(attribute.to_string().as_str())
+                    .cards
+                    .get_prop_cache(CardProperty::Attr, attribute.to_string())
+                    .first()
+                    .unwrap()
+                    .parse()
                     .unwrap();
+                
 
-                let f = attr.name(*instance, provider.clone());
-                TextData::from_raw(&f)
+                let class = provider.load(class).unwrap();
+                
+                let attr = class.get_attr(*attribute).unwrap();
+                
+                let instance = provider.load(*instance).unwrap().name_textdata();
+                
+                let instance = instance.to_raw();
+                
+
+                let new = attr.pattern.replace("{}", &instance);
+                
+
+                TextData::from_raw(&new)
             }
             CardType::Class {
                 name, parent_class, ..
@@ -465,6 +539,34 @@ pub struct RawCard {
 }
 
 impl RawCard {
+    pub fn cache_front(&self, ledger: &FixedLedger<RawCard, CardEvent>) -> String {
+        match self.data.clone() {
+            CardType::Instance { name, .. } => name.to_raw(),
+            CardType::Normal { front, .. } => front.to_raw(),
+            CardType::Unfinished { front } => front.to_raw(),
+            CardType::Attribute {
+                attribute: _,
+                instance,
+                ..
+            } => {
+                let attr = self.get_attr_rec(ledger.to_owned()).unwrap();
+
+                let instance = ledger
+                    .load(instance)
+                    .unwrap()
+                    .data
+                    .name_fixed_ledger(ledger);
+                let instance = instance.to_raw();
+
+                let new = attr.pattern.replace("{}", &instance);
+                new
+            }
+            CardType::Class { name, .. } => name.to_raw(),
+            CardType::Statement { front } => front.to_raw(),
+            CardType::Event { front, .. } => front.to_raw(),
+        }
+    }
+
     // if a card is deleted that is being referenced we might have to change the card type
     pub fn remove_dep(&mut self, id: CardId) {
         todo!()
@@ -554,6 +656,36 @@ impl RawCard {
         }
     }
 
+    pub fn get_attr(&self, id: AttributeId) -> Option<Attrv2> {
+        if let CardType::Class { ref attrs, .. } = &self.data {
+            attrs.iter().find(|attr| attr.id == id).cloned()
+        } else {
+            None
+        }
+    }
+
+    pub fn get_attr_rec(&self, ledger: FixedLedger<RawCard, CardEvent>) -> Option<Attrv2> {
+        let CardType::Attribute {
+            attribute,
+            instance,
+            ..
+        } = &self.data
+        else {
+            return None;
+        };
+
+        let mut card: Self = ledger.load(*instance).unwrap();
+
+        while let Some(parent) = card.parent_class() {
+            card = ledger.load(parent).unwrap();
+            if let Some(attr) = card.get_attr(*attribute) {
+                return Some(attr);
+            }
+        }
+
+        None
+    }
+
     /// Returns all dependencies of the card
     pub fn dependencies(&self) -> BTreeSet<CardId> {
         let mut deps = self.dependencies.clone();
@@ -626,11 +758,13 @@ impl RawCard {
                 back: _,
                 parent_class,
                 default_question,
+                attrs,
             } => CardType::Class {
                 name,
                 back: Some(new_back),
                 parent_class,
                 default_question,
+                attrs,
             },
         };
 
@@ -657,16 +791,16 @@ pub fn normalize_string(str: &str) -> String {
 }
 
 use fancy_regex::Regex;
-fn resolve_text(txt: String, ledger: &CacheGetter<RawCard>, re: &Regex) -> String {
-    let uuids: Vec<String> = re
+fn resolve_text(txt: String, ledger: &FixedLedger<RawCard, CardEvent>, re: &Regex) -> String {
+    let uuids: Vec<CardId> = re
         .find_iter(&txt)
         .filter_map(Result::ok)
-        .map(|m| m.as_str().to_string())
+        .map(|m| m.as_str().parse().unwrap())
         .collect();
 
     let mut s: String = re.replace_all(&txt, "").to_string();
     for id in uuids {
-        let txt = ledger.load(&id).unwrap().data.raw_front();
+        let txt = ledger.load(id).unwrap().cache_front(ledger);
         s.push_str(&resolve_text(txt, ledger, re));
     }
 
@@ -675,13 +809,13 @@ fn resolve_text(txt: String, ledger: &CacheGetter<RawCard>, re: &Regex) -> Strin
 
 /// replaces all uuids on frontside of card with the frontside of the card referenced by uuid.
 /// just appends it, doesn't preserve order, this is just to collect bigrams.
-fn resolve_card(card: &RawCard, ledger: &CacheGetter<RawCard>) -> String {
+fn resolve_card(card: &RawCard, ledger: &FixedLedger<RawCard, CardEvent>) -> String {
     let uuid_regex = Regex::new(
         r"\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\b",
     )
     .unwrap();
 
-    resolve_text(card.data.raw_front(), ledger, &uuid_regex)
+    resolve_text(card.cache_front(ledger), ledger, &uuid_regex)
 }
 
 impl LedgerItem<CardEvent> for RawCard {
@@ -704,6 +838,8 @@ impl LedgerItem<CardEvent> for RawCard {
                 out.entry(RefType::Dependent).or_default().insert(*class);
             }
             CardType::Attribute { instance, .. } => {
+                // bruh
+                // this allows us to, what? search for an instance, and get all the attribute cards for it? includingt his card? yeahhh
                 out.entry(RefType::AttrClass).or_default().insert(*instance);
                 out.entry(RefType::Dependent).or_default().insert(*instance);
             }
@@ -739,7 +875,10 @@ impl LedgerItem<CardEvent> for RawCard {
         out
     }
 
-    fn properties_cache(&self, cache: CacheGetter<Self>) -> HashSet<(Self::PropertyType, String)> {
+    fn properties_cache(
+        &self,
+        cache: FixedLedger<Self, CardEvent>,
+    ) -> HashSet<(Self::PropertyType, String)> {
         let mut out: HashSet<(Self::PropertyType, String)> = Default::default();
 
         let resolved_text = resolve_card(self, &cache);
@@ -756,7 +895,11 @@ impl LedgerItem<CardEvent> for RawCard {
             CardType::Attribute { attribute, .. } => {
                 out.insert((CardProperty::AttrId, attribute.to_string()));
             }
-            CardType::Class { .. } => {}
+            CardType::Class { attrs, .. } => {
+                for attr in attrs {
+                    out.insert((CardProperty::Attr, attr.id.to_string()));
+                }
+            }
             CardType::Statement { .. } => {}
             CardType::Event { .. } => {}
         };
@@ -792,7 +935,6 @@ impl LedgerItem<CardEvent> for RawCard {
                     } => *default_question = default.map(|s| TextData::from_raw(&s)),
                     _ => return Err(()),
                 },
-
                 CardAction::SetFrontAudio(audio) => {
                     self.front_audio = audio;
                 }
@@ -816,6 +958,24 @@ impl LedgerItem<CardEvent> for RawCard {
                 CardAction::SetBackRef(reff) => {
                     let backside = BackSide::Card(reff);
                     self = self.set_backside(backside);
+                }
+                CardAction::InsertAttr(attrv2) => {
+                    if let CardType::Class { ref mut attrs, .. } = self.data {
+                        if !attrs.iter().any(|attr| attr.id == attrv2.id) {
+                            attrs.push(attrv2);
+                        }
+                    } else {
+                        panic!("expeted class");
+                    }
+                }
+                CardAction::RemoveAttr(attr_id) => {
+                    if let CardType::Class { ref mut attrs, .. } = self.data {
+                        let attr_len = attrs.len();
+                        attrs.retain(|attr| attr.id != attr_id);
+                        assert_eq!(attr_len - 1, attrs.len());
+                    } else {
+                        panic!("expeted class");
+                    }
                 }
             }
         }

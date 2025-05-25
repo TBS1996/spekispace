@@ -1,10 +1,10 @@
 use crate::{
     attribute::AttrEvent,
     audio::AudioId,
-    card::CardId,
+    card::{Attrv2, CardId},
     collection::{CollectionId, MaybeDyn},
     recall_rate::{History, Review, ReviewEvent},
-    CardType,
+    AttributeId, CardType,
 };
 use ledgerstore::LedgerEvent;
 use serde::{Deserialize, Serialize};
@@ -58,6 +58,8 @@ pub enum CardAction {
     DeleteCard,
     SetDefaultQuestion(Option<String>),
     SetNamespace(Option<CardId>),
+    InsertAttr(Attrv2),
+    RemoveAttr(AttributeId),
 }
 
 pub enum HistoryEvent {
@@ -103,18 +105,12 @@ impl From<CollectionEvent> for Event {
         Event::Collection(event)
     }
 }
-impl From<AttrEvent> for Event {
-    fn from(event: AttrEvent) -> Self {
-        Event::Attr(event)
-    }
-}
 
 pub enum Event {
     Meta(MetaEvent),
     History(ReviewEvent),
     Card(CardEvent),
     Collection(CollectionEvent),
-    Attr(AttrEvent),
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, Hash)]

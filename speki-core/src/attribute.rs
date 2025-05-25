@@ -5,10 +5,9 @@ use std::{
 
 use ledgerstore::{LedgerEvent, LedgerItem};
 use serde::{Deserialize, Serialize};
-use tracing::Instrument;
 use uuid::Uuid;
 
-use crate::{card::CardId, card_provider::CardProvider};
+use crate::{card::basecard::CardId, card_provider::CardProvider};
 
 /// An attribute of a sub-class or an instance
 /// predefined questions that are valid for all in its class.
@@ -18,7 +17,7 @@ pub struct Attribute {
     pub id: AttributeId,
     /// The attribute is valid for this class
     pub class: CardId,
-    // the answer to the attribute should be part of this
+    // the answer to the attribute should be an instance of this.
     // for example, if the attribute is 'where was {} born?' the type should be of concept place
     pub back_type: Option<CardId>,
 }

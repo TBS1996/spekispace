@@ -52,7 +52,6 @@ impl App {
             Ledger::new(root),
             Ledger::new(root),
             Ledger::new(root),
-            Ledger::new(root),
         )))
     }
 
@@ -69,6 +68,7 @@ impl App {
     }
 
     pub async fn try_load_card(&self, id: CardId) -> Option<Signal<Card>> {
+        
         self.0
             .load_card(id)
             .await

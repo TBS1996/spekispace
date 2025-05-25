@@ -1,12 +1,17 @@
-use std::{collections::HashMap, sync::Arc, time::Duration};
+use std::{
+    collections::{BTreeSet, HashMap, HashSet},
+    sync::Arc,
+    time::Duration,
+};
 
 use dioxus::prelude::*;
+use either::Either;
 use speki_core::{
     attribute::{AttrAction, AttrEvent, RefAttr},
     audio::AudioId,
-    card::{CardId, TextData},
+    card::{Attrv2, CardId, TextData},
     ledger::{CardAction, CardEvent},
-    AttributeId, Card, CardType,
+    AttributeId, Card, CardProperty, CardType, RefType,
 };
 
 use speki_web::{Node, NodeId, NodeMetadata};
@@ -14,9 +19,8 @@ use tracing::info;
 
 use crate::{
     components::{
-        backside::BackPutRender, cardref::CardRefRender, frontside::FrontPutRender,
-        graph::GraphRepRender, BackPut, CardRef, CardTy, DropDownMenu, FrontPut, GraphRep,
-        RenderDependents,
+        backside::BackPutRender, cardref::CardRefRender, frontside::FrontPutRender, BackPut,
+        CardRef, CardTy, DropDownMenu, FrontPut, GraphRep, RenderDependents,
     },
     overlays::{
         card_selector::{CardSelector, MyClosure},
@@ -145,7 +149,57 @@ pub struct CardRep {
     front_audio: Option<AudioId>,
     back_audio: Option<AudioId>,
     deps: Vec<CardId>,
-    attrs: HashMap<AttributeId, String>,
+    attrs: HashMap<AttributeId, (String, Option<CardId>)>,
+}
+
+#[derive(Clone, Debug)]
+enum AttrAnswer {
+    /// There's already a card created for this attribute
+    /// answer can be modified but not changed
+    Old {
+        id: CardId,
+        question: String,
+        answer: Signal<BackPut>,
+    },
+    /// There's not already one, so you can create it.
+    /// the id now referes the attribute not the card.
+    New {
+        attr_id: AttributeId,
+        question: String,
+        answer: Signal<Option<BackPut>>,
+    },
+}
+
+impl PartialEq for AttrAnswer {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (
+                Self::Old {
+                    id: l_id,
+                    question: l_question,
+                    answer: l_answer,
+                },
+                Self::Old {
+                    id: r_id,
+                    question: r_question,
+                    answer: r_answer,
+                },
+            ) => l_id == r_id && l_question == r_question && l_answer == r_answer,
+            (
+                Self::New {
+                    attr_id: l_attr_id,
+                    question: l_question,
+                    answer: l_answer,
+                },
+                Self::New {
+                    attr_id: r_attr_id,
+                    question: r_question,
+                    answer: r_answer,
+                },
+            ) => l_attr_id == r_attr_id && l_question == r_question && l_answer == r_answer,
+            _ => false,
+        }
+    }
 }
 
 /// container for all the structs you edit while creating/modifying a card
@@ -158,7 +212,8 @@ pub struct CardEditor {
     concept: CardRef,
     dependencies: Signal<Vec<Signal<Card>>>,
     allowed_cards: Vec<CardTy>,
-    attrs: Signal<Vec<(AttributeId, Signal<String>)>>,
+    attrs: Signal<Vec<(AttributeId, (Signal<String>, CardRef))>>,
+    attr_answers: Signal<Vec<AttrAnswer>>,
 }
 
 impl CardEditor {
@@ -171,6 +226,21 @@ impl CardEditor {
         if front.is_empty() {
             return None;
         }
+
+        let attrs: HashMap<AttributeId, (String, Option<CardId>)> = self
+            .attrs
+            .cloned()
+            .into_iter()
+            .filter_map(|(id, (pattern, answerty))| {
+                let pattern = pattern.cloned();
+                let answerty = answerty.selected_card().cloned();
+                if pattern.contains("{}") {
+                    Some((id, (pattern, answerty)))
+                } else {
+                    None
+                }
+            })
+            .collect();
 
         let ty = match self.front.dropdown.selected.cloned() {
             CardTy::Normal => {
@@ -188,11 +258,20 @@ impl CardEditor {
             CardTy::Class => {
                 let parent_class = self.concept.selected_card().cloned();
                 let back = backside.to_backside().filter(|x| !x.is_empty_text());
+                let attrs: Vec<Attrv2> = attrs
+                    .into_iter()
+                    .map(|(id, (pattern, back_type))| Attrv2 {
+                        id,
+                        pattern,
+                        back_type,
+                    })
+                    .collect();
 
                 CardType::Class {
                     name: TextData::from_raw(&front),
                     back,
                     parent_class,
+                    attrs,
                     default_question: {
                         let s = self.default_question.cloned();
                         if s.is_empty() {
@@ -224,10 +303,11 @@ impl CardEditor {
                 .attrs
                 .cloned()
                 .into_iter()
-                .filter_map(|(id, pattern)| {
+                .filter_map(|(id, (pattern, answerty))| {
                     let pattern = pattern.cloned();
+                    let answerty = answerty.selected_card().cloned();
                     if pattern.contains("{}") {
-                        Some((id, pattern))
+                        Some((id, (pattern, answerty)))
                     } else {
                         None
                     }
@@ -270,7 +350,6 @@ fn RenderDependencies(
     rsx! {
         div {
             class: "flex flex-col {show_graph} w-full h-auto bg-white p-2 shadow-md rounded-md overflow-y-auto",
-
 
             div {
                 class: "flex items-center justify-between mb-2",
@@ -486,19 +565,97 @@ impl CardViewer {
                 concept
             };
 
-            let attrs: Vec<(AttributeId, Signal<String>)> = if card.read().is_class() {
-                let ledger = APP.read().inner().provider.attrs.clone();
+            // for instance cards, how you answer certain attributes.
 
-                let attrs: Vec<speki_core::Attribute> = ledger
-                    .get_ref_cache(RefAttr::Class, card.read().id())
+            let attrs = if card.read().is_instance() {
+                let curr_card = card.clone();
+
+                let classes = curr_card.read().attributes();
+
+                let mut attrs: Vec<Attrv2> = curr_card.read().attributes().unwrap_or_default();
+
+                let provider = APP.read().inner().card_provider.clone();
+                let card_ledger = APP.read().inner().provider.cards.clone();
+
+                // all cards that are an attribute card based on a given instance.
+                // wait, isnt this all we need? damn..
+                let attr_cards_based_on_instance: BTreeSet<Arc<Card>> = card_ledger
+                    .get_ref_cache(RefType::AttrClass, curr_card.read().id())
                     .into_iter()
-                    .map(|attr_id| ledger.load(&attr_id).unwrap())
+                    .map(|id| provider.load(id.parse().unwrap()).unwrap())
                     .collect();
 
-                let mut map: Vec<(AttributeId, Signal<String>)> = Default::default();
+                attrs.retain(|attr_id| {
+                    !attr_cards_based_on_instance
+                        .iter()
+                        .any(|card| card.uses_attr_id(attr_id.id))
+                });
+
+                let mut output: Vec<AttrAnswer> = vec![];
+
+                for card in attr_cards_based_on_instance {
+                    let question = card.front_side().to_string();
+                    let answer = BackPut::new(card.clone_base().data.backside().cloned());
+                    let val = AttrAnswer::Old {
+                        id: card.id(),
+                        question,
+                        answer: Signal::new_in_scope(answer, ScopeId::APP),
+                    };
+                    output.push(val);
+                }
 
                 for attr in attrs {
-                    map.push((attr.id, Signal::new_in_scope(attr.pattern, ScopeId::APP)));
+                    let instance = card.read().name_textdata().to_raw();
+
+                    let question = attr.pattern.replace("{}", &instance);
+
+                    let val = AttrAnswer::New {
+                        attr_id: attr.id,
+                        question,
+                        answer: Signal::new_in_scope(None, ScopeId::APP),
+                    };
+                    output.push(val);
+                }
+
+                /*
+
+                1. create a set of all the attributes valid for this instance
+                2. create a set of all the attribute cards that reference an attribute in previous set
+                3. remove all the attributes from the first set that have a matching card in second set
+                -> now we'll two sets that together form all the valid attributes, but ones meaning is all the ones created, the other is the ones not (yet) created.
+                4. list the inputs of the created ones so the user can easily change the provided answer.
+                5. for the ones not created, no input box but a button where if you press it one will be created. user can write answer there. should be possible to X it out.
+
+                i think to find the right attr card, i need to get all the cards whose attribute belong to a class, and all the attrcards belonging to an instance, and then find the one
+                card that is in both sets?
+
+                 */
+
+                output
+            } else {
+                vec![]
+            };
+
+            let attr_answers = Signal::new_in_scope(attrs, ScopeId::APP);
+
+            // The attributes for a given class
+            let attrs: Vec<(AttributeId, (Signal<String>, CardRef))> = if card.read().is_class() {
+                let attrs = card.read().attributes().unwrap();
+
+                let mut map: Vec<(AttributeId, (Signal<String>, CardRef))> = Default::default();
+
+                for attr in attrs {
+                    let cref = CardRef::new();
+
+                    if let Some(ty) = attr.back_type {
+                        let card = APP.read().load_card_sync(ty);
+                        cref.set_ref(card);
+                    }
+
+                    map.push((
+                        attr.id,
+                        (Signal::new_in_scope((attr.pattern), ScopeId::APP), cref),
+                    ));
                 }
                 map
             } else {
@@ -555,6 +712,7 @@ impl CardViewer {
             CardEditor {
                 front,
                 attrs: Signal::new_in_scope(attrs, ScopeId::APP),
+                attr_answers,
                 namespace,
                 back: bck,
                 concept,
@@ -607,7 +765,10 @@ impl CardViewer {
                 .on_select(f.clone())
                 .on_deselect(af.clone());
 
+            let attr_answers = Signal::new_in_scope(Default::default(), ScopeId::APP);
+
             CardEditor {
+                attr_answers,
                 front,
                 namespace: CardRef::new(),
                 back,
@@ -686,6 +847,7 @@ fn RenderInputs(props: CardViewer) -> Element {
                 card_id,
                 namespace: props.editor.namespace.clone(),
                 attrs: props.editor.attrs.clone(),
+                attr_answers: props.editor.attr_answers.clone(),
             }
         }
         div {
@@ -711,13 +873,11 @@ fn InputElements(
     ty: CardTy,
     card_id: Option<CardId>,
     namespace: CardRef,
-    attrs: Signal<Vec<(AttributeId, Signal<String>)>>,
+    attrs: Signal<Vec<(AttributeId, (Signal<String>, CardRef))>>,
+    attr_answers: Signal<Vec<AttrAnswer>>,
 ) -> Element {
-    let is_short = IS_SHORT.cloned();
-
     let has_attrs = !attrs.is_empty();
-
-    dbg!(&attrs);
+    let has_attr_answers = !attr_answers.read().is_empty();
 
     let is_class = matches!(ty, CardTy::Class);
     let inner_attrs = attrs.cloned();
@@ -730,7 +890,6 @@ fn InputElements(
             style: "margin-right: 82px;",
 
             CardRefRender{
-                card_display: namespace.display.clone(),
                 selected_card: namespace.card.clone(),
                 placeholder: "choose namespace",
                 on_select: namespace.on_select.clone(),
@@ -776,7 +935,6 @@ fn InputElements(
                     "Parent class"
 
                     CardRefRender{
-                        card_display: concept.display.clone(),
                         selected_card: concept.card.clone(),
                         placeholder: "pick parent class",
                         on_select: concept.on_select.clone(),
@@ -785,7 +943,9 @@ fn InputElements(
                         allowed: concept.allowed.clone(),
                         overlay: overlay.clone(),
                     },
-                }
+
+
+                    }
             },
             CardTy::Instance => rsx! {
                 BackPutRender {
@@ -796,38 +956,94 @@ fn InputElements(
                     audio: back.audio.clone(),
                 }
 
-                if !is_short {
-                    div {
-                        class: "block text-gray-700 text-sm font-medium mb-2",
-                        style: "margin-right: 81px;",
-                        "Class of instance"
-                        CardRefRender{
-                            card_display: concept.display.clone(),
-                            selected_card: concept.card.clone(),
-                            placeholder: "pick class of instance",
-                            on_select: concept.on_select.clone(),
-                            on_deselect: concept.on_deselect.clone(),
-                            dependent: concept.dependent.clone(),
-                            allowed: concept.allowed.clone(),
-                            overlay: overlay.clone(),
-                        },
-                    }
-                } else {
-                    div {
-                        class: "block text-gray-700 text-sm font-medium",
-                        style: "margin-right: 81px;",
-                        CardRefRender{
-                            card_display: concept.display.clone(),
-                            selected_card: concept.card.clone(),
-                            placeholder: "pick class of instance",
-                            on_select: concept.on_select.clone(),
-                            on_deselect: concept.on_deselect.clone(),
-                            dependent: concept.dependent.clone(),
-                            allowed: concept.allowed.clone(),
-                            overlay: overlay.clone(),
-                        },
-                    }
+                div {
+                    class: "block text-gray-700 text-sm font-medium mb-2",
+                    style: "margin-right: 81px;",
+                    "Class of instance"
+                    CardRefRender{
+                        selected_card: concept.card.clone(),
+                        placeholder: "pick class of instance",
+                        on_select: concept.on_select.clone(),
+                        on_deselect: concept.on_deselect.clone(),
+                        dependent: concept.dependent.clone(),
+                        allowed: concept.allowed.clone(),
+                        overlay: overlay.clone(),
+                    },
                 }
+
+                if has_attr_answers {
+
+            p {"attributes"}
+            div {
+                class: "max-h-64 overflow-y-auto",
+
+                    for answer in attr_answers.iter() {
+                        match answer.clone() {
+                            AttrAnswer::Old {question, answer,..} => {
+                                rsx! {
+                                    p {"{question}"}
+                                    BackPutRender {
+                                        text: answer.read().text.clone(),
+                                        dropdown: answer.read().dropdown.clone(),
+                                        ref_card: answer.read().ref_card.clone(),
+                                        overlay: overlay.clone(),
+                                        audio: answer.read().audio.clone(),
+                                    }
+                                }
+                            },
+                            AttrAnswer::New {question, mut answer,..} => {
+                                rsx! {
+                                    match answer.clone().as_ref() {
+                                        Some(backside) => {
+                                            rsx! {
+                                                p{"{question}"}
+                                                div {
+                                                    class: "flex flex-row",
+                                                    button {
+                                                        onclick: move |_| {
+                                                            answer.set(None);
+                                                        },
+                                                        "x"
+                                                    }
+
+                                                BackPutRender {
+                                                text: backside.text.clone(),
+                                                dropdown: backside.dropdown.clone(),
+                                                ref_card: backside.ref_card.clone(),
+                                                overlay: overlay.clone(),
+                                                audio: backside.audio.clone(),
+                                            }
+
+                                                }
+                                        }
+                                        }
+                                        None => {
+                                            rsx! {
+                                                div {
+                                                    class: "flex flex-row",
+                                                    p{"{question}"}
+                                                    button {
+                                                    class: "mt-2 inline-flex items-center text-white bg-gray-800 border-0 py-1 px-3 focus:outline-none hover:bg-gray-700 rounded text-base md:mt-0",
+                                                    onclick: move |_| {
+                                                        answer.set(Some(BackPut::new(None)));
+                                                    },
+                                                    "add answer"
+                                                }
+                                                }
+
+                                            }
+                                        },
+                                    }
+                                }
+                            },
+                        }
+                    }
+
+
+            }
+
+                }
+
             },
         }
 
@@ -835,23 +1051,28 @@ fn InputElements(
             p {"attributes"}
             div {
                 class: "max-h-64 overflow-y-auto",
-                for (_id, mut pattern) in inner_attrs {
+                for (_id, (mut pattern, backty)) in inner_attrs {
+                    div {
+                    class: "flex flex-row",
                     input {
                         class: "bg-white w-full border border-gray-300 rounded-md p-2 mb-4 text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent",
                         value: "{pattern}",
                         placeholder: "default question",
                         oninput: move |evt| pattern.set(evt.value()),
                     }
+
+                    CardRefRender { selected_card: backty.selected_card(), placeholder: "answer type", allowed: vec![CardTy::Class] , overlay: overlay.clone() }
+
+                    }
                 }
             }
         }
-
 
         if is_class {
             button {
                 class: "mt-2 inline-flex items-center text-white bg-gray-800 border-0 py-1 px-3 focus:outline-none hover:bg-gray-700 rounded text-base md:mt-0",
                 onclick: move |_| {
-                    attrs.write().push((AttributeId::new_v4(), Signal::new_in_scope("{}".to_string(), ScopeId::APP)));
+                    attrs.write().push((AttributeId::new_v4(), (Signal::new_in_scope("{}".to_string(), ScopeId::APP), CardRef::new())));
                 },
                 "add attribute"
 
@@ -995,13 +1216,6 @@ fn save_button(CardViewer: CardViewer) -> Element {
 
                         for event in events {
                             APP.read().inner().provider.cards.insert_ledger(event);
-                        }
-
-                        for (attr, pattern) in card.attrs.into_iter() {
-                            APP.read().inner().provider.attrs.insert_ledger(AttrEvent{
-                                id: attr,
-                                action: AttrAction::UpSert { pattern, class: id},
-                            });
                         }
 
                         let card = APP.read().inner().card_provider().load(id).unwrap();

@@ -31,14 +31,6 @@ impl CardProvider {
         self.providers.run_event(event);
     }
 
-    fn current_cache(&self) -> String {
-        let card_hash = self.providers.cards.state_hash();
-        let meta_hash = self.providers.metadata.state_hash();
-        let review_hash = self.providers.reviews.state_hash();
-
-        todo!()
-    }
-
     pub async fn load_all_card_ids(&self) -> Vec<CardId> {
         info!("x1");
         self.providers

@@ -43,12 +43,15 @@ pub enum MaybeEntry {
 
 impl MaybeEntry {
     pub async fn entry(&mut self) -> Option<Signal<Card>> {
+        
         let id = match self {
             Self::Yes(card) => return Some(card.clone()),
             Self::No(id) => id,
         };
 
+        
         let card = APP.read().try_load_card(*id).await?;
+        
         *self = Self::Yes(card.clone());
         Some(card)
     }
@@ -192,22 +195,28 @@ impl CardSelector {
                     info!("{} cards sorted", sorted_cards.len());
 
                     for (matches, card) in sorted_cards {
+                        
                         let entry = cards.get(&card).unwrap();
+                        
                         let card = entry.write_silent().entry().await.unwrap();
+                        
 
                         if forbidden_cards.read().contains(&card.read().id()) {
                             continue;
                         }
+                        
 
                         if filtered_cards.len() > 300 {
                             break;
                         }
+                        
 
                         if allowed_cards.is_empty()
                             || allowed_cards
                                 .read()
                                 .contains(&CardTy::from_ctype(card.read().card_type()))
                         {
+                            
                             let flag = match filtermemo.cloned() {
                                 Some(filter) => filter.filter(Arc::new(card.cloned())).await,
                                 None => true,

@@ -197,6 +197,7 @@ impl MaybeDyn {
             info!("dyn card to evaluate: {:?}", card);
             out.extend(card.evaluate(provider.clone()).await);
         }
+        info!("done evaluating them cards");
 
         out
     }
@@ -264,11 +265,7 @@ impl DynCard {
                 output
             }
             DynCard::Dependents(id) => match provider.load(*id) {
-                Some(card) => card
-                    .dependents()
-                    .into_iter()
-                    .map(MaybeCard::Card)
-                    .collect(),
+                Some(card) => card.dependents().into_iter().map(MaybeCard::Card).collect(),
                 None => vec![],
             },
 
