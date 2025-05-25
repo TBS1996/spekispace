@@ -157,6 +157,7 @@ impl ReviewPage {
                 out.push((col, RecallDist::default()));
             }
             cols.clone().set(out);
+            return;
 
             let mut out = vec![];
 

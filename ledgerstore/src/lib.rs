@@ -347,6 +347,13 @@ impl<T: LedgerItem<E>, E: LedgerEvent> Ledger<T, E> {
         info!("modify cache!");
 
         if insert.is_empty() && remove.is_empty() {
+            if let Some(prev_state) = prev_state_hash {
+                if let Some(cache_hash) = self.try_get_cache_hash(prev_state) {
+                    self.insert_cache_map(&cache_hash, next_state_hash);
+                }
+            }
+
+            dbg!("not updating cache!!");
             return;
         }
 
@@ -355,7 +362,9 @@ impl<T: LedgerItem<E>, E: LedgerEvent> Ledger<T, E> {
                 Some(cache_hash) => cache_hash,
                 None => {
                     info!("rebuild cache cause not in map");
-                    self.rebuild_cache(next_state_hash);
+                    if let Some(cache_hash) = self.rebuild_cache(next_state_hash) {
+                        self.insert_cache_map(&cache_hash, next_state_hash);
+                    }
                     return;
                 }
             },
