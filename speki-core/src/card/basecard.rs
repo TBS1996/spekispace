@@ -187,6 +187,17 @@ pub struct Attrv2 {
     pub back_type: Option<CardId>,
 }
 
+pub enum BackSideConstraint {
+    Card { ty: Option<CardId> },
+}
+
+/// Generic for a class. Any instance must define it.
+pub struct Generic {
+    id: Uuid,
+    name: String,
+    of_type: Option<CardId>,
+}
+
 #[derive(PartialEq, Debug, Clone, Serialize, Deserialize, Hash)]
 pub enum CardType {
     /// A specific instance of a class
@@ -655,42 +666,6 @@ impl RawCard {
         None
     }
 
-    /// Returns all dependencies of the card
-    pub fn dependencies(&self) -> BTreeSet<CardId> {
-        let mut deps = self.dependencies.clone();
-        if let Some(back) = self.ref_backside() {
-            deps.extend(back.dependencies());
-        }
-
-        match &self.data {
-            CardType::Instance { class, .. } => {
-                deps.insert(*class);
-            }
-            CardType::Normal { front, .. } => {
-                deps.extend(front.card_ids());
-            }
-            CardType::Unfinished { front } => {
-                deps.extend(front.card_ids());
-            }
-            CardType::Attribute { instance, .. } => {
-                deps.insert(*instance);
-            }
-            CardType::Class { parent_class, .. } => {
-                if let Some(class) = parent_class {
-                    deps.insert(*class);
-                }
-            }
-            CardType::Statement { front } => {
-                deps.extend(front.card_ids());
-            }
-            CardType::Event { front, .. } => {
-                deps.extend(front.card_ids());
-            }
-        }
-
-        deps
-    }
-
     pub fn set_backside(mut self, new_back: BackSide) -> Self {
         let data = match self.data.clone() {
             x @ CardType::Event { .. } => x,
@@ -796,43 +771,82 @@ impl LedgerItem<CardEvent> for RawCard {
         let mut out: HashMap<Self::RefType, HashSet<Uuid>> = Default::default();
 
         for dep in &self.dependencies {
-            out.entry(RefType::Dependent).or_default().insert(*dep);
+            out.entry(RefType::ExplicitDependent)
+                .or_default()
+                .insert(*dep);
         }
 
         match &self.data {
-            CardType::Normal { .. } => {}
-            CardType::Unfinished { .. } => {}
-            CardType::Instance { class, .. } => {
+            CardType::Normal { front, .. } => {
+                for id in front.card_ids() {
+                    out.entry(RefType::LinkRef).or_default().insert(id);
+                }
+            }
+            CardType::Unfinished { front, .. } => {
+                for id in front.card_ids() {
+                    out.entry(RefType::LinkRef).or_default().insert(id);
+                }
+            }
+            CardType::Instance { name, class, .. } => {
+                for id in name.card_ids() {
+                    out.entry(RefType::LinkRef).or_default().insert(id);
+                }
+
                 out.entry(RefType::Instance).or_default().insert(*class);
-                out.entry(RefType::Dependent).or_default().insert(*class);
             }
             CardType::Attribute { instance, .. } => {
                 // bruh
                 // this allows us to, what? search for an instance, and get all the attribute cards for it? includingt his card? yeahhh
                 out.entry(RefType::AttrClass).or_default().insert(*instance);
-                out.entry(RefType::Dependent).or_default().insert(*instance);
             }
-            CardType::Class { parent_class, .. } => {
+            CardType::Class {
+                name,
+                default_question,
+                parent_class,
+                ..
+            } => {
+                for id in name.card_ids() {
+                    out.entry(RefType::LinkRef).or_default().insert(id);
+                }
+
+                if let Some(def) = default_question {
+                    for id in def.card_ids() {
+                        out.entry(RefType::LinkRef).or_default().insert(id);
+                    }
+                }
+
                 if let Some(class) = parent_class {
                     out.entry(RefType::SubClass).or_default().insert(*class);
-                    out.entry(RefType::Dependent).or_default().insert(*class);
+                    out.entry(RefType::ExplicitDependent)
+                        .or_default()
+                        .insert(*class);
                 }
             }
-            CardType::Statement { .. } => {}
-            CardType::Event { .. } => {}
+            CardType::Statement { front, .. } => {
+                for id in front.card_ids() {
+                    out.entry(RefType::LinkRef).or_default().insert(id);
+                }
+            }
+            CardType::Event { front, .. } => {
+                for id in front.card_ids() {
+                    out.entry(RefType::LinkRef).or_default().insert(id);
+                }
+            }
         };
 
         if let Some(back) = &self.data.backside() {
             match back {
-                BackSide::Text(_) => {}
+                BackSide::Text(txt) => {
+                    for id in txt.card_ids() {
+                        out.entry(RefType::LinkRef).or_default().insert(id);
+                    }
+                }
                 BackSide::Card(id) => {
-                    out.entry(RefType::BackRef).or_default().insert(*id);
-                    out.entry(RefType::Dependent).or_default().insert(*id);
+                    out.entry(RefType::LinkRef).or_default().insert(*id);
                 }
                 BackSide::List(ids) => {
                     for id in ids {
-                        out.entry(RefType::BackRef).or_default().insert(*id);
-                        out.entry(RefType::Dependent).or_default().insert(*id);
+                        out.entry(RefType::LinkRef).or_default().insert(*id);
                     }
                 }
                 BackSide::Time(_) => {}

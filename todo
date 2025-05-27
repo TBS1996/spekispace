@@ -30,6 +30,8 @@ like king should have constraint male. and then in the questions for king, it ca
 
 and yeah, the way it works in properties, i guess a question can simply reference another property, and then uatomatically this property will be like hidden until youve answered that other one. like in the UI it can be greyed out and if you hover over it it'll say which question you need to answer first.
 
+oh and another one is for it to be disabled, due to a "wrong" property. like don't ask for cause of death if is_alive == true
+
 
 # OWL logic
 

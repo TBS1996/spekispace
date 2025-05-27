@@ -60,6 +60,10 @@ pub trait LedgerItem<E: LedgerEvent + Debug>:
         Default::default()
     }
 
+    fn dependencies(&self) -> HashSet<E::Key> {
+        self.ref_cache().into_values().flatten().collect()
+    }
+
     /// List of defined properties that this item has.
     ///
     /// The property keys are predefined, hence theyre static str
@@ -72,6 +76,7 @@ pub trait LedgerItem<E: LedgerEvent + Debug>:
     where
         Self: LedgerItem<E>,
     {
+        let _ = ledger;
         Default::default()
     }
 
@@ -94,6 +99,12 @@ pub trait LedgerItem<E: LedgerEvent + Debug>:
 
         for (reftype, ids) in self.ref_cache() {
             for ref_id in ids {
+                out.insert((
+                    CacheKey::Dependents {
+                        id: ref_id.to_string(),
+                    },
+                    id.to_string(),
+                ));
                 out.insert((
                     CacheKey::ItemRef {
                         reftype: reftype.clone(),
@@ -522,6 +533,20 @@ impl<T: LedgerItem<E>, E: LedgerEvent> Ledger<T, E> {
             Some(item) => serde_json::from_slice(&item).unwrap(),
             None => None,
         }
+    }
+
+    pub fn get_dependencies(&self, id: impl AsRef<E::Key>) -> Vec<E::Key> {
+        self.load(id)
+            .unwrap()
+            .ref_cache()
+            .into_values()
+            .flatten()
+            .collect()
+    }
+
+    pub fn get_dependents(&self, id: E::Key) -> Vec<String> {
+        let key = CacheKey::Dependents { id: id.to_string() };
+        self.get_cache(key)
     }
 
     pub fn get_prop_cache(&self, key: T::PropertyType, value: String) -> Vec<String> {

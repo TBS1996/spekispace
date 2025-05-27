@@ -281,12 +281,7 @@ impl Card {
     pub fn dependents_ids(&self) -> BTreeSet<CardId> {
         let id = self.id;
         let mut stack = BTreeSet::new();
-        for dep in self
-            .card_provider
-            .providers
-            .cards
-            .get_ref_cache(RefType::Dependent, id)
-        {
+        for dep in self.card_provider.providers.cards.get_dependents(id) {
             let dep: CardId = dep.parse().unwrap();
             stack.insert(dep);
         }
@@ -527,12 +522,7 @@ impl Card {
                 deps.push(id);
             }
 
-            for dep_str in self
-                .card_provider
-                .providers
-                .cards
-                .get_ref_cache(RefType::Dependent, id)
-            {
+            for dep_str in self.card_provider.providers.cards.get_dependents(id) {
                 let dep: CardId = dep_str.parse().unwrap();
 
                 if path.contains(&dep) {
@@ -693,7 +683,9 @@ impl Card {
         self.id
     }
 
-    pub fn dependencies(&self) -> BTreeSet<CardId> {
+    pub fn dependencies(&self) -> HashSet<CardId> {
+        use ledgerstore::LedgerItem;
+
         self.base.dependencies()
     }
 

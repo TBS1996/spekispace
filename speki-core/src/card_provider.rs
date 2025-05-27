@@ -58,7 +58,7 @@ impl CardProvider {
 
         self.providers
             .cards
-            .get_ref_cache(RefType::Dependent, id)
+            .get_dependents(id)
             .into_iter()
             .map(|x| x.parse().unwrap())
             .collect()

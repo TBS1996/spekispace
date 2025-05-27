@@ -40,9 +40,9 @@ pub struct DepCacheKey {
 
 #[derive(Clone, PartialEq, PartialOrd, Hash, Eq, Debug)]
 pub enum RefType {
-    Dependent,
+    ExplicitDependent,
     Instance,
-    BackRef,
+    LinkRef,
     SubClass,
     AttrClass,
 }
@@ -56,9 +56,9 @@ impl Display for RefType {
 impl AsRef<str> for RefType {
     fn as_ref(&self) -> &str {
         match self {
-            Self::Dependent => "dependents",
+            Self::ExplicitDependent => "explicit_dependent",
             Self::Instance => "instances",
-            Self::BackRef => "backrefs",
+            Self::LinkRef => "linkref",
             Self::SubClass => "subclasses",
             Self::AttrClass => "attrclass",
         }

@@ -43,12 +43,7 @@ pub fn RenderDependents(
     let (deps, qty) = {
         let mut inner = vec![];
 
-        let dep_ids = APP
-            .read()
-            .inner()
-            .provider
-            .cards
-            .get_ref_cache(RefType::Dependent, card_id);
+        let dep_ids = APP.read().inner().provider.cards.get_dependents(card_id);
 
         let qty = dep_ids.len();
 
