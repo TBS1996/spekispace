@@ -53,6 +53,7 @@ impl App {
             Ledger::new(root),
             Ledger::new(root),
             Ledger::new(root),
+            Ledger::new(root),
         )))
     }
 
@@ -95,7 +96,7 @@ impl App {
     }
 
     pub async fn load_collection(&self, id: CollectionId) -> Collection {
-        self.0.provider.collections.load(&id.to_string()).unwrap()
+        self.0.provider.collections.load(id).unwrap()
     }
 
     pub async fn load_collections(&self) -> Vec<Collection> {

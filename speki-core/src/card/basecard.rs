@@ -380,20 +380,15 @@ impl CardType {
             CardType::Instance {
                 name, class, back, ..
             } => {
-                let (class_name, default_question) = match provider
-                    .providers
-                    .cards
-                    .load(class.to_string().as_str())
-                    .unwrap()
-                    .data
-                {
-                    CardType::Class {
-                        default_question,
-                        name,
-                        ..
-                    } => (name, default_question),
-                    _ => panic!(),
-                };
+                let (class_name, default_question) =
+                    match provider.providers.cards.load(class).unwrap().data {
+                        CardType::Class {
+                            default_question,
+                            name,
+                            ..
+                        } => (name, default_question),
+                        _ => panic!(),
+                    };
 
                 let thename = &name.evaluate(provider);
                 let class_name = &class_name.evaluate(provider);

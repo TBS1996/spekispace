@@ -31,12 +31,11 @@ impl CardProvider {
         self.providers.run_event(event);
     }
 
-    pub async fn load_all_card_ids(&self) -> Vec<CardId> {
+    pub fn load_all_card_ids(&self) -> Vec<CardId> {
         info!("x1");
         self.providers
             .cards
             .load_ids()
-            .await
             .into_iter()
             .map(|id| id.parse().unwrap())
             .collect()
@@ -45,7 +44,7 @@ impl CardProvider {
     pub async fn load_all(&self) -> Vec<Arc<Card>> {
         info!("load all");
         let mut out: Vec<Arc<Card>> = vec![];
-        let ids = self.load_all_card_ids().await;
+        let ids = self.load_all_card_ids();
 
         for id in ids {
             let card = self.load(id).unwrap();
@@ -70,12 +69,12 @@ impl CardProvider {
         //    return Some(card);
         //}
 
-        let base = self.providers.cards.load(&id.to_string())?;
-        let history = match self.providers.reviews.load(&id.to_string()) {
+        let base = self.providers.cards.load(id)?;
+        let history = match self.providers.reviews.load(id) {
             Some(revs) => revs,
             None => History::new(id),
         };
-        let metadata = match self.providers.metadata.load(&id.to_string()) {
+        let metadata = match self.providers.metadata.load(id) {
             Some(meta) => meta,
             None => Metadata::new(id),
         };

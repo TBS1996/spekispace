@@ -562,6 +562,7 @@ impl CardViewer {
             }
 
             let back = match raw_ty.data.backside() {
+                Some(BackSide::Time(ts)) => ts.to_string(),
                 Some(b) if b.is_text() => b.to_string(),
                 _ => String::new(),
             };
@@ -1317,7 +1318,7 @@ fn save_button(CardViewer: CardViewer) -> Element {
                                     }
                                 },
                                 AttrAnswer::Old { id: attr_card_id, question: _, answer, attr_id } => {
-                                    let prev_back = APP.read().inner().card_provider.providers.cards.load(id.to_string().as_str()).unwrap().ref_backside().cloned().unwrap();
+                                    let prev_back = APP.read().inner().card_provider.providers.cards.load(id).unwrap().ref_backside().cloned().unwrap();
                                     match answer {
                                         Either::Left(answer) => {
                                             if let Some(back) = answer.to_backside() {
@@ -1342,7 +1343,11 @@ fn save_button(CardViewer: CardViewer) -> Element {
                             }
                         }
 
-                        let card = APP.read().inner().card_provider().load(id).unwrap();
+                        let Some(card) = APP.read().inner().card_provider().load(id) else {
+                            dbg!(id);
+                            panic!();
+                        };
+
                         let inner_card = Arc::unwrap_or_clone(card);
                         let card = Signal::new_in_scope(inner_card.clone(),  ScopeId::APP);
                         if let Some(hook) = selveste.save_hook.clone() {

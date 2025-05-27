@@ -6,6 +6,7 @@ use std::{
 };
 
 use async_recursion::async_recursion;
+use either::Either;
 use ledgerstore::LedgerItem;
 use serde::{Deserialize, Serialize};
 use tracing::{error, info, warn};
@@ -173,7 +174,7 @@ impl MaybeDyn {
             MaybeDyn::Dyn(card) => vec![*card],
             MaybeDyn::Collection(id) => {
                 seen_cols.insert(*id);
-                let Some(col) = provider.providers.collections.load(&id.to_string()) else {
+                let Some(col) = provider.providers.collections.load(*id) else {
                     return vec![];
                 };
 
@@ -195,7 +196,7 @@ impl MaybeDyn {
 
         for card in cards {
             info!("dyn card to evaluate: {:?}", card);
-            out.extend(card.evaluate(provider.clone()).await);
+            out.extend(card.evaluate(provider.clone()));
         }
         info!("done evaluating them cards");
 
@@ -230,7 +231,7 @@ impl PartialOrd for MaybeCard {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, Eq, PartialEq, Copy, Hash)]
+#[derive(Serialize, Deserialize, Debug, Clone, Eq, PartialEq, Copy, Hash, PartialOrd, Ord)]
 pub enum DynCard {
     Card(CardId),
     Instances(CardId),
@@ -240,11 +241,10 @@ pub enum DynCard {
 }
 
 impl DynCard {
-    pub async fn evaluate(&self, provider: CardProvider) -> Vec<MaybeCard> {
+    pub fn evaluate(&self, provider: CardProvider) -> Vec<MaybeCard> {
         match self {
             DynCard::Any => provider
                 .load_all_card_ids()
-                .await
                 .into_iter()
                 .map(MaybeCard::Id)
                 .collect(),

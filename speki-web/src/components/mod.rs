@@ -123,7 +123,7 @@ pub fn RenderDependents(
     }
 }
 
-pub fn set_card_link(text: Signal<String>, mut overlay: Signal<Option<OverlayEnum>>) {
+pub fn set_card_link(text: Signal<String>, mut overlay: Signal<Option<OverlayEnum>>, alias: bool) {
     let mut eval = document::eval(
         r#"
         const sel = window.getSelection();
@@ -139,7 +139,11 @@ pub fn set_card_link(text: Signal<String>, mut overlay: Signal<Option<OverlayEnu
 
             let theval = val.clone();
             let f = MyClosure::new(move |card: Signal<Card>| {
-                let s = format!("[[{}]]", card.read().id());
+                let s = if alias {
+                    format!("[[{}|{}]]", card.read().id(), val)
+                } else {
+                    format!("[[{}]]", card.read().id())
+                };
                 text.clone().set(text.cloned().replace(&val, &s));
                 async move {}
             });

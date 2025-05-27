@@ -195,12 +195,7 @@ impl Card {
         }
 
         for class in self.parent_classes() {
-            let card = self
-                .card_provider
-                .providers
-                .cards
-                .load(&class.to_string())
-                .unwrap();
+            let card = self.card_provider.providers.cards.load(class).unwrap();
             if let CardType::Class { attrs, .. } = card.data {
                 output.extend(attrs);
             }
@@ -355,7 +350,7 @@ impl Card {
             card_provider
                 .providers
                 .cards
-                .load(&id.to_string())
+                .load(id)
                 .unwrap()
                 .data
                 .raw_front()
@@ -384,7 +379,7 @@ impl Card {
                         card_provider
                             .providers
                             .cards
-                            .load(pcl.to_string().as_str())
+                            .load(*pcl)
                             .unwrap()
                             .data
                             .raw_front(),
@@ -395,7 +390,7 @@ impl Card {
                     card_provider
                         .providers
                         .cards
-                        .load(pcl.to_string().as_str())
+                        .load(*pcl)
                         .unwrap()
                         .data
                         .raw_front(),

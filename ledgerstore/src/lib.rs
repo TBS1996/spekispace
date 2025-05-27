@@ -480,7 +480,7 @@ impl<T: LedgerItem<E>, E: LedgerEvent> Ledger<T, E> {
         self.load_all_on_state(&hash)
     }
 
-    pub async fn load_ids(&self) -> Vec<String> {
+    pub fn load_ids(&self) -> Vec<String> {
         let Some(hash) = self.state_hash() else {
             return Default::default();
         };
@@ -513,11 +513,12 @@ impl<T: LedgerItem<E>, E: LedgerEvent> Ledger<T, E> {
         }
     }
 
-    pub fn load(&self, id: &str) -> Option<T> {
-        trace!("load item from ledger: {id}");
+    pub fn load(&self, id: impl AsRef<E::Key>) -> Option<T> {
+        let id = id.as_ref();
+        trace!("load item from ledger: {id:?}");
         let state = self.state_hash()?;
-        trace!("loading item from state: {state} item : {id}");
-        match self.snap.get(&state, id) {
+        trace!("loading item from state: {state} item : {id:?}");
+        match self.snap.get(&state, id.to_string().as_str()) {
             Some(item) => serde_json::from_slice(&item).unwrap(),
             None => None,
         }
@@ -731,11 +732,13 @@ impl<T: LedgerItem<E>, E: LedgerEvent> Ledger<T, E> {
         let mut to_delete: HashSet<Content> = Default::default();
         let mut cleanup_states: HashSet<LedgerHash> = Default::default();
 
+        let modify_cache = unapplied_entries.len() < 100;
+
         info!("start apply unapplied!");
         while let Some(entry) = unapplied_entries.pop() {
             let idx = entry.index;
             let (state_hash, new_contents) =
-                timed!(self.run_event(entry.event.clone(), last_applied.as_deref(), true));
+                timed!(self.run_event(entry.event.clone(), last_applied.as_deref(), modify_cache));
             timed!(self.save_ledger_state(&entry.hash(), &state_hash));
             last_applied = Some(state_hash);
             info!("new last applied: {last_applied:?}");
@@ -835,7 +838,7 @@ impl<T: LedgerItem<E>, E: LedgerEvent> Ledger<T, E> {
 
         let cachegetter = self.cachegetter(state_hash.map(ToOwned::to_owned));
 
-        let old_cache = if !new_item {
+        let old_cache = if !new_item && update_cache {
             timed!(item.caches(cachegetter.clone()))
         } else {
             Default::default()
@@ -843,7 +846,12 @@ impl<T: LedgerItem<E>, E: LedgerEvent> Ledger<T, E> {
 
         let id = item.item_id();
         let item = timed!(item.run_event(event.clone()).unwrap());
-        let new_caches = item.caches(cachegetter);
+        let new_caches = if update_cache {
+            item.caches(cachegetter)
+        } else {
+            Default::default()
+        };
+
         let item = serde_json::to_vec(&item).unwrap();
         let (state_hash, new_contents) = timed!(self.snap.save(state_hash, &id.to_string(), item));
 

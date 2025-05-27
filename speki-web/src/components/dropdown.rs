@@ -2,7 +2,7 @@ use std::fmt::{Debug, Display};
 
 use dioxus::prelude::*;
 use serde::{Deserialize, Serialize};
-use tracing::info;
+use tracing::trace;
 
 #[component]
 pub fn DropComponent<T: PartialEq + Clone + 'static>(
@@ -15,7 +15,7 @@ where
 {
     let mut dropdown = selected.clone();
     let value = serde_json::to_string(&dropdown.cloned()).unwrap();
-    info!("value: {value}");
+    trace!("value: {value}");
 
     rsx! {
         div {
@@ -78,7 +78,7 @@ where
     T: Serialize + for<'de> Deserialize<'de> + 'static + Clone + Display + PartialEq,
 {
     pub fn new(options: impl IntoIterator<Item = T>, default: Option<T>) -> Self {
-        info!("creating dopdown");
+        trace!("creating dopdown");
         let options: Vec<T> = options.into_iter().collect();
         assert!(!options.is_empty(), "must provide at least one option");
 
@@ -87,7 +87,7 @@ where
             None => options.iter().next().cloned().unwrap(),
         };
 
-        info!("selected val is: {selected}");
+        trace!("selected val is: {selected}");
 
         let selected = Signal::new_in_scope(selected, ScopeId(3));
 

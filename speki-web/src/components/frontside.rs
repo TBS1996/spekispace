@@ -122,10 +122,10 @@ pub fn FrontPutRender(
                     placeholder: "{placeholder}",
                     value: "{text}",
                     oninput: move |evt| text.set(evt.value()),
-                    onmouseup: move |_| {
+                    onmouseup: move |e| {
                         let text = text.clone();
                         let overlay = overlay.clone();
-                        set_card_link(text, overlay);
+                        set_card_link(text, overlay, e.modifiers().shift());
                     },
                 }
 

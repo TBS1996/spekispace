@@ -9,6 +9,7 @@ use ledgerstore::CacheKey;
 use ledgerstore::{Ledger, TimeProvider};
 use metadata::Metadata;
 use recall_rate::{History, ReviewEvent};
+use set::{Set, SetEvent};
 use std::fmt::Display;
 use std::{collections::HashMap, fmt::Debug, sync::Arc, time::Duration};
 use tracing::trace;
@@ -23,6 +24,7 @@ mod common;
 pub mod ledger;
 pub mod metadata;
 pub mod recall_rate;
+pub mod set;
 
 pub use attribute::{Attribute, AttributeId};
 pub use card::{Card, CardType};
@@ -152,6 +154,7 @@ impl CollectionProvider {
 #[derive(Clone)]
 pub struct Provider {
     pub cards: Ledger<RawCard, CardEvent>,
+    pub sets: Ledger<Set, SetEvent>,
     pub reviews: Ledger<History, ReviewEvent>,
     pub collections: Ledger<Collection, CollectionEvent>,
     pub metadata: Ledger<Metadata, MetaEvent>,
@@ -193,6 +196,7 @@ impl App {
         history_provider: Ledger<History, ReviewEvent>,
         collections_provider: Ledger<Collection, CollectionEvent>,
         meta_provider: Ledger<Metadata, MetaEvent>,
+        set_provider: Ledger<Set, SetEvent>,
     ) -> Self
     where
         A: RecallCalc + 'static + Send,
@@ -209,6 +213,7 @@ impl App {
             collections: collections_provider,
             metadata: meta_provider,
             time: time_provider.clone(),
+            sets: set_provider,
         };
 
         /*
@@ -281,7 +286,7 @@ impl App {
     }
 
     pub async fn load_cards(&self) -> Vec<CardId> {
-        self.card_provider.load_all_card_ids().await
+        self.card_provider.load_all_card_ids()
     }
 
     pub async fn cards_filtered(&self, filter: CardFilter) -> Vec<Arc<Card>> {

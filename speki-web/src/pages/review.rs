@@ -1,10 +1,12 @@
 use std::{fmt::Debug, sync::Arc};
 
 use dioxus::prelude::*;
+use ledgerstore::{Ledger, LedgerItem};
 use speki_core::{
     cardfilter::CardFilter,
     collection::{Collection, DynCard},
     ledger::{CollectionAction, CollectionEvent},
+    set::{Input, Set, SetEvent, SetExpr, SetId},
 };
 use tracing::info;
 use uuid::Uuid;
@@ -188,6 +190,7 @@ pub fn Review() -> Element {
     tracing::info!("memo lol: {:?}", &state.cardfilter);
 
     let overlay = state.overlay.clone();
+    let sets: Signal<Vec<Set>> = Signal::new_in_scope(vec![], ScopeId::APP);
 
     rsx! {
         Overender {
@@ -201,6 +204,7 @@ pub fn Review() -> Element {
                         collections: state.collections.clone(),
                         overlay: state.overlay.clone(),
                     }
+                    RenderSets { sets }
                 }
             }
         }
@@ -296,6 +300,74 @@ impl RecallDist {
         tracing::info!("{selv:?}");
 
         selv
+    }
+}
+
+#[component]
+fn RenderInput(input: Input, #[props(default = 0)] depth: usize) -> Element {
+    let ledger = APP.read().inner().provider.sets.clone();
+    let indent = format!("{}• ", " ".repeat(depth));
+
+    rsx! {
+        match input {
+            Input::Leaf(card) => {
+                rsx!{p { "{indent}Leaf: {card:?}" }}
+            },
+            Input::Reference(id) => {
+                rsx!{RenderSet { set: ledger.load(id).unwrap(), depth: depth + 1}}
+            },
+            Input::Expr(expr) => {
+                rsx!{RenderExpr { expr: (*expr).clone(), depth: depth + 1}}
+            },
+        }
+    }
+}
+
+#[component]
+fn RenderExpr(expr: SetExpr, #[props(default = 0)] depth: usize) -> Element {
+    let name = expr.set_name();
+    let inputs = expr.inputs();
+    let indent = format!("{}⎯ ", " ".repeat(depth));
+
+    rsx! {
+        div {
+            p { "{indent}{name}" }
+
+            for input in inputs {
+                RenderInput { input: input.clone(), depth: depth + 1 }
+            }
+        }
+    }
+}
+
+#[component]
+fn RenderSet(set: Set, #[props(default = 0)] depth: usize) -> Element {
+    let indent = format!("{}⎯ ", " ".repeat(depth));
+    rsx! {
+        div {
+            p { "{indent}{set.name}" }
+            RenderExpr { expr: set.expr, depth: depth + 1 }
+        }
+    }
+}
+
+#[component]
+fn RenderSets(sets: Signal<Vec<Set>>) -> Element {
+    rsx! {
+        div {
+        class: "flex flex-col",
+        for set in sets.cloned() {
+            RenderSet { set }
+        }
+
+        button {
+            onclick: move |_|{
+                let set = Set::new_default(SetId::new_v4());
+                sets.clone().write().push(set);
+            },
+            "new set"
+        }
+    }
     }
 }
 

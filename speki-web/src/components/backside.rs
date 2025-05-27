@@ -66,10 +66,11 @@ pub fn BackPutRender(
                                         value: "{sig}",
                                         placeholder: "{placeholder}",
                                         oninput: move |evt| sig.set(evt.value()),
-                                        onmouseup: move |_| {
+                                        onmouseup: move |e| {
+                                            let with_alias = e.modifiers().shift();
                                             let text = text.clone();
                                             let overlay = overlay.clone();
-                                            set_card_link(text, overlay);
+                                            set_card_link(text, overlay, with_alias);
                                         },
                                     }
                                 }

@@ -11,7 +11,7 @@ use speki_core::{
     recall_rate::Recall,
     Card,
 };
-use tracing::info;
+use tracing::{info, trace};
 
 use crate::{
     components::RenderDependents,
@@ -136,11 +136,11 @@ impl ReviewSession {
         let mut out: BTreeSet<Arc<Card>> = Default::default();
 
         for card in &self.cards {
-            let cards = card.evaluate(provider.clone()).await;
+            let cards = card.evaluate(provider.clone());
             let cardqty = cards.len();
             for (idx, card) in cards.into_iter().enumerate() {
                 if idx % 100 == 0 {
-                    info!("eval {}/{}", idx, cardqty);
+                    trace!("eval {}/{}", idx, cardqty);
                 }
                 let card = match card {
                     MaybeCard::Id(id) => provider.load(id).unwrap(),

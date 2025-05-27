@@ -183,20 +183,17 @@ impl<PK: Display + Clone, RK: Display + Clone> CacheFs<PK, RK> {
     }
 
     pub fn get_cache(&self, gen_hash: &str, cache_key: &CacheKey<PK, RK>) -> Vec<String> {
-        
         let path = self.full_path(gen_hash, &cache_key.to_string());
         let mut out = vec![];
 
         if !path.exists() {
             return vec![];
         }
-        
 
         for line in fs::read_to_string(&path).unwrap().lines() {
             let line: String = line.parse().unwrap();
             out.push(line);
         }
-        
 
         out
     }
@@ -236,7 +233,10 @@ impl SnapFs {
         let mut file_map = HashMap::new();
 
         for entry in WalkDir::new(&path).follow_links(true) {
-            let entry = entry.unwrap();
+            let Ok(entry) = entry else {
+                dbg!(entry);
+                panic!();
+            };
             let path = entry.path();
 
             if path.is_file() {
@@ -401,7 +401,6 @@ impl FsDir {
         trace!("loading dir: {dir_path:?}");
         let path = full_blob_path(&dir_path, &hash);
         if !path.exists() {
-            
             return None;
         }
 
@@ -569,7 +568,14 @@ impl Deref for Content {
 
 impl Content {
     pub fn new(path: PathBuf) -> Self {
-        let path = path.canonicalize().unwrap();
+        let path = match path.canonicalize() {
+            Ok(p) => p,
+            Err(e) => {
+                dbg!(path);
+                dbg!(e);
+                panic!();
+            }
+        };
         if path.is_file() {
             Self::File(path)
         } else {
@@ -590,15 +596,11 @@ impl Content {
         match self {
             Self::File(original) => match hard_link(original, &link) {
                 Ok(()) => {}
-                Err(e) => {
-                    
-                }
+                Err(e) => {}
             },
             Self::Dir(original) => match symlink(original, link) {
                 Ok(()) => {}
-                Err(e) => {
-                    
-                }
+                Err(e) => {}
             },
         }
     }

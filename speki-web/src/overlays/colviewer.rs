@@ -278,7 +278,7 @@ pub fn ColViewRender(props: CollectionEditor) -> Element {
                 let name = selv.colname.cloned();
                 spawn(async move {
                     let id = selv.col.read().id;
-                    match APP.read().inner().provider.collections.load(&id.to_string()) {
+                    match APP.read().inner().provider.collections.load(id) {
                         Some(col) =>{
                             let old_name = col.name;
                             if old_name != name {
