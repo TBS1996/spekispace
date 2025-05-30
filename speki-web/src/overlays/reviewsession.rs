@@ -148,7 +148,7 @@ impl ReviewSession {
                     out.insert(card.clone());
                 }
 
-                for dependency in card.recursive_dependencies().await {
+                for dependency in card.recursive_dependencies() {
                     let card = provider.load(dependency).unwrap();
                     if self.filter.filter(card.clone()).await {
                         out.insert(card.clone());

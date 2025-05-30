@@ -546,7 +546,26 @@ impl Card {
         deps
     }
 
-    pub async fn recursive_dependencies(&self) -> Vec<CardId> {
+    pub fn recursive_dependencies_as_card(&self) -> Vec<Arc<Card>> {
+        tracing::trace!("getting dependencies of: {}", self.id);
+        let mut deps = vec![];
+        let mut stack = vec![Arc::new(self.clone())];
+
+        while let Some(card) = stack.pop() {
+            if self.id() != card.id() {
+                deps.push(card.clone());
+            }
+
+            for dep in card.dependencies() {
+                let dep = self.card_provider.load(dep).unwrap();
+                stack.push(dep);
+            }
+        }
+
+        deps
+    }
+
+    pub fn recursive_dependencies(&self) -> Vec<CardId> {
         tracing::trace!("getting dependencies of: {}", self.id);
         let mut deps = vec![];
         let mut stack = vec![self.id()];
@@ -572,7 +591,7 @@ impl Card {
         tracing::trace!("min rec recall of {}", self.id);
         let mut min_recall: RecallRate = 1.0;
 
-        for card in self.recursive_dependencies().await {
+        for card in self.recursive_dependencies() {
             let card = self.card_provider.load(card).unwrap();
             min_recall = min_recall.min(card.recall_rate().unwrap_or_default());
         }

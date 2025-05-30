@@ -199,7 +199,6 @@ async fn collect_recursive_dependencies(app: App, node: Node) -> Vec<Node> {
                 let deps: Vec<Node> = card
                     .read()
                     .recursive_dependencies()
-                    .await
                     .into_iter()
                     .map(Node::Card)
                     .collect();
@@ -446,7 +445,7 @@ mod tests {
         for edge in graph.edge_references() {
             let source = graph.node_weight(edge.source()).unwrap().id.clone();
             let target = graph.node_weight(edge.target()).unwrap().id.clone();
-            
+
         }
 
         // After reduction

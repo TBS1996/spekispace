@@ -365,15 +365,14 @@ pub async fn as_graph(app: &App) -> String {
     graphviz::export(app).await
 }
 
-mod graphviz {
+pub mod graphviz {
     use std::collections::BTreeSet;
 
     use super::*;
 
-    pub async fn export(app: &App) -> String {
+    pub fn export_cards(cards: impl IntoIterator<Item = Arc<Card>>) -> String {
         let mut dot = String::from("digraph G {\nranksep=2.0;\nrankdir=BT;\n");
         let mut relations = BTreeSet::default();
-        let cards = app.load_all_cards().await;
 
         for card in cards {
             let label = card
@@ -424,6 +423,11 @@ mod graphviz {
 
         dot.push_str("}\n");
         dot
+    }
+
+    pub async fn export(app: &App) -> String {
+        let cards = app.load_all_cards().await;
+        export_cards(cards)
     }
 
     // Convert recall rate to a color, from red to green

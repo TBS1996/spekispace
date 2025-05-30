@@ -128,7 +128,7 @@ impl Collection {
                             warn!("unable to find card with id: {}", id);
                             return out;
                         };
-                        for dep in card.recursive_dependencies().await {
+                        for dep in card.recursive_dependencies() {
                             let dep = provider.load(dep).unwrap();
                             out.push(dep);
                         }
@@ -136,7 +136,7 @@ impl Collection {
                         out
                     }
                     MaybeCard::Card(card) => {
-                        for dep in card.recursive_dependencies().await {
+                        for dep in card.recursive_dependencies() {
                             let dep = provider.load(dep).unwrap();
                             out.push(dep);
                         }

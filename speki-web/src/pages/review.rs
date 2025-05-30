@@ -1,4 +1,6 @@
-use std::{cmp::Ordering, collections::BTreeSet, fmt::Debug, sync::Arc};
+use std::{
+    cmp::Ordering, collections::BTreeSet, fmt::Debug, fs, io::Write, path::PathBuf, sync::Arc,
+};
 
 use dioxus::prelude::*;
 use either::IntoEither;
@@ -387,11 +389,11 @@ fn RenderSet(
     #[props(default = 0)] depth: usize,
     overlay: Signal<Option<OverlayEnum>>,
 ) -> Element {
-    let indent = format!("{}⎯ ", " ".repeat(depth));
     let mut name = set.name.clone();
 
     let ledger = APP.read().inner().provider.sets.clone();
     let filter2 = filter.clone();
+    let filter3 = filter.clone();
 
     rsx! {
         div {
@@ -443,17 +445,27 @@ fn RenderSet(
                             let provider = APP.read().inner().card_provider.clone();
                             let cards = expr.eval(&provider);
 
-                            let mut filtered_cards: Vec<CardId> = vec![];
-
+                            let mut cards_with_deps: BTreeSet<Arc<Card>> = Default::default();
 
                             for card in cards {
-                                let card: Arc<Card> = match card {
-                                    MaybeCard::Card(c) => c,
+                                let card = match card {
+                                    MaybeCard::Card(card) => card,
                                     MaybeCard::Id(id) => {
-                                        provider.load(id).unwrap()
+                                    provider.load(id).unwrap()
                                     },
                                 };
 
+                                for dep_card in card.recursive_dependencies_as_card(){
+                                    cards_with_deps.insert(dep_card);
+                                }
+
+                                cards_with_deps.insert(card);
+                            }
+
+                            let mut filtered_cards: Vec<CardId> = vec![];
+
+
+                            for card in cards_with_deps {
                                 let id = card.id();
                                 if filter.filter(card).await {
                                     filtered_cards.push(id);
@@ -469,6 +481,48 @@ fn RenderSet(
 
                     },
                     "review"
+                }
+
+                button {
+                    onclick: move |_| {
+                        let name = set.name.cloned();
+                        let expr: SetExpr = match SetExpr::try_from(set.expr.cloned()) {
+                            Ok(t) => t,
+                            Err(s) => {
+                                dbg!(s);
+                                return;
+                            }
+                        };
+
+                        let provider = APP.read().inner().card_provider.clone();
+                        let mcards = expr.eval(&provider);
+
+                        let mut cards: BTreeSet<Arc<Card>> = BTreeSet::new();
+
+                        for card in mcards {
+                            let card = match card {
+                                MaybeCard::Card(card) => card,
+                                MaybeCard::Id(id) => {
+                                 provider.load(id).unwrap()
+                                },
+                            };
+
+                            for dep in card.recursive_dependencies() {
+                                let card = provider.load(dep).unwrap();
+                                cards.insert(card);
+                            }
+                            cards.insert(card);
+                        }
+
+                        let dot = speki_core::graphviz::export_cards(cards);
+                        let mut path = PathBuf::from(name);
+                        path.set_extension("dot");
+                        let mut f = fs::File::create(&path).unwrap();
+                        f.write_all(dot.as_bytes()).unwrap();
+                        info!("done exporting to {path:?}!");
+
+                    },
+                    "export DOT"
                 }
             }
             RenderExpr { filter, inputs: set.expr.cloned().inputs.clone(), ty: set.expr.cloned().ty.clone(), depth: depth + 1 , overlay}
