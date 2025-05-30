@@ -52,6 +52,13 @@ pub trait LedgerItem<E: LedgerEvent + Debug>:
 
     fn item_id(&self) -> E::Key;
 
+    /// Assertions that should hold true. Like invariants with other cards that it references.
+    /// called by run_event, if it returns error after an event is run, the event is not applied.
+    fn validate(&self, ledger: FixedLedger<Self, E>) -> Result<(), Self::Error> {
+        let _ = ledger;
+        Ok(())
+    }
+
     /// List of references to other items, along with the name of the type of reference.
     ///
     /// Used to create a index, like if item A references item B, we cache that item B is referenced by item A,
@@ -871,6 +878,7 @@ impl<T: LedgerItem<E>, E: LedgerEvent> Ledger<T, E> {
 
         let id = item.item_id();
         let item = timed!(item.run_event(event.clone()).unwrap());
+        item.validate(cachegetter.clone()).unwrap();
         let new_caches = if update_cache {
             item.caches(cachegetter)
         } else {

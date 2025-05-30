@@ -18,9 +18,73 @@ use dioxus::prelude::*;
 use itemselector::{ItemSelector, ItemSelectorRender};
 use reviewsession::ReviewRender;
 use speki_core::collection::Collection;
-use std::fmt::Debug;
+use std::{fmt::Debug, sync::Arc};
 use textinput::TextInputRender;
 use yesno::YesnoRender;
+
+#[derive(Clone)]
+pub struct OverlayChoice {
+    pub display: String,
+    pub overlay: Arc<Box<dyn Fn() -> OverlayEnum>>,
+}
+
+impl PartialEq for OverlayChoice {
+    fn eq(&self, other: &Self) -> bool {
+        self.display == other.display
+    }
+}
+
+impl Eq for OverlayChoice {}
+
+#[component]
+pub fn OverlaySelectorRender(
+    title: String,
+    choices: Vec<OverlayChoice>,
+    overlay: Signal<Option<OverlayEnum>>,
+) -> Element {
+    rsx! {
+        p{"{title}"}
+
+        div {
+            class: "flex flex-col",
+
+            for choice in choices {
+
+                button {
+                    onclick: move |_|{
+                        let new = (choice.overlay)();
+                        overlay.clone().set(Some(new));
+                    },
+                    "{choice.display}"
+                }
+            }
+        }
+    }
+}
+
+#[derive(Clone)]
+pub struct OverlaySelector {
+    pub title: String,
+    pub choices: Vec<OverlayChoice>,
+    pub chosen: Option<Box<OverlayEnum>>,
+}
+
+pub struct Selector<T> {
+    pub title: String,
+    pub choices: Vec<SelectorItem<T>>,
+    pub on_select: Arc<Box<dyn FnOnce(T)>>,
+}
+
+pub struct SelectorItem<T> {
+    pub display: String,
+    pub f: Arc<Box<dyn Fn() -> T>>,
+}
+
+/*
+
+
+
+*/
 
 #[derive(Clone)]
 pub enum OverlayEnum {
@@ -31,6 +95,7 @@ pub enum OverlayEnum {
     CardSelector(CardSelector),
     ColSelector(ItemSelector<Collection>),
     YesNo(Yesno),
+    OverlaySelector(OverlaySelector),
 }
 
 impl OverlayEnum {
@@ -42,6 +107,9 @@ impl OverlayEnum {
             OverlayEnum::Text(_) => Signal::new_in_scope(Default::default(), ScopeId::APP),
             OverlayEnum::YesNo(_) => Signal::new_in_scope(Default::default(), ScopeId::APP),
             OverlayEnum::ColSelector(_) => Signal::new_in_scope(Default::default(), ScopeId::APP),
+            OverlayEnum::OverlaySelector(_) => {
+                Signal::new_in_scope(Default::default(), ScopeId::APP)
+            }
             OverlayEnum::CardViewer(elm) => elm.overlay.clone(),
             OverlayEnum::CardSelector(elm) => elm.overlay.clone(),
         }
@@ -56,6 +124,7 @@ impl OverlayEnum {
             OverlayEnum::CardSelector(elm) => elm.done.cloned(),
             OverlayEnum::YesNo(elm) => elm.done.cloned(),
             OverlayEnum::ColSelector(elm) => elm.done.cloned(),
+            OverlayEnum::OverlaySelector(elm) => elm.chosen.is_some(),
         }
     }
 }
@@ -70,6 +139,7 @@ impl Debug for OverlayEnum {
             Self::CardSelector(_) => f.debug_tuple("card selector").finish(),
             Self::YesNo(_) => f.debug_tuple("yesno").finish(),
             Self::ColSelector(_) => f.debug_tuple("col selector").finish(),
+            Self::OverlaySelector(_) => f.debug_tuple("overlay selector").finish(),
         }
     }
 }
@@ -120,7 +190,6 @@ pub fn Overender(overlay: Signal<Option<OverlayEnum>>, root: Element) -> Element
                                     tot: elm.tot_len,
                                     overlay: elm.overlay.clone(),
                                     dependencies:elm.dependencies.clone(),
-                                    session: elm.session.clone(),
                                 }
                             },
                             OverlayEnum::Colviewer(elm) => rsx!{
@@ -153,6 +222,9 @@ pub fn Overender(overlay: Signal<Option<OverlayEnum>>, root: Element) -> Element
                                     tempnode: elm.tempnode.clone(),
                                     overlay: elm.overlay.clone(),
                                 }
+                            },
+                            OverlayEnum::OverlaySelector(elm) => rsx! {
+                                OverlaySelectorRender { title: elm.title.clone(), choices: elm.choices.clone(), overlay: overlay.clone()  }
                             },
                             OverlayEnum::YesNo(elm) => rsx! {
                                 YesnoRender {

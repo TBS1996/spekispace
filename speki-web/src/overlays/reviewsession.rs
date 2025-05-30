@@ -31,7 +31,6 @@ fn RecallButton(
     card: Signal<Card>,
     mut queue: Signal<Queue>,
     mut show_backside: Signal<bool>,
-    session: ReviewSession,
 ) -> Element {
     let _label = match recall {
         Recall::None => "😞",
@@ -72,7 +71,6 @@ fn ReviewButtons(
     mut show_backside: Signal<bool>,
     card: Signal<Card>,
     queue: Signal<Queue>,
-    session: ReviewSession,
 ) -> Element {
     rsx! {
         div {
@@ -103,7 +101,6 @@ fn ReviewButtons(
                             card: card.clone(),
                             queue: queue.clone(),
                             show_backside: show_backside.clone(),
-                            session: session.clone(),
                         }
                     }
                 }
@@ -174,7 +171,6 @@ pub fn ReviewRender(
     tot: Resource<usize>,
     overlay: Signal<Option<OverlayEnum>>,
     dependencies: Resource<Vec<Signal<Card>>>,
-    session: ReviewSession,
 ) -> Element {
     let card2 = card.clone();
     let log_event = move |event: Rc<KeyboardData>| {
@@ -246,7 +242,7 @@ pub fn ReviewRender(
                             class: "flex-none w-full md:w-1/2 p-4 box-border overflow-y-auto overflow-x-hidden order-2 md:order-1",
                             style: "min-height: 0; max-height: 100%;",
                              CardSides {
-                                front, back, queue, card, show_backside, session, overlay: overlay.clone()
+                                front, back, queue, card, show_backside, overlay: overlay.clone()
                              }
                         }
                     }
@@ -315,23 +311,16 @@ pub struct ReviewState {
     pub show_backside: Signal<bool>,
     pub is_done: Memo<bool>,
     pub overlay: Signal<Option<OverlayEnum>>,
-    pub session: ReviewSession,
 }
 
 impl ReviewState {
     pub async fn new_with_filter(cards: Vec<DynCard>, filter: CardFilter) -> Self {
         let session = ReviewSession::new(cards, filter).await;
-        Self::new(session)
+        Self::new(session.thecards.into_iter().map(|c| c.id()).collect())
     }
 
-    pub fn new(session: ReviewSession) -> Self {
-        info!("start review for {} cards", session.thecards.len());
-
-        let mut thecards = vec![];
-
-        for card in &session.thecards {
-            thecards.push(card.id());
-        }
+    pub fn new(thecards: Vec<CardId>) -> Self {
+        info!("start review for {} cards", thecards.len());
 
         let overlay: Signal<Option<OverlayEnum>> = Signal::new_in_scope(None, ScopeId::APP);
         let queue: Signal<Queue> = Signal::new_in_scope(Queue::new(thecards), ScopeId::APP);
@@ -394,7 +383,6 @@ impl ReviewState {
             is_done,
             queue,
             overlay,
-            session,
         }
     }
 }
@@ -573,7 +561,6 @@ fn CardSides(
     show_backside: Signal<bool>,
     card: Signal<Card>,
     queue: Signal<Queue>,
-    session: ReviewSession,
     overlay: Signal<Option<OverlayEnum>>,
 ) -> Element {
     let backside_visibility_class = if show_backside() {
@@ -613,7 +600,6 @@ fn CardSides(
                     show_backside,
                     card,
                     queue,
-                    session,
                 }
             }
         }

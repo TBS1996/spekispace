@@ -1,8 +1,21 @@
-use std::fmt::{Debug, Display};
+use std::{
+    fmt::{Debug, Display},
+    sync::Arc,
+};
 
 use dioxus::prelude::*;
 use serde::{Deserialize, Serialize};
 use tracing::trace;
+
+/// just to pass in the displayer thing, cause i can't pass in directly since it needs to implement partialeq mannn...
+#[derive(Clone)]
+pub struct Displayer<T>(pub Arc<Box<dyn Fn(&T) -> String>>);
+
+impl<T> PartialEq for Displayer<T> {
+    fn eq(&self, _: &Self) -> bool {
+        true
+    }
+}
 
 #[component]
 pub fn DropComponent<T: PartialEq + Clone + 'static>(
@@ -15,7 +28,7 @@ where
 {
     let mut dropdown = selected.clone();
     let value = serde_json::to_string(&dropdown.cloned()).unwrap();
-    trace!("value: {value}");
+    tracing::info!("value: {value}");
 
     rsx! {
         div {
@@ -63,6 +76,7 @@ where
     #[props(!optional)]
     pub hook: Option<Callback<T, ()>>,
     pub init: Signal<bool>,
+    pub display: Option<Arc<Box<dyn Fn(&T) -> String>>>,
 }
 
 impl<T: Serialize + for<'de> Deserialize<'de> + 'static + Clone + Display + PartialEq> Debug
@@ -96,6 +110,14 @@ where
             selected,
             hook: None,
             init: Signal::new_in_scope(false, ScopeId::APP),
+            display: None,
+        }
+    }
+
+    pub fn with_display_fn(self, f: Arc<Box<dyn Fn(&T) -> String>>) -> Self {
+        Self {
+            display: Some(f),
+            ..self
         }
     }
 

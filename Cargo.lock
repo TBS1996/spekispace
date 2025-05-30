@@ -4301,6 +4301,7 @@ dependencies = [
  "omtrent",
  "serde",
  "serde_json",
+ "strum",
  "tokio",
  "toml",
  "tracing",

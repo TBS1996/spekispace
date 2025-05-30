@@ -33,8 +33,6 @@ pub const DEFAULT_FILTER: &'static str =
 /// is true every time we change route, and is set back to false after the cyto instance is re-rendered
 pub static ROUTE_CHANGE: AtomicBool = AtomicBool::new(false);
 
-use dioxus::desktop::{Config, LogicalSize, WindowBuilder};
-
 fn main() {
     dioxus_logger::init(Level::INFO).expect("failed to init logger");
     info!("starting app");

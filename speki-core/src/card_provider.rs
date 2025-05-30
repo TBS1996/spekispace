@@ -4,7 +4,7 @@ use crate::{
     ledger::{CardAction, CardEvent},
     metadata::Metadata,
     recall_rate::History,
-    Card, Provider, Recaller, RefType, TimeGetter,
+    Card, Provider, Recaller, TimeGetter,
 };
 use dioxus_logger::tracing::{info, trace};
 use std::{collections::BTreeSet, fmt::Debug, sync::Arc};

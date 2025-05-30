@@ -363,9 +363,7 @@ impl Card {
             CardType::Unfinished { .. } => {
                 EvalText::just_some_string("<unfinished>".to_string(), &card_provider)
             }
-            CardType::Attribute { .. } => {
-                EvalText::just_some_string("<attribute>".to_string(), &card_provider)
-            }
+            CardType::Attribute { back, .. } => from_back(back),
             CardType::Class {
                 back, parent_class, ..
             } => match (back, parent_class) {

@@ -440,11 +440,7 @@ impl CardType {
 
                 let attr = class.get_attr(*attribute).unwrap();
 
-                let instance = provider.load(*instance).unwrap().name_textdata();
-
-                let instance = instance.to_raw();
-
-                let new = attr.pattern.replace("{}", &instance);
+                let new = attr.pattern.replace("{}", &format!("[[{instance}]]"));
 
                 TextData::from_raw(&new)
             }

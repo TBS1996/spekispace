@@ -2,6 +2,7 @@ use std::{collections::BTreeSet, fmt::Display};
 
 use ledgerstore::{LedgerEvent, LedgerItem};
 use serde::{Deserialize, Serialize};
+use strum::{Display, EnumDiscriminants, EnumIter, EnumString};
 use uuid::Uuid;
 
 use crate::{
@@ -25,6 +26,12 @@ pub enum SetAction {
 pub struct SetEvent {
     id: SetId,
     action: SetAction,
+}
+
+impl SetEvent {
+    pub fn new(id: SetId, action: SetAction) -> Self {
+        Self { id, action }
+    }
 }
 
 impl LedgerEvent for SetEvent {
@@ -80,12 +87,29 @@ pub enum Input {
     Expr(Box<SetExpr>),
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Hash, Eq, PartialOrd, Ord)]
+#[derive(
+    Serialize, Deserialize, Debug, Clone, PartialEq, Hash, Eq, PartialOrd, Ord, EnumDiscriminants,
+)]
+#[strum_discriminants(derive(
+    EnumIter,
+    EnumString,
+    Display,
+    Serialize,
+    Deserialize,
+    PartialOrd,
+    Ord
+))]
 pub enum SetExpr {
     Union(BTreeSet<Input>),
     Intersection(BTreeSet<Input>),
-    Difference(Box<Input>, Box<Input>),
-    Complement(Box<Input>),
+    Difference(Input, Input),
+    Complement(Input),
+}
+
+impl Default for SetExpr {
+    fn default() -> Self {
+        Self::Union(Default::default())
+    }
 }
 
 impl Input {
@@ -152,11 +176,11 @@ impl SetExpr {
 
                 set
             }
-            SetExpr::Difference(input, input1) => input
-                .eval(provider)
-                .difference(&input1.eval(provider))
-                .cloned()
-                .collect(),
+            SetExpr::Difference(input1, input2) => {
+                let set1 = input1.eval(provider);
+                let set2 = input2.eval(provider);
+                set1.difference(&set2).cloned().collect()
+            }
             SetExpr::Complement(input) => provider
                 .providers
                 .cards
