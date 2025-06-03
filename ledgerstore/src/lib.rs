@@ -770,14 +770,21 @@ impl<T: LedgerItem<E>, E: LedgerEvent> Ledger<T, E> {
         while let Some(entry) = unapplied_entries.pop() {
             let idx = entry.index;
             let (state_hash, new_contents) =
-                timed!(self.run_event(entry.event.clone(), last_applied.as_deref(), modify_cache));
-            timed!(self.save_ledger_state(&entry.hash(), &state_hash));
+                self.run_event(entry.event.clone(), last_applied.as_deref(), modify_cache);
+            self.save_ledger_state(&entry.hash(), &state_hash);
             last_applied = Some(state_hash);
-            info!("new last applied: {last_applied:?}");
+            if modify_cache {
+                info!("new last applied: {last_applied:?}");
+            } else {
+                let len = unapplied_entries.len();
+                if len % 100 == 0 {
+                    info!("remaining unapplied: {len}");
+                }
+            }
 
             let new_contents: HashSet<Content> = new_contents.into_iter().collect();
 
-            timed!(self.append_ref(idx, new_contents));
+            self.append_ref(idx, new_contents);
 
             if entry.index % self.gc_keep == 0 && self.gc_keep < entry.index {
                 let (content, states) = self.garbage_collection(entry.index - self.gc_keep);
@@ -848,7 +855,9 @@ impl<T: LedgerItem<E>, E: LedgerEvent> Ledger<T, E> {
         update_cache: bool,
     ) -> (StateHash, Vec<Content>) {
         let prev_state_hash = state_hash;
-        info!("running event: {event:?} on hash {state_hash:?}");
+        if update_cache {
+            info!("running event: {event:?} on hash {state_hash:?}");
+        }
 
         let mut new_item = true;
         let item = match state_hash {
@@ -871,7 +880,7 @@ impl<T: LedgerItem<E>, E: LedgerEvent> Ledger<T, E> {
         let cachegetter = self.cachegetter(state_hash.map(ToOwned::to_owned));
 
         let old_cache = if !new_item && update_cache {
-            timed!(item.caches(cachegetter.clone()))
+            item.caches(cachegetter.clone())
         } else {
             Default::default()
         };
@@ -894,9 +903,8 @@ impl<T: LedgerItem<E>, E: LedgerEvent> Ledger<T, E> {
         let removed_caches: Vec<&(CacheKey<T::PropertyType, T::RefType>, String)> =
             old_cache.difference(&new_caches).collect();
 
-        info!("done running event, new statehash: {state_hash}");
-
         if update_cache {
+            info!("done running event, new statehash: {state_hash}");
             self.modify_cache(prev_state_hash, &state_hash, added_caches, removed_caches);
         }
 

@@ -11,7 +11,7 @@ use std::{
     sync::Arc,
 };
 
-use tracing::{info, trace};
+use tracing::trace;
 use walkdir::WalkDir;
 
 use crate::{CacheKey, HashAndContents, KeyFoo, get_hash};
@@ -138,7 +138,7 @@ impl<PK: Display + Clone, RK: Display + Clone> CacheFs<PK, RK> {
         let x = leafdir_path.save_item(key.key.to_owned(), item_path);
 
         let top_hash = x.first().unwrap().hash.clone();
-        info!("new generation after item insert: {top_hash}");
+        trace!("new generation after item insert: {top_hash}");
         let mut new_contents: Vec<Content> = Default::default();
 
         for dir in x {
@@ -280,7 +280,7 @@ impl SnapFs {
         let x = leafdir_path.save_item(key.key.to_owned(), item_path);
 
         let top_hash = x.first().unwrap().hash.clone();
-        info!("new generation after item insert: {top_hash}");
+        trace!("new generation after item insert: {top_hash}");
         let mut new_contents: Vec<Content> = Default::default();
 
         for dir in x {

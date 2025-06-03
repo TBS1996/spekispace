@@ -740,7 +740,11 @@ fn resolve_text(txt: String, ledger: &FixedLedger<RawCard, CardEvent>, re: &Rege
 
     let mut s: String = re.replace_all(&txt, "").to_string();
     for id in uuids {
-        let txt = ledger.load(id).unwrap().cache_front(ledger);
+        let Some(card) = ledger.load(id) else {
+            dbg!(id);
+            panic!();
+        };
+        let txt = card.cache_front(ledger);
         s.push_str(&resolve_text(txt, ledger, re));
     }
 
@@ -765,6 +769,10 @@ impl LedgerItem<CardEvent> for RawCard {
 
     fn ref_cache(&self) -> HashMap<Self::RefType, HashSet<CardId>> {
         let mut out: HashMap<Self::RefType, HashSet<Uuid>> = Default::default();
+
+        if let Some(ns) = self.namespace {
+            out.entry(RefType::LinkRef).or_default().insert(ns);
+        }
 
         for dep in &self.dependencies {
             out.entry(RefType::ExplicitDependent)
