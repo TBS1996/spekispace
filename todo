@@ -16,6 +16,14 @@ also, might be tricky to make it answer with link cards?
 we gotta detect cycles maaan
 
 
+# Wikidata integration
+
+most basic way, a way to link a card to the identifier in wikidata
+
+then maybe suggest properties and stuff based on the info in wikidata?
+
+
+
 # Traits?
 
 for the same reason i like traits in rust, should I have them in speki instead of inheritance?
@@ -31,6 +39,11 @@ like king should have constraint male. and then in the questions for king, it ca
 and yeah, the way it works in properties, i guess a question can simply reference another property, and then uatomatically this property will be like hidden until youve answered that other one. like in the UI it can be greyed out and if you hover over it it'll say which question you need to answer first.
 
 oh and another one is for it to be disabled, due to a "wrong" property. like don't ask for cause of death if is_alive == true
+
+
+hm should properties be more free-flowing in a way, like, a property could be the same in diff types of classes, like 'creation date' property can refer to things like humans (birhtdate), or companies.
+
+so then what, i implement the same property on various classes? like should there be a separate property definition? or just inheritance?
 
 
 # OWL logic
@@ -378,6 +391,122 @@ also fits well with syncing i guess? easy to just pick up logs from a given time
 disadvantage, well, it's more cumbersome, potentially slower but i dont think that's a big problem. 
 
 
+# relational properties
+
+how to deal with properties like..
+
+Say alice and bob are married
+
+the property 'alice's husband'->'bob' also implies 'bobs wife'->'alice'
+but to be DRY it's no good to have that same relationship be specified in both cards
+
+so then where would it live? some kinda new card-type about relations between objects?
+
+i think yeah, new card makes sense, since i try to make sure that one card is one fact in a way
+
+but in a way, it's an isntance of a class right? like you can have a class 'siblings', and the generics is the two object.
+relationship can have more than two objects too.
+
+so let's see...
+
+we have card type relation
+
+struct Object {
+    name: String
+    id: Uuid,
+}
+
+struct ObjectClass {
+    name: String,
+    id: ObjectId,
+    /// so like if we want to ensure that this object is of a certain subclass
+    /// like if the name of object is "Father", the class will be "Male"
+    class: Option<CardId>, 
+
+}
+
+struct RelationshipClass{
+    name: String
+    id: RelID,
+    objects: Vec<ObjectClass>,
+}
+
+struct RelationshipInstance {
+    relationship: RelId,
+    objects: VeC<Object>,
+
+}
+
+struct ObjectInstance {
+    card: CardId,
+    object_class: ObjectId,
+}
+
+
+so for example..
+
+
+let father = ObjectClass {
+    name: "father",
+    class: Some({male})
+    id: Uuid::new_v4(),
+}
+
+let daughter = ObjectClass {
+    name: "daughter",
+    class:  Some({female})
+    id: Uuid::new_v4(),
+}
+
+
+let rel_class = RelationshipClass {
+    name: "parent-daughter",
+    id: Uuid::new_v4(),
+    objects: vec![father, daughter],
+}
+
+let father_instance = ObjectInstance {
+    card: {id of father instance},
+    object_class: father.id,
+}
+
+let daughter_instance = ObjectInstance {
+    card: {id of daughter instance},
+    object_class: daughter.id,
+}
+
+let relationship = RelationshipInstance {
+    relationship: rel_class.id,
+    objects: vec![fahter_instance, daughter_instance],
+}
+
+ok so, here we have a kind of relationship class card, for any given father-daughter relationship
+we can then create an instance of this where we refer to a specific instance of a father-daughter relationship
+
+we should then be able to, on a given instance of either male or female, refer to this instance there, where we also encode which generic
+that instance belongs to, which can in this instance be known automatically
+
+or yeah, i guess, we go to a male or female, then we can click like add father-daughter relationship, and it'll take us to a relationship instance card
+in this case, if we go to male and click it, it can pre-fill that the "father" is the male, same if you went from female it'll guess that the card you came 
+from is the daughter (due to class constraint). you then obviously have to select the other generic, in order to be able to save the relationship instance
+
+this property will then be referenced on both the parent and daughter attribute set. 
+
+the relationship class should specify how the question should be. like maybe just one question, like 'how is the familial relatoinship between {father} and {daughter}. maybe generate more cards too.
+
+# relationship constraints
+
+maybe also put constraints, like for example if alice is the daughter of bob, she cannot be the mother of bob.
+
+maybe should be its own cardtype by itself, because a constraint covers multiple relationships so it doesn't neatly live in one or the other.
+also, you can think of it as a knowledge fact by itself, like you should underestand the constraint. so it makes sense to have it as a separate card.
+
+# property-dependencies
+
+so sometimes when you depend on some instance, it might not be enough to just know the instance itself but you should know a certain amount of the properties.
+maybe make it easier to, when you add an instance as a dependency, also select which attributes of it are also required. like on the dependency list it can just say smth like 'albert einstein (+4)' where the +4 mean you 
+selected 4 attributes of him and you can just hover your mouse over to see them.
+
 # properties
 
 sometimes a card depends on another because it describes the card in more detail, while other times it just references it. I'd like to be able to properly distinguish that, so that you can see how well you know a certain card not just by its own recall rate but also how well you know the properties, while ignoring the cards that just reference it.
@@ -396,6 +525,18 @@ can all cards have properties of itself? i guess instances can, classes can too 
 attributes would automatically be considered properties tho but i guess we can't fit everything into the attributes thing. or maybe we can rename attributes to properties and not only have the auto-generated ones be that?
 
 should propertyness be defined in the card itself or in the dependency?
+
+maybe extra properties should simply be that in the instancee on the list of the derived properties you can also add custom ones? So that also means when you edit these properties you do so within the big instane class basically.
+
+maybe the properties should be sorted by how essential they are to understanding this instance? so while they may not depend on each other, it'd still make sense to prioritize some over the other. 
+that could also be used for that priorities thing. 
+
+# contextual unfinished cards
+
+so when a card reference something you dont know and you dont have the time to learn it you just wanna note it down would be nice if i can just select the thing and it'll create some new unfinished card
+that also contains a reference to where it was used, so tht when i try to learn what it is i can see the context about it.
+
+like maybe just i hold like alt-key down while i select it and it auto-creates it
 
 # unlocking properties
 

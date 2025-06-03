@@ -401,12 +401,54 @@ fn Infobar(
     rsx! {
         div {
             class: "flex justify-start items-center w-full md:w-auto gap-5",
-            h2 {
+
+             div {
+        class: "flex justify-start items-center w-full md:w-auto gap-5",
+
+        div {
+            class: "flex text-2xl text-gray-700 gap-1",
+
+            button {
                 class: "text-2xl text-gray-700",
-                "{pos}/{tot}"
+                onclick: move |_| {
+                    let passed: Vec<DynCard> = queue.read().passed.clone()
+                        .into_iter()
+                        .map(DynCard::Card)
+                        .collect();
+                    spawn(async move {
+                        let props = CardSelector::new(false, Default::default()).with_dyncards(passed).with_edit_collection(false);
+                        overlay.clone().set(Some(OverlayEnum::CardSelector(props)));
+                    });
+                },
+                "{pos}"
             }
 
+            span { "/" }
 
+            button {
+                class: "text-2xl text-gray-700",
+                onclick: move |_| {
+                    let total = {
+                        let mut passed: Vec<DynCard> = queue.read().passed.clone()
+                            .into_iter()
+                            .map(DynCard::Card)
+                            .collect();
+                        let upcoming: Vec<DynCard> = queue.read().upcoming.clone()
+                            .into_iter()
+                            .map(DynCard::Card)
+                            .collect();
+                        passed.extend(upcoming);
+                        passed
+                    };
+                    spawn(async move {
+                        let props = CardSelector::new(false, Default::default()).with_dyncards(total).with_edit_collection(false);
+                        overlay.clone().set(Some(OverlayEnum::CardSelector(props)));
+                    });
+                },
+                "{tot}"
+            }
+        }
+    }
             button {
                 class: "cursor-pointer text-gray-500 hover:text-gray-700",
                 onclick: move |_| {

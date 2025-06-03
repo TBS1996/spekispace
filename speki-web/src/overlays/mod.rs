@@ -247,6 +247,7 @@ pub fn Overender(overlay: Signal<Option<OverlayEnum>>, root: Element) -> Element
                                     filtermemo: elm.filtermemo.clone(),
                                     overlay: elm.overlay.clone(),
                                     collection: elm.collection,
+                                    edit_collection: elm.edit_collection,
                                 }
                             },
                         }

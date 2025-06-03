@@ -235,7 +235,8 @@ impl SnapFs {
         for entry in WalkDir::new(&path).follow_links(true) {
             let Ok(entry) = entry else {
                 dbg!(entry);
-                panic!();
+                continue;
+                //panic!();
             };
             let path = entry.path();
 
@@ -598,10 +599,17 @@ impl Content {
                 Ok(()) => {}
                 Err(e) => {}
             },
-            Self::Dir(original) => match symlink(original, link) {
-                Ok(()) => {}
-                Err(e) => {}
-            },
+            Self::Dir(original) => {
+                if !original.exists() {
+                    dbg!(original);
+                    panic!();
+                }
+
+                match symlink(original, link) {
+                    Ok(()) => {}
+                    Err(e) => {}
+                }
+            }
         }
     }
 }

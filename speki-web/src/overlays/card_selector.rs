@@ -43,15 +43,13 @@ pub enum MaybeEntry {
 
 impl MaybeEntry {
     pub async fn entry(&mut self) -> Option<Signal<Card>> {
-        
         let id = match self {
             Self::Yes(card) => return Some(card.clone()),
             Self::No(id) => id,
         };
 
-        
         let card = APP.read().try_load_card(*id).await?;
-        
+
         *self = Self::Yes(card.clone());
         Some(card)
     }
@@ -81,6 +79,7 @@ pub struct CardSelector {
     pub filtermemo: Memo<Option<CardFilter>>,
     pub overlay: Signal<Option<OverlayEnum>>,
     pub collection: CollectionEditor,
+    pub edit_collection: bool,
     pub cards: Resource<Vec<Signal<Card>>>,
     pub col_cards: Resource<BTreeMap<Uuid, Signal<MaybeEntry>>>,
     pub default_search: Signal<Option<String>>,
@@ -195,28 +194,23 @@ impl CardSelector {
                     info!("{} cards sorted", sorted_cards.len());
 
                     for (matches, card) in sorted_cards {
-                        
                         let entry = cards.get(&card).unwrap();
-                        
+
                         let card = entry.write_silent().entry().await.unwrap();
-                        
 
                         if forbidden_cards.read().contains(&card.read().id()) {
                             continue;
                         }
-                        
 
                         if filtered_cards.len() > 300 {
                             break;
                         }
-                        
 
                         if allowed_cards.is_empty()
                             || allowed_cards
                                 .read()
                                 .contains(&CardTy::from_ctype(card.read().card_type()))
                         {
-                            
                             let flag = match filtermemo.cloned() {
                                 Some(filter) => filter.filter(Arc::new(card.cloned())).await,
                                 None => true,
@@ -252,6 +246,7 @@ impl CardSelector {
         info!("creating cardselector");
         Self {
             title: "select card".to_string(),
+            edit_collection: true,
             search,
             on_card_selected: overlay_card_viewer(overlay.clone()),
             cards,
@@ -275,6 +270,13 @@ impl CardSelector {
         col.dyncards = dyns;
         self.collection.col.set(col);
         self
+    }
+
+    pub fn with_edit_collection(self, edit_collection: bool) -> Self {
+        Self {
+            edit_collection,
+            ..self
+        }
     }
 
     pub fn ref_picker(fun: MyClosure, dependents: Vec<Node>) -> Self {
@@ -395,6 +397,7 @@ pub fn CardSelectorRender(
     filtermemo: Memo<Option<CardFilter>>,
     overlay: Signal<Option<OverlayEnum>>,
     collection: CollectionEditor,
+    edit_collection: bool,
 ) -> Element {
     info!("render cardselector");
     rsx! {
@@ -407,13 +410,15 @@ pub fn CardSelectorRender(
                 FilterComp {editor: filtereditor}
             }
 
-            ColViewRender {
-                col: collection.col,
-                colname: collection.colname,
-                done: collection.done,
-                entries: collection.entries,
-                overlay: overlay.clone(),
-                addnew: collection.addnew,
+            if edit_collection {
+                ColViewRender {
+                    col: collection.col,
+                    colname: collection.colname,
+                    done: collection.done,
+                    entries: collection.entries,
+                    overlay: overlay.clone(),
+                    addnew: collection.addnew,
+                }
             }
         }
 

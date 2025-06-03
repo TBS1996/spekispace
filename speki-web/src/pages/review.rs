@@ -472,6 +472,10 @@ fn RenderSet(
                                 }
                             }
 
+                            use rand::seq::SliceRandom;
+                            filtered_cards.shuffle(&mut rand::thread_rng());
+
+
                             let revses = OverlayEnum::Review(ReviewState::new(filtered_cards));
                             overlay.clone().set(Some(revses));
 

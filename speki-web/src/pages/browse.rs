@@ -46,6 +46,7 @@ pub fn Browse() -> Element {
                     filtermemo: browse_state.browse_page.filtermemo.clone(),
                     overlay: browse_state.browse_page.overlay.clone(),
                     collection: browse_state.browse_page.collection,
+                    edit_collection: browse_state.browse_page.edit_collection,
                 }
             }
          }
