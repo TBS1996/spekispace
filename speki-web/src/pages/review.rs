@@ -208,7 +208,7 @@ fn RenderInput(
 #[component]
 pub fn RenderExpr(
     filter: CardFilter,
-    inputs: Signal<BTreeSet<InputEditor>>,
+    inputs: Signal<Vec<InputEditor>>,
     ty: Signal<SetExprDiscriminants>,
     overlay: Signal<Option<OverlayEnum>>,
     #[props(default = 0)] depth: usize,
@@ -218,7 +218,7 @@ pub fn RenderExpr(
     let expr_func: DropdownClosure = Arc::new(Box::new(move || {
         let expr = SetExpr::default();
         let input: InputEditor = Input::Expr(expr.into()).into();
-        inputs.clone().write().insert(input);
+        inputs.clone().write().push(input);
     }));
 
     let leaf_func: DropdownClosure = Arc::new(Box::new(move || {
@@ -229,7 +229,7 @@ pub fn RenderExpr(
                     let f = move |card: Signal<Card>| {
                         let leaf = DynCard::Card(card.read().id());
                         let input = InputEditor::Leaf(leaf);
-                        inputs.clone().write().insert(input);
+                        inputs.clone().write().push(input);
                         async move {}
                     };
                     let overlay =
@@ -252,7 +252,7 @@ pub fn RenderExpr(
                     let f = move |card: Signal<Card>| {
                         let leaf = DynCard::Instances(card.read().id());
                         let input = InputEditor::Leaf(leaf);
-                        inputs.clone().write().insert(input);
+                        inputs.clone().write().push(input);
                         async move {}
                     };
                     let overlay = CardSelector::class_picker(MyClosure::new(f));
@@ -274,7 +274,7 @@ pub fn RenderExpr(
                     let f = move |card: Signal<Card>| {
                         let leaf = DynCard::RecDependents(card.read().id());
                         let input = InputEditor::Leaf(leaf);
-                        inputs.clone().write().insert(input);
+                        inputs.clone().write().push(input);
                         async move {}
                     };
                     let overlay =
@@ -329,7 +329,7 @@ pub fn RenderExpr(
                     button {
                         class: "mt-1", // optional: fine-tune vertical alignment
                         onclick: move |_| {
-                            assert!(inputs.write().remove(&input));
+                            inputs.write().retain(|x|x != &input);
                         },
                         "❌"
                     }
@@ -548,7 +548,7 @@ impl PartialOrd for InputEditor {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ExprEditor {
-    pub inputs: Signal<BTreeSet<InputEditor>>,
+    pub inputs: Signal<Vec<InputEditor>>,
     pub ty: Signal<SetExprDiscriminants>,
 }
 
@@ -619,7 +619,7 @@ impl Ord for ExprEditor {
 
 impl From<SetExpr> for ExprEditor {
     fn from(value: SetExpr) -> Self {
-        let inputs: BTreeSet<InputEditor> = value
+        let inputs: Vec<InputEditor> = value
             .inputs()
             .into_iter()
             .cloned()
