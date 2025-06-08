@@ -360,7 +360,12 @@ fn RenderExpr(
     let expr_opt = DropdownAction::new("expr".to_string(), expr_func);
     let leaf_opt = DropdownAction::new("leaf".to_string(), leaf_func);
 
-    dbg!(&class);
+    let enable_new_input = match ty.cloned() {
+        SetExprDiscriminants::Union => true,
+        SetExprDiscriminants::Intersection => true,
+        SetExprDiscriminants::Difference => inputs.read().len() < 2,
+        SetExprDiscriminants::Complement => inputs.read().is_empty(),
+    };
 
     rsx! {
         div {
@@ -370,8 +375,9 @@ fn RenderExpr(
                 class: "flex flex-row",
                 DropComponent { options: SetExprDiscriminants::iter().collect(), selected: ty}
 
-                ActionDropdown {label:"➕".to_string(), options: vec![expr_opt,leaf_opt]  }
-
+                if enable_new_input {
+                    ActionDropdown {label:"➕".to_string(), options: vec![expr_opt,leaf_opt]  }
+                }
             }
 
 
