@@ -115,6 +115,7 @@ pub struct LeafKey {
     components: Vec<char>,
 }
 
+#[derive(Debug)]
 pub struct KeyFoo<'a> {
     key: &'a str,
     cmps: Vec<char>,

@@ -334,7 +334,7 @@ impl<T: LedgerItem + Debug> Ledger<T> {
 
     /// This will go through the entire state and create a hash for it
     fn rebuild_cache(&self, state_hash: &str) -> Option<CacheHash> {
-        info!("rebuilding cache");
+        info!("rebuilding cache on {state_hash}");
         let caches: HashSet<(CacheKey<T::PropertyType, T::RefType>, String)> = self
             .load_all_on_state(state_hash)
             .into_values()
@@ -534,11 +534,15 @@ impl<T: LedgerItem + Debug> Ledger<T> {
     }
 
     pub fn load_all_on_state(&self, hash: &str) -> HashMap<String, T> {
-        self.snap
+        let res: HashMap<String, T> = self
+            .snap
             .get_all(hash)
             .into_iter()
             .map(|(key, val)| (key, serde_json::from_slice(&val).unwrap()))
-            .collect()
+            .collect();
+        dbg!(res.len());
+        dbg!(hash);
+        res
     }
 
     pub fn load_all(&self) -> HashMap<String, T> {

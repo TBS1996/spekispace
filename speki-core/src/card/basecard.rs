@@ -1,9 +1,6 @@
 use super::*;
 use crate::{
-    attribute::AttributeId,
-    audio::AudioId,
-    card_provider::CardProvider,
-    CardProperty, RefType,
+    attribute::AttributeId, audio::AudioId, card_provider::CardProvider, CardProperty, RefType,
 };
 use either::Either;
 use ledgerstore::{FixedLedger, LedgerItem};
@@ -512,7 +509,7 @@ pub struct RawCard {
     pub namespace: Option<CardId>,
     pub data: CardType,
     #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
-    pub dependencies: BTreeSet<Uuid>,
+    pub explicit_dependencies: BTreeSet<Uuid>,
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub tags: BTreeMap<String, String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -748,8 +745,11 @@ fn resolve_text(txt: String, ledger: &FixedLedger<RawCard>, re: &Regex) -> Strin
     let mut s: String = re.replace_all(&txt, "").to_string();
     for id in uuids {
         let Some(card) = ledger.load(id) else {
+            dbg!(&txt);
             dbg!(id);
+            dbg!("<<<<<<<<<<<<<<<<<<<<<<<<<<");
             panic!();
+            continue;
         };
         let txt = card.cache_front(ledger);
         s.push_str(&resolve_text(txt, ledger, re));
@@ -783,7 +783,7 @@ impl LedgerItem for RawCard {
             out.entry(RefType::LinkRef).or_default().insert(ns);
         }
 
-        for dep in &self.dependencies {
+        for dep in &self.explicit_dependencies {
             out.entry(RefType::ExplicitDependent)
                 .or_default()
                 .insert(*dep);
@@ -912,7 +912,7 @@ impl LedgerItem for RawCard {
                 back: BackSide::Text("uninit".to_string().into()),
             },
             tags: Default::default(),
-            dependencies: Default::default(),
+            explicit_dependencies: Default::default(),
             front_audio: Default::default(),
             back_audio: Default::default(),
         }
@@ -941,10 +941,10 @@ impl LedgerItem for RawCard {
                 self.namespace = ns;
             }
             CardAction::AddDependency(dependency) => {
-                self.dependencies.insert(dependency);
+                self.explicit_dependencies.insert(dependency);
             }
             CardAction::RemoveDependency(dependency) => {
-                self.dependencies.remove(&dependency);
+                self.explicit_dependencies.remove(&dependency);
                 self.remove_dep(dependency);
             }
             CardAction::SetBackRef(reff) => {
@@ -970,6 +970,18 @@ impl LedgerItem for RawCard {
                 }
             }
         };
+
+        let implicit_deps: BTreeSet<Uuid> = {
+            let mut all = self.ref_cache();
+            all.remove(&RefType::ExplicitDependent);
+            all.into_values().flatten().collect()
+        };
+
+        self.explicit_dependencies = self
+            .explicit_dependencies
+            .difference(&implicit_deps)
+            .cloned()
+            .collect();
 
         Ok(self)
     }

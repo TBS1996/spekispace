@@ -473,7 +473,7 @@ impl Card {
             self.id(),
             dependency
         );
-        let res = self.base.dependencies.remove(&dependency);
+        let res = self.base.explicit_dependencies.remove(&dependency);
 
         if !res {
             info!("no dep to remove");
@@ -488,7 +488,7 @@ impl Card {
     }
 
     pub async fn add_dependency(&mut self, dependency: CardId) {
-        self.base.dependencies.insert(dependency);
+        self.base.explicit_dependencies.insert(dependency);
         let action = CardAction::AddDependency(dependency);
         let event = CardEvent::new(self.id, action);
         self.card_provider.providers.run_event(event);

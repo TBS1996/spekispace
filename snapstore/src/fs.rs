@@ -3,7 +3,7 @@ use std::{
     fmt::Display,
     fs::{self, hard_link},
     hash::Hash,
-    io,
+    io::{self, ErrorKind},
     marker::PhantomData,
     ops::Deref,
     os::unix::fs::symlink,
@@ -119,7 +119,7 @@ impl<PK: Display + Clone, RK: Display + Clone> CacheFs<PK, RK> {
             Some(prev_gen) => FsDir::load(self.blob_path.clone(), prev_gen.to_owned()).unwrap(),
             None => {
                 let empty = Dir::new();
-                empty.persist(self.blob_path.clone())
+                empty.persist(self.blob_path.clone()).0
             }
         };
 
@@ -137,13 +137,15 @@ impl<PK: Display + Clone, RK: Display + Clone> CacheFs<PK, RK> {
         let leafdir_path = self.get_leafdir_path(prev_generation, key.cmps);
         let x = leafdir_path.save_item(key.key.to_owned(), item_path);
 
-        let top_hash = x.first().unwrap().hash.clone();
+        let top_hash = x.first().unwrap().0.hash.clone();
         trace!("new generation after item insert: {top_hash}");
         let mut new_contents: Vec<Content> = Default::default();
 
-        for dir in x {
-            let c = Content::new(dir.path());
-            new_contents.push(c);
+        for (dir, already_existed) in x {
+            if !already_existed {
+                let c = Content::new(dir.path());
+                new_contents.push(c);
+            }
         }
 
         (top_hash, new_contents)
@@ -211,6 +213,28 @@ impl SnapFs {
         // Read the top-level entries (assuming these are all dirs)
         let dirs: Vec<_> = fs::read_dir(&base_path)
             .unwrap()
+            .map(|e| e.unwrap()) // unwrap each entry explicitly
+            .filter(|e| e.path().is_dir())
+            .map(|e| e.path())
+            .collect();
+
+        // Process each top-level dir in parallel
+        dirs.par_iter()
+            .flat_map_iter(|dir| {
+                WalkDir::new(dir)
+                    .follow_links(true)
+                    .into_iter()
+                    .map(|entry| entry.unwrap()) // crash on any walkdir error
+                    .map(|entry| Content::new(entry.path().to_path_buf()))
+            })
+            .collect()
+    }
+    pub fn xall_paths(&self, gen_hashh: &str) -> HashSet<Content> {
+        let base_path = self.the_full_blob_path(gen_hashh);
+
+        // Read the top-level entries (assuming these are all dirs)
+        let dirs: Vec<_> = fs::read_dir(&base_path)
+            .unwrap()
             .filter_map(Result::ok)
             .filter(|e| e.path().is_dir())
             .map(|e| e.path())
@@ -229,7 +253,7 @@ impl SnapFs {
     }
 
     pub fn get_all(&self, hash: &str) -> HashMap<String, Vec<u8>> {
-        let path = self.the_full_blob_path(hash);
+        let path = dbg!(self.the_full_blob_path(hash));
         let mut file_map = HashMap::new();
 
         for entry in WalkDir::new(&path).follow_links(true) {
@@ -256,7 +280,7 @@ impl SnapFs {
             Some(prev_gen) => FsDir::load(self.blob_path.clone(), prev_gen.to_owned()).unwrap(),
             None => {
                 let empty = Dir::new();
-                empty.persist(self.blob_path.clone())
+                empty.persist(self.blob_path.clone()).0
             }
         };
 
@@ -270,17 +294,23 @@ impl SnapFs {
         item_hash: &str,
     ) -> HashAndContents {
         let item_path = full_blob_path(&self.blob_path, item_hash);
+        if !item_path.exists() {
+            dbg!(key, prev_generation, item_hash);
+            panic!();
+        }
 
         let leafdir_path = self.get_leafdir_path(prev_generation, key.cmps);
         let x = leafdir_path.save_item(key.key.to_owned(), item_path);
 
-        let top_hash = x.first().unwrap().hash.clone();
+        let top_hash = x.first().unwrap().0.hash.clone();
         trace!("new generation after item insert: {top_hash}");
         let mut new_contents: Vec<Content> = Default::default();
 
-        for dir in x {
-            let c = Content::new(dir.path());
-            new_contents.push(c);
+        for (dir, already_existed) in x {
+            if !already_existed {
+                let c = Content::new(dir.path());
+                new_contents.push(c);
+            }
         }
 
         (top_hash, new_contents)
@@ -296,13 +326,15 @@ impl SnapFs {
         let leafdir_path = self.get_leafdir_path(prev_generation, key.cmps);
         let x = leafdir_path.remove_item(key.key.to_owned());
 
-        let top_hash = x.first().unwrap().hash.clone();
+        let top_hash = x.first().unwrap().0.hash.clone();
         trace!("new generation after item removal: {top_hash}");
         let mut new_contents: Vec<Content> = Default::default();
 
-        for dir in x {
-            let c = Content::new(dir.path());
-            new_contents.push(c);
+        for (dir, already_existed) in x {
+            if !already_existed {
+                let c = Content::new(dir.path());
+                new_contents.push(c);
+            }
         }
 
         (top_hash, new_contents)
@@ -319,13 +351,15 @@ impl SnapFs {
         let keycomps = self.get_key_components(key);
         let all = topdir.all_dirs(keycomps);
         let new_path = all.remove_item(key.to_owned());
-        let hash = new_path.first().unwrap().hash.clone();
+        let hash = new_path.first().unwrap().0.hash.clone();
 
         let mut contents: Vec<Content> = vec![];
 
-        for dir in new_path {
-            let c = Content::new(dir.path());
-            contents.push(c);
+        for (dir, already_existed) in new_path {
+            if !already_existed {
+                let c = Content::new(dir.path());
+                contents.push(c);
+            }
         }
 
         (hash, contents)
@@ -497,7 +531,7 @@ struct ItemPath {
 
 impl ItemPath {
     /// Modifies the leaf dir of the itempath, persists all the dirs leading up to it and returns them
-    fn modify<F: FnOnce(&mut Dir)>(mut self, dir_modifier: F) -> Vec<FsDir> {
+    fn modify<F: FnOnce(&mut Dir)>(mut self, dir_modifier: F) -> Vec<(FsDir, bool)> {
         let mut out = vec![];
 
         let (item_dir, mut parent_component) = self.dirs.pop().unwrap();
@@ -507,14 +541,14 @@ impl ItemPath {
         dir_modifier(&mut dir);
 
         let fs_item_dir = dir.persist(self.blob_path.clone());
-        let mut path = fs_item_dir.path();
+        let mut path = fs_item_dir.0.path();
         out.push(fs_item_dir);
 
         while let Some((dir, cmp)) = self.dirs.pop() {
             let mut dir = dir;
             dir.insert_dir(format!("{parent_component}"), path.clone());
             let fsdir = dir.persist(self.blob_path.clone());
-            path = fsdir.path();
+            path = fsdir.0.path();
             parent_component = cmp;
             out.insert(0, fsdir);
         }
@@ -528,8 +562,9 @@ impl ItemPath {
     }
 
     /// Creates a hardlink to an item in the leafdir
-    fn save_item(self, key: String, item_path: PathBuf) -> Vec<FsDir> {
+    fn save_item(self, key: String, item_path: PathBuf) -> Vec<(FsDir, bool)> {
         tracing::trace!("inserting item: key: {key}, path: {item_path:?}");
+        assert!(item_path.exists());
 
         let f: Box<dyn FnOnce(&mut Dir)> =
             Box::new(|dir: &mut Dir| match dir.insert_file(key, item_path) {
@@ -545,7 +580,7 @@ impl ItemPath {
     }
 
     /// Removes a hardlink to an item in the leafdir
-    fn remove_item(self, key: String) -> Vec<FsDir> {
+    fn remove_item(self, key: String) -> Vec<(FsDir, bool)> {
         tracing::trace!("removing item: {key}");
         let f: Box<dyn FnOnce(&mut Dir)> =
             Box::new(|dir: &mut Dir| match dir.contents.remove(&key) {
@@ -598,7 +633,11 @@ impl Content {
     pub fn delete(self) -> io::Result<()> {
         match self {
             Content::File(p) => fs::remove_file(&p),
-            Content::Dir(p) => fs::remove_dir_all(&p),
+            Content::Dir(p) => {
+                dbg!("deleting folder");
+                dbg!(p);
+                Ok(())
+            }
         }
     }
 
@@ -618,7 +657,12 @@ impl Content {
 
                 match symlink(original, link) {
                     Ok(()) => {}
-                    Err(e) => {}
+                    Err(e) => {
+                        if e.kind() != ErrorKind::AlreadyExists {
+                            dbg!(e);
+                            panic!();
+                        }
+                    }
                 }
             }
         }
@@ -660,15 +704,22 @@ impl Dir {
     }
 
     fn insert_dir(&mut self, key: String, path: PathBuf) {
+        assert!(path.is_dir());
         self.contents.insert(key, Content::Dir(path));
     }
 
     fn insert_file(&mut self, key: String, path: PathBuf) -> Option<Content> {
+        assert!(path.is_file());
         self.contents.insert(key, Content::File(path))
     }
 
-    fn persist(self, dir_path: Arc<PathBuf>) -> FsDir {
+    fn persist(self, dir_path: Arc<PathBuf>) -> (FsDir, bool) {
         let hash = self.get_hash();
+
+        if let Some(dir) = FsDir::load(dir_path.clone(), hash.clone()) {
+            return (dir, false);
+        }
+
         let path = full_blob_path(&dir_path, &hash);
         fs::create_dir_all(&path).unwrap();
 
@@ -677,7 +728,7 @@ impl Dir {
             original.create_file_reference(link);
         }
 
-        FsDir::load(dir_path, hash).unwrap()
+        (FsDir::load(dir_path, hash).unwrap(), false)
     }
 }
 

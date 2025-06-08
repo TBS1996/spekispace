@@ -1,13 +1,16 @@
-use std::{
-    cmp::Ordering,
-    collections::{BTreeMap, BTreeSet},
-    fmt::Debug,
-    fs,
-    io::Write,
-    path::PathBuf,
-    sync::Arc,
+use crate::styles;
+use crate::{
+    components::{
+        dropdown::{ActionDropdown, DropComponent, DropdownAction, DropdownClosure},
+        FilterComp, FilterEditor,
+    },
+    overlays::{
+        card_selector::{CardSelector, MaybeEntry, MyClosure},
+        reviewsession::ReviewState,
+        Overender, OverlayChoice, OverlayEnum, OverlaySelector,
+    },
+    APP,
 };
-
 use dioxus::prelude::*;
 use ledgerstore::LedgerItem;
 use speki_core::{
@@ -17,21 +20,18 @@ use speki_core::{
     set::{Input, Set, SetAction, SetEvent, SetExpr, SetExprDiscriminants, SetId},
     Card,
 };
+use std::{
+    cmp::Ordering,
+    collections::{BTreeMap, BTreeSet},
+    fmt::Debug,
+    fs,
+    io::Write,
+    path::PathBuf,
+    sync::Arc,
+};
 use strum::IntoEnumIterator;
 use tracing::info;
 use uuid::Uuid;
-
-use crate::{
-    components::{
-        dropdown::{ActionDropdown, DropComponent, DropdownAction, DropdownClosure}, FilterComp, FilterEditor,
-    },
-    overlays::{
-        card_selector::{CardSelector, MaybeEntry, MyClosure},
-        reviewsession::ReviewState,
-        Overender, OverlayChoice, OverlayEnum, OverlaySelector,
-    },
-    APP,
-};
 
 #[derive(Clone)]
 pub struct ReviewPage {
@@ -701,8 +701,6 @@ impl SetEditor {
     }
 }
 
-use crate::styles;
-
 #[component]
 fn RenderSets(
     filter: CardFilter,
@@ -711,20 +709,20 @@ fn RenderSets(
 ) -> Element {
     rsx! {
         div {
-        class: "flex flex-col mb-10",
-        for set in sets.cloned() {
-            RenderSet { filter: filter.clone(), set , overlay}
-        }
+            class: "flex flex-col mb-10",
+            for set in sets.cloned() {
+                RenderSet { filter: filter.clone(), set , overlay}
+            }
 
-        button {
-            class: "{styles::BLUE_BUTTON}",
-            onclick: move |_|{
-                let set = Set::new_default(SetId::new_v4());
-                let set = SetEditor::new(&set);
-                sets.clone().write().push(set);
-            },
-            "new set"
+            button {
+                class: "{styles::BLUE_BUTTON}",
+                onclick: move |_|{
+                    let set = Set::new_default(SetId::new_v4());
+                    let set = SetEditor::new(&set);
+                    sets.clone().write().push(set);
+                },
+                "new set"
+            }
         }
-    }
     }
 }
