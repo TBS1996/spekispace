@@ -1,11 +1,7 @@
 use std::{fmt::Debug, sync::Arc};
 
 use dioxus::prelude::*;
-use speki_core::{
-    card::CardId,
-    collection::{Collection, CollectionId},
-    Card,
-};
+use speki_core::{card::CardId, Card};
 #[cfg(not(feature = "desktop"))]
 use speki_provider::{DexieProvider, WasmTime};
 use speki_web::{Node, NodeMetadata};
@@ -53,7 +49,6 @@ impl App {
             Ledger::new(root),
             Ledger::new(root),
             Ledger::new(root),
-            Ledger::new(root),
         )))
     }
 
@@ -93,19 +88,6 @@ impl App {
                 .expect(&format!("unable to load card with id: {id}")),
             ScopeId::APP,
         )
-    }
-
-    pub async fn load_collection(&self, id: CollectionId) -> Collection {
-        self.0.provider.collections.load(id).unwrap()
-    }
-
-    pub async fn load_collections(&self) -> Vec<Collection> {
-        self.0
-            .provider
-            .collections
-            .load_all()
-            .into_values()
-            .collect()
     }
 
     pub async fn new_instance(

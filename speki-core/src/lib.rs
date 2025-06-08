@@ -2,9 +2,8 @@ use attribute::AttrEvent;
 use card::{Attrv2, BackSide, CardId, RawCard, RecallRate, TextData};
 use card_provider::CardProvider;
 use cardfilter::CardFilter;
-use collection::{Collection, CollectionId};
 use dioxus_logger::tracing::info;
-use ledger::{CardAction, CardEvent, CollectionEvent, Event, MetaEvent};
+use ledger::{CardAction, CardEvent, Event, MetaEvent};
 use ledgerstore::{CacheKey, LedgerItem, Modifier};
 use ledgerstore::{Ledger, TimeProvider};
 use metadata::Metadata;
@@ -33,9 +32,6 @@ pub use card::{Card, CardType};
 pub use common::current_time;
 pub use omtrent::TimeStamp;
 pub use recall_rate::SimpleRecall;
-
-use crate::ledger::{CollectionAction, MetaAction};
-use crate::set::SetAction;
 
 #[derive(Clone, PartialEq, PartialOrd, Hash, Eq, Debug)]
 pub struct DepCacheKey {
@@ -154,34 +150,10 @@ pub trait RecallCalc {
 }
 
 #[derive(Clone)]
-pub struct CollectionProvider {
-    pub inner: Ledger<Collection>,
-}
-
-impl CollectionProvider {
-    pub fn new(inner: Ledger<Collection>) -> Self {
-        Self { inner }
-    }
-    pub async fn save(&self, event: CollectionEvent) {
-        todo!()
-    }
-
-    pub async fn load(&self, id: CollectionId) -> Option<Collection> {
-        None
-    }
-
-    pub async fn load_all(&self) -> HashMap<CollectionId, Collection> {
-        // self.inner.load_all_items().await.into_iter().map(|(key, val)| (key.parse().unwrap(), val)).collect()
-        Default::default()
-    }
-}
-
-#[derive(Clone)]
 pub struct Provider {
     pub cards: Ledger<RawCard>,
     pub sets: Ledger<Set>,
     pub reviews: Ledger<History>,
-    pub collections: Ledger<Collection>,
     pub metadata: Ledger<Metadata>,
     pub time: TimeGetter,
 }
@@ -192,7 +164,6 @@ impl Provider {
             Event::Meta(event) => self.metadata.insert_ledger(event),
             Event::History(event) => self.reviews.insert_ledger(event),
             Event::Card(event) => self.cards.insert_ledger(event),
-            Event::Collection(event) => self.collections.insert_ledger(event),
         }
     }
 }
@@ -219,7 +190,6 @@ impl App {
         time_provider: B,
         card_provider: Ledger<RawCard>,
         history_provider: Ledger<History>,
-        collections_provider: Ledger<Collection>,
         meta_provider: Ledger<Metadata>,
         set_provider: Ledger<Set>,
     ) -> Self
@@ -235,7 +205,6 @@ impl App {
         let provider = Provider {
             cards: card_provider,
             reviews: history_provider,
-            collections: collections_provider,
             metadata: meta_provider,
             time: time_provider.clone(),
             sets: set_provider,

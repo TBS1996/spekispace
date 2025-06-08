@@ -2,7 +2,6 @@ use crate::{
     attribute::AttrEvent,
     audio::AudioId,
     card::{Attrv2, CardId, RawCard},
-    collection::{Collection, CollectionId, MaybeDyn},
     metadata::Metadata,
     recall_rate::{History, Review, ReviewAction, ReviewEvent},
     AttributeId, CardType,
@@ -57,27 +56,9 @@ impl From<ReviewEvent> for Event {
         Event::History(event)
     }
 }
-impl From<CollectionEvent> for Event {
-    fn from(event: CollectionEvent) -> Self {
-        Event::Collection(event)
-    }
-}
 
 pub enum Event {
     Meta(MetaEvent),
     History(ReviewEvent),
     Card(CardEvent),
-    Collection(CollectionEvent),
 }
-
-pub type CollectionEvent = TheLedgerEvent<Collection>;
-
-#[derive(Deserialize, Serialize, Clone, Debug, Hash)]
-pub enum CollectionAction {
-    SetName(String),
-    InsertDyn(MaybeDyn),
-    RemoveDyn(MaybeDyn),
-    Delete,
-}
-
-impl Modifier for CollectionAction {}

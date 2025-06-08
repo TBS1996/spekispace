@@ -15,8 +15,7 @@ use serde::{Deserialize, Serialize};
 use speki_core::{
     card::CardId,
     cardfilter::CardFilter,
-    collection::{Collection, DynCard, MaybeCard},
-    ledger::{CollectionAction, CollectionEvent},
+    collection::{DynCard, MaybeCard},
     set::{Input, Set, SetAction, SetEvent, SetExpr, SetExprDiscriminants, SetId},
     Card,
 };
@@ -31,7 +30,6 @@ use crate::{
     },
     overlays::{
         card_selector::{CardSelector, MaybeEntry, MyClosure},
-        colviewer::CollectionEditor,
         reviewsession::{ReviewSession, ReviewState},
         textinput::TextInput,
         Overender, OverlayChoice, OverlayEnum, OverlaySelector,
@@ -43,7 +41,6 @@ use crate::{
 pub struct ReviewPage {
     filter: FilterEditor,
     cardfilter: Memo<CardFilter>,
-    collections: Signal<Vec<(Collection, RecallDist)>>,
     overlay: Signal<Option<OverlayEnum>>,
 }
 
@@ -54,39 +51,8 @@ impl ReviewPage {
         let selv = Self {
             filter,
             cardfilter,
-            collections: Default::default(),
             overlay: Default::default(),
         };
-
-        let cols = selv.collections.clone();
-
-        spawn(async move {
-            let _cols = APP.read().load_collections().await;
-            let mut out = vec![];
-
-            for col in _cols.clone() {
-                out.push((col, RecallDist::default()));
-            }
-            cols.clone().set(out);
-            return;
-
-            let mut out = vec![];
-
-            let mut futs = vec![];
-
-            for col in _cols {
-                futs.push(async move {
-                    let dist = RecallDist::new(col.clone()).await;
-                    (col, dist)
-                });
-            }
-
-            for (col, dist) in futures::future::join_all(futs).await {
-                out.push((col, dist));
-            }
-
-            cols.clone().set(out);
-        });
 
         selv
     }
@@ -193,36 +159,6 @@ impl RecallDist {
             (self.n5 as f32 / total as f32 * 100.0, Self::HEX5),
             (self.n6 as f32 / total as f32 * 100.0, Self::HEX6),
         ]
-    }
-
-    async fn new(col: Collection) -> Self {
-        let mut selv = Self::default();
-        //return selv;
-
-        for card in col.expand(APP.read().inner().card_provider()).await {
-            *match card.recall_rate() {
-                Some(rate) => {
-                    if rate < 0.05 {
-                        &mut selv.n1
-                    } else if rate < 0.2 {
-                        &mut selv.n2
-                    } else if rate < 0.5 {
-                        &mut selv.n3
-                    } else if rate < 0.8 {
-                        &mut selv.n4
-                    } else if rate < 0.95 {
-                        &mut selv.n5
-                    } else {
-                        &mut selv.n6
-                    }
-                }
-                None => &mut selv.p,
-            } += 1;
-        }
-
-        tracing::info!("{selv:?}");
-
-        selv
     }
 }
 
@@ -794,101 +730,5 @@ fn RenderSets(
             "new set"
         }
     }
-    }
-}
-
-#[component]
-fn RenderCols(
-    filter: CardFilter,
-    collections: Signal<Vec<(Collection, RecallDist)>>,
-    overlay: Signal<Option<OverlayEnum>>,
-) -> Element {
-    let mut colfil: Vec<(Collection, RecallDist, CardFilter)> = vec![];
-
-    for (col, dist) in collections.cloned() {
-        colfil.push((col, dist, filter.clone()));
-    }
-
-    rsx! {
-        div {
-       //     class: "flex flex-col max-w-[550px] mr-5",
-
-            div {
-                button {
-                    class: "inline-flex items-center text-white bg-gray-800 border-0 py-1 px-3 focus:outline-none hover:bg-gray-700 rounded text-base mb-8",
-                    onclick: move |_| {
-                        let filter = filter.clone();
-                        spawn(async move {
-                            let session = ReviewSession::new(vec![DynCard::Any], filter).await;
-                            let cards: Vec<CardId> = session.expand().await.into_iter().map(|c|c.id()).collect();
-                            let revses = OverlayEnum::Review(ReviewState::new(cards));
-                            overlay.clone().set(Some(revses));
-                        });
-                    },
-                    "review all"
-                    }
-
-                button {
-                    class: "inline-flex items-center text-white bg-blue-700 border-0 py-1 px-3 focus:outline-none hover:bg-blue-900 rounded text-base mb-5",
-                    onclick: move |_| {
-                        let done = Signal::new_in_scope(false, ScopeId::APP);
-                        let f = move |name: String| {
-                            info!("new collection made!");
-                            spawn(async move {
-                                info!("saving it!");
-                                let event = CollectionEvent::new(Uuid::new_v4(), CollectionAction::SetName(name));
-                                APP.read().inner().provider.run_event(event);
-                                done.clone().set(true);
-                                info!("saved it!");
-                            });
-                            info!("bye");
-                        };
-
-                        let txt = OverlayEnum::Text(TextInput::new("add collection".to_string(), Arc::new(Box::new(f)), done));
-                        overlay.clone().set(Some(txt));
-                    },
-                    "add collection"
-                }
-            }
-
-            for (col, dist, filter) in colfil {
-                div {
-                    class: "flex flex-col mb-4",
-                    div {
-                    class: "flex flex-row",
-                        button {
-                            class: "inline-flex items-center text-white bg-gray-800 border-0 py-1 px-3 focus:outline-none hover:bg-gray-700 rounded text-base mb-2",
-                            onclick: move |_| {
-                                let filter = filter.clone();
-                                spawn(async move {
-                                    let col = APP.read().load_collection(col.id).await;
-                                    let provider = APP.read().inner().card_provider.clone();
-                                    let mut cards = vec![];
-                                    for card in col.dyncards {
-                                        cards.extend(card.expand(provider.clone(), Default::default()).await);
-                                    }
-                                    let session = OverlayEnum::Review(ReviewState::new_with_filter(cards, filter).await);
-                                    overlay.clone().set(Some(session));
-                                });
-                            },
-                            "{col.name}"
-                        }
-                        button {
-                            class: "ml-auto inline-flex items-center text-white bg-blue-700 border-0 py-1 px-3 focus:outline-none hover:bg-blue-900 rounded text-base mb-5",
-                            onclick: move |_|{
-                                spawn(async move {
-                                    let viewer = OverlayEnum::Colviewer(CollectionEditor::new(col.id).await);
-                                    overlay.clone().set(Some(viewer));
-                                });
-                            },
-                            "edit"
-                        }
-                    }
-
-                    RecallBar { dist  }
-                }
-            }
-
-        }
     }
 }

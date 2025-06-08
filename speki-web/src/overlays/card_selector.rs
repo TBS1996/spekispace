@@ -10,7 +10,7 @@ use ledgerstore::LedgerItem;
 use speki_core::{
     card::{bigrams, normalize_string, CardId},
     cardfilter::CardFilter,
-    collection::{Collection, DynCard, MaybeDyn},
+    collection::DynCard,
     set::SetExpr,
     Card, CardProperty,
 };
@@ -25,11 +25,11 @@ use crate::{
 
 use crate::{
     components::{CardTy, FilterComp, FilterEditor},
-    overlays::{cardviewer::CardViewer, colviewer::ColViewRender},
+    overlays::cardviewer::CardViewer,
     APP,
 };
 
-use super::{colviewer::CollectionEditor, OverlayEnum};
+use super::OverlayEnum;
 
 pub fn overlay_card_viewer(overlay: Signal<Option<OverlayEnum>>) -> MyClosure {
     MyClosure::new(move |card: Signal<Card>| async move {
