@@ -414,7 +414,7 @@ fn RenderSet(
     let save_button: bool = match SetExpr::try_from(set.expr.cloned()) {
         Ok(set_expr) => match APP.read().inner().provider.sets.load(set.id) {
             Some(old_set) => old_set.expr != set_expr || old_set.name != set.name.cloned(),
-            None => false,
+            None => true,
         },
         Err(_) => false,
     };
@@ -424,7 +424,9 @@ fn RenderSet(
             class: "border border-black p-4",
             div {
                 class: "flex flex-row",
+
                 input {
+                    class: "text-xl font-semibold mb-4 p-2 w-full bg-gray-100 rounded",
                     value: "{name}",
                     oninput: move |evt|{
                         let val = evt.value();

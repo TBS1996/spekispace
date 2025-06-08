@@ -45,9 +45,8 @@ pub fn ActionDropdown(label: String, options: Vec<DropdownAction>) -> Element {
 
     rsx! {
         div {
-            class: "dropdown",
             select {
-                class: "appearance-none bg-white w-full border border-gray-300 rounded-md p-2 text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent",
+                class: "appearance-none bg-white w-full rounded-md p-2 text-gray-700",
                 value: "{current_value}",
                 onchange: move |evt| {
                     let val = evt.value();
