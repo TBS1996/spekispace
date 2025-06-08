@@ -9,9 +9,7 @@ use std::{
 };
 
 use dioxus::prelude::*;
-use either::IntoEither;
 use ledgerstore::LedgerItem;
-use serde::{Deserialize, Serialize};
 use speki_core::{
     card::CardId,
     cardfilter::CardFilter,
@@ -19,19 +17,17 @@ use speki_core::{
     set::{Input, Set, SetAction, SetEvent, SetExpr, SetExprDiscriminants, SetId},
     Card,
 };
-use strum::{Display, EnumDiscriminants, EnumIter, EnumString, IntoEnumIterator};
+use strum::IntoEnumIterator;
 use tracing::info;
 use uuid::Uuid;
 
 use crate::{
     components::{
-        dropdown::{ActionDropdown, Displayer, DropComponent, DropdownAction, DropdownClosure},
-        DropDownMenu, FilterComp, FilterEditor,
+        dropdown::{ActionDropdown, DropComponent, DropdownAction, DropdownClosure}, FilterComp, FilterEditor,
     },
     overlays::{
         card_selector::{CardSelector, MaybeEntry, MyClosure},
-        reviewsession::{ReviewSession, ReviewState},
-        textinput::TextInput,
+        reviewsession::ReviewState,
         Overender, OverlayChoice, OverlayEnum, OverlaySelector,
     },
     APP,

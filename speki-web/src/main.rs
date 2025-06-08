@@ -12,14 +12,13 @@ use dioxus::prelude::*;
 use dioxus_logger::tracing::{info, Level};
 #[cfg(not(feature = "desktop"))]
 use firebase::AuthUser;
-use ledgerstore::{LedgerEntry, TheLedgerEvent};
+use ledgerstore::LedgerEntry;
 use pages::{ImportState, ReviewPage};
 use serde::Deserialize;
 use speki_core::{
-    card::{CardId, RawCard},
+    card::CardId,
     ledger::{CardAction, CardEvent},
     recall_rate::{Recall, Review as Xreview, ReviewAction, ReviewEvent},
-    Card,
 };
 
 use crate::{

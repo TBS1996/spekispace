@@ -1,9 +1,8 @@
 use crate::{
-    attribute::AttrEvent,
     audio::AudioId,
     card::{Attrv2, CardId, RawCard},
     metadata::Metadata,
-    recall_rate::{History, Review, ReviewAction, ReviewEvent},
+    recall_rate::{Review, ReviewEvent},
     AttributeId, CardType,
 };
 use ledgerstore::{Modifier, TheLedgerEvent};

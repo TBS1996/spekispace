@@ -1,7 +1,7 @@
 use std::fmt::Debug;
 
 use dioxus::prelude::*;
-use speki_core::{card::CardId, collection::DynCard, Card, CardType};
+use speki_core::{card::CardId, collection::DynCard, Card};
 use tracing::info;
 
 use super::CardTy;

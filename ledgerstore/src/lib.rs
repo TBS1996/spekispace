@@ -1,5 +1,5 @@
 use rayon::prelude::*;
-use serde::{Deserialize, Deserializer, Serialize, de::DeserializeOwned};
+use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use simpletime::timed;
 use snapstore::fs::{CacheFs, Content, SnapFs};
 use snapstore::{HashAndContents, Key, SnapStorage};
@@ -13,7 +13,6 @@ use std::{
     collections::{HashMap, HashSet},
     fmt::Debug,
     hash::{DefaultHasher, Hash, Hasher},
-    marker::PhantomData,
     sync::{Arc, RwLock},
 };
 use tracing::{info, trace};

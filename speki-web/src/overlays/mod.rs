@@ -13,7 +13,6 @@ use crate::overlays::{
 use card_selector::CardSelectorRender;
 use cardviewer::CardViewerRender;
 use dioxus::prelude::*;
-use itemselector::{ItemSelector, ItemSelectorRender};
 use reviewsession::ReviewRender;
 use std::{fmt::Debug, sync::Arc};
 use textinput::TextInputRender;

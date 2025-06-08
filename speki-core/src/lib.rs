@@ -1,18 +1,16 @@
-use attribute::AttrEvent;
-use card::{Attrv2, BackSide, CardId, RawCard, RecallRate, TextData};
+use card::{BackSide, CardId, RawCard, RecallRate, TextData};
 use card_provider::CardProvider;
 use cardfilter::CardFilter;
 use dioxus_logger::tracing::info;
-use ledger::{CardAction, CardEvent, Event, MetaEvent};
-use ledgerstore::{CacheKey, LedgerItem, Modifier};
+use ledger::{CardAction, CardEvent, Event};
+use ledgerstore::{CacheKey, LedgerItem};
 use ledgerstore::{Ledger, TimeProvider};
 use metadata::Metadata;
-use recall_rate::{History, ReviewAction};
-use serde::Deserialize;
-use set::{Set, SetEvent};
+use recall_rate::History;
+use set::Set;
 use std::fmt::Display;
 use std::ops::Deref;
-use std::{collections::HashMap, fmt::Debug, sync::Arc, time::Duration};
+use std::{fmt::Debug, sync::Arc, time::Duration};
 use tracing::trace;
 
 pub mod attribute;

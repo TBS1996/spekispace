@@ -13,7 +13,7 @@ pub use dropdown::DropDownMenu;
 pub use filtereditor::*;
 pub use frontside::{CardTy, FrontPut};
 pub use graph::GraphRep;
-use speki_core::{card::CardId, collection::DynCard, Card, RefType};
+use speki_core::{card::CardId, collection::DynCard, Card};
 
 use dioxus::prelude::*;
 

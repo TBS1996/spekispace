@@ -6,7 +6,6 @@ use std::{
 };
 
 use dioxus::prelude::*;
-use ledgerstore::LedgerItem;
 use speki_core::{
     card::{bigrams, normalize_string, CardId},
     cardfilter::CardFilter,

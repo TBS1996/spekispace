@@ -1,5 +1,5 @@
 use std::{
-    collections::{BTreeSet, HashMap, HashSet},
+    collections::{BTreeSet, HashMap},
     sync::Arc,
     time::Duration,
 };
@@ -8,17 +8,15 @@ use dioxus::prelude::*;
 use either::Either;
 use ledgerstore::TheLedgerEvent;
 use speki_core::{
-    attribute::{AttrAction, AttrEvent, RefAttr},
     audio::AudioId,
     card::{Attrv2, BackSide, CardId, TextData},
     collection::DynCard,
     ledger::{CardAction, CardEvent},
-    AttributeId, Card, CardProperty, CardType, RefType,
+    AttributeId, Card, CardType, RefType,
 };
 
 use speki_web::{Node, NodeId, NodeMetadata};
 use tracing::info;
-use uuid::Uuid;
 
 use crate::{
     ask_openai,
@@ -29,10 +27,9 @@ use crate::{
     load_api_key,
     overlays::{
         card_selector::{CardSelector, MyClosure},
-        yesno::Yesno,
         OverlayEnum,
     },
-    APP, IS_SHORT,
+    APP,
 };
 
 #[component]
@@ -698,7 +695,7 @@ impl CardViewer {
 
                     map.push((
                         attr.id,
-                        (Signal::new_in_scope((attr.pattern), ScopeId::APP), cref),
+                        (Signal::new_in_scope(attr.pattern, ScopeId::APP), cref),
                     ));
                 }
                 map
