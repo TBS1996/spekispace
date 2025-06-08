@@ -413,7 +413,7 @@ fn RenderSet(
 
     let save_button: bool = match SetExpr::try_from(set.expr.cloned()) {
         Ok(set_expr) => match APP.read().inner().provider.sets.load(set.id) {
-            Some(old_set) => old_set.expr != set_expr,
+            Some(old_set) => old_set.expr != set_expr || old_set.name != set.name.cloned(),
             None => false,
         },
         Err(_) => false,
