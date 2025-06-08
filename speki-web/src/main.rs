@@ -501,3 +501,8 @@ fn Debug() -> Element {
 
         }
 }
+
+pub mod styles {
+    pub const BLACK_BUTTON: &'static str = "mt-2 inline-flex items-center text-white bg-gray-800 border-0 py-1 px-3 focus:outline-none hover:bg-gray-700 rounded text-base md:mt-0";
+    pub const BLUE_BUTTON: &'static str = "text-center py-4 px-6 bg-blue-500 text-white font-bold rounded-lg shadow hover:bg-blue-600 transition";
+}

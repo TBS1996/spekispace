@@ -17,6 +17,69 @@ impl<T> PartialEq for Displayer<T> {
     }
 }
 
+pub type DropdownClosure = Arc<Box<dyn Fn()>>;
+
+pub struct DropdownAction((String, DropdownClosure));
+
+impl DropdownAction {
+    pub fn new(label: String, f: DropdownClosure) -> Self {
+        Self((label, f))
+    }
+}
+
+impl PartialEq for DropdownAction {
+    fn eq(&self, _: &Self) -> bool {
+        true
+    }
+}
+
+impl Clone for DropdownAction {
+    fn clone(&self) -> Self {
+        DropdownAction((self.0 .0.clone(), Arc::clone(&self.0 .1)))
+    }
+}
+
+#[component]
+pub fn ActionDropdown(label: String, options: Vec<DropdownAction>) -> Element {
+    let mut current_value = use_signal(|| "".to_string());
+
+    rsx! {
+        div {
+            class: "dropdown",
+            select {
+                class: "appearance-none bg-white w-full border border-gray-300 rounded-md p-2 text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent",
+                value: "{current_value}",
+                onchange: move |evt| {
+                    let val = evt.value();
+                    if let Ok(idx) = val.parse::<usize>() {
+                        if let Some(action) = options.get(idx) {
+                            (action.0).1(); // call the callback
+                        }
+                    }
+
+                    current_value.set("".to_string());
+                },
+
+
+                option {
+                    value: "",
+                    selected: true,
+                    disabled: true,
+                    "{label}"
+                }
+
+
+                for (i, action) in options.iter().enumerate() {
+                    option {
+                        value: i.to_string(),
+                        "{(action.0).0}"
+                    }
+                }
+            }
+        }
+    }
+}
+
 #[component]
 pub fn DropComponent<T: PartialEq + Clone + 'static>(
     options: Vec<T>,

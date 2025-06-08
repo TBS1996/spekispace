@@ -20,7 +20,7 @@ use uuid::Uuid;
 
 use crate::{
     components::{
-        dropdown::{Displayer, DropComponent},
+        dropdown::{ActionDropdown, Displayer, DropComponent, DropdownAction, DropdownClosure},
         DropDownMenu, FilterComp, FilterEditor,
     },
     overlays::{
@@ -273,6 +273,93 @@ fn RenderExpr(
 ) -> Element {
     let class = format!("pl-{}", depth * 4);
 
+    let leaf_func: DropdownClosure = Arc::new(Box::new(move || {
+        let expr = SetExpr::default();
+        let input: InputEditor = Input::Expr(expr.into()).into();
+        inputs.clone().write().insert(input);
+    }));
+
+    let expr_func: DropdownClosure = Arc::new(Box::new(move || {
+        // normal card
+        let leaf_card = {
+            let f: Arc<Box<dyn Fn() -> OverlayEnum>> = {
+                let f = move || {
+                    let f = move |card: Signal<Card>| {
+                        let leaf = DynCard::Card(card.read().id());
+                        let input = InputEditor::Leaf(leaf);
+                        inputs.clone().write().insert(input);
+                        async move {}
+                    };
+                    let overlay =
+                        CardSelector::new(false, vec![]).new_on_card_selected(MyClosure::new(f));
+                    OverlayEnum::CardSelector(overlay)
+                };
+
+                Arc::new(Box::new(f))
+            };
+
+            OverlayChoice {
+                display: "Add card".to_string(),
+                overlay: f,
+            }
+        };
+
+        let instances = {
+            let f: Arc<Box<dyn Fn() -> OverlayEnum>> = {
+                let f = move || {
+                    let f = move |card: Signal<Card>| {
+                        let leaf = DynCard::Instances(card.read().id());
+                        let input = InputEditor::Leaf(leaf);
+                        inputs.clone().write().insert(input);
+                        async move {}
+                    };
+                    let overlay = CardSelector::class_picker(MyClosure::new(f));
+                    OverlayEnum::CardSelector(overlay)
+                };
+
+                Arc::new(Box::new(f))
+            };
+
+            OverlayChoice {
+                display: "instances".to_string(),
+                overlay: f,
+            }
+        };
+
+        let dependents = {
+            let f: Arc<Box<dyn Fn() -> OverlayEnum>> = {
+                let f = move || {
+                    let f = move |card: Signal<Card>| {
+                        let leaf = DynCard::RecDependents(card.read().id());
+                        let input = InputEditor::Leaf(leaf);
+                        inputs.clone().write().insert(input);
+                        async move {}
+                    };
+                    let overlay =
+                        CardSelector::new(false, vec![]).new_on_card_selected(MyClosure::new(f));
+                    OverlayEnum::CardSelector(overlay)
+                };
+
+                Arc::new(Box::new(f))
+            };
+
+            OverlayChoice {
+                display: "dependents".to_string(),
+                overlay: f,
+            }
+        };
+
+        let sel = OverlaySelector {
+            title: "dyn ty".to_string(),
+            choices: vec![leaf_card, instances, dependents],
+            chosen: None,
+        };
+        overlay.clone().set(Some(OverlayEnum::OverlaySelector(sel)));
+    }));
+
+    let expr_opt = DropdownAction::new("expr".to_string(), expr_func);
+    let leaf_opt = DropdownAction::new("leaf".to_string(), leaf_func);
+
     dbg!(&class);
 
     rsx! {
@@ -283,85 +370,9 @@ fn RenderExpr(
                 class: "flex flex-row",
                 DropComponent { options: SetExprDiscriminants::iter().collect(), selected: ty}
 
-                button {
-                    onclick: move |_|{
-                        let expr = SetExpr::default();
-                        let input: InputEditor = Input::Expr(expr.into()).into();
-                        inputs.clone().write().insert(input);
-                    },
-                    "expr"
-                }
+                ActionDropdown {label:"➕".to_string(), options: vec![expr_opt,leaf_opt]  }
 
-                button {
-                    onclick: move |_| {
-                        // normal card
-                        let leaf_card = {
-                            let f: Arc<Box<dyn Fn() -> OverlayEnum>> = {
-                                let f = move || {
-                                    let f = move |card: Signal<Card>| {
-                                        let leaf = DynCard::Card(card.read().id());
-                                        let input = InputEditor::Leaf(leaf);
-                                        inputs.clone().write().insert(input);
-                                        async move {}
-                                    };
-                                    let overlay = CardSelector::new(false, vec![]).new_on_card_selected(MyClosure::new(f));
-                                    OverlayEnum::CardSelector(overlay)
-                                };
-
-                                Arc::new(Box::new(f))
-                            };
-
-                            OverlayChoice { display: "Add card".to_string(), overlay: f }
-                        };
-
-
-                        let instances = {
-                            let f: Arc<Box<dyn Fn() -> OverlayEnum>> = {
-                                let f = move || {
-                                    let f = move |card: Signal<Card>| {
-                                        let leaf = DynCard::Instances(card.read().id());
-                                        let input = InputEditor::Leaf(leaf);
-                                        inputs.clone().write().insert(input);
-                                        async move {}
-                                    };
-                                    let overlay = CardSelector::class_picker(MyClosure::new(f));
-                                    OverlayEnum::CardSelector(overlay)
-                                };
-
-                                Arc::new(Box::new(f))
-                            };
-
-                            OverlayChoice { display: "instances".to_string(), overlay: f }
-                        };
-
-
-                        let dependents = {
-                            let f: Arc<Box<dyn Fn() -> OverlayEnum>> = {
-                                let f = move || {
-                                    let f = move |card: Signal<Card>| {
-                                        let leaf = DynCard::RecDependents(card.read().id());
-                                        let input = InputEditor::Leaf(leaf);
-                                        inputs.clone().write().insert(input);
-                                        async move {}
-                                    };
-                                    let overlay = CardSelector::new(false, vec![]).new_on_card_selected(MyClosure::new(f));
-                                    OverlayEnum::CardSelector(overlay)
-                                };
-
-                                Arc::new(Box::new(f))
-                            };
-
-                            OverlayChoice { display: "dependents".to_string(), overlay: f }
-                        };
-
-                        let sel = OverlaySelector { title: "dyn ty".to_string(), choices: vec![leaf_card, instances, dependents], chosen: None};
-                        overlay.clone().set(Some(OverlayEnum::OverlaySelector(sel)));
-
-                    },
-                    "leaf"
-                }
             }
-
 
 
             for input in inputs.cloned() {
@@ -372,7 +383,7 @@ fn RenderExpr(
                         onclick: move |_| {
                             assert!(inputs.write().remove(&input));
                         },
-                        "X"
+                        "❌"
                     }
                     RenderInput { filter: filter.clone(), input: input.clone(), depth: depth + 1, overlay }
                 }
@@ -393,10 +404,10 @@ fn RenderSet(
 
     let ledger = APP.read().inner().provider.sets.clone();
     let filter2 = filter.clone();
-    let filter3 = filter.clone();
 
     rsx! {
         div {
+            class: "border border-black p-4",
             div {
                 class: "flex flex-row",
                 input {
@@ -407,6 +418,8 @@ fn RenderSet(
                     },
                 }
                 button {
+                    class: "{crate::styles::BLACK_BUTTON}",
+
                     onclick: move |_| {
                         let expr: SetExpr = match SetExpr::try_from(set.expr.cloned()) {
                             Ok(t) => t,
@@ -431,6 +444,7 @@ fn RenderSet(
                 }
 
                 button {
+                    class: "{crate::styles::BLACK_BUTTON}",
                     onclick: move |_| {
                         let expr: SetExpr = match SetExpr::try_from(set.expr.cloned()) {
                             Ok(t) => t,
@@ -488,6 +502,7 @@ fn RenderSet(
                 }
 
                 button {
+                    class: "{crate::styles::BLACK_BUTTON}",
                     onclick: move |_| {
                         let name = set.name.cloned();
                         let expr: SetExpr = match SetExpr::try_from(set.expr.cloned()) {
@@ -691,6 +706,8 @@ impl SetEditor {
     }
 }
 
+use crate::styles;
+
 #[component]
 fn RenderSets(
     filter: CardFilter,
@@ -705,6 +722,7 @@ fn RenderSets(
         }
 
         button {
+            class: "{styles::BLUE_BUTTON}",
             onclick: move |_|{
                 let set = Set::new_default(SetId::new_v4());
                 let set = SetEditor::new(&set);
