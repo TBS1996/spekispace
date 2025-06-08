@@ -391,7 +391,9 @@ impl<T: LedgerItem + Debug> Ledger<T> {
             }
 
             let mut inserted: Vec<String> = item.to_vec();
-            let (top, _leaf) = self.cache.save_cache(cache_hash.as_deref(), &key, item);
+            let (top, _leaf) =
+                self.cache
+                    .save_cache(cache_hash.as_deref(), &key, item, &mut vec![]);
             cache_hash = Some(top);
             let mut retrieved = self
                 .cache
@@ -439,7 +441,11 @@ impl<T: LedgerItem + Debug> Ledger<T> {
                 }
             },
             None => match insert.pop() {
-                Some((key, item)) => self.cache.save_cache(None, key, vec![item.to_string()]).0,
+                Some((key, item)) => {
+                    self.cache
+                        .save_cache(None, key, vec![item.to_string()], &mut vec![])
+                        .0
+                }
                 None => {
                     panic!();
                 }
@@ -448,15 +454,15 @@ impl<T: LedgerItem + Debug> Ledger<T> {
 
         info!("starting inserting of caches");
         for (key, item) in insert {
-            let (hash, _c) = self
-                .cache
-                .save_cache(Some(&cache_hash), key, vec![item.to_string()]);
+            let (hash, _c) =
+                self.cache
+                    .save_cache(Some(&cache_hash), key, vec![item.to_string()], &mut vec![]);
             cache_hash = hash;
         }
 
         info!("starting removing of caches");
         for (key, item) in remove {
-            let (hash, _c) = self.cache.remove_cache(&cache_hash, key, item);
+            let (hash, _c) = self.cache.remove_cache(&cache_hash, key, item, &mut vec![]);
             cache_hash = hash;
         }
 
@@ -913,6 +919,7 @@ impl<T: LedgerItem + Debug> Ledger<T> {
         state_hash: Option<&str>,
         update_cache: bool,
     ) -> HashAndContents {
+        let mut new_content: Vec<Content> = vec![];
         let prev_state_hash = state_hash;
         if update_cache {
             //info!("running event: {event:?} on hash {state_hash:?}");
@@ -930,7 +937,9 @@ impl<T: LedgerItem + Debug> Ledger<T> {
                 let item: T = serde_json::from_slice(&item).unwrap();
 
                 let cachegetter = self.cachegetter(state_hash.to_string());
-                let (next_state_hash, contents) = self.snap.remove(state_hash, &id.to_string());
+                let (next_state_hash, contents) =
+                    self.snap
+                        .remove(state_hash, &id.to_string(), &mut new_content);
 
                 let old_cache = if update_cache {
                     item.caches(cachegetter.clone())
@@ -953,7 +962,7 @@ impl<T: LedgerItem + Debug> Ledger<T> {
                     );
                 }
 
-                return (next_state_hash, contents);
+                return (next_state_hash, new_content);
             }
         };
 
@@ -993,7 +1002,9 @@ impl<T: LedgerItem + Debug> Ledger<T> {
         };
 
         let item = serde_json::to_vec(&item).unwrap();
-        let (state_hash, new_contents) = timed!(self.snap.save(state_hash, &id.to_string(), item));
+        let (state_hash, new_contents) =
+            self.snap
+                .save(state_hash, &id.to_string(), item, &mut new_content);
 
         let added_caches = new_caches.difference(&old_cache);
         let added_caches: Vec<&(CacheKey<T::PropertyType, T::RefType>, String)> =
