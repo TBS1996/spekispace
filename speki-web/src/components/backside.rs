@@ -47,6 +47,16 @@ pub fn BackPutRender(
             div {
                 class: "backside-editor flex items-center space-x-4",
 
+
+                div {
+                    class: "flex-shrink-0",
+                    style: "width: 65px;",
+                    DropComponent {
+                        options: dropdown.options.clone(),
+                        selected: dropdown.selected.clone(),
+                    }
+                }
+
                 div {
                     class: "flex-grow overflow-hidden",
 
@@ -91,14 +101,6 @@ pub fn BackPutRender(
                     }
                 }
 
-                div {
-                    class: "flex-shrink-0",
-                    style: "width: 65px;",
-                    DropComponent {
-                        options: dropdown.options.clone(),
-                        selected: dropdown.selected.clone(),
-                    }
-                }
             }
         }
     }

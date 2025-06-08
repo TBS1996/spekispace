@@ -117,6 +117,12 @@ pub fn FrontPutRender(
             div {
                 class: "backside-editor flex items-center space-x-4",
 
+                div {
+                    class: "flex-shrink-0",
+                    style: "width: 65px;",
+                    DropComponent {options: dropdown.options.clone(), selected: dropdown.selected.clone()}
+                }
+
                 input {
                     class: "bg-white w-full border border-gray-300 rounded-md p-2 mb-4 text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent",
                     placeholder: "{placeholder}",
@@ -130,11 +136,6 @@ pub fn FrontPutRender(
                 }
 
 
-                div {
-                    class: "flex-shrink-0",
-                    style: "width: 65px;",
-                    DropComponent {options: dropdown.options.clone(), selected: dropdown.selected.clone()}
-                }
             }
         }
     }

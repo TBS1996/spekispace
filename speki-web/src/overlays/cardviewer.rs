@@ -979,13 +979,6 @@ fn InputElements(
                     audio: back.audio.clone(),
                 }
 
-                input {
-                    class: "bg-white w-full border border-gray-300 rounded-md p-2 mb-4 text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent",
-                    value: "{default_question}",
-                    placeholder: "default question",
-                    oninput: move |evt| default_question.set(evt.value()),
-                }
-
                 div {
                     class: "block text-gray-700 text-sm font-medium mb-2",
                     style: "margin-right: 82px;",
