@@ -411,6 +411,14 @@ fn RenderSet(
     let ledger = APP.read().inner().provider.sets.clone();
     let filter2 = filter.clone();
 
+    let save_button: bool = match SetExpr::try_from(set.expr.cloned()) {
+        Ok(set_expr) => match APP.read().inner().provider.sets.load(set.id) {
+            Some(old_set) => old_set.expr != set_expr,
+            None => false,
+        },
+        Err(_) => false,
+    };
+
     rsx! {
         div {
             class: "border border-black p-4",
@@ -423,7 +431,8 @@ fn RenderSet(
                         name.set(val.to_string());
                     },
                 }
-                button {
+                if save_button {
+                    button {
                     class: "{crate::styles::BLACK_BUTTON}",
 
                     onclick: move |_| {
@@ -447,6 +456,9 @@ fn RenderSet(
 
                     },
                     "save"
+                }
+
+
                 }
 
                 button {
