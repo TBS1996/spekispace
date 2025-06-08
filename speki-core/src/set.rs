@@ -115,6 +115,10 @@ impl Input {
 }
 
 impl SetExpr {
+    pub fn universe() -> Self {
+        Self::Complement(Input::Expr(Box::new(Self::Union(Default::default()))))
+    }
+
     pub fn set_name(&self) -> &'static str {
         match self {
             SetExpr::Union(_) => "union",

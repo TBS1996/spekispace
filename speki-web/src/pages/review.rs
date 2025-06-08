@@ -1,5 +1,11 @@
 use std::{
-    cmp::Ordering, collections::BTreeSet, fmt::Debug, fs, io::Write, path::PathBuf, sync::Arc,
+    cmp::Ordering,
+    collections::{BTreeMap, BTreeSet},
+    fmt::Debug,
+    fs,
+    io::Write,
+    path::PathBuf,
+    sync::Arc,
 };
 
 use dioxus::prelude::*;
@@ -24,7 +30,7 @@ use crate::{
         DropDownMenu, FilterComp, FilterEditor,
     },
     overlays::{
-        card_selector::{CardSelector, MyClosure},
+        card_selector::{CardSelector, MaybeEntry, MyClosure},
         colviewer::CollectionEditor,
         reviewsession::{ReviewSession, ReviewState},
         textinput::TextInput,
@@ -264,7 +270,7 @@ fn RenderInput(
 }
 
 #[component]
-fn RenderExpr(
+pub fn RenderExpr(
     filter: CardFilter,
     inputs: Signal<BTreeSet<InputEditor>>,
     ty: Signal<SetExprDiscriminants>,
@@ -273,13 +279,13 @@ fn RenderExpr(
 ) -> Element {
     let class = format!("pl-{}", depth * 4);
 
-    let leaf_func: DropdownClosure = Arc::new(Box::new(move || {
+    let expr_func: DropdownClosure = Arc::new(Box::new(move || {
         let expr = SetExpr::default();
         let input: InputEditor = Input::Expr(expr.into()).into();
         inputs.clone().write().insert(input);
     }));
 
-    let expr_func: DropdownClosure = Arc::new(Box::new(move || {
+    let leaf_func: DropdownClosure = Arc::new(Box::new(move || {
         // normal card
         let leaf_card = {
             let f: Arc<Box<dyn Fn() -> OverlayEnum>> = {
@@ -608,6 +614,43 @@ impl PartialOrd for InputEditor {
 pub struct ExprEditor {
     pub inputs: Signal<BTreeSet<InputEditor>>,
     pub ty: Signal<SetExprDiscriminants>,
+}
+
+impl ExprEditor {
+    pub fn expanded(&self) -> Resource<BTreeMap<Uuid, Signal<MaybeEntry>>> {
+        info!("lets expand!");
+        let selv = self.clone();
+        ScopeId::APP.in_runtime(|| {
+            let selv = selv.clone();
+            use_resource(move || {
+                let selv = selv.clone();
+
+                let res = match SetExpr::try_from(selv) {
+                    Ok(expr) => {
+                        let provider = APP.read().inner().card_provider.clone();
+                        let mut out: BTreeMap<Uuid, Signal<MaybeEntry>> = Default::default();
+
+                        for c in expr.eval(&provider) {
+                            let id = c.id();
+                            let entry = match c {
+                                MaybeCard::Id(id) => MaybeEntry::No(id),
+                                MaybeCard::Card(card) => MaybeEntry::Yes(Signal::new_in_scope(
+                                    Arc::unwrap_or_clone(card),
+                                    ScopeId::APP,
+                                )),
+                            };
+
+                            out.insert(id, Signal::new_in_scope(entry, ScopeId::APP));
+                        }
+                        out
+                    }
+                    Err(_) => Default::default(),
+                };
+
+                async move { res }
+            })
+        })
+    }
 }
 
 impl PartialOrd for ExprEditor {

@@ -11,13 +11,17 @@ use speki_core::{
     card::{bigrams, normalize_string, CardId},
     cardfilter::CardFilter,
     collection::{Collection, DynCard, MaybeDyn},
+    set::SetExpr,
     Card, CardProperty,
 };
 use speki_web::Node;
 use tracing::info;
 use uuid::Uuid;
 
-use crate::components::graph::GraphRep;
+use crate::{
+    components::graph::GraphRep,
+    pages::{ExprEditor, InputEditor, RenderExpr},
+};
 
 use crate::{
     components::{CardTy, FilterComp, FilterEditor},
@@ -78,7 +82,7 @@ pub struct CardSelector {
     pub filtereditor: FilterEditor,
     pub filtermemo: Memo<Option<CardFilter>>,
     pub overlay: Signal<Option<OverlayEnum>>,
-    pub collection: CollectionEditor,
+    pub collection: ExprEditor,
     pub edit_collection: bool,
     pub cards: Resource<Vec<Signal<Card>>>,
     pub col_cards: Resource<BTreeMap<Uuid, Signal<MaybeEntry>>>,
@@ -136,7 +140,7 @@ impl CardSelector {
         let overlay: Signal<Option<OverlayEnum>> =
             Signal::new_in_scope(Default::default(), ScopeId::APP);
 
-        let collection = CollectionEditor::new_unsaved();
+        let collection: ExprEditor = ExprEditor::from(SetExpr::universe());
         let col_cards = collection.expanded();
 
         let allowed = allowed_cards.clone();
@@ -240,9 +244,6 @@ impl CardSelector {
             })
         });
 
-        let mut col = collection.clone();
-        col.push_entry(MaybeDyn::Dyn(DynCard::Any));
-
         info!("creating cardselector");
         Self {
             title: "select card".to_string(),
@@ -265,10 +266,8 @@ impl CardSelector {
     }
 
     pub fn with_dyncards(mut self, dyns: Vec<DynCard>) -> Self {
-        let dyns: Vec<MaybeDyn> = dyns.into_iter().map(|d| MaybeDyn::Dyn(d)).collect();
-        let mut col = Collection::new_default(Uuid::nil());
-        col.dyncards = dyns;
-        self.collection.col.set(col);
+        let leafs: Vec<InputEditor> = dyns.into_iter().map(|x| InputEditor::Leaf(x)).collect();
+        self.collection.inputs.write().extend(leafs);
         self
     }
 
@@ -396,10 +395,11 @@ pub fn CardSelectorRender(
     filtereditor: FilterEditor,
     filtermemo: Memo<Option<CardFilter>>,
     overlay: Signal<Option<OverlayEnum>>,
-    collection: CollectionEditor,
+    collection: ExprEditor,
     edit_collection: bool,
 ) -> Element {
     info!("render cardselector");
+    let filter = filtermemo.cloned().unwrap_or_default();
     rsx! {
         div {
             class: "flex flex-row",
@@ -411,14 +411,7 @@ pub fn CardSelectorRender(
             }
 
             if edit_collection {
-                ColViewRender {
-                    col: collection.col,
-                    colname: collection.colname,
-                    done: collection.done,
-                    entries: collection.entries,
-                    overlay: overlay.clone(),
-                    addnew: collection.addnew,
-                }
+                RenderExpr { filter, inputs: collection.inputs.clone(), ty: collection.ty.clone(), overlay: overlay.clone() }
             }
         }
 
