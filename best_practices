@@ -1,0 +1,80 @@
+Document to outline the best practices of formulating and structuring flashcards
+
+
+# Minimize explicit dependencies
+
+Explicit dependencies are the dependencies you manually set on a card.
+
+While all dependencies should be mapped out, it's best if it can be automatically deduced through the card itself. Meaning, links from text, in the namespace, by parent-class or attributes etc..
+Obviously don't avoid setting explicit dependencies if it's needed but try to first see if the dependency can naturaly be deduced.
+
+# Use namespaces
+
+If you have a card like "kubernetes cluster", and the word "cluster" makes sense whenever you're talking with someone in the context of kubernetes, then simply name
+the card 'cluster' and set kubernetes as its namespace. 
+
+namespaces makes the front card short and conscice, while properly integrating the required dependency. It's also nice for disambiguation, for example "port" is usually said as just port not network port, 
+but obviously it's different from a place where boats are located, so namespaces should also be used here.
+
+# Keep cards as atomic as possible
+
+Cards should try to be as small as possible and just have a single fact. The fact that we can ensure all necessary contexts is learned with the dependency and type system means you can
+keep cards very small without losing context. 
+
+For example
+
+the card "zoroastrian" should simply be "adherent of zoroastrianism". where zoroastrianism links to the card about the zoroastrianism religion.
+you may feel it's too short of a card and perhaps you want to write more on the back, but due to the dependency system, we can ensure that by the time the user get the card, 
+they have already learned about zoroastrianism. Each card should represent one piece of knowledge, there should not be duplicate definition of the same concept.
+
+
+# Use wikidata
+
+Not sure what class a new instance should belong to? look it up on wikidata, check the "instance of" section. 
+
+note: Wikidata is not a source of truth for modeling in speki, but it's helpful for inspiration.
+
+# Avoid "normal" cards if possible
+
+As many cards as possible should be part of the type system. 
+
+For now it means classes, attributes, and instances.
+
+if a card represents a class, make it a class, if it's an instance, make it an instance. if it's an attribute that is shared among instances of the class of the instance, then add it as an attribute.
+
+"normal" cards represent a failure to properly encode it in the type system. Currently there are some card types missing in speki, but hopefully over time i'll be able to patch most (maybe even all?) of
+these. For example, adding a 'relationship' type will be coming.
+
+Don't avoid adding 'normal cards' if it doesn't fit into these categories, but do take a moment to think if you can encode it properly.
+
+# Add 'obvious' cards if it helps the structure, even if everybody knows about it.
+
+if a card is an instance of a class that everybody knows the definition of, add this class anyway. 
+For example, the class 'person', everybody knows what a person is, but adding this class is still very useful in order to keep the structure.
+
+Don't worry about making too many cards, easy cards in SRS systems will very quickly get a long interval so you won't be wasting much time on them.
+
+# Avoid "What/who is.." cards
+
+for example, 'what is terraform'.
+
+These cards represent classes or instances, and the front part should just be the name of this _thing_. 
+These questions however are good for the attributes of the thing.
+
+for example, don't write 'who was albert einstein'. just make a card 'albert einstein', set it as an instance of 'male (subclass of person)'.
+then in the attributes of its parent class you can write the what/who/when questions
+
+# Use text references
+
+in the text of a card, both front and back, any piece of knowledge mentioned there can/should be a hyperlink to another card. 
+This is nice both for browsing around, but more importantly it avoids 'explicit dependencies' as mentioned above.
+
+# Avoiding cycles
+
+This isn't so much a 'tip' as a requirement, as cycles are explicitly disallowed.
+Which simply makes sense, if you can't know A before B, and you can't know B before A, then it is in practice impossible to learn either of A or B.
+
+You may often find that a concept A naturally references B, and the concept B naturally references A, which is how you may end up creating cycles.
+
+The way to solve it is to stick with the 'minimum information principle' as mentioned above. 
+Simply define the A and B as basic as possible, even if it seems ridiculous to have the answer to the card be so sparse. Then create more cards that explain A and B respectively in greater detail.

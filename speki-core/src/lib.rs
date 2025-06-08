@@ -5,12 +5,14 @@ use cardfilter::CardFilter;
 use collection::{Collection, CollectionId};
 use dioxus_logger::tracing::info;
 use ledger::{CardAction, CardEvent, CollectionEvent, Event, MetaEvent};
-use ledgerstore::CacheKey;
+use ledgerstore::{CacheKey, LedgerItem, Modifier};
 use ledgerstore::{Ledger, TimeProvider};
 use metadata::Metadata;
-use recall_rate::{History, ReviewEvent};
+use recall_rate::{History, ReviewAction};
+use serde::Deserialize;
 use set::{Set, SetEvent};
 use std::fmt::Display;
+use std::ops::Deref;
 use std::{collections::HashMap, fmt::Debug, sync::Arc, time::Duration};
 use tracing::trace;
 
@@ -32,10 +34,33 @@ pub use common::current_time;
 pub use omtrent::TimeStamp;
 pub use recall_rate::SimpleRecall;
 
+use crate::ledger::{CollectionAction, MetaAction};
+use crate::set::SetAction;
+
 #[derive(Clone, PartialEq, PartialOrd, Hash, Eq, Debug)]
 pub struct DepCacheKey {
     id: CardId,
     ty: RefType,
+}
+
+pub struct SavedItem<T: LedgerItem> {
+    id: T::Key,
+    item: T,
+    ledger: Ledger<T>,
+}
+
+impl<T: LedgerItem> SavedItem<T> {
+    pub fn id(&self) -> T::Key {
+        self.id
+    }
+}
+
+impl<T: LedgerItem> Deref for SavedItem<T> {
+    type Target = T;
+
+    fn deref(&self) -> &Self::Target {
+        &self.item
+    }
 }
 
 #[derive(Clone, PartialEq, PartialOrd, Hash, Eq, Debug)]
@@ -130,11 +155,11 @@ pub trait RecallCalc {
 
 #[derive(Clone)]
 pub struct CollectionProvider {
-    pub inner: Ledger<Collection, CollectionEvent>,
+    pub inner: Ledger<Collection>,
 }
 
 impl CollectionProvider {
-    pub fn new(inner: Ledger<Collection, CollectionEvent>) -> Self {
+    pub fn new(inner: Ledger<Collection>) -> Self {
         Self { inner }
     }
     pub async fn save(&self, event: CollectionEvent) {
@@ -153,11 +178,11 @@ impl CollectionProvider {
 
 #[derive(Clone)]
 pub struct Provider {
-    pub cards: Ledger<RawCard, CardEvent>,
-    pub sets: Ledger<Set, SetEvent>,
-    pub reviews: Ledger<History, ReviewEvent>,
-    pub collections: Ledger<Collection, CollectionEvent>,
-    pub metadata: Ledger<Metadata, MetaEvent>,
+    pub cards: Ledger<RawCard>,
+    pub sets: Ledger<Set>,
+    pub reviews: Ledger<History>,
+    pub collections: Ledger<Collection>,
+    pub metadata: Ledger<Metadata>,
     pub time: TimeGetter,
 }
 
@@ -192,11 +217,11 @@ impl App {
     pub fn new<A, B>(
         recall_calc: A,
         time_provider: B,
-        card_provider: Ledger<RawCard, CardEvent>,
-        history_provider: Ledger<History, ReviewEvent>,
-        collections_provider: Ledger<Collection, CollectionEvent>,
-        meta_provider: Ledger<Metadata, MetaEvent>,
-        set_provider: Ledger<Set, SetEvent>,
+        card_provider: Ledger<RawCard>,
+        history_provider: Ledger<History>,
+        collections_provider: Ledger<Collection>,
+        meta_provider: Ledger<Metadata>,
+        set_provider: Ledger<Set>,
     ) -> Self
     where
         A: RecallCalc + 'static + Send,

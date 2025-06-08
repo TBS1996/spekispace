@@ -3,7 +3,7 @@ use std::{
     fmt::Display,
 };
 
-use ledgerstore::{LedgerEvent, LedgerItem};
+use ledgerstore::{LedgerItem, Modifier};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -53,13 +53,7 @@ pub struct AttrEvent {
     pub action: AttrAction,
 }
 
-impl LedgerEvent for AttrEvent {
-    type Key = AttributeId;
-
-    fn id(&self) -> Self::Key {
-        self.id
-    }
-}
+impl Modifier for AttrAction {}
 
 #[derive(Clone, Debug, Copy, Hash, Eq, PartialEq)]
 pub enum RefAttr {
@@ -82,13 +76,15 @@ impl AsRef<str> for RefAttr {
     }
 }
 
-impl LedgerItem<AttrEvent> for Attribute {
+impl LedgerItem for Attribute {
     type Error = ();
     type RefType = RefAttr;
     type PropertyType = String;
+    type Key = AttributeId;
+    type Modifier = AttrAction;
 
-    fn run_event(mut self, event: AttrEvent) -> Result<Self, Self::Error> {
-        match event.action {
+    fn run_event(mut self, event: AttrAction) -> Result<Self, Self::Error> {
+        match event {
             AttrAction::UpSert { pattern, class } => {
                 self.pattern = pattern;
                 self.class = class;

@@ -338,7 +338,7 @@ impl CardType {
         }
     }
 
-    pub fn name_fixed_ledger(&self, provider: &FixedLedger<RawCard, CardEvent>) -> TextData {
+    pub fn name_fixed_ledger(&self, provider: &FixedLedger<RawCard>) -> TextData {
         match self {
             CardType::Instance { name, .. } => name.clone(),
             CardType::Normal { front, .. } => front.clone(),
@@ -392,13 +392,21 @@ impl CardType {
                 name, class, back, ..
             } => {
                 let (class_name, default_question) =
-                    match provider.providers.cards.load(class).unwrap().data {
-                        CardType::Class {
+                    match provider.providers.cards.load(class).map(|x| x.data) {
+                        Some(CardType::Class {
                             default_question,
                             name,
                             ..
-                        } => (name, default_question),
-                        _ => panic!(),
+                        }) => (name, default_question),
+                        None => {
+                            dbg!(class);
+                            panic!();
+                        }
+                        other => {
+                            dbg!(class);
+                            dbg!(other);
+                            panic!();
+                        }
                     };
 
                 let thename = &name.evaluate(provider);
@@ -515,7 +523,7 @@ pub struct RawCard {
 }
 
 impl RawCard {
-    pub fn cache_front(&self, ledger: &FixedLedger<RawCard, CardEvent>) -> String {
+    pub fn cache_front(&self, ledger: &FixedLedger<RawCard>) -> String {
         match self.data.clone() {
             CardType::Instance { name, .. } => name.to_raw(),
             CardType::Normal { front, .. } => front.to_raw(),
@@ -640,7 +648,7 @@ impl RawCard {
         }
     }
 
-    pub fn get_attr_rec(&self, ledger: FixedLedger<RawCard, CardEvent>) -> Option<Attrv2> {
+    pub fn get_attr_rec(&self, ledger: FixedLedger<RawCard>) -> Option<Attrv2> {
         let CardType::Attribute {
             attribute,
             instance,
@@ -731,7 +739,7 @@ pub fn normalize_string(str: &str) -> String {
 }
 
 use fancy_regex::Regex;
-fn resolve_text(txt: String, ledger: &FixedLedger<RawCard, CardEvent>, re: &Regex) -> String {
+fn resolve_text(txt: String, ledger: &FixedLedger<RawCard>, re: &Regex) -> String {
     let uuids: Vec<CardId> = re
         .find_iter(&txt)
         .filter_map(Result::ok)
@@ -753,7 +761,7 @@ fn resolve_text(txt: String, ledger: &FixedLedger<RawCard, CardEvent>, re: &Rege
 
 /// replaces all uuids on frontside of card with the frontside of the card referenced by uuid.
 /// just appends it, doesn't preserve order, this is just to collect bigrams.
-fn resolve_card(card: &RawCard, ledger: &FixedLedger<RawCard, CardEvent>) -> String {
+fn resolve_card(card: &RawCard, ledger: &FixedLedger<RawCard>) -> String {
     let uuid_regex = Regex::new(
         r"\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\b",
     )
@@ -762,10 +770,12 @@ fn resolve_card(card: &RawCard, ledger: &FixedLedger<RawCard, CardEvent>) -> Str
     resolve_text(card.cache_front(ledger), ledger, &uuid_regex)
 }
 
-impl LedgerItem<CardEvent> for RawCard {
+impl LedgerItem for RawCard {
     type Error = ();
+    type Key = CardId;
     type RefType = RefType;
     type PropertyType = CardProperty;
+    type Modifier = CardAction;
 
     fn ref_cache(&self) -> HashMap<Self::RefType, HashSet<CardId>> {
         let mut out: HashMap<Self::RefType, HashSet<Uuid>> = Default::default();
@@ -862,10 +872,7 @@ impl LedgerItem<CardEvent> for RawCard {
         out
     }
 
-    fn properties_cache(
-        &self,
-        cache: FixedLedger<Self, CardEvent>,
-    ) -> HashSet<(Self::PropertyType, String)> {
+    fn properties_cache(&self, cache: FixedLedger<Self>) -> HashSet<(Self::PropertyType, String)> {
         let mut out: HashSet<(Self::PropertyType, String)> = Default::default();
 
         let resolved_text = resolve_card(self, &cache);
@@ -912,60 +919,58 @@ impl LedgerItem<CardEvent> for RawCard {
         }
     }
 
-    fn run_event(mut self, event: CardEvent) -> Result<Self, ()> {
-        for action in event.action {
-            match action {
-                CardAction::SetDefaultQuestion(default) => match &mut self.data {
-                    CardType::Class {
-                        ref mut default_question,
-                        ..
-                    } => *default_question = default.map(|s| TextData::from_raw(&s)),
-                    _ => return Err(()),
-                },
-                CardAction::SetFrontAudio(audio) => {
-                    self.front_audio = audio;
-                }
-                CardAction::SetBackAudio(audio) => {
-                    self.back_audio = audio;
-                }
-                CardAction::UpsertCard(ty) => {
-                    self.data = ty;
-                }
-                CardAction::DeleteCard => {}
-                CardAction::SetNamespace(ns) => {
-                    self.namespace = ns;
-                }
-                CardAction::AddDependency(dependency) => {
-                    self.dependencies.insert(dependency);
-                }
-                CardAction::RemoveDependency(dependency) => {
-                    self.dependencies.remove(&dependency);
-                    self.remove_dep(dependency);
-                }
-                CardAction::SetBackRef(reff) => {
-                    let backside = BackSide::Card(reff);
-                    self = self.set_backside(backside);
-                }
-                CardAction::InsertAttr(attrv2) => {
-                    if let CardType::Class { ref mut attrs, .. } = self.data {
-                        if !attrs.iter().any(|attr| attr.id == attrv2.id) {
-                            attrs.push(attrv2);
-                        }
-                    } else {
-                        panic!("expeted class");
+    fn run_event(mut self, event: CardAction) -> Result<Self, ()> {
+        match event {
+            CardAction::SetDefaultQuestion(default) => match &mut self.data {
+                CardType::Class {
+                    ref mut default_question,
+                    ..
+                } => *default_question = default.map(|s| TextData::from_raw(&s)),
+                _ => return Err(()),
+            },
+            CardAction::SetFrontAudio(audio) => {
+                self.front_audio = audio;
+            }
+            CardAction::SetBackAudio(audio) => {
+                self.back_audio = audio;
+            }
+            CardAction::UpsertCard(ty) => {
+                self.data = ty;
+            }
+            CardAction::DeleteCard => {}
+            CardAction::SetNamespace(ns) => {
+                self.namespace = ns;
+            }
+            CardAction::AddDependency(dependency) => {
+                self.dependencies.insert(dependency);
+            }
+            CardAction::RemoveDependency(dependency) => {
+                self.dependencies.remove(&dependency);
+                self.remove_dep(dependency);
+            }
+            CardAction::SetBackRef(reff) => {
+                let backside = BackSide::Card(reff);
+                self = self.set_backside(backside);
+            }
+            CardAction::InsertAttr(attrv2) => {
+                if let CardType::Class { ref mut attrs, .. } = self.data {
+                    if !attrs.iter().any(|attr| attr.id == attrv2.id) {
+                        attrs.push(attrv2);
                     }
-                }
-                CardAction::RemoveAttr(attr_id) => {
-                    if let CardType::Class { ref mut attrs, .. } = self.data {
-                        let attr_len = attrs.len();
-                        attrs.retain(|attr| attr.id != attr_id);
-                        assert_eq!(attr_len - 1, attrs.len());
-                    } else {
-                        panic!("expeted class");
-                    }
+                } else {
+                    panic!("expeted class");
                 }
             }
-        }
+            CardAction::RemoveAttr(attr_id) => {
+                if let CardType::Class { ref mut attrs, .. } = self.data {
+                    let attr_len = attrs.len();
+                    attrs.retain(|attr| attr.id != attr_id);
+                    assert_eq!(attr_len - 1, attrs.len());
+                } else {
+                    panic!("expeted class");
+                }
+            }
+        };
 
         Ok(self)
     }

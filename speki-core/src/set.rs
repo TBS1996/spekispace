@@ -1,6 +1,6 @@
 use std::{collections::BTreeSet, fmt::Display};
 
-use ledgerstore::{LedgerEvent, LedgerItem};
+use ledgerstore::{LedgerItem, Modifier, TheLedgerEvent};
 use serde::{Deserialize, Serialize};
 use strum::{Display, EnumDiscriminants, EnumIter, EnumString};
 use uuid::Uuid;
@@ -22,35 +22,21 @@ pub enum SetAction {
     SetExpr(SetExpr),
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Hash)]
-pub struct SetEvent {
-    id: SetId,
-    action: SetAction,
-}
+pub type SetEvent = TheLedgerEvent<Set>;
 
-impl SetEvent {
-    pub fn new(id: SetId, action: SetAction) -> Self {
-        Self { id, action }
-    }
-}
+impl Modifier for SetAction {}
 
-impl LedgerEvent for SetEvent {
+impl LedgerItem for Set {
+    type Error = ();
     type Key = SetId;
 
-    fn id(&self) -> Self::Key {
-        self.id
-    }
-}
-
-impl LedgerItem<SetEvent> for Set {
-    type Error = ();
-
+    type Modifier = SetAction;
     type RefType = String;
 
     type PropertyType = String;
 
-    fn run_event(mut self, event: SetEvent) -> Result<Self, Self::Error> {
-        match event.action {
+    fn run_event(mut self, event: SetAction) -> Result<Self, Self::Error> {
+        match event {
             SetAction::SetName(name) => self.name = name,
             SetAction::SetExpr(expr) => self.expr = expr,
         }
@@ -58,7 +44,7 @@ impl LedgerItem<SetEvent> for Set {
         Ok(self)
     }
 
-    fn new_default(id: <SetEvent as ledgerstore::LedgerEvent>::Key) -> Self {
+    fn new_default(id: Self::Key) -> Self {
         Self {
             id,
             name: "...".to_string(),
@@ -66,7 +52,7 @@ impl LedgerItem<SetEvent> for Set {
         }
     }
 
-    fn item_id(&self) -> <SetEvent as ledgerstore::LedgerEvent>::Key {
+    fn item_id(&self) -> Self::Key {
         self.id
     }
 }

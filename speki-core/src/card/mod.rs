@@ -23,7 +23,7 @@ use crate::{
     card_provider::CardProvider,
     ledger::{CardAction, CardEvent, MetaEvent},
     metadata::Metadata,
-    recall_rate::{History, Recall, ReviewEvent, SimpleRecall},
+    recall_rate::{History, Recall, Review, ReviewAction, ReviewEvent, SimpleRecall},
     AttributeId, RecallCalc, Recaller, RefType, TimeGetter,
 };
 
@@ -298,11 +298,11 @@ impl Card {
     }
 
     pub async fn add_review(&mut self, recall: Recall) {
-        let event = ReviewEvent {
-            id: self.id,
+        let action = ReviewAction::Insert(Review {
             grade: recall,
             timestamp: self.current_time(),
-        };
+        });
+        let event = ReviewEvent::new(self.id, action);
         self.card_provider.providers.run_event(event);
     }
 
@@ -683,11 +683,7 @@ impl Card {
     }
 
     pub async fn set_suspend(&mut self, suspend: bool) {
-        let event = MetaEvent {
-            id: self.id,
-            action: crate::ledger::MetaAction::Suspend(suspend),
-        };
-
+        let event = MetaEvent::new(self.id, crate::ledger::MetaAction::Suspend(suspend));
         self.card_provider.providers.run_event(event);
         self.metadata.suspended = suspend.into();
     }

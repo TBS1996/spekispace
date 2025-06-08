@@ -32,6 +32,7 @@ ledgerstore.workspace = true
 either.workspace = true
 nonempty.workspace = true
 rand.workspace = true
+async-openai.workspace = true
 
 # WebAssembly-specific dependencies (optional)
 wasm-bindgen = { workspace = true, optional = true }

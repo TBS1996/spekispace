@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use ledgerstore::{LedgerEvent, LedgerItem};
+use ledgerstore::{LedgerItem, Modifier, TheLedgerEvent};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -169,35 +169,30 @@ pub struct Review {
     pub timestamp: Duration,
     // Recall grade.
     pub grade: Recall,
-    // How long you spent before attempting recall.
-    pub time_spent: Duration,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Hash)]
-pub struct ReviewEvent {
-    pub id: CardId,
-    pub grade: Recall,
-    pub timestamp: Duration,
+pub enum ReviewAction {
+    Insert(Review),
 }
 
-impl LedgerEvent for ReviewEvent {
-    type Key = CardId;
+impl Modifier for ReviewAction {}
 
-    fn id(&self) -> CardId {
-        self.id
-    }
-}
+pub type ReviewEvent = TheLedgerEvent<History>;
 
-impl LedgerItem<ReviewEvent> for History {
+impl LedgerItem for History {
     type Error = ();
+    type Key = CardId;
     type PropertyType = &'static str;
     type RefType = &'static str;
+    type Modifier = ReviewAction;
 
-    fn run_event(mut self, event: ReviewEvent) -> Result<Self, ()> {
-        let review = Review {
-            timestamp: event.timestamp,
-            grade: event.grade,
-            time_spent: Default::default(),
+    fn run_event(mut self, event: ReviewAction) -> Result<Self, ()> {
+        let review = match event {
+            ReviewAction::Insert(review) => Review {
+                timestamp: review.timestamp,
+                grade: review.grade,
+            },
         };
 
         self.push(review);

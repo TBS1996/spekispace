@@ -263,11 +263,6 @@ impl SnapFs {
         top_map.all_dirs(cmps)
     }
 
-    /// hmm okk..
-    ///
-    /// so the leafdir key just make sense if there's already a leafdir there so cant use it it on save_on_gen cause it might be the first one
-    /// i need to better separate out the logic of whether it exist or not already
-    ///
     pub fn save_on_gen(
         &self,
         key: KeyFoo<'_>,
@@ -295,6 +290,22 @@ impl SnapFs {
         trace!("try get item: {key} on hash: {hash}");
         let path = self.full_path(hash, key);
         fs::read(&path).ok()
+    }
+
+    pub fn delete_on_gen(&self, key: KeyFoo<'_>, prev_generation: Option<&str>) -> HashAndContents {
+        let leafdir_path = self.get_leafdir_path(prev_generation, key.cmps);
+        let x = leafdir_path.remove_item(key.key.to_owned());
+
+        let top_hash = x.first().unwrap().hash.clone();
+        trace!("new generation after item removal: {top_hash}");
+        let mut new_contents: Vec<Content> = Default::default();
+
+        for dir in x {
+            let c = Content::new(dir.path());
+            new_contents.push(c);
+        }
+
+        (top_hash, new_contents)
     }
 
     pub fn save_item(&self, item_hash: &str, item: Vec<u8>) {

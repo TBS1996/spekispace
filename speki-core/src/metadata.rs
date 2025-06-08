@@ -7,7 +7,10 @@ use serde::{
 };
 use uuid::Uuid;
 
-use crate::{card::CardId, ledger::MetaEvent};
+use crate::{
+    card::CardId,
+    ledger::{MetaAction, MetaEvent},
+};
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize, Hash)]
 pub struct Metadata {
@@ -24,13 +27,15 @@ impl Metadata {
     }
 }
 
-impl LedgerItem<MetaEvent> for Metadata {
+impl LedgerItem for Metadata {
     type Error = ();
+    type Key = Uuid;
     type PropertyType = &'static str;
     type RefType = &'static str;
+    type Modifier = MetaAction;
 
-    fn run_event(mut self, event: MetaEvent) -> Result<Self, ()> {
-        match event.action {
+    fn run_event(mut self, event: MetaAction) -> Result<Self, ()> {
+        match event {
             crate::ledger::MetaAction::Suspend(flag) => self.suspended = flag.into(),
         }
 

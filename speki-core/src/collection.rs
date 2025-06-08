@@ -34,13 +34,15 @@ pub struct Collection {
     pub dyncards: Vec<MaybeDyn>,
 }
 
-impl LedgerItem<CollectionEvent> for Collection {
+impl LedgerItem for Collection {
     type Error = ();
+    type Key = CollectionId;
     type PropertyType = &'static str;
     type RefType = &'static str;
+    type Modifier = CollectionAction;
 
-    fn run_event(mut self, event: CollectionEvent) -> Result<Self, Self::Error> {
-        match event.action {
+    fn run_event(mut self, event: CollectionAction) -> Result<Self, Self::Error> {
+        match event {
             CollectionAction::Delete => {}
             CollectionAction::SetName(s) => self.name = s,
             CollectionAction::InsertDyn(val) => self.dyncards.push(val),

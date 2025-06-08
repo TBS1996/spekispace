@@ -6,6 +6,7 @@ use std::{
 
 use dioxus::prelude::*;
 use either::Either;
+use ledgerstore::TheLedgerEvent;
 use speki_core::{
     attribute::{AttrAction, AttrEvent, RefAttr},
     audio::AudioId,
@@ -20,10 +21,12 @@ use tracing::info;
 use uuid::Uuid;
 
 use crate::{
+    ask_openai,
     components::{
         backside::BackPutRender, cardref::CardRefRender, frontside::FrontPutRender, BackPut,
         CardRef, CardTy, DropDownMenu, FrontPut, GraphRep, RenderDependents,
     },
+    load_api_key,
     overlays::{
         card_selector::{CardSelector, MyClosure},
         yesno::Yesno,
@@ -875,6 +878,13 @@ fn RenderInputs(props: CardViewer) -> Element {
     info!("render inputs");
     let ty = props.editor.front.dropdown.selected.clone();
     let card_id = props.old_card.read().as_ref().map(|c| c.id());
+    let deletable = match props.old_card.cloned() {
+        Some(card) => card.dependents().is_empty(),
+        None => false,
+    };
+
+    let api_key = load_api_key();
+    let ai_enabled = api_key.is_some() && !props.editor.front.text.read().trim().is_empty();
 
     rsx! {
         div {
@@ -893,13 +903,19 @@ fn RenderInputs(props: CardViewer) -> Element {
         }
         div {
             if let Some(card) = props.old_card.cloned() {
-                DeleteButton{card: card.id(), isdone: props.is_done.clone(), overlay: props.overlay.clone()}
+                if deletable {
+                    DeleteButton{card: card.id(), isdone: props.is_done.clone(), overlay: props.overlay.clone()}
+                }
                 Suspend { card: props.old_card.clone() }
             }
 
             add_dep { selv: props.clone() }
 
             save_button { CardViewer: props.clone() }
+
+            if ai_enabled {
+                AiComplete { CardViewer: props.clone(), api_key }
+            }
         }
     }
 }
@@ -1200,16 +1216,8 @@ fn DeleteButton(
         button {
             class: "mt-2 inline-flex items-center text-white bg-gray-800 border-0 py-1 px-3 focus:outline-none hover:bg-gray-700 rounded text-base md:mt-0",
             onclick: move |_| {
-                let fun: Box<dyn Fn()> = Box::new(move || {
-                    spawn(async move {
-                        info!("cardviewer delete card! {card}");
-                        APP.read().delete_card(card).await;
-                        isdone.clone().set(true);
-                    });
-                });
-
-                let yesno = Yesno::new("Really delete card?".to_string(), Arc::new(fun));
-                overlay.clone().set(Some(OverlayEnum::YesNo(yesno)));
+                APP.read().inner().provider.cards.insert_ledger(TheLedgerEvent::new_delete(card));
+                isdone.clone().set(true);
             },
             "delete"
         }
@@ -1235,6 +1243,35 @@ fn Suspend(card: Signal<Option<Card>>) -> Element {
                 });
             },
             "{txt}"
+        }
+    }
+}
+
+#[component]
+fn AiComplete(CardViewer: CardViewer, api_key: Option<String>) -> Element {
+    let selv = CardViewer.clone();
+
+    let class = "mt-2 inline-flex items-center text-white bg-gray-800 border-0 py-1 px-3 focus:outline-none hover:bg-gray-700 rounded text-base md:mt-0";
+
+    rsx! {
+        button {
+            class: "{class}",
+            onclick: move |_| {
+                let front: String = selv.editor.front.text.cloned();
+                if front.trim().is_empty() {
+                    return;
+                }
+
+                let back = selv.editor.back.text.clone();
+                let key = api_key.clone();
+
+                spawn(async move {
+                    let response = ask_openai(key.clone().unwrap(), front).await;
+                    back.clone().set(response);
+                });
+
+            },
+            "ai complete"
         }
     }
 }

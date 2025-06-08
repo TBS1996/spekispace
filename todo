@@ -593,6 +593,38 @@ it can create a subclass for each combination? uh no that's ugly.
 maybe just have various sub-classes and have a way to make an instnce 
 
 
+# SavedItem wrapper
+
+wrapper around the raw type
+it uses deref to get access to the inner raw thing, which also doesn't allow mutation whihc is good cause mutation should be done through new ledger stuff
+
+it can have an id field so the id doesn't need to be stored in the raw type at all
+also can have all the dependents, so you can get dependents without needing the ledger, you just need the type itself
+
+potentially, maybe an internal arcswap thing to change out the inner rawtype if any of its dependencies got updated?
+
+for example, we can internally save the hash of the entire state, and have some kinda list of ids changed after that hash
+when we read from the card, we can check if any of the card's dependencies are on that list
+if any of the card's dependencies are on the list, we can then reload the card. Although, unfortunately this would require global state.
+
+maybe that's fine tho, if we roll with having global state anyway like a reference to ledger inside the SavedItem thing anyway, then we can do things like, when calling dependencies or whatever instead of 
+returning IDs we can return the actual other SavedItem's.
+
+and maybe instead of it checking to see if it's gotten invalid it can be more push-based so when we update the Ledger it can send a signal to invalidate all dependents of a card.
+maybe just a flag inside the SavedItem that ledger will trigger, so that we can be lazy about it. so that when you change a very high-level card it won't re-load any cards until they're actually getting used.
+
+proper use of Arc so that various containers that keep SavedItem won't keep any copies.
+
+maybe also have an uninit state within SavedItem so at first it might just keep the ID until deref is getting called. 
+
+could try to figure out if a change in a card updates any dependencies or not but that's probably too complicated
+
+# multiple aliases for same concept?
+
+so sometimes, a concept has multiple names to it. not sure how to encode that properly. 
+
+
+
 # main graph
 
 

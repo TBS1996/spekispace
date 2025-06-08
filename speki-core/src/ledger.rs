@@ -1,51 +1,16 @@
 use crate::{
     attribute::AttrEvent,
     audio::AudioId,
-    card::{Attrv2, CardId},
-    collection::{CollectionId, MaybeDyn},
-    recall_rate::{History, Review, ReviewEvent},
+    card::{Attrv2, CardId, RawCard},
+    collection::{Collection, CollectionId, MaybeDyn},
+    metadata::Metadata,
+    recall_rate::{History, Review, ReviewAction, ReviewEvent},
     AttributeId, CardType,
 };
-use ledgerstore::LedgerEvent;
+use ledgerstore::{Modifier, TheLedgerEvent};
 use serde::{Deserialize, Serialize};
 
-pub fn decompose_history(history: History) -> Vec<ReviewEvent> {
-    let mut actions = vec![];
-
-    let id = history.id;
-    for review in history.reviews {
-        actions.push(ReviewEvent {
-            id,
-            grade: review.grade,
-            timestamp: review.timestamp,
-        });
-    }
-
-    actions
-}
-
-#[derive(Serialize, Deserialize, Clone, Debug, Hash)]
-pub struct CardEvent {
-    pub action: Vec<CardAction>,
-    pub id: CardId,
-}
-
-impl CardEvent {
-    pub fn new(id: CardId, action: CardAction) -> Self {
-        Self {
-            id,
-            action: vec![action],
-        }
-    }
-}
-
-impl LedgerEvent for CardEvent {
-    type Key = CardId;
-
-    fn id(&self) -> Self::Key {
-        self.id
-    }
-}
+pub type CardEvent = TheLedgerEvent<RawCard>;
 
 #[derive(Deserialize, Serialize, Clone, Debug, Hash)]
 pub enum CardAction {
@@ -62,28 +27,20 @@ pub enum CardAction {
     RemoveAttr(AttributeId),
 }
 
+impl Modifier for CardAction {}
+
 pub enum HistoryEvent {
     Review { id: CardId, review: Review },
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Hash)]
-pub struct MetaEvent {
-    pub id: CardId,
-    pub action: MetaAction,
-}
-
-impl LedgerEvent for MetaEvent {
-    type Key = CardId;
-
-    fn id(&self) -> Self::Key {
-        self.id
-    }
-}
+pub type MetaEvent = TheLedgerEvent<Metadata>;
 
 #[derive(Debug, Clone, Serialize, Deserialize, Hash)]
 pub enum MetaAction {
     Suspend(bool),
 }
+
+impl Modifier for MetaAction {}
 
 impl From<MetaEvent> for Event {
     fn from(event: MetaEvent) -> Self {
@@ -113,25 +70,7 @@ pub enum Event {
     Collection(CollectionEvent),
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug, Hash)]
-pub struct CollectionEvent {
-    pub action: CollectionAction,
-    pub id: CollectionId,
-}
-
-impl CollectionEvent {
-    pub fn new(id: CollectionId, action: CollectionAction) -> Self {
-        Self { id, action }
-    }
-}
-
-impl LedgerEvent for CollectionEvent {
-    type Key = CollectionId;
-
-    fn id(&self) -> Self::Key {
-        self.id
-    }
-}
+pub type CollectionEvent = TheLedgerEvent<Collection>;
 
 #[derive(Deserialize, Serialize, Clone, Debug, Hash)]
 pub enum CollectionAction {
@@ -140,3 +79,5 @@ pub enum CollectionAction {
     RemoveDyn(MaybeDyn),
     Delete,
 }
+
+impl Modifier for CollectionAction {}
