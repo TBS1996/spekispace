@@ -22,3 +22,4 @@ snapstore.workspace = true
 walkdir.workspace = true
 rayon.workspace = true
 simpletime.workspace = true
+either.workspace = true

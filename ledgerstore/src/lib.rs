@@ -1,7 +1,10 @@
+use either::Either;
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
+use simpletime::timed;
 use snapstore::fs::{CacheFs, Content, SnapFs};
-use snapstore::{HashAndContents, Key, SnapStorage};
+use snapstore::mem::SnapMem;
+use snapstore::{HashAndContents, Key};
 use std::fmt::Display;
 use std::fs::{self};
 use std::io::Write;
@@ -21,29 +24,13 @@ pub mod ledger_cache;
 
 pub use snapstore::CacheKey;
 
-/*
-/// Represents a single event in the ledger.
-pub trait LedgerAction:
-    Hash + Debug + Clone + Serialize + Deserialize + Send + Sync + 'static
-{
-    type Key: Copy + Eq + Hash + ToString + Debug;
-
-    fn data_hash(&self) -> Hashed {
-        get_hash(self)
-    }
-}
-*/
-
-//pub struct Ledger<T: LedgerItem<E, S>, E: LedgerEvent, S: Clone = ()> {
-
 /// Represents how a ledger mutates or creates an item.
-
 pub trait LedgerItem: Serialize + DeserializeOwned + Hash + Clone + 'static {
-    type Key: Copy + Eq + Hash + ToString + Debug + Serialize + DeserializeOwned;
+    type Key: Copy + Eq + Hash + ToString + Debug + Serialize + DeserializeOwned + Send + Sync;
     type Error: Debug;
-    type RefType: AsRef<str> + Display + Clone + Hash + PartialEq + Eq;
-    type PropertyType: AsRef<str> + Display + Clone + Hash + PartialEq + Eq;
-    type Modifier: Clone + Debug + Hash + Serialize + DeserializeOwned;
+    type RefType: AsRef<str> + Display + Clone + Hash + PartialEq + Eq + Send + Sync;
+    type PropertyType: AsRef<str> + Display + Clone + Hash + PartialEq + Eq + Send + Sync;
+    type Modifier: Clone + Debug + Hash + Serialize + DeserializeOwned + Send + Sync;
 
     fn run_event(self, event: Self::Modifier) -> Result<Self, Self::Error>;
 
@@ -180,16 +167,23 @@ ledgers represent the same thing? like how review ID refer to cardId ?
 /// A ledger fixed to a certain hash.
 #[derive(Clone)]
 pub struct FixedLedger<T: LedgerItem> {
-    inner: Ledger<T>,
+    inner: Either<Ledger<T>, SnapMem>,
     hash: Option<StateHash>,
 }
 
 impl<T: LedgerItem> FixedLedger<T> {
     pub fn load(&self, id: T::Key) -> Option<T> {
-        let state = self.hash.as_ref()?;
-        match self.inner.snap.get(state, id.to_string().as_str()) {
-            Some(item) => serde_json::from_slice(&item).unwrap(),
-            None => None,
+        match &self.inner {
+            Either::Left(ledger) => {
+                let state = self.hash.as_ref()?;
+                match ledger.snap.get(state, id.to_string().as_str()) {
+                    Some(item) => serde_json::from_slice(&item).unwrap(),
+                    None => None,
+                }
+            }
+            Either::Right(mem) => mem
+                .get(&id.to_string())
+                .map(|data| serde_json::from_slice(&data).unwrap()),
         }
     }
 }
@@ -258,7 +252,7 @@ pub struct Ledger<T: LedgerItem> {
     all_paths: Arc<RwLock<HashMap<StateHash, Arc<HashSet<Content>>>>>,
 }
 
-impl<T: LedgerItem + Debug> Ledger<T> {
+impl<T: LedgerItem + Debug + Send + Sync> Ledger<T> {
     /// Map from a state hash, to a cash hash
     fn cache_map(&self) -> PathBuf {
         let p = self.root.join("cache").join("map");
@@ -324,19 +318,32 @@ impl<T: LedgerItem + Debug> Ledger<T> {
 
     fn cachegetter(&self, hash: impl Into<Option<String>>) -> FixedLedger<T> {
         FixedLedger {
-            inner: (*self).clone(),
+            inner: Either::Left((*self).clone()),
             hash: hash.into(),
         }
     }
 
-    /// This will go through the entire state and create a hash for it
-    fn rebuild_cache(&self, state_hash: &str) -> Option<CacheHash> {
-        info!("rebuilding cache on {state_hash}");
-        let caches: HashSet<(CacheKey<T::PropertyType, T::RefType>, String)> = self
-            .load_all_on_state(state_hash)
-            .into_values()
-            .flat_map(|item| item.caches(self.cachegetter(state_hash.to_owned())))
-            .collect();
+    fn rebuild_the_cache(
+        &self,
+        items: HashMap<String, T>,
+        fixed: FixedLedger<T>,
+    ) -> Option<CacheHash>
+    where
+        T: Send + Sync, // Add this bound if not already present
+        T::PropertyType: Send + Sync + 'static,
+        T::RefType: Send + Sync + 'static,
+    {
+        info!("rebuilding cache maan");
+
+        use rayon::prelude::*;
+
+        let caches: HashSet<(CacheKey<T::PropertyType, T::RefType>, String)> = items
+            .into_par_iter() // Parallel iterator
+            .map(|(_, item)| item.caches(fixed.clone())) // Returns an iterator
+            .flatten() // Flattens all those iterators
+            .collect(); // Collects into a HashSet
+
+        dbg!();
 
         let cache_map: HashMap<CacheKey<T::PropertyType, T::RefType>, Vec<String>> = {
             let mut cache_map: HashMap<CacheKey<T::PropertyType, T::RefType>, Vec<String>> =
@@ -406,6 +413,12 @@ impl<T: LedgerItem + Debug> Ledger<T> {
         cache_hash
     }
 
+    /// This will go through the entire state and create a hash for it
+    fn rebuild_cache(&self, state_hash: &str) -> Option<CacheHash> {
+        let items = self.load_all_on_state(state_hash);
+        self.rebuild_the_cache(items, self.cachegetter(state_hash.to_string()))
+    }
+
     fn modify_cache(
         &self,
         prev_state_hash: Option<&str>,
@@ -468,7 +481,7 @@ impl<T: LedgerItem + Debug> Ledger<T> {
     }
 }
 
-impl<T: LedgerItem + Debug> Ledger<T> {
+impl<T: LedgerItem + Debug + Send + Sync> Ledger<T> {
     pub fn new(root: &Path) -> Self {
         let root = Arc::new(PathBuf::from(root).join(Self::item_name()));
         fs::create_dir_all(&*root).unwrap();
@@ -573,9 +586,16 @@ impl<T: LedgerItem + Debug> Ledger<T> {
     pub fn state_hash(&self) -> Option<StateHash> {
         trace!("retrieving current state hash");
         let ledger = self.ledger.try_read().unwrap();
+        if ledger.is_empty() {
+            return None;
+        }
 
         if let Some(ledger_hash) = ledger.last().map(|x| x.data_hash()) {
             trace!("ledger hash: {ledger_hash} for {:?}", &self.root);
+        }
+
+        if !self.has_statehash() {
+            return self.mem_rebuild();
         }
 
         self._state_hash(ledger.as_slice())
@@ -766,6 +786,12 @@ impl<T: LedgerItem + Debug> Ledger<T> {
         p
     }
 
+    fn has_statehash(&self) -> bool {
+        let path = self.state_map_path();
+        let mut entries = fs::read_dir(path).unwrap();
+        entries.next().is_some()
+    }
+
     fn try_get_state_hash(&self, ledger_hash: &str) -> Option<StateHash> {
         let path = self.state_map_path().join(ledger_hash);
         if !path.exists() {
@@ -781,6 +807,60 @@ impl<T: LedgerItem + Debug> Ledger<T> {
                     .to_string(),
             )
         }
+    }
+
+    fn mem_rebuild(&self) -> Option<StateHash> {
+        info!("starting inmemory rebuild");
+        let mut snapmem = SnapMem::default();
+
+        let guard = self.ledger.read().unwrap();
+
+        if guard.is_empty() {
+            return None;
+        }
+
+        for event in guard.iter() {
+            let id = event.event.id;
+            let key = id.to_string();
+
+            match &event.event.action {
+                TheLedgerAction::Create(_) => todo!(),
+                TheLedgerAction::Modify(m) => {
+                    let item = snapmem
+                        .get(&id.to_string())
+                        .map(|x| serde_json::from_slice(x.as_slice()).unwrap())
+                        .unwrap_or_else(|| T::new_default(id));
+                    let item = item.run_event(m.clone()).unwrap();
+                    let item = serde_json::to_vec(&item).unwrap();
+                    snapmem.save(&id.to_string(), item);
+                }
+                TheLedgerAction::Delete => {
+                    snapmem.remove(&key);
+                }
+            }
+        }
+
+        info!("persisting inmem to fs");
+        let (state_hash, items) = snapmem.clone().persist(self.snap.clone());
+        let items: HashMap<String, T> = items
+            .into_iter()
+            .map(|(key, val)| (key, serde_json::from_slice(&val).unwrap()))
+            .collect();
+        let ledger_hash = guard.last().unwrap().data_hash();
+        self.save_ledger_state(&ledger_hash, &state_hash);
+        info!("inmemory rebuild persisted!!");
+
+        /*
+        let fixed = Either::Right(snapmem);
+        let fixed = FixedLedger {
+            inner: fixed,
+            hash: None,
+        };
+        if let Some(cache_hash) = self.rebuild_the_cache(items, fixed) {
+            self.insert_cache_map(&cache_hash, &state_hash);
+        }
+        */
+        Some(state_hash)
     }
 
     /// Returns last applied entry, and list of entries not applied yet.
@@ -898,11 +978,11 @@ impl<T: LedgerItem + Debug> Ledger<T> {
         foo.sort_by_key(|k| k.0);
 
         let mut output: Vec<LedgerEntry<T>> = vec![];
-        let mut prev_hash: Option<String> = None;
+        let mut _prev_hash: Option<String> = None;
 
         for (_, entry) in foo {
             //assert_eq!(entry.previous.clone(), prev_hash);
-            prev_hash = Some(entry.data_hash());
+            //_prev_hash = Some(entry.data_hash());
             output.push(entry);
         }
 
@@ -934,7 +1014,7 @@ impl<T: LedgerItem + Debug> Ledger<T> {
                 let item: T = serde_json::from_slice(&item).unwrap();
 
                 let cachegetter = self.cachegetter(state_hash.to_string());
-                let (next_state_hash, contents) =
+                let next_state_hash =
                     self.snap
                         .remove(state_hash, &id.to_string(), &mut new_content);
 

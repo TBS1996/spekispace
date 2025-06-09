@@ -4,7 +4,7 @@ macro_rules! timed {
         let start = std::time::Instant::now();
         let result = $expr;
         let duration = start.elapsed();
-        tracing::trace!("{} took {:?}", stringify!($expr), duration);
+        tracing::info!("{} took {:?}", stringify!($expr), duration);
         result
     }};
     ($label:literal, $expr:expr) => {{

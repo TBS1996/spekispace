@@ -3,7 +3,7 @@
 //! state while minimizing space on disk.
 
 pub mod fs;
-//pub mod mem;
+pub mod mem;
 
 /*
 
@@ -119,74 +119,6 @@ pub struct LeafKey {
 pub struct KeyFoo<'a> {
     key: &'a str,
     cmps: Vec<char>,
-}
-
-/// Main trait lol
-/// hmm maybe instead of loading two snapshots and checking all the stuff between that's not used for garbage collection
-/// then each time we save a new item, if it's trivial to check if the new unused contents don't have any owner then store those
-/// directly and remove them. like, we save an item, then the new contents A, B, C is created
-/// then we store a new one and the contents D E F created. if we can tell easily which of A B C no longer used, then we know it's safe to delete
-/// them later. since they're inbetween snapshots.
-///
-/// hmm mayve if we have in-memory all the new stuff created from last snapshot, when we create a new itempath we can check if the hashes of the
-/// discarded ones belong in the new-stuff. if they do, we can put them in a different file
-/// so at the point of the next snapshot, we'll have two files. one representing all the new contents of the snapshot
-/// the other representing hte things that were created along the way to the new snapshot but no longer required, which can be safely cleaned up.
-/// then there's no need to traverse the entire store.
-///
-/// for caching, i think remove we the caching methods here and have a new trait for that which has this as supertrait.
-pub trait SnapStorage {
-    /// Creates like a new generation that includes the new item. must be called after [`Self::save_item`].
-    fn save_on_gen(
-        &self,
-        key: KeyFoo<'_>,
-        prev_generation: Option<&str>,
-        item_hash: &str,
-    ) -> HashAndContents;
-
-    /// Saves item to the blob store. Does not update any paths to the item.
-    fn save_item(&self, item_hash: &str, item: Vec<u8>);
-
-    fn get_all(&self, gen_hash: &str) -> HashMap<String, Vec<u8>>;
-
-    fn all_paths(&self, _gen_hashh: &str) -> HashSet<Content> {
-        todo!()
-    }
-
-    /// removes the item and returns the top hash
-    fn remove(&self, gen_hash: &str, key: &str) -> HashAndContents;
-
-    /// fetches an item
-    fn get(&self, hash: &str, key: &str) -> Option<Vec<u8>>;
-
-    /// Saves the item and returns the hash to the new generation and list of added paths.
-    fn save(&self, gen_hash: Option<&str>, key: &str, item: Vec<u8>) -> HashAndContents {
-        let key = KeyFoo {
-            key,
-            cmps: self.get_key_components(key),
-        };
-        let item_hash = get_hash(&item);
-        self.save_item(&item_hash, item);
-        self.save_on_gen(key, gen_hash, &item_hash)
-    }
-
-    fn num_key_components(&self) -> usize {
-        3
-    }
-
-    fn get_key_components(&self, key: &str) -> Vec<char> {
-        let hash = get_hash(&key.to_string());
-        let mut out = vec![];
-        let mut chars = hash.chars();
-
-        for _ in 0..self.num_key_components() {
-            out.push(chars.next().unwrap());
-        }
-
-        tracing::trace!("key: {key}, components: {out:?}");
-
-        out
-    }
 }
 
 pub(crate) fn get_hash<T: Hash>(item: &T) -> Hashed {
