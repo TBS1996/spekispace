@@ -264,6 +264,13 @@ impl CardSelector {
         }
     }
 
+    pub fn with_set(self, set: SetExpr) -> Self {
+        Self {
+            collection: ExprEditor::from(set),
+            ..self
+        }
+    }
+
     pub fn with_dyncards(mut self, dyns: Vec<DynCard>) -> Self {
         let leafs: Vec<InputEditor> = dyns.into_iter().map(|x| InputEditor::Leaf(x)).collect();
         self.collection.inputs.write().extend(leafs);

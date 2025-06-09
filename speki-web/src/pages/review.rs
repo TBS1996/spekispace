@@ -349,13 +349,18 @@ fn RenderSet(
     let ledger = APP.read().inner().provider.sets.clone();
     let filter2 = filter.clone();
 
-    let save_button: bool = match SetExpr::try_from(set.expr.cloned()) {
+    let real_set = SetExpr::try_from(set.expr.cloned());
+
+    let save_button: bool = match real_set.clone() {
         Ok(set_expr) => match APP.read().inner().provider.sets.load(set.id) {
             Some(old_set) => old_set.expr != set_expr || old_set.name != set.name.cloned(),
             None => true,
         },
         Err(_) => false,
     };
+
+    let show_view_button = real_set.is_ok();
+    let set_name = set.name.cloned();
 
     rsx! {
         div {
@@ -500,6 +505,19 @@ fn RenderSet(
 
                     },
                     "export DOT"
+                }
+
+                if show_view_button {
+                    button {
+                        class: "{crate::styles::BLACK_BUTTON}",
+                        onclick: move |_|{
+                            let expr = real_set.clone().unwrap();
+                            let title = set_name.clone();
+                            let viewer = CardSelector::new(false, vec![]).with_set(expr).with_title(title).with_edit_collection(false);
+                            overlay.set(Some(OverlayEnum::CardSelector(viewer)));
+                        },
+                        "view"
+                    }
                 }
             }
             RenderExpr { filter, inputs: set.expr.cloned().inputs.clone(), ty: set.expr.cloned().ty.clone(), depth: depth + 1 , overlay}
