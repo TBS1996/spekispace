@@ -498,10 +498,6 @@ impl Card {
         self.base.data.backside()
     }
 
-    pub async fn delete_card(self) {
-        self.card_provider.remove_card(self.id).await;
-    }
-
     pub fn recursive_dependents(&self) -> Vec<CardId> {
         use std::collections::VecDeque;
 

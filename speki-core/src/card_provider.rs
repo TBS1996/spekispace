@@ -1,10 +1,6 @@
 use crate::{
-    audio::Audio,
-    card::CardId,
-    ledger::{CardAction, CardEvent},
-    metadata::Metadata,
-    recall_rate::History,
-    Card, Provider, Recaller, TimeGetter,
+    audio::Audio, card::CardId, metadata::Metadata, recall_rate::History, Card, Provider, Recaller,
+    TimeGetter,
 };
 use dioxus_logger::tracing::{info, trace};
 use std::{collections::BTreeSet, fmt::Debug, sync::Arc};
@@ -26,11 +22,6 @@ impl Debug for CardProvider {
 }
 
 impl CardProvider {
-    pub async fn remove_card(&self, card_id: CardId) {
-        let event = CardEvent::new(card_id, CardAction::DeleteCard);
-        self.providers.run_event(event);
-    }
-
     pub fn load_all_card_ids(&self) -> Vec<CardId> {
         info!("x1");
         self.providers

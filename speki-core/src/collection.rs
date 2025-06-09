@@ -1,7 +1,4 @@
-use std::{
-    cmp::Ordering,
-    sync::Arc,
-};
+use std::{cmp::Ordering, sync::Arc};
 
 use serde::{Deserialize, Serialize};
 use tracing::error;

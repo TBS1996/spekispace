@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use ledgerstore::{LedgerItem, Modifier, TheLedgerEvent};
+use ledgerstore::{LedgerItem, TheLedgerEvent};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -175,8 +175,6 @@ pub struct Review {
 pub enum ReviewAction {
     Insert(Review),
 }
-
-impl Modifier for ReviewAction {}
 
 pub type ReviewEvent = TheLedgerEvent<History>;
 

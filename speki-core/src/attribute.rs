@@ -3,7 +3,7 @@ use std::{
     fmt::Display,
 };
 
-use ledgerstore::{LedgerItem, Modifier};
+use ledgerstore::LedgerItem;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -52,8 +52,6 @@ pub struct AttrEvent {
     pub id: AttributeId,
     pub action: AttrAction,
 }
-
-impl Modifier for AttrAction {}
 
 #[derive(Clone, Debug, Copy, Hash, Eq, PartialEq)]
 pub enum RefAttr {

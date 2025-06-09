@@ -1,6 +1,5 @@
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
-use simpletime::timed;
 use snapstore::fs::{CacheFs, Content, SnapFs};
 use snapstore::{HashAndContents, Key, SnapStorage};
 use std::fmt::Display;
@@ -249,8 +248,6 @@ pub enum TheLedgerAction<T: LedgerItem> {
     Delete,
 }
 
-pub trait Modifier: Clone + Debug + Hash + Serialize + DeserializeOwned {}
-
 #[derive(Clone)]
 pub struct Ledger<T: LedgerItem> {
     ledger: Arc<RwLock<Vec<LedgerEntry<T>>>>,
@@ -368,7 +365,7 @@ impl<T: LedgerItem + Debug> Ledger<T> {
 
         for key in cache_map.clone() {
             let stringified = key.0.to_string();
-            if let Some(old_key) = stringied_keys.insert(stringified.clone(), key.0.clone()) {
+            if let Some(_) = stringied_keys.insert(stringified.clone(), key.0.clone()) {
                 panic!();
             }
         }

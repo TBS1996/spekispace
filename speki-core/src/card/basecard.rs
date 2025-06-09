@@ -936,7 +936,6 @@ impl LedgerItem for RawCard {
             CardAction::UpsertCard(ty) => {
                 self.data = ty;
             }
-            CardAction::DeleteCard => {}
             CardAction::SetNamespace(ns) => {
                 self.namespace = ns;
             }

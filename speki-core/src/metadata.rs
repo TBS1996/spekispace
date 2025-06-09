@@ -7,10 +7,7 @@ use serde::{
 };
 use uuid::Uuid;
 
-use crate::{
-    card::CardId,
-    ledger::MetaAction,
-};
+use crate::{card::CardId, ledger::MetaAction};
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize, Hash)]
 pub struct Metadata {

@@ -108,7 +108,7 @@ impl<T: Serialize + DeserializeOwned + std::fmt::Debug + 'static, E: LedgerEvent
         };
 
         if let Err(e) = hard_link(to, from) {
-            
+
         }
     }
 
@@ -132,7 +132,7 @@ impl<T: Serialize + DeserializeOwned + std::fmt::Debug + 'static, E: LedgerEvent
         };
 
         if let Err(e) = hard_link(to, from) {
-            
+
         }
     }
 
@@ -196,7 +196,7 @@ impl<T: Serialize + DeserializeOwned + std::fmt::Debug + Sized + 'static> ItemSt
     }
 
     async fn xload_all_items(&self, space: &[&str]) -> HashMap<String, T> {
-        
+
         let contents = self.load_all_contents(space).await;
         let mut out: HashMap<String, T> = Default::default();
 
@@ -209,7 +209,7 @@ impl<T: Serialize + DeserializeOwned + std::fmt::Debug + Sized + 'static> ItemSt
     }
 
     async fn xsave_item(&self, space: &[&str], id: &str, item: &T) {
-        
+
         //let bytes = bincode::serialize(item).unwrap();
         let bytes = serde_json::to_vec(item).unwrap();
         self.save_content(space, id, &bytes).await;
