@@ -373,7 +373,7 @@ fn RenderDependencies(
 
                 h4 {
                     class: "font-bold",
-                    "Dependencies"
+                    "Explicit dependencies"
                 }
 
                     button {
@@ -401,7 +401,9 @@ fn RenderDependencies(
                     }
                 }
 
-            for card in deps {
+            for (idx, card) in deps.into_iter().enumerate() {
+                div {
+                    class: "flex flex-row",
                 button {
                     class: "mb-1 p-1 bg-gray-100 rounded-md text-left",
                     onclick: move|_|{
@@ -413,7 +415,22 @@ fn RenderDependencies(
                     },
                     "{card}"
                 }
-            }
+
+                button {
+                    class: "p-1 hover:bg-gray-200 hover:border-gray-400 border border-transparent rounded-md transition-colors",
+                    onclick: move |_|{
+                        let removed =  dependencies.write().remove(idx);
+                        if let Some(id) = card_id {
+                            let event = TheLedgerEvent::new(id, CardAction::RemoveDependency(removed.read().id()));
+                            APP.read().inner().provider.cards.insert_ledger(event);
+                        }
+                    },
+                    "X"
+                }
+
+
+                }
+           }
         }
     }
 }
@@ -716,7 +733,7 @@ impl CardViewer {
 
             let dependencies: Signal<Vec<Signal<Card>>> = Signal::new_in_scope(
                 card.read()
-                    .dependencies()
+                    .explicit_dependencies()
                     .into_iter()
                     .map(|id| APP.read().load_card_sync(id))
                     .collect(),

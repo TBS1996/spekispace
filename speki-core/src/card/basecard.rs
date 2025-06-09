@@ -547,58 +547,6 @@ impl RawCard {
         }
     }
 
-    // if a card is deleted that is being referenced we might have to change the card type
-    pub fn remove_dep(&mut self, id: CardId) {
-        todo!()
-        /*
-        if let Some(back) = self.data.mut_backside() {
-            back.invalidate_if_has_ref(id);
-        }
-
-        match self {
-            CardType::Instance{
-                ref name,
-                ref back,
-                class,
-            } => {
-                if *class == id {
-                    match back.clone() {
-                        Some(backside) => {
-                            *self = Self::Normal{
-                                front: name.clone(),
-                                back: backside,
-                            }
-                        }
-                        None => {
-                            *self = Self::Unfinished{
-                                front: name.clone(),
-                            }
-                        }
-                    }
-                }
-            }
-            CardType::Normal{..} => {}
-            CardType::Unfinished{..} => {}
-            CardType::Attribute{..} => {}
-            CardType::Class{
-                name,
-                back,
-                parent_class,
-            } => {
-                if *parent_class == Some(id) {
-                    *self = Self::Class{
-                        name: name.clone(),
-                        back: back.clone(),
-                        parent_class: None,
-                    };
-                }
-            }
-            CardType::Statement{..} => {}
-            CardType::Event{..} => {}
-        };
-        */
-    }
-
     /// Returns the class this card belongs to (if any)
     pub fn parent_class(&self) -> Option<CardId> {
         match self.data {
@@ -944,7 +892,6 @@ impl LedgerItem for RawCard {
             }
             CardAction::RemoveDependency(dependency) => {
                 self.explicit_dependencies.remove(&dependency);
-                self.remove_dep(dependency);
             }
             CardAction::SetBackRef(reff) => {
                 let backside = BackSide::Card(reff);

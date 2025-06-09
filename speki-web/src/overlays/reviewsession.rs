@@ -1,11 +1,13 @@
 use dioxus::prelude::*;
 use either::Either;
+use ledgerstore::TheLedgerEvent;
 use std::{collections::BTreeSet, rc::Rc, sync::Arc};
 
 use speki_core::{
     card::{CardId, EvalText},
     cardfilter::CardFilter,
     collection::{DynCard, MaybeCard},
+    ledger::CardAction,
     recall_rate::Recall,
     Card,
 };
@@ -168,7 +170,7 @@ pub fn ReviewRender(
     show_backside: Signal<bool>,
     tot: Resource<usize>,
     overlay: Signal<Option<OverlayEnum>>,
-    dependencies: Resource<Vec<Signal<Card>>>,
+    explicit_dependencies: Resource<Vec<Signal<Card>>>,
 ) -> Element {
     let card2 = card.clone();
     let log_event = move |event: Rc<KeyboardData>| {
@@ -224,7 +226,7 @@ pub fn ReviewRender(
                             style: "min-height: 0; flex-grow: 1;",
                             RenderDependencies{
                                 card: card.clone(),
-                                dependencies,
+                                explicit_dependencies,
                                 overlay: overlay.clone(),
                                 show_backside: show_backside.cloned(),
                                 queue: queue.clone(),
@@ -340,7 +342,7 @@ impl ReviewState {
                 if let Some(Some(card)) = card.cloned() {
                     let mut deps: Vec<Signal<Card>> = vec![];
 
-                    for dep in &card.read().dependencies() {
+                    for dep in &card.read().explicit_dependencies() {
                         if let Some(dep) = APP.read().try_load_card(*dep).await {
                             deps.push(dep);
                         }
@@ -492,8 +494,8 @@ fn Suspend(card: Signal<Card>, mut queue: Signal<Queue>) -> Element {
 
 #[component]
 fn RenderDependencies(
-    card: Signal<Card>,
-    dependencies: Resource<Vec<Signal<Card>>>,
+    mut card: Signal<Card>,
+    explicit_dependencies: Resource<Vec<Signal<Card>>>,
     overlay: Signal<Option<OverlayEnum>>,
     show_backside: bool,
     queue: Signal<Queue>,
@@ -504,7 +506,7 @@ fn RenderDependencies(
         "opacity-0 invisible"
     };
 
-    let deps = dependencies.cloned().unwrap_or_default();
+    let deps = explicit_dependencies.cloned().unwrap_or_default();
 
     rsx! {
         div {
@@ -516,7 +518,7 @@ fn RenderDependencies(
 
                 h4 {
                     class: "font-bold",
-                    "Dependencies"
+                    "Explicit dependencies"
                 }
 
                     button {
@@ -542,19 +544,38 @@ fn RenderDependencies(
                     }
                 }
 
-            for card in deps {
-                button {
-                    class: "mb-1 p-1 bg-gray-100 rounded-md text-left",
-                    onclick: move|_|{
-                        let card = card.clone();
-                        spawn(async move{
-                            let viewer = CardViewer::new_from_card(card, Default::default()).await;
-                            overlay.clone().set(Some(OverlayEnum::CardViewer(viewer)));
-                        });
-                    },
-                    "{card}"
+            for (idx, card) in deps.into_iter().enumerate() {
+                div {
+                    class: "flex flex-row",
+                    button {
+                        class: "mb-1 p-1 bg-gray-100 rounded-md text-left",
+                        onclick: move|_|{
+                            let card = card.clone();
+                            spawn(async move{
+                                let viewer = CardViewer::new_from_card(card, Default::default()).await;
+                                overlay.clone().set(Some(OverlayEnum::CardViewer(viewer)));
+                            });
+                        },
+                        "{card}"
+                    }
+                    button {
+                        class: "p-1 hover:bg-gray-200 hover:border-gray-400 border border-transparent rounded-md transition-colors",
+                        onclick: move |_|{
+                            let mut thecard = card.clone();
+                            let removed =  explicit_dependencies.cloned().unwrap().get(idx).cloned().unwrap();
+                            let id = card.read().id();
+                            let event = TheLedgerEvent::new(id, CardAction::RemoveDependency(removed.read().id()));
+                            APP.read().inner().provider.cards.insert_ledger(event);
+
+                            let new_card = Arc::unwrap_or_clone(APP.read().inner().card_provider.load(id).unwrap());
+                            thecard.set(new_card);
+                        },
+                        "X"
+                    }
+
+
                 }
-            }
+           }
         }
     }
 }

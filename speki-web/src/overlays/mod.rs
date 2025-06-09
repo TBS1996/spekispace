@@ -170,7 +170,7 @@ pub fn Overender(overlay: Signal<Option<OverlayEnum>>, root: Element) -> Element
                                     show_backside: elm.show_backside.clone(),
                                     tot: elm.tot_len,
                                     overlay: elm.overlay.clone(),
-                                    dependencies:elm.dependencies.clone(),
+                                    explicit_dependencies: elm.dependencies.clone(),
                                 }
                             },
                             OverlayEnum::Text(elm) => rsx!{

@@ -194,7 +194,7 @@ pub fn GraphRepRender(
                                 return;
                             };
                             let mut first = app.load_card(from).await;
-                            first.write().rm_dependency(to).await;
+                            //first.write().rm_dependency(to).await;
 
                             inner.set_origin(Node::Card(from)).await;
                             if is_dom_rendered(&cyto_id) {

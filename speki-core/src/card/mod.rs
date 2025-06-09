@@ -467,26 +467,6 @@ impl Card {
         self
     }
 
-    pub async fn rm_dependency(&mut self, dependency: CardId) {
-        info!(
-            "for removal, dependent: {}, -- dependency: {}",
-            self.id(),
-            dependency
-        );
-        let res = self.base.explicit_dependencies.remove(&dependency);
-
-        if !res {
-            info!("no dep to remove");
-            return;
-        }
-
-        info!("dep was there: {res}");
-        self.base.remove_dep(dependency);
-        let action = CardAction::RemoveDependency(dependency);
-        let event = CardEvent::new(self.id, action);
-        self.card_provider.providers.run_event(event);
-    }
-
     pub async fn add_dependency(&mut self, dependency: CardId) {
         self.base.explicit_dependencies.insert(dependency);
         let action = CardAction::AddDependency(dependency);
@@ -690,6 +670,14 @@ impl Card {
 
     pub fn id(&self) -> CardId {
         self.id
+    }
+
+    pub fn explicit_dependencies(&self) -> HashSet<CardId> {
+        self.base
+            .explicit_dependencies
+            .clone()
+            .into_iter()
+            .collect()
     }
 
     pub fn dependencies(&self) -> HashSet<CardId> {
