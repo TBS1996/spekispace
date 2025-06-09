@@ -451,10 +451,10 @@ impl Card {
     }
 
     pub fn is_instance_of(&self, _class: CardId) -> bool {
-        if let CardType::Instance { class, .. } = &self.base.data {
-            *class == _class
+        if let CardType::Instance { .. } = &self.base.data {
+            self.parent_classes().contains(&_class)
         } else {
-            false
+            return false;
         }
     }
 

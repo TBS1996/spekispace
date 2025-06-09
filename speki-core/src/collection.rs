@@ -38,26 +38,21 @@ pub enum DynCard {
     Instances(CardId),
     Dependents(CardId),
     RecDependents(CardId),
-    Any,
 }
 
 impl DynCard {
-    fn card(&self) -> Option<CardId> {
+    fn card(&self) -> CardId {
         let card = match self {
             DynCard::Card(uuid) => uuid,
             DynCard::Instances(uuid) => uuid,
             DynCard::Dependents(uuid) => uuid,
             DynCard::RecDependents(uuid) => uuid,
-            DynCard::Any => return None,
         };
 
-        Some(*card)
+        *card
     }
     pub fn display(&self, provider: CardProvider) -> String {
-        let card = match self.card() {
-            Some(id) => id,
-            None => return "any".to_string(),
-        };
+        let card = self.card();
 
         let name = provider.load(card).unwrap().name().to_string();
 
@@ -66,17 +61,11 @@ impl DynCard {
             DynCard::Instances(_) => format!("instances: {name}"),
             DynCard::Dependents(_) => format!("dependents: {name}"),
             DynCard::RecDependents(_) => format!("rec dependents: {name}"),
-            DynCard::Any => unreachable!(),
         }
     }
 
     pub fn evaluate(&self, provider: CardProvider) -> Vec<MaybeCard> {
         match self {
-            DynCard::Any => provider
-                .load_all_card_ids()
-                .into_iter()
-                .map(MaybeCard::Id)
-                .collect(),
             DynCard::Card(id) => vec![MaybeCard::Id(*id)],
             DynCard::Instances(id) => {
                 let Some(card) = provider.load(*id) else {

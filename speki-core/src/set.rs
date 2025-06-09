@@ -88,6 +88,7 @@ pub enum SetExpr {
     Intersection(BTreeSet<Input>),
     Difference(Input, Input),
     Complement(Input),
+    All,
 }
 
 impl Default for SetExpr {
@@ -114,7 +115,7 @@ impl Input {
 
 impl SetExpr {
     pub fn universe() -> Self {
-        Self::Complement(Input::Expr(Box::new(Self::Union(Default::default()))))
+        Self::All
     }
 
     pub fn set_name(&self) -> &'static str {
@@ -123,6 +124,7 @@ impl SetExpr {
             SetExpr::Intersection(_) => "intersection",
             SetExpr::Difference(_, _) => "difference",
             SetExpr::Complement(_) => "complement",
+            SetExpr::All => "all",
         }
     }
 
@@ -136,6 +138,7 @@ impl SetExpr {
                 out.push(input1);
             }
             SetExpr::Complement(input) => out.push(input),
+            SetExpr::All => {}
         }
         out
     }
@@ -169,6 +172,12 @@ impl SetExpr {
                 let set2 = input2.eval(provider);
                 set1.difference(&set2).cloned().collect()
             }
+
+            SetExpr::All => {
+                Self::Complement(Input::Expr(Box::new(Self::Union(Default::default())))) // complement of an empty union is the same as universe.
+                    .eval(provider)
+            }
+
             SetExpr::Complement(input) => provider
                 .providers
                 .cards

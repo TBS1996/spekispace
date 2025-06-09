@@ -303,6 +303,7 @@ pub fn RenderExpr(
         SetExprDiscriminants::Intersection => true,
         SetExprDiscriminants::Difference => inputs.read().len() < 2,
         SetExprDiscriminants::Complement => inputs.read().is_empty(),
+        SetExprDiscriminants::All => false,
     };
 
     rsx! {
@@ -343,6 +344,7 @@ fn RenderSet(
     set: SetEditor,
     #[props(default = 0)] depth: usize,
     overlay: Signal<Option<OverlayEnum>>,
+    #[props(default = true)] editable: bool,
 ) -> Element {
     let mut name = set.name.clone();
 
@@ -357,7 +359,7 @@ fn RenderSet(
             None => true,
         },
         Err(_) => false,
-    };
+    } && editable;
 
     let show_view_button = real_set.is_ok();
     let set_name = set.name.cloned();
@@ -371,6 +373,7 @@ fn RenderSet(
                 input {
                     class: "text-xl font-semibold mb-4 p-2 w-full bg-gray-100 rounded",
                     value: "{name}",
+                    disabled: !editable,
                     oninput: move |evt|{
                         let val = evt.value();
                         name.set(val.to_string());
@@ -520,7 +523,9 @@ fn RenderSet(
                     }
                 }
             }
-            RenderExpr { filter, inputs: set.expr.cloned().inputs.clone(), ty: set.expr.cloned().ty.clone(), depth: depth + 1 , overlay}
+            if editable {
+                RenderExpr { filter, inputs: set.expr.cloned().inputs.clone(), ty: set.expr.cloned().ty.clone(), depth: depth + 1 , overlay}
+            }
         }
     }
 }
@@ -676,6 +681,13 @@ impl TryFrom<ExprEditor> for SetExpr {
                     Ok(SetExpr::Difference(elm1, elm2))
                 }
             }
+            SetExprDiscriminants::All => {
+                if !inputs.is_empty() {
+                    Err("All takes no inputs".to_string())
+                } else {
+                    Ok(SetExpr::All)
+                }
+            }
             SetExprDiscriminants::Complement => {
                 if inputs.len() != 1 {
                     Err("Complement takes exactly one element".to_string())
@@ -725,9 +737,16 @@ fn RenderSets(
     sets: Signal<Vec<SetEditor>>,
     overlay: Signal<Option<OverlayEnum>>,
 ) -> Element {
+    let all_set: SetEditor = SetEditor::new(&Set {
+        id: Uuid::nil(),
+        name: "all cards".to_string(),
+        expr: SetExpr::All,
+    });
+
     rsx! {
         div {
             class: "flex flex-col mb-10",
+            RenderSet { filter: filter.clone(), set: all_set , overlay, editable: false}
             for set in sets.cloned() {
                 RenderSet { filter: filter.clone(), set , overlay}
             }
