@@ -62,7 +62,7 @@ pub fn Review() -> Element {
 
     let overlay = state.overlay.clone();
     let sets: Signal<Vec<SetEditor>> = {
-        let sets: Vec<SetEditor> = APP
+        let mut sets: Vec<SetEditor> = APP
             .read()
             .inner()
             .provider
@@ -71,6 +71,8 @@ pub fn Review() -> Element {
             .into_values()
             .map(|set| SetEditor::new(&set))
             .collect();
+
+        sets.sort_by_key(|set| set.name.cloned());
 
         Signal::new_in_scope(sets, ScopeId::APP)
     };
