@@ -53,7 +53,10 @@ fn default_filter() -> CardFilter {
         finished: Some(true),
         suspended: Some(false),
         pending: None,
-        lapses: None,
+        lapses: Some(NumOp {
+            num: 4.,
+            ord: MyNumOrd::Less,
+        }),
         isolated: None,
     }
 }
