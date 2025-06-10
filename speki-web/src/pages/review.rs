@@ -82,13 +82,6 @@ pub fn Review() -> Element {
                 div {
                     class: "flex flex-row items-start min-h-screen space-y-4 justify-start w-full",
                     FilterComp {editor}
-                    /*
-                    RenderCols{
-                        filter: state.filter.to_filter(),
-                        collections: state.collections.clone(),
-                        overlay: state.overlay.clone(),
-                    }
-                    */
                     RenderSets {filter: state.filter.to_filter(), sets, overlay }
                 }
             }
