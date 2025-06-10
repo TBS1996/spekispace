@@ -171,6 +171,17 @@ pub struct Review {
     pub grade: Recall,
 }
 
+impl Review {
+    pub fn is_success(&self) -> bool {
+        match self.grade {
+            Recall::None => false,
+            Recall::Late => false,
+            Recall::Some => true,
+            Recall::Perfect => true,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, Hash)]
 pub enum ReviewAction {
     Insert(Review),

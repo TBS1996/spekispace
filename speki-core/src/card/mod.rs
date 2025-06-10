@@ -609,6 +609,36 @@ impl Card {
         SimpleRecall.recall_rate(&self.history, current_unix)
     }
 
+    /// Full history includes all the successful reviews of cards that are dependent on this card.
+    /// the idea is, if you can successfully recall a dependent card, then implicitly you know this card too.
+    /// It does not include unsuccesful reviews of dependents because you may have failed to realize that card either due to the card itself or another dependency.
+    pub fn full_history(&self) -> History {
+        let mut reviews: Vec<Review> = vec![];
+        for dep in self.dependents_ids() {
+            let Some(history) = self.card_provider.providers.reviews.load(dep) else {
+                continue;
+            };
+
+            for review in history.inner() {
+                if review.is_success() {
+                    reviews.push(review.to_owned());
+                }
+            }
+        }
+
+        reviews.sort_by_key(|r| r.timestamp);
+
+        let mut history = self.history.clone();
+
+        history.insert_many(reviews);
+        history
+    }
+
+    pub fn full_recall_rate(&self) -> Option<RecallRate> {
+        let now = self.current_time();
+        self.recaller.recall_rate(&self.full_history(), now)
+    }
+
     pub fn recall_rate(&self) -> Option<RecallRate> {
         let now = self.current_time();
         self.recaller.recall_rate(&self.history, now)

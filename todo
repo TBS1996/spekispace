@@ -624,6 +624,15 @@ could try to figure out if a change in a card updates any dependencies or not bu
 so sometimes, a concept has multiple names to it. not sure how to encode that properly. 
 
 
+# Fail on dependnecies during review
+
+if you're reviewing something and you realize it has a dependency that you had forgotten about, you should be able to click the dependency (while holding a butotn or something),
+and it'll give that dependency a negative review. 
+
+also when checking recall rate of a card, i guess it'd make sense it'll also look through all its dependents and add the successful ones there too?
+just the succesful ones though, i mean, if you succesfully recall a card it makes sense you also recalled the dependencies implicitly, but if you didn't recall it, you may still know the dependencies
+
+
 
 # main graph
 

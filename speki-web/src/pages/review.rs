@@ -13,6 +13,7 @@ use crate::{
 };
 use dioxus::prelude::*;
 use ledgerstore::LedgerItem;
+use speki_core::cardfilter::{MyNumOrd, NumOrd};
 use speki_core::{
     card::CardId,
     cardfilter::CardFilter,
@@ -437,15 +438,21 @@ fn RenderSet(
                                 cards_with_deps.insert(card);
                             }
 
-                            let mut filtered_cards: Vec<CardId> = vec![];
-
+                            let mut filtered_cards: Vec<Arc<Card>> = vec![];
 
                             for card in cards_with_deps {
-                                let id = card.id();
-                                if filter.filter(card).await {
-                                    filtered_cards.push(id);
+                                if filter.filter(card.clone()).await {
+                                    filtered_cards.push(card);
                                 }
                             }
+
+                            if let Some(recall) = filter.recall {
+                                if recall.ord == MyNumOrd::Less {
+                                    filtered_cards.retain(|card| card.full_recall_rate().unwrap_or_default() < recall.num);
+                                }
+                            }
+
+                            let mut filtered_cards: Vec<CardId> = filtered_cards.into_iter().map(|card|card.id()).collect();
 
                             use rand::seq::SliceRandom;
                             filtered_cards.shuffle(&mut rand::thread_rng());
