@@ -671,13 +671,13 @@ impl<T: LedgerItem + Debug + Send + Sync> Ledger<T> {
     /// so if the gc interval is 100, we the state of snapshot 500 is ABCD, there'd be a file named ABCD500
     /// for each new state after 500, we add all the new paths to it
     /// when we reach 600, we check how many of those paths are in 600, the ones that are not can be safely removed
-    fn garbage_collection(&self, index: usize) -> (HashSet<Content>, HashSet<LedgerHash>) {
+    fn garbage_collection(&self, index: usize) -> Option<(HashSet<Content>, HashSet<LedgerHash>)> {
         info!("GARBAGE COLLECTION;;");
 
         let guard = self.ledger.read().unwrap();
 
         if guard.is_empty() {
-            return Default::default();
+            return None;
         }
 
         /// lets see...
@@ -716,10 +716,8 @@ impl<T: LedgerItem + Debug + Send + Sync> Ledger<T> {
             return Default::default();
         }
 
-        let prev_state_hash = self.try_get_state_hash(&guard[index].data_hash()).unwrap();
-        let next_state_hash = self
-            .try_get_state_hash(&guard[index + self.gc_keep].data_hash())
-            .unwrap();
+        let prev_state_hash = self.try_get_state_hash(&guard[index].data_hash())?;
+        let next_state_hash = self.try_get_state_hash(&guard[index + self.gc_keep].data_hash())?;
 
         let old_contents = self.get_all_paths(&prev_state_hash);
         let new_contents = self.get_all_paths(&next_state_hash);
@@ -731,7 +729,7 @@ impl<T: LedgerItem + Debug + Send + Sync> Ledger<T> {
             }
         }
 
-        (to_delete, clean_states.states)
+        Some((to_delete, clean_states.states))
     }
 
     fn get_all_paths(&self, hash: &StateHash) -> Arc<HashSet<Content>> {
@@ -929,9 +927,13 @@ impl<T: LedgerItem + Debug + Send + Sync> Ledger<T> {
             self.append_ref(idx, new_contents);
 
             if entry.index % self.gc_keep == 0 && self.gc_keep < entry.index {
-                let (content, states) = self.garbage_collection(entry.index - self.gc_keep);
-                to_delete.extend(content);
-                cleanup_states.extend(states);
+                if let Some((content, states)) = self.garbage_collection(entry.index - self.gc_keep)
+                {
+                    to_delete.extend(content);
+                    cleanup_states.extend(states);
+                } else {
+                    tracing::warn!("failed to do garbage collection for index: {}", entry.index);
+                }
             }
         }
 

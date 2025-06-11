@@ -10,7 +10,7 @@ use speki_core::{
     card::{bigrams, normalize_string, CardId},
     cardfilter::CardFilter,
     collection::DynCard,
-    set::SetExpr,
+    set::{SetExpr, SetExprDiscriminants},
     Card, CardProperty,
 };
 use speki_web::Node;
@@ -274,6 +274,7 @@ impl CardSelector {
     pub fn with_dyncards(mut self, dyns: Vec<DynCard>) -> Self {
         let leafs: Vec<InputEditor> = dyns.into_iter().map(|x| InputEditor::Leaf(x)).collect();
         self.collection.inputs.write().extend(leafs);
+        self.collection.ty.set(SetExprDiscriminants::Union);
         self
     }
 

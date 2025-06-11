@@ -632,6 +632,8 @@ and it'll give that dependency a negative review.
 also when checking recall rate of a card, i guess it'd make sense it'll also look through all its dependents and add the successful ones there too?
 just the succesful ones though, i mean, if you succesfully recall a card it makes sense you also recalled the dependencies implicitly, but if you didn't recall it, you may still know the dependencies
 
+hmm maybe it can figure out if the dependencies are correct based on whether you're able to review a card based on wehther you could review its dependencies.
+like if you fail a dependency when you have correctly recalled a dependent then something's up.
 
 
 # main graph

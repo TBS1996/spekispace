@@ -21,7 +21,7 @@ use yesno::YesnoRender;
 #[derive(Clone)]
 pub struct OverlayChoice {
     pub display: String,
-    pub overlay: Arc<Box<dyn Fn() -> OverlayEnum>>,
+    pub overlay: Arc<Box<dyn Fn() -> Option<OverlayEnum>>>,
 }
 
 impl PartialEq for OverlayChoice {
@@ -49,7 +49,7 @@ pub fn OverlaySelectorRender(
                 button {
                     onclick: move |_|{
                         let new = (choice.overlay)();
-                        overlay.clone().set(Some(new));
+                        overlay.clone().set(new);
                     },
                     "{choice.display}"
                 }

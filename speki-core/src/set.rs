@@ -118,6 +118,11 @@ impl SetExpr {
         Self::All
     }
 
+    pub fn union_with(dyns: impl IntoIterator<Item = DynCard>) -> Self {
+        let leafs: BTreeSet<Input> = dyns.into_iter().map(Input::Leaf).collect();
+        Self::Union(leafs)
+    }
+
     pub fn set_name(&self) -> &'static str {
         match self {
             SetExpr::Union(_) => "union",

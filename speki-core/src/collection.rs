@@ -3,7 +3,11 @@ use std::{cmp::Ordering, sync::Arc};
 use serde::{Deserialize, Serialize};
 use tracing::error;
 
-use crate::{card::CardId, card_provider::CardProvider, Card};
+use crate::{
+    card::{CType, CardId},
+    card_provider::CardProvider,
+    Card, CardProperty,
+};
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub enum MaybeCard {
@@ -38,29 +42,21 @@ pub enum DynCard {
     Instances(CardId),
     Dependents(CardId),
     RecDependents(CardId),
+    CardType(CType),
 }
 
 impl DynCard {
-    fn card(&self) -> CardId {
-        let card = match self {
-            DynCard::Card(uuid) => uuid,
-            DynCard::Instances(uuid) => uuid,
-            DynCard::Dependents(uuid) => uuid,
-            DynCard::RecDependents(uuid) => uuid,
-        };
-
-        *card
-    }
     pub fn display(&self, provider: CardProvider) -> String {
-        let card = self.card();
-
-        let name = provider.load(card).unwrap().name().to_string();
+        let name = |id: &CardId| provider.load(*id).unwrap().name().to_string();
 
         match self {
-            DynCard::Card(_) => name,
-            DynCard::Instances(_) => format!("instances: {name}"),
-            DynCard::Dependents(_) => format!("dependents: {name}"),
-            DynCard::RecDependents(_) => format!("rec dependents: {name}"),
+            DynCard::Card(id) => name(id),
+            DynCard::Instances(id) => format!("instances: {}", name(id)),
+            DynCard::Dependents(id) => format!("dependents: {}", name(id)),
+            DynCard::RecDependents(id) => format!("rec dependents: {}", name(id)),
+            DynCard::CardType(ctype) => {
+                format!("card type: {ctype}")
+            }
         }
     }
 
@@ -82,6 +78,14 @@ impl DynCard {
 
                 output
             }
+            DynCard::CardType(ty) => provider
+                .providers
+                .cards
+                .get_prop_cache(CardProperty::CardType, ty.to_string())
+                .into_iter()
+                .map(|id| MaybeCard::Id(id.parse().unwrap()))
+                .collect(),
+
             DynCard::Dependents(id) => match provider.load(*id) {
                 Some(card) => card.dependents().into_iter().map(MaybeCard::Card).collect(),
                 None => vec![],

@@ -12,6 +12,7 @@ use speki_core::{
     card::{Attrv2, BackSide, CardId, TextData},
     collection::DynCard,
     ledger::{CardAction, CardEvent},
+    set::{Input, SetExpr},
     AttributeId, Card, CardType, RefType,
 };
 
@@ -642,7 +643,7 @@ impl CardViewer {
                             let selected_card = card.back_side().unwrap().as_card().unwrap();
                             let filter = DynCard::Instances(card_id);
                             let mut cref = CardRef::new();
-                            cref.filter = Some(vec![filter]);
+                            cref.filter = SetExpr::union_with([filter]);
                             cref.set_ref_id(selected_card);
                             Either::Right(cref)
                         }
@@ -968,6 +969,7 @@ fn InputElements(
                 dependent: namespace.dependent.clone(),
                 allowed: namespace.allowed.clone(),
                 overlay: overlay.clone(),
+                filter: namespace.filter.clone(),
             },
         }
 
@@ -1006,6 +1008,7 @@ fn InputElements(
                         dependent: concept.dependent.clone(),
                         allowed: concept.allowed.clone(),
                         overlay: overlay.clone(),
+                        filter: concept.filter.clone(),
                     },
 
 
@@ -1032,6 +1035,7 @@ fn InputElements(
                         dependent: concept.dependent.clone(),
                         allowed: concept.allowed.clone(),
                         overlay: overlay.clone(),
+                        filter: concept.filter.clone(),
                     },
                 }
 
@@ -1115,7 +1119,7 @@ fn InputElements(
                                                         match attr_id.back_type {
                                                             Some(id) => {
                                                                let mut cref = CardRef::new();
-                                                               cref.filter = Some(vec![DynCard::Instances(id)]);
+                                                               cref.filter = SetExpr::union_with([DynCard::Instances(id)]);
                                                                answer.set(Some(Either::Right(cref)))
                                                             },
                                                             None => {
@@ -1158,7 +1162,7 @@ fn InputElements(
                         oninput: move |evt| pattern.set(evt.value()),
                     }
 
-                    CardRefRender { selected_card: backty.selected_card(), placeholder: "answer type", allowed: vec![CardTy::Class] , overlay: overlay.clone() }
+                    CardRefRender { selected_card: backty.selected_card(), placeholder: "answer type", allowed: vec![CardTy::Class] , overlay: overlay.clone(), filter: speki_core::set::SetExpr::union_with([DynCard::CardType(speki_core::card::CType::Class)])}
 
                     }
                 }

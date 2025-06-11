@@ -13,6 +13,7 @@ use crate::{
 };
 use dioxus::prelude::*;
 use ledgerstore::LedgerItem;
+use speki_core::card::CType;
 use speki_core::cardfilter::{MyNumOrd, NumOrd};
 use speki_core::{
     card::CardId,
@@ -197,6 +198,23 @@ fn RenderInput(
     }
 }
 
+fn card_choice(ty: CType, inputs: Signal<Vec<InputEditor>>) -> OverlayChoice {
+    let f: Arc<Box<dyn Fn() -> Option<OverlayEnum>>> = {
+        let f = move || {
+            let leaf = DynCard::CardType(ty);
+            let input = InputEditor::Leaf(leaf);
+            inputs.clone().write().push(input);
+            None
+        };
+        Arc::new(Box::new(f))
+    };
+
+    OverlayChoice {
+        display: format!("{ty} cards"),
+        overlay: f,
+    }
+}
+
 #[component]
 pub fn RenderExpr(
     filter: CardFilter,
@@ -216,7 +234,7 @@ pub fn RenderExpr(
     let leaf_func: DropdownClosure = Arc::new(Box::new(move || {
         // normal card
         let leaf_card = {
-            let f: Arc<Box<dyn Fn() -> OverlayEnum>> = {
+            let f: Arc<Box<dyn Fn() -> Option<OverlayEnum>>> = {
                 let f = move || {
                     let f = move |card: Signal<Card>| {
                         let leaf = DynCard::Card(card.read().id());
@@ -226,7 +244,7 @@ pub fn RenderExpr(
                     };
                     let overlay =
                         CardSelector::new(false, vec![]).new_on_card_selected(MyClosure::new(f));
-                    OverlayEnum::CardSelector(overlay)
+                    Some(OverlayEnum::CardSelector(overlay))
                 };
 
                 Arc::new(Box::new(f))
@@ -238,8 +256,14 @@ pub fn RenderExpr(
             }
         };
 
+        let class_cards = card_choice(CType::Class, inputs.clone());
+        let normal_cards = card_choice(CType::Normal, inputs.clone());
+        let instance_cards = card_choice(CType::Instance, inputs.clone());
+        let attr_cards = card_choice(CType::Attribute, inputs.clone());
+        let unfinished_cards = card_choice(CType::Unfinished, inputs.clone());
+
         let instances = {
-            let f: Arc<Box<dyn Fn() -> OverlayEnum>> = {
+            let f: Arc<Box<dyn Fn() -> Option<OverlayEnum>>> = {
                 let f = move || {
                     let f = move |card: Signal<Card>| {
                         let leaf = DynCard::Instances(card.read().id());
@@ -248,7 +272,7 @@ pub fn RenderExpr(
                         async move {}
                     };
                     let overlay = CardSelector::class_picker(MyClosure::new(f));
-                    OverlayEnum::CardSelector(overlay)
+                    Some(OverlayEnum::CardSelector(overlay))
                 };
 
                 Arc::new(Box::new(f))
@@ -261,7 +285,7 @@ pub fn RenderExpr(
         };
 
         let dependents = {
-            let f: Arc<Box<dyn Fn() -> OverlayEnum>> = {
+            let f: Arc<Box<dyn Fn() -> Option<OverlayEnum>>> = {
                 let f = move || {
                     let f = move |card: Signal<Card>| {
                         let leaf = DynCard::RecDependents(card.read().id());
@@ -271,7 +295,7 @@ pub fn RenderExpr(
                     };
                     let overlay =
                         CardSelector::new(false, vec![]).new_on_card_selected(MyClosure::new(f));
-                    OverlayEnum::CardSelector(overlay)
+                    Some(OverlayEnum::CardSelector(overlay))
                 };
 
                 Arc::new(Box::new(f))
@@ -285,7 +309,16 @@ pub fn RenderExpr(
 
         let sel = OverlaySelector {
             title: "dyn ty".to_string(),
-            choices: vec![leaf_card, instances, dependents],
+            choices: vec![
+                leaf_card,
+                instances,
+                dependents,
+                normal_cards,
+                class_cards,
+                instance_cards,
+                attr_cards,
+                unfinished_cards,
+            ],
             chosen: None,
         };
         overlay.clone().set(Some(OverlayEnum::OverlaySelector(sel)));

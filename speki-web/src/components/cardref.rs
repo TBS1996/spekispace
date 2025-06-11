@@ -1,7 +1,7 @@
 use std::fmt::Debug;
 
 use dioxus::prelude::*;
-use speki_core::{card::CardId, collection::DynCard, Card};
+use speki_core::{card::CardId, set::SetExpr, Card};
 use tracing::info;
 
 use super::CardTy;
@@ -19,7 +19,7 @@ const PLACEHOLDER: &'static str = "pick card...";
 #[derive(PartialEq, Clone)]
 pub struct CardRef {
     pub card: Signal<Option<CardId>>,
-    pub filter: Option<Vec<DynCard>>,
+    pub filter: SetExpr,
     pub dependent: Option<TempNode>,
     pub allowed: Vec<CardTy>,
     pub on_select: Option<MyClosure>,
@@ -45,7 +45,7 @@ pub fn CardRefRender(
     on_select: Option<MyClosure>,
     on_deselect: Option<MyClosure>,
     dependent: Option<TempNode>,
-    filter: Option<Vec<DynCard>>,
+    #[props(default = SetExpr::All)] filter: SetExpr,
 ) -> Element {
     let is_selected = selected_card.read().is_some();
 
@@ -91,11 +91,8 @@ pub fn CardRefRender(
                         .unwrap_or_default();
 
                     let allowed = allowed.clone();
-                    let mut props = CardSelector::ref_picker(fun, dependents)
-                        .with_allowed_cards(allowed);
-                    if let Some(filter)  = filter.clone() {
-                        props = props.with_dyncards(filter);
-                    }
+                    let  props = CardSelector::ref_picker(fun, dependents)
+                        .with_allowed_cards(allowed).with_set(filter.clone());
 
                         overlay.clone().set(Some(OverlayEnum::CardSelector(props)));
                 },
@@ -129,7 +126,7 @@ impl CardRef {
     pub fn new() -> Self {
         Self {
             card: Signal::new_in_scope(Default::default(), ScopeId(3)),
-            filter: None,
+            filter: SetExpr::All,
             dependent: None,
             allowed: vec![],
             on_select: None,

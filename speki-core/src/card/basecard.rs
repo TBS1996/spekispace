@@ -6,7 +6,10 @@ use either::Either;
 use ledgerstore::{FixedLedger, LedgerItem};
 use omtrent::TimeStamp;
 use serde::{Deserialize, Serialize, Serializer};
-use std::collections::{HashMap, HashSet};
+use std::{
+    collections::{HashMap, HashSet},
+    fmt::Display,
+};
 
 pub type CardId = Uuid;
 
@@ -1097,7 +1100,9 @@ impl<'de> Deserialize<'de> for BackSide {
 #[derive(Serialize, Deserialize, Debug, Clone, Default)]
 pub struct Config;
 
-#[derive(Serialize, Deserialize, Debug, Clone, Default, Copy, Eq, PartialEq, Hash, PartialOrd)]
+#[derive(
+    Serialize, Deserialize, Debug, Clone, Default, Copy, Eq, PartialEq, Hash, PartialOrd, Ord,
+)]
 #[serde(rename_all = "lowercase")]
 pub enum CType {
     Instance,
@@ -1108,6 +1113,12 @@ pub enum CType {
     Class,
     Statement,
     Event,
+}
+
+impl Display for CType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self)
+    }
 }
 
 impl CType {
