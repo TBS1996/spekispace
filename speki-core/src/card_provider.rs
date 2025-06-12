@@ -24,12 +24,7 @@ impl Debug for CardProvider {
 impl CardProvider {
     pub fn load_all_card_ids(&self) -> Vec<CardId> {
         info!("x1");
-        self.providers
-            .cards
-            .load_ids()
-            .into_iter()
-            .map(|id| id.parse().unwrap())
-            .collect()
+        self.providers.cards.load_ids().into_iter().collect()
     }
 
     pub async fn load_all(&self) -> Vec<Arc<Card>> {

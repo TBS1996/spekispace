@@ -178,7 +178,7 @@ ledgers represent the same thing? like how review ID refer to cardId ?
 /// A ledger fixed to a certain hash.
 #[derive(Clone)]
 pub struct FixedLedger<T: LedgerItem> {
-    inner: Either<Ledger<T>, SnapMem>,
+    inner: Either<Ledger<T>, SnapMem<T::Key>>,
     hash: Option<StateHash>,
 }
 
@@ -187,7 +187,7 @@ impl<T: LedgerItem> FixedLedger<T> {
         match &self.inner {
             Either::Left(ledger) => {
                 let state = self.hash.as_ref()?;
-                match ledger.snap.get(state, id.to_string().as_str()) {
+                match ledger.snap.get(state, id) {
                     Some(item) => serde_json::from_slice(&item).unwrap(),
                     None => None,
                 }
@@ -256,7 +256,7 @@ pub enum TheLedgerAction<T: LedgerItem> {
 #[derive(Clone)]
 pub struct Ledger<T: LedgerItem> {
     ledger: Arc<RwLock<Vec<LedgerEntry<T>>>>,
-    snap: SnapFs,
+    snap: SnapFs<T::Key>,
     cache: CacheFs<T::PropertyType, T::RefType>,
     root: Arc<PathBuf>,
     gc_keep: usize,
@@ -337,7 +337,7 @@ impl<T: LedgerItem + Debug + Send + Sync> Ledger<T> {
 
     fn rebuild_the_cache(
         &self,
-        items: HashMap<String, T>,
+        items: HashMap<T::Key, T>,
         fixed: FixedLedger<T>,
     ) -> Option<CacheHash>
     where
@@ -562,8 +562,8 @@ impl<T: LedgerItem + Debug + Send + Sync> Ledger<T> {
         out
     }
 
-    pub fn load_all_on_state(&self, hash: &str) -> HashMap<String, T> {
-        let res: HashMap<String, T> = self
+    pub fn load_all_on_state(&self, hash: &str) -> HashMap<T::Key, T> {
+        let res: HashMap<T::Key, T> = self
             .snap
             .get_all(hash)
             .into_iter()
@@ -574,7 +574,7 @@ impl<T: LedgerItem + Debug + Send + Sync> Ledger<T> {
         res
     }
 
-    pub fn load_all(&self) -> HashMap<String, T> {
+    pub fn load_all(&self) -> HashMap<T::Key, T> {
         let Some(hash) = self.state_hash() else {
             return Default::default();
         };
@@ -582,7 +582,7 @@ impl<T: LedgerItem + Debug + Send + Sync> Ledger<T> {
         self.load_all_on_state(&hash)
     }
 
-    pub fn load_ids(&self) -> Vec<String> {
+    pub fn load_ids(&self) -> Vec<T::Key> {
         let Some(hash) = self.state_hash() else {
             return Default::default();
         };
@@ -614,7 +614,7 @@ impl<T: LedgerItem + Debug + Send + Sync> Ledger<T> {
         self._state_hash(ledger.as_slice())
     }
 
-    pub fn load_last_applied(&self, id: &str) -> Option<T> {
+    pub fn load_last_applied(&self, id: T::Key) -> Option<T> {
         let (last_applied, _) = self.applied_status(self.ledger.read().unwrap().as_slice());
         match self.snap.get(&last_applied?, id) {
             Some(item) => serde_json::from_slice(&item).unwrap(),
@@ -639,7 +639,7 @@ impl<T: LedgerItem + Debug + Send + Sync> Ledger<T> {
             &self.root
         );
 
-        match self.snap.get(&state, id.to_string().as_str()) {
+        match self.snap.get(&state, *id) {
             Some(item) => {
                 let item: T = serde_json::from_slice(&item).unwrap();
                 self.item_cache
@@ -839,7 +839,7 @@ impl<T: LedgerItem + Debug + Send + Sync> Ledger<T> {
 
     fn mem_rebuild(&self) -> Option<StateHash> {
         info!("starting inmemory rebuild");
-        let mut snapmem = SnapMem::default();
+        let mut snapmem = SnapMem::<T::Key>::default();
 
         let guard = self.ledger.read().unwrap();
 
@@ -1065,13 +1065,11 @@ impl<T: LedgerItem + Debug + Send + Sync> Ledger<T> {
                 info!("deletingg!!");
 
                 let state_hash = state_hash.unwrap();
-                let item = self.snap.get(state_hash, &id.to_string()).unwrap();
+                let item = self.snap.get(state_hash, id).unwrap();
                 let item: T = serde_json::from_slice(&item).unwrap();
 
                 let cachegetter = self.cachegetter(state_hash.to_string());
-                let next_state_hash =
-                    self.snap
-                        .remove(state_hash, &id.to_string(), &mut new_content);
+                let next_state_hash = self.snap.remove(state_hash, id, &mut new_content);
 
                 let old_cache = if update_cache {
                     item.caches(cachegetter.clone())
@@ -1103,7 +1101,7 @@ impl<T: LedgerItem + Debug + Send + Sync> Ledger<T> {
             Some(hash) => {
                 match self
                     .snap
-                    .get(hash, &id.to_string())
+                    .get(hash, id)
                     .map(|v| serde_json::from_slice(&v).unwrap())
                 {
                     Some(item) => {
@@ -1134,9 +1132,7 @@ impl<T: LedgerItem + Debug + Send + Sync> Ledger<T> {
         };
 
         let item = serde_json::to_vec(&item).unwrap();
-        let (state_hash, new_contents) =
-            self.snap
-                .save(state_hash, &id.to_string(), item, &mut new_content);
+        let (state_hash, new_contents) = self.snap.save(state_hash, id, item, &mut new_content);
 
         let added_caches = new_caches.difference(&old_cache);
         let added_caches: Vec<&(CacheKey<T::PropertyType, T::RefType>, String)> =

@@ -1,9 +1,12 @@
 use std::{
     collections::{BTreeMap, HashMap, HashSet},
+    marker::PhantomData,
     path::{Path, PathBuf},
+    str::FromStr,
     sync::Arc,
 };
 
+use std::hash::Hash;
 use tracing::trace;
 
 use crate::{
@@ -26,10 +29,24 @@ struct LeafDir([Option<ItemDir>; 16]);
 #[derive(Default, Clone, PartialEq, Ord, PartialOrd, Eq)]
 struct ItemDir(BTreeMap<Key, ItemHash>);
 
-#[derive(Default, Clone)]
-pub struct SnapMem {
+#[derive(Clone)]
+pub struct SnapMem<K>
+where
+    K: Copy + Eq + FromStr + ToString + Hash, // + Hash + Debug + Serialize + DeserializeOwned + Send + Sync,
+{
     items: HashMap<ItemHash, Item>,
     top_dir: Topdir,
+    _phantom: PhantomData<K>,
+}
+
+impl<K: Copy + Eq + FromStr + ToString + Hash> Default for SnapMem<K> {
+    fn default() -> Self {
+        Self {
+            items: Default::default(),
+            top_dir: Default::default(),
+            _phantom: Default::default(),
+        }
+    }
 }
 
 fn hex_char_to_value(c: char) -> Option<usize> {
@@ -53,8 +70,8 @@ fn key_cmps(key: &str) -> [usize; 3] {
         .unwrap()
 }
 
-impl SnapMem {
-    pub fn persist(mut self, fs: SnapFs) -> (Hashed, HashMap<ItemHash, Item>) {
+impl<K: Copy + Eq + FromStr + ToString + Hash> SnapMem<K> {
+    pub fn persist(mut self, fs: SnapFs<K>) -> (Hashed, HashMap<ItemHash, Item>) {
         let topdir = self.top_dir;
         let middle_dirs: Vec<MiddleDir> = topdir.0.clone().into_iter().filter_map(|x| x).collect();
         let leaf_dirs: Vec<LeafDir> = middle_dirs

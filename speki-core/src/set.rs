@@ -188,7 +188,7 @@ impl SetExpr {
                 .cards
                 .load_ids()
                 .into_iter()
-                .map(|id| MaybeCard::Id(id.parse().unwrap()))
+                .map(|id| MaybeCard::Id(id))
                 .collect::<BTreeSet<MaybeCard>>()
                 .difference(&input.eval(provider))
                 .cloned()

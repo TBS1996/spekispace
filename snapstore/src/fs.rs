@@ -8,6 +8,7 @@ use std::{
     ops::Deref,
     os::unix::fs::symlink,
     path::{Path, PathBuf},
+    str::FromStr,
     sync::Arc,
 };
 
@@ -209,16 +210,23 @@ impl<PK: Display + Clone, RK: Display + Clone> CacheFs<PK, RK> {
     }
 }
 
+use std::fmt::Debug;
+
 #[derive(Debug, Clone)]
-pub struct SnapFs {
+pub struct SnapFs<K>
+where
+    K: Copy + Eq + FromStr + ToString + Hash, // + Hash + Debug + Serialize + DeserializeOwned + Send + Sync,
+{
     pub blob_path: Arc<PathBuf>,
+    _phantom: PhantomData<K>,
 }
 
 // all the public stuff
-impl SnapFs {
-    pub fn get(&self, hash: &str, key: &str) -> Option<Vec<u8>> {
+impl<K: Copy + Eq + FromStr + ToString + Hash> SnapFs<K> {
+    pub fn get(&self, hash: &str, key: K) -> Option<Vec<u8>> {
+        let key = key.to_string();
         trace!("try get item: {key} on hash: {hash}");
-        let path = self.full_path(hash, key);
+        let path = self.full_path(hash, &key);
         fs::read(&path).ok()
     }
 
@@ -245,7 +253,7 @@ impl SnapFs {
             .collect()
     }
 
-    pub fn get_all(&self, hash: &str) -> HashMap<String, Vec<u8>> {
+    pub fn get_all(&self, hash: &str) -> HashMap<K, Vec<u8>> {
         let path = dbg!(self.the_full_blob_path(hash));
         let mut file_map = HashMap::new();
 
@@ -260,7 +268,12 @@ impl SnapFs {
             if path.is_file() {
                 if let Some(file_name) = path.file_name().and_then(|n| n.to_str()) {
                     let contents = fs::read(path).unwrap();
-                    file_map.insert(file_name.to_string(), contents);
+                    match file_name.parse::<K>() {
+                        Ok(key) => {
+                            file_map.insert(key, contents);
+                        }
+                        Err(_) => panic!(),
+                    }
                 }
             }
         }
@@ -268,9 +281,11 @@ impl SnapFs {
         file_map
     }
 
-    pub fn remove(&self, gen_hash: &str, key: &str, new_content: &mut Vec<Content>) -> Hashed {
+    pub fn remove(&self, gen_hash: &str, key: K, new_content: &mut Vec<Content>) -> Hashed {
+        let key = key.to_string();
+
         let topdir = FsDir::load(self.blob_path.clone(), gen_hash.to_string()).unwrap();
-        let keycomps = get_key_components(self.num_key_components(), key);
+        let keycomps = get_key_components(self.num_key_components(), &key);
         let all = topdir.all_dirs(keycomps);
         let new_path = all.remove_item(key.to_owned(), new_content);
         let hash = new_path.first().unwrap().0.hash.clone();
@@ -291,10 +306,12 @@ impl SnapFs {
     pub fn save(
         &self,
         gen_hash: Option<&str>,
-        key: &str,
+        key: K,
         item: Vec<u8>,
         new_content: &mut Vec<Content>,
     ) -> HashAndContents {
+        let key = key.to_string();
+        let key = key.as_str();
         let key = KeyFoo {
             key,
             cmps: get_key_components(self.num_key_components(), key),
@@ -308,7 +325,7 @@ impl SnapFs {
     }
 }
 
-impl SnapFs {
+impl<K: Copy + Eq + FromStr + ToString + Hash> SnapFs<K> {
     fn get_leafdir_path(
         &self,
         prev_generation: Option<&str>,
@@ -369,12 +386,15 @@ impl SnapFs {
     }
 }
 
-impl SnapFs {
+impl<K: Copy + Eq + FromStr + ToString + Hash> SnapFs<K> {
     pub fn new(root: PathBuf) -> Self {
         let blob_path = Arc::new(root.join("blobs"));
         fs::create_dir_all(&*blob_path).unwrap();
 
-        Self { blob_path }
+        Self {
+            blob_path,
+            _phantom: PhantomData,
+        }
     }
 
     pub fn the_full_blob_path(&self, hash: &str) -> PathBuf {
