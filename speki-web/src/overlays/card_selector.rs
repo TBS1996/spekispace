@@ -526,6 +526,7 @@ fn TableRender(
                             th { class: "border border-gray-300 px-4 py-2 w-1/12", "Recall" }
                             th { class: "border border-gray-300 px-4 py-2 w-1/12", "Stability" }
                             th { class: "border border-gray-300 px-4 py-2 w-1/24", "Ty" }
+                            th { class: "border border-gray-300 px-4 py-2 w-1/24", "class" }
                         }
                     }
                     tbody {
@@ -553,6 +554,10 @@ fn TableRender(
                 }
             }
     }
+}
+
+fn parent_class(card: Signal<Card>) -> Option<String> {
+    None
 }
 
 fn maybe_dur(dur: Option<Duration>) -> String {

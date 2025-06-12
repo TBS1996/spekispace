@@ -652,6 +652,18 @@ but subset is more like, in relation to, idk. like rust functions in the gandalf
 or maybe im not thinking clearly here.. 
 
 
+# Lazy update
+
+so some kinda card abstraction that'll when its outdated simply reload itself
+
+maybe on the ledger struct
+it'll keep a cache of all the cards you've loaded into memory
+then whenever there's a new event run
+it'll remove all the dependencies of the card that is changed
+
+
+
+
 
 
 # main graph

@@ -5,11 +5,13 @@ use simpletime::timed;
 use snapstore::fs::{CacheFs, Content, SnapFs};
 use snapstore::mem::SnapMem;
 use snapstore::{HashAndContents, Key};
+use std::collections::BTreeSet;
 use std::fmt::Display;
 use std::fs::{self};
 use std::io::Write;
 use std::os::unix::fs::symlink;
 use std::path::{Path, PathBuf};
+use std::str::FromStr;
 use std::vec::Vec;
 use std::{
     collections::{HashMap, HashSet},
@@ -26,7 +28,16 @@ pub use snapstore::CacheKey;
 
 /// Represents how a ledger mutates or creates an item.
 pub trait LedgerItem: Serialize + DeserializeOwned + Hash + Clone + 'static {
-    type Key: Copy + Eq + Hash + ToString + Debug + Serialize + DeserializeOwned + Send + Sync;
+    type Key: Copy
+        + Eq
+        + Hash
+        + ToString
+        + Debug
+        + Serialize
+        + DeserializeOwned
+        + FromStr
+        + Send
+        + Sync;
     type Error: Debug;
     type RefType: AsRef<str> + Display + Clone + Hash + PartialEq + Eq + Send + Sync;
     type PropertyType: AsRef<str> + Display + Clone + Hash + PartialEq + Eq + Send + Sync;
@@ -250,6 +261,7 @@ pub struct Ledger<T: LedgerItem> {
     root: Arc<PathBuf>,
     gc_keep: usize,
     all_paths: Arc<RwLock<HashMap<StateHash, Arc<HashSet<Content>>>>>,
+    item_cache: Arc<RwLock<HashMap<T::Key, T>>>,
 }
 
 impl<T: LedgerItem + Debug + Send + Sync> Ledger<T> {
@@ -495,6 +507,7 @@ impl<T: LedgerItem + Debug + Send + Sync> Ledger<T> {
             root,
             gc_keep: 100,
             all_paths: Default::default(),
+            item_cache: Default::default(),
         };
 
         let ledger = Self::load_ledger(&selv.ledger_path());
@@ -611,14 +624,31 @@ impl<T: LedgerItem + Debug + Send + Sync> Ledger<T> {
 
     pub fn load(&self, id: impl AsRef<T::Key>) -> Option<T> {
         let id = id.as_ref();
+
+        if let Some(item) = self.item_cache.read().unwrap().get(id) {
+            tracing::trace!("cache hit for: {:?}", id);
+            return Some(item.clone());
+        } else {
+            tracing::trace!("cache miss for: {:?}", id);
+        }
+
         trace!("load item from ledger: {id:?}");
         let state = self.state_hash()?;
         trace!(
             "loading item from state: {state} item : {id:?}, root: {:?}",
             &self.root
         );
+
         match self.snap.get(&state, id.to_string().as_str()) {
-            Some(item) => serde_json::from_slice(&item).unwrap(),
+            Some(item) => {
+                let item: T = serde_json::from_slice(&item).unwrap();
+                self.item_cache
+                    .write()
+                    .unwrap()
+                    .insert(id.clone(), item.clone());
+                Some(item)
+            }
+
             None => None,
         }
     }
@@ -911,6 +941,7 @@ impl<T: LedgerItem + Debug + Send + Sync> Ledger<T> {
             let idx = entry.index;
             let (state_hash, new_contents) =
                 self.run_event(entry.event.clone(), last_applied.as_deref(), modify_cache);
+            self.align_item_cache(entry.event.id);
             self.save_ledger_state(&entry.data_hash(), &state_hash);
             last_applied = Some(state_hash);
             if modify_cache {
@@ -989,6 +1020,28 @@ impl<T: LedgerItem + Debug + Send + Sync> Ledger<T> {
         }
 
         output
+    }
+
+    fn align_item_cache(&self, modified_item: T::Key) {
+        tracing::trace!("aligning item cache");
+
+        let dependents = self.get_dependents(modified_item);
+        let mut to_delete = Vec::with_capacity(dependents.len() + 1);
+        to_delete.push(modified_item);
+
+        for dep in dependents {
+            if let Ok(dep) = dep.parse::<T::Key>() {
+                to_delete.push(dep);
+            }
+        }
+
+        let mut guard = self.item_cache.write().unwrap();
+
+        for key in &to_delete {
+            guard.remove(key);
+        }
+
+        tracing::trace!("removed {} items from item cache", to_delete.len());
     }
 
     /// Clones the current state, modifies it with the new entry, and returns the hash of the new state.
