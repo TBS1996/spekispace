@@ -96,7 +96,7 @@ impl Default for CardSelector {
 }
 
 impl CardSelector {
-    pub fn new(with_memo: bool, allowed_cards: Vec<CardTy>) -> Self {
+    pub fn new_with_filter(with_memo: bool, allowed_cards: Vec<CardTy>, filter: SetExpr) -> Self {
         let allowed_cards = Signal::new_in_scope(allowed_cards, ScopeId::APP);
         let default_search: Signal<Option<String>> = Signal::new_in_scope(None, ScopeId::APP);
         let forbidden_cards: Signal<BTreeSet<CardId>> =
@@ -139,7 +139,7 @@ impl CardSelector {
         let overlay: Signal<Option<OverlayEnum>> =
             Signal::new_in_scope(Default::default(), ScopeId::APP);
 
-        let collection: ExprEditor = ExprEditor::from(SetExpr::universe());
+        let collection: ExprEditor = ExprEditor::from(filter);
         let col_cards = collection.expanded();
 
         let allowed = allowed_cards.clone();
@@ -232,7 +232,7 @@ impl CardSelector {
                         if ord_key == std::cmp::Ordering::Equal {
                             let card_a = a.1.read();
                             let card_b = b.1.read();
-                            card_a.print().len().cmp(&card_b.print().len())
+                            card_a.name().len().cmp(&card_b.name().len())
                         } else {
                             ord_key
                         }
@@ -264,6 +264,10 @@ impl CardSelector {
         }
     }
 
+    pub fn new(with_memo: bool, allowed_cards: Vec<CardTy>) -> Self {
+        Self::new_with_filter(with_memo, allowed_cards, SetExpr::All)
+    }
+
     pub fn with_set(self, set: SetExpr) -> Self {
         Self {
             collection: ExprEditor::from(set),
@@ -285,14 +289,14 @@ impl CardSelector {
         }
     }
 
-    pub fn ref_picker(fun: MyClosure, dependents: Vec<Node>) -> Self {
+    pub fn ref_picker(fun: MyClosure, dependents: Vec<Node>, filter: SetExpr) -> Self {
         Self {
             title: "choose reference".to_string(),
             on_card_selected: fun,
             allow_new: true,
             done: Signal::new_in_scope(false, ScopeId(3)),
             dependents: Signal::new_in_scope(dependents, ScopeId(3)),
-            ..Self::new(false, vec![])
+            ..Self::new_with_filter(false, vec![], filter)
         }
     }
 

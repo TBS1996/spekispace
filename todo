@@ -636,6 +636,24 @@ hmm maybe it can figure out if the dependencies are correct based on whether you
 like if you fail a dependency when you have correctly recalled a dependent then something's up.
 
 
+# Whoop lol
+
+maybe whoop/fitness tracker integration so it can use things like your sleep data to see how likely you are to know something and how much better the memory gets.
+
+
+# Subclass vs subset?
+
+maybe have a subset of istances be differend than a subclass?
+i mean a subclass implies the istances f this class has more strict property requirements than the parent class
+like, the class 'male' requires everything presn do but also XY chromosomes
+
+but subset is more like, in relation to, idk. like rust functions in the gandalf codebase. theyre still just rust functions. 
+
+or maybe im not thinking clearly here.. 
+
+
+
+
 # main graph
 
 

@@ -864,10 +864,10 @@ impl CardViewer {
     async fn reset(&self) {
         self.editor.front.reset();
         self.editor.back.reset();
-        self.editor.concept.reset();
         self.editor.dependencies.clone().write().clear();
         self.old_card.clone().set(None);
         self.graph.clear().await;
+        //self.editor.concept.reset();
     }
 
     pub fn set_graph(&self) {

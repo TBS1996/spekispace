@@ -91,8 +91,8 @@ pub fn CardRefRender(
                         .unwrap_or_default();
 
                     let allowed = allowed.clone();
-                    let  props = CardSelector::ref_picker(fun, dependents)
-                        .with_allowed_cards(allowed).with_set(filter.clone());
+                    let  props = CardSelector::ref_picker(fun, dependents, filter.clone())
+                        .with_allowed_cards(allowed);
 
                         overlay.clone().set(Some(OverlayEnum::CardSelector(props)));
                 },

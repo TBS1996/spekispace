@@ -176,7 +176,13 @@ pub fn ReviewRender(
         }
     };
 
-    let card = APP.read().inner().card_provider.load(card_id).unwrap();
+    let card = match APP.read().inner().card_provider.load(card_id) {
+        Some(card) => card,
+        None => {
+            queue.write().next();
+            return rsx! {};
+        }
+    };
 
     let explicit_dependencies: Vec<Signal<Card>> = {
         let mut deps: Vec<Signal<Card>> = vec![];
