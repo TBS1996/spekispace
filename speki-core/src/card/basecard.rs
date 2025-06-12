@@ -1122,15 +1122,15 @@ impl Display for CType {
 }
 
 impl CType {
-    pub fn supports_backside(&self) -> bool {
+    pub fn short_form(&self) -> &'static str {
         match self {
-            CType::Instance => true,
-            CType::Normal => true,
-            CType::Class => true,
-            CType::Attribute => true,
-            CType::Unfinished => false,
-            CType::Statement => false,
-            CType::Event => false,
+            CType::Instance => "I",
+            CType::Normal => "N",
+            CType::Attribute => "A",
+            CType::Class => "C",
+            CType::Unfinished => "U",
+            CType::Statement => "S",
+            CType::Event => "E",
         }
     }
 }

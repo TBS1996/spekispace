@@ -112,7 +112,7 @@ impl CardFilter {
         }
 
         if let Some(NumOp { ord, num }) = stability {
-            let stability = card.maturity().unwrap_or_default();
+            let stability = card.maturity_days().unwrap_or_default();
 
             match ord {
                 MyNumOrd::Equal => {

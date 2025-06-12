@@ -644,8 +644,16 @@ impl Card {
         self.recaller.recall_rate(&self.history, now)
     }
 
-    pub fn maturity(&self) -> Option<f32> {
+    pub fn maturity_days(&self) -> Option<f32> {
+        self.maturity().map(|d| d.as_secs_f32() / 86400.)
+    }
+
+    pub fn maturity(&self) -> Option<Duration> {
         use gkquad::single::integral;
+
+        if self.recall_rate().is_none() {
+            return None;
+        }
 
         let now = self.current_time();
         let result = integral(
@@ -658,7 +666,9 @@ impl Card {
         .estimate()
         .ok()?;
 
-        Some(result as f32)
+        let dur = Duration::from_secs_f64(result * 86400.);
+
+        Some(dur)
     }
 
     pub fn print(&self) -> String {

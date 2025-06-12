@@ -383,7 +383,7 @@ pub mod graphviz {
             match card.recall_rate() {
                 Some(rate) => {
                     let recall_rate = rate * 100.;
-                    let maturity = card.maturity().unwrap_or_default();
+                    let maturity = card.maturity_days().unwrap_or_default();
                     dot.push_str(&format!(
                         "    \"{}\" [label=\"{} ({:.0}%/{:.0}d)\", style=filled, fillcolor=\"{}\"];\n",
                         card.id(),

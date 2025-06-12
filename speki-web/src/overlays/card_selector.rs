@@ -3,6 +3,7 @@ use std::{
     future::Future,
     pin::Pin,
     sync::Arc,
+    time::Duration,
 };
 
 use dioxus::prelude::*;
@@ -524,6 +525,7 @@ fn TableRender(
                             th { class: "border border-gray-300 px-4 py-2 w-2/3", "Front" }
                             th { class: "border border-gray-300 px-4 py-2 w-1/12", "Recall" }
                             th { class: "border border-gray-300 px-4 py-2 w-1/12", "Stability" }
+                            th { class: "border border-gray-300 px-4 py-2 w-1/24", "Ty" }
                         }
                     }
                     tbody {
@@ -543,11 +545,44 @@ fn TableRender(
 
                                 td { class: "border border-gray-300 px-4 py-2 w-2/3", "{card}" }
                                 td { class: "border border-gray-300 px-4 py-2 w-1/12", "{card.read().recall_rate().unwrap_or_default():.2}" }
-                                td { class: "border border-gray-300 px-4 py-2 w-1/12", "{card.read().maturity().unwrap_or_default():.1}" }
+                                td { class: "border border-gray-300 px-4 py-2 w-1/12", "{maybe_dur(card.read().maturity())}"}
+                                td { class: "border border-gray-300 px-4 py-2 w-1/24", "{card.read().card_type().short_form()}" }
                             }
                         }
                     }
                 }
             }
+    }
+}
+
+fn maybe_dur(dur: Option<Duration>) -> String {
+    match dur {
+        Some(dur) => format_dur(dur),
+        None => format!("None"),
+    }
+}
+
+fn format_dur(dur: Duration) -> String {
+    let secs = dur.as_secs();
+
+    let minute = 60;
+    let hour = minute * 60;
+    let day = hour * 24;
+    let year = day * 365;
+
+    if secs < minute {
+        format!("{secs}s")
+    } else if secs < hour {
+        format!("{}m", secs / minute)
+    } else if secs < day {
+        format!("{}h", secs / hour)
+    } else if secs < day * 1000 {
+        format!("{}d", secs / day)
+    } else if secs < year * 10 {
+        format!("{:.2}y", secs as f32 / year as f32)
+    } else if secs < year * 100 {
+        format!("{:.1}y", secs as f32 / year as f32)
+    } else {
+        format!("{}y", secs / year)
     }
 }
