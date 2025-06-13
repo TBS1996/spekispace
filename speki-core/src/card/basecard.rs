@@ -1,7 +1,5 @@
 use super::*;
-use crate::{
-    attribute::AttributeId, audio::AudioId, card_provider::CardProvider, CardProperty, RefType,
-};
+use crate::{audio::AudioId, card_provider::CardProvider, CardProperty, RefType};
 use either::Either;
 use ledgerstore::{FixedLedger, LedgerItem};
 use omtrent::TimeStamp;
@@ -175,6 +173,8 @@ impl<'de> Deserialize<'de> for TextData {
         Ok(TextData::from_raw(&s))
     }
 }
+
+pub type AttributeId = Uuid;
 
 /// An attribute of a class is pre-made questions that can be asked about any of the classes' instances.
 /// For example, all instances of `Person` can have the quesiton "when was {} born?"

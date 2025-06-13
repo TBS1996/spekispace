@@ -9,11 +9,11 @@ use either::Either;
 use ledgerstore::TheLedgerEvent;
 use speki_core::{
     audio::AudioId,
-    card::{Attrv2, BackSide, CardId, TextData},
+    card::{AttributeId, Attrv2, BackSide, CardId, TextData},
     collection::DynCard,
     ledger::{CardAction, CardEvent},
-    set::{Input, SetExpr},
-    AttributeId, Card, CardType, RefType,
+    set::SetExpr,
+    Card, CardType, RefType,
 };
 
 use speki_web::{Node, NodeId, NodeMetadata};
@@ -157,7 +157,6 @@ pub struct CardRep {
     front_audio: Option<AudioId>,
     back_audio: Option<AudioId>,
     deps: Vec<CardId>,
-    attrs: HashMap<AttributeId, (String, Option<CardId>)>,
     answered_attrs: Vec<AttrAnswer>,
 }
 
@@ -316,20 +315,6 @@ impl CardEditor {
 
         Some(CardRep {
             ty,
-            attrs: self
-                .attrs
-                .cloned()
-                .into_iter()
-                .filter_map(|(id, (pattern, answerty))| {
-                    let pattern = pattern.cloned();
-                    let answerty = answerty.selected_card().cloned();
-                    if pattern.contains("{}") {
-                        Some((id, (pattern, answerty)))
-                    } else {
-                        None
-                    }
-                })
-                .collect(),
             answered_attrs: self.attr_answers.cloned(),
             namespace: self.namespace.selected_card().cloned(),
             front_audio: self.front.audio.cloned().map(|audio| audio.id),

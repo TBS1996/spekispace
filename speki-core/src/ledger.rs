@@ -1,9 +1,9 @@
 use crate::{
     audio::AudioId,
-    card::{Attrv2, CardId, RawCard},
+    card::{AttributeId, Attrv2, CardId, RawCard},
     metadata::Metadata,
     recall_rate::{Review, ReviewEvent},
-    AttributeId, CardType,
+    CardType,
 };
 use ledgerstore::TheLedgerEvent;
 use serde::{Deserialize, Serialize};

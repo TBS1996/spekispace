@@ -7,7 +7,7 @@ use std::{
 use serde::{Deserialize, Serialize};
 
 pub enum Precision {
-    millennium,
+    millenium,
     Century,
     Decade,
     Year,
@@ -19,7 +19,7 @@ pub enum Precision {
 
 #[derive(Default, PartialOrd, Eq, Hash, PartialEq, Debug, Clone, Serialize, Deserialize)]
 pub struct TimeStamp {
-    millennium: u32,
+    millenium: u32,
     century: Option<u32>,
     decade: Option<u32>,
     year: Option<u32>,
@@ -39,8 +39,8 @@ impl Ord for TimeStamp {
         }
 
         let ord = self
-            .millennium
-            .cmp(&other.millennium)
+            .millenium
+            .cmp(&other.millenium)
             .then_with(|| option_cmp(self.century, other.century))
             .then_with(|| option_cmp(self.decade, other.decade))
             .then_with(|| option_cmp(self.year, other.year))
@@ -76,10 +76,10 @@ impl TimeStamp {
         let era = if self.after_christ { "AD" } else { "BC" };
 
         let cty = match self.century {
-            Some(c) => self.millennium * 10 + c,
+            Some(c) => self.millenium * 10 + c,
             None => {
-                let num = self.millennium + 1;
-                return format!("{}{} millennium {}", num, Self::suffix(num), era);
+                let num = self.millenium + 1;
+                return format!("{}{} millenium {}", num, Self::suffix(num), era);
             }
         };
 
@@ -197,7 +197,7 @@ impl TimeStamp {
             s.push('-');
         }
 
-        s.push_str(&self.millennium.to_string());
+        s.push_str(&self.millenium.to_string());
         s.push_str(
             &self
                 .century
@@ -257,7 +257,7 @@ impl FromStr for TimeStamp {
             _ => panic!(),
         }
 
-        selv.millennium = iter.next().ok_or(())?.to_string().parse().ok().ok_or(())?;
+        selv.millenium = iter.next().ok_or(())?.to_string().parse().ok().ok_or(())?;
 
         selv.century = match iter.next().ok_or(())? {
             '*' => None,

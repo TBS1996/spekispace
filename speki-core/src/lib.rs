@@ -13,7 +13,6 @@ use std::ops::Deref;
 use std::{fmt::Debug, sync::Arc, time::Duration};
 use tracing::trace;
 
-pub mod attribute;
 pub mod audio;
 pub mod card;
 pub mod card_provider;
@@ -25,7 +24,6 @@ pub mod metadata;
 pub mod recall_rate;
 pub mod set;
 
-pub use attribute::{Attribute, AttributeId};
 pub use card::{Card, CardType};
 pub use common::current_time;
 pub use omtrent::TimeStamp;

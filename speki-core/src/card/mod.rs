@@ -24,7 +24,7 @@ use crate::{
     ledger::{CardAction, CardEvent, MetaEvent},
     metadata::Metadata,
     recall_rate::{History, Recall, Review, ReviewAction, ReviewEvent, SimpleRecall},
-    AttributeId, RecallCalc, Recaller, TimeGetter,
+    RecallCalc, Recaller, TimeGetter,
 };
 
 pub type RecallRate = f32;
