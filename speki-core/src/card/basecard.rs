@@ -698,7 +698,6 @@ fn resolve_text(txt: String, ledger: &FixedLedger<RawCard>, re: &Regex) -> Strin
         let Some(card) = ledger.load(id) else {
             dbg!(&txt);
             dbg!(id);
-            dbg!("<<<<<<<<<<<<<<<<<<<<<<<<<<");
             panic!();
             continue;
         };
@@ -822,7 +821,7 @@ impl LedgerItem for RawCard {
         out
     }
 
-    fn properties_cache(&self, cache: FixedLedger<Self>) -> HashSet<(Self::PropertyType, String)> {
+    fn properties_cache(&self, cache: &FixedLedger<Self>) -> HashSet<(Self::PropertyType, String)> {
         let mut out: HashSet<(Self::PropertyType, String)> = Default::default();
 
         let resolved_text = resolve_card(self, &cache);

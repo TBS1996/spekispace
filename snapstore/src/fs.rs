@@ -253,6 +253,31 @@ impl<K: Copy + Eq + FromStr + ToString + Hash> SnapFs<K> {
             .collect()
     }
 
+    pub fn all_item_ids(&self, hash: &str) -> HashSet<K> {
+        let path = dbg!(self.the_full_blob_path(hash));
+        let mut file_map = HashSet::new();
+
+        for entry in WalkDir::new(&path).follow_links(true) {
+            let Ok(entry) = entry else {
+                dbg!(entry);
+                panic!();
+                continue;
+            };
+            let path = entry.path();
+
+            if path.is_file() {
+                if let Some(file_name) = path.file_name().and_then(|n| n.to_str()) {
+                    match file_name.parse::<K>() {
+                        Ok(key) => file_map.insert(key),
+                        Err(_) => panic!(),
+                    };
+                }
+            }
+        }
+
+        file_map
+    }
+
     pub fn get_all(&self, hash: &str) -> HashMap<K, Vec<u8>> {
         let path = dbg!(self.the_full_blob_path(hash));
         let mut file_map = HashMap::new();

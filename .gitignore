@@ -6,3 +6,5 @@ speki-web/static/
 speki-web/.dioxus/
 speki-web/assets/tailwind.css
 speki-web**/*.rs.bk
+**/*.dot
+**/*.svg

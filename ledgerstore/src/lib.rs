@@ -12,6 +12,7 @@ use std::io::Write;
 use std::os::unix::fs::symlink;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
+use std::time::Duration;
 use std::vec::Vec;
 use std::{
     collections::{HashMap, HashSet},
@@ -51,7 +52,7 @@ pub trait LedgerItem: Serialize + DeserializeOwned + Hash + Clone + 'static {
 
     /// Assertions that should hold true. Like invariants with other cards that it references.
     /// called by run_event, if it returns error after an event is run, the event is not applied.
-    fn validate(&self, ledger: FixedLedger<Self>) -> Result<(), Self::Error> {
+    fn validate(&self, ledger: &FixedLedger<Self>) -> Result<(), Self::Error> {
         let _ = ledger;
         Ok(())
     }
@@ -73,7 +74,7 @@ pub trait LedgerItem: Serialize + DeserializeOwned + Hash + Clone + 'static {
     /// The property keys are predefined, hence theyre static str
     /// the String is the Value which could be anything.
     /// For example ("suspended", true).
-    fn properties_cache(&self, ledger: FixedLedger<Self>) -> HashSet<(Self::PropertyType, String)>
+    fn properties_cache(&self, ledger: &FixedLedger<Self>) -> HashSet<(Self::PropertyType, String)>
     where
         Self: LedgerItem,
     {
@@ -83,12 +84,12 @@ pub trait LedgerItem: Serialize + DeserializeOwned + Hash + Clone + 'static {
 
     fn caches(
         &self,
-        ledger: FixedLedger<Self>,
+        ledger: &FixedLedger<Self>,
     ) -> HashSet<(CacheKey<Self::PropertyType, Self::RefType>, String)>
     where
         Self: LedgerItem,
     {
-        trace!("fetching caches for item: {:?}", self.item_id());
+        info!("fetching caches for item: {:?}", self.item_id());
 
         let mut out: HashSet<(CacheKey<Self::PropertyType, Self::RefType>, String)> =
             Default::default();
@@ -328,9 +329,10 @@ impl<T: LedgerItem + Debug + Send + Sync> Ledger<T> {
         self.cache.get_cache(&cache_hash, cache_key)
     }
 
-    fn cachegetter(&self, hash: impl Into<Option<String>>) -> FixedLedger<T> {
+    fn cachegetter(&self, hash: Option<String>) -> FixedLedger<T> {
+        let selv = self.clone();
         FixedLedger {
-            inner: Either::Left((*self).clone()),
+            inner: Either::Left(selv),
             hash: hash.into(),
         }
     }
@@ -351,11 +353,9 @@ impl<T: LedgerItem + Debug + Send + Sync> Ledger<T> {
 
         let caches: HashSet<(CacheKey<T::PropertyType, T::RefType>, String)> = items
             .into_par_iter() // Parallel iterator
-            .map(|(_, item)| item.caches(fixed.clone())) // Returns an iterator
+            .map(|(_, item)| item.caches(&fixed)) // Returns an iterator
             .flatten() // Flattens all those iterators
             .collect(); // Collects into a HashSet
-
-        dbg!();
 
         let cache_map: HashMap<CacheKey<T::PropertyType, T::RefType>, Vec<String>> = {
             let mut cache_map: HashMap<CacheKey<T::PropertyType, T::RefType>, Vec<String>> =
@@ -428,7 +428,7 @@ impl<T: LedgerItem + Debug + Send + Sync> Ledger<T> {
     /// This will go through the entire state and create a hash for it
     fn rebuild_cache(&self, state_hash: &str) -> Option<CacheHash> {
         let items = self.load_all_on_state(state_hash);
-        self.rebuild_the_cache(items, self.cachegetter(state_hash.to_string()))
+        self.rebuild_the_cache(items, self.cachegetter(Some(state_hash.to_string())))
     }
 
     fn modify_cache(
@@ -447,7 +447,6 @@ impl<T: LedgerItem + Debug + Send + Sync> Ledger<T> {
                 }
             }
 
-            dbg!("not updating cache!!");
             return;
         }
 
@@ -582,11 +581,11 @@ impl<T: LedgerItem + Debug + Send + Sync> Ledger<T> {
         self.load_all_on_state(&hash)
     }
 
-    pub fn load_ids(&self) -> Vec<T::Key> {
+    pub fn load_ids(&self) -> HashSet<T::Key> {
         let Some(hash) = self.state_hash() else {
             return Default::default();
         };
-        self.snap.get_all(&hash).into_keys().collect()
+        self.snap.all_item_ids(&hash)
     }
 
     pub fn insert_ledger(&self, event: TheLedgerEvent<T>) {
@@ -625,12 +624,14 @@ impl<T: LedgerItem + Debug + Send + Sync> Ledger<T> {
     pub fn load(&self, id: impl AsRef<T::Key>) -> Option<T> {
         let id = id.as_ref();
 
+        /*
         if let Some(item) = self.item_cache.read().unwrap().get(id) {
             tracing::trace!("cache hit for: {:?}", id);
             return Some(item.clone());
         } else {
             tracing::trace!("cache miss for: {:?}", id);
         }
+        */
 
         trace!("load item from ledger: {id:?}");
         let state = self.state_hash()?;
@@ -642,10 +643,12 @@ impl<T: LedgerItem + Debug + Send + Sync> Ledger<T> {
         match self.snap.get(&state, *id) {
             Some(item) => {
                 let item: T = serde_json::from_slice(&item).unwrap();
+                /*
                 self.item_cache
                     .write()
                     .unwrap()
                     .insert(id.clone(), item.clone());
+                */
                 Some(item)
             }
 
@@ -936,12 +939,15 @@ impl<T: LedgerItem + Debug + Send + Sync> Ledger<T> {
         let modify_cache = unapplied_entries.len() < 100;
 
         info!("start apply unapplied!");
-        //dbg!(&unapplied_entries);
+        dbg!(&unapplied_entries);
+        dbg!(modify_cache);
         while let Some(entry) = unapplied_entries.pop() {
             let idx = entry.index;
             let (state_hash, new_contents) =
                 self.run_event(entry.event.clone(), last_applied.as_deref(), modify_cache);
-            self.align_item_cache(entry.event.id);
+            if modify_cache {
+                //self.align_item_cache(entry.event.id);
+            }
             self.save_ledger_state(&entry.data_hash(), &state_hash);
             last_applied = Some(state_hash);
             if modify_cache {
@@ -966,6 +972,10 @@ impl<T: LedgerItem + Debug + Send + Sync> Ledger<T> {
                     tracing::warn!("failed to do garbage collection for index: {}", entry.index);
                 }
             }
+        }
+
+        if !modify_cache {
+            //self.clear_item_cache();
         }
 
         let state_root = Arc::new(self.root.join("states"));
@@ -1024,8 +1034,10 @@ impl<T: LedgerItem + Debug + Send + Sync> Ledger<T> {
 
     fn align_item_cache(&self, modified_item: T::Key) {
         tracing::trace!("aligning item cache");
+        dbg!();
 
         let dependents = self.get_dependents(modified_item);
+        dbg!(&dependents);
         let mut to_delete = Vec::with_capacity(dependents.len() + 1);
         to_delete.push(modified_item);
 
@@ -1035,6 +1047,8 @@ impl<T: LedgerItem + Debug + Send + Sync> Ledger<T> {
             }
         }
 
+        dbg!();
+
         let mut guard = self.item_cache.write().unwrap();
 
         for key in &to_delete {
@@ -1042,6 +1056,11 @@ impl<T: LedgerItem + Debug + Send + Sync> Ledger<T> {
         }
 
         tracing::trace!("removed {} items from item cache", to_delete.len());
+    }
+
+    fn clear_item_cache(&self) {
+        info!("clearing item cache");
+        self.item_cache.write().unwrap().clear();
     }
 
     /// Clones the current state, modifies it with the new entry, and returns the hash of the new state.
@@ -1068,11 +1087,11 @@ impl<T: LedgerItem + Debug + Send + Sync> Ledger<T> {
                 let item = self.snap.get(state_hash, id).unwrap();
                 let item: T = serde_json::from_slice(&item).unwrap();
 
-                let cachegetter = self.cachegetter(state_hash.to_string());
+                let cachegetter = self.cachegetter(Some(state_hash.to_string()));
                 let next_state_hash = self.snap.remove(state_hash, id, &mut new_content);
 
                 let old_cache = if update_cache {
-                    item.caches(cachegetter.clone())
+                    item.caches(&cachegetter)
                 } else {
                     Default::default()
                 };
@@ -1114,19 +1133,22 @@ impl<T: LedgerItem + Debug + Send + Sync> Ledger<T> {
             None => T::new_default(id),
         };
 
-        let cachegetter = self.cachegetter(state_hash.map(ToOwned::to_owned));
+        let hashed = state_hash.map(|x| x.to_owned());
+
+        dbg!(&hashed);
+        let cachegetter = self.cachegetter(hashed);
 
         let old_cache = if !new_item && update_cache {
-            item.caches(cachegetter.clone())
+            item.caches(&cachegetter)
         } else {
             Default::default()
         };
 
         let id = item.item_id();
         let item = item.run_event(event.clone()).unwrap();
-        item.validate(cachegetter.clone()).unwrap();
+        item.validate(&cachegetter).unwrap();
         let new_caches = if update_cache {
-            item.caches(cachegetter)
+            item.caches(&cachegetter)
         } else {
             Default::default()
         };

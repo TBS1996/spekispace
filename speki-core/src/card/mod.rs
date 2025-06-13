@@ -297,13 +297,14 @@ impl Card {
         cards
     }
 
-    pub async fn add_review(&mut self, recall: Recall) {
+    pub fn add_review(&mut self, recall: Recall) {
         let action = ReviewAction::Insert(Review {
             grade: recall,
             timestamp: self.current_time(),
         });
         let event = ReviewEvent::new(self.id, action);
         self.card_provider.providers.run_event(event);
+        tracing::info!("added recall: {recall:?}");
     }
 
     pub fn time_provider(&self) -> TimeGetter {

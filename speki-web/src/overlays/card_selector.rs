@@ -206,7 +206,7 @@ impl CardSelector {
                             continue;
                         }
 
-                        if filtered_cards.len() > 300 {
+                        if filtered_cards.len() > 100 {
                             break;
                         }
 
@@ -526,7 +526,6 @@ fn TableRender(
                             th { class: "border border-gray-300 px-4 py-2 w-1/12", "Recall" }
                             th { class: "border border-gray-300 px-4 py-2 w-1/12", "Stability" }
                             th { class: "border border-gray-300 px-4 py-2 w-1/24", "Ty" }
-                            th { class: "border border-gray-300 px-4 py-2 w-1/24", "class" }
                         }
                     }
                     tbody {

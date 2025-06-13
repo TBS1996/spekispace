@@ -640,11 +640,14 @@ impl CardViewer {
 
                     let answer = match attr.back_type {
                         Some(card_id) => {
-                            let selected_card = card.back_side().unwrap().as_card().unwrap();
                             let filter = DynCard::Instances(card_id);
                             let mut cref = CardRef::new();
                             cref.filter = SetExpr::union_with([filter]);
-                            cref.set_ref_id(selected_card);
+                            if let Some(selected_card) =
+                                card.back_side().and_then(|bs| bs.as_card())
+                            {
+                                cref.set_ref_id(selected_card);
+                            };
                             Either::Right(cref)
                         }
                         None => {

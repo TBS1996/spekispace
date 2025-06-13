@@ -51,14 +51,13 @@ fn RecallButton(
             class: "bg-blue-500 mt-6 inline-flex items-center justify-center text-white border-0 py-4 px-6 focus:outline-none hover:bg-blue-700 rounded text-4xl leading-none",
             onclick: move |_| {
                 let mut card = card.clone();
-                spawn(async move{
-                    info!("do review");
-                    card.write()
-                        .add_review(recall)
-                        .await;
-                    queue.write().next();
-                    show_backside.set(false);
-                });
+                info!("do review");
+                card.write()
+                    .add_review(recall);
+                queue.write().next();
+                show_backside.set(false);
+
+
             },
             "{label}"
 
@@ -220,10 +219,8 @@ pub fn ReviewRender(
         };
         queue.clone().write().next();
         show_backside.clone().set(false);
-        spawn(async move {
-            let mut card = Arc::unwrap_or_clone(card);
-            card.add_review(recall).await;
-        });
+        let mut card = Arc::unwrap_or_clone(card);
+        card.add_review(recall);
     };
 
     rsx! {

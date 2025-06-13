@@ -90,7 +90,7 @@ where
 {
     let mut dropdown = selected.clone();
     let value = serde_json::to_string(&dropdown.cloned()).unwrap();
-    tracing::info!("value: {value}");
+    tracing::trace!("value: {value}");
 
     rsx! {
         div {

@@ -6,7 +6,7 @@ use tracing::error;
 use crate::{
     card::{CType, CardId},
     card_provider::CardProvider,
-    Card, CardProperty,
+    Card, CardProperty, RefType,
 };
 
 #[derive(Debug, Clone, Eq, PartialEq)]
@@ -64,16 +64,14 @@ impl DynCard {
         match self {
             DynCard::Card(id) => vec![MaybeCard::Id(*id)],
             DynCard::Instances(id) => {
-                let Some(card) = provider.load(*id) else {
-                    error!("failed to load card with id: {id}");
-                    return vec![];
-                };
                 let mut output = vec![];
 
-                for card in card.dependents() {
-                    if card.is_instance_of(*id) {
-                        output.push(MaybeCard::Card(card));
-                    }
+                for instance in provider
+                    .providers
+                    .cards
+                    .get_ref_cache(RefType::Instance, *id)
+                {
+                    output.push(MaybeCard::Id(instance.parse().unwrap()));
                 }
 
                 output
