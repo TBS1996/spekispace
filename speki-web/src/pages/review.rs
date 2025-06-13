@@ -473,6 +473,7 @@ fn RenderSet(
 
                             let mut filtered_cards: Vec<Arc<Card>> = vec![];
 
+
                             for card in cards_with_deps {
                                 if filter.filter(card.clone()).await {
                                     filtered_cards.push(card);
@@ -481,7 +482,7 @@ fn RenderSet(
 
                             if let Some(recall) = filter.recall {
                                 if recall.ord == MyNumOrd::Less {
-                                    filtered_cards.retain(|card| card.full_recall_rate().unwrap_or_default() < recall.num);
+                                    //filtered_cards.retain(|card| card.full_recall_rate().unwrap_or_default() < recall.num);
                                 }
                             }
 

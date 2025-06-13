@@ -38,13 +38,9 @@ pub fn CardViewerRender(props: CardViewer) -> Element {
     info!("render cardviewer");
 
     let old_card: Option<CardId> = props.old_card.read().as_ref().map(|c| c.id());
-
-    let history = {
-        if let Some(card) = props.old_card.cloned() {
-            card.history().clone()
-        } else {
-            speki_core::recall_rate::History::new(Default::default())
-        }
+    let history = match props.old_card.cloned() {
+        Some(card) => Some(card.history().to_owned()),
+        None => None,
     };
 
     let now = APP.read().inner().time_provider.current_time();
@@ -52,7 +48,10 @@ pub fn CardViewerRender(props: CardViewer) -> Element {
     rsx! {
         div {
             class: "flex-none p-2 box-border order-2",
-            DisplayHistory { history, now }
+            if let Some(history) = history {
+                DisplayHistory { history, now }
+            }
+
             RenderInputs {
                 editor:props.editor.clone(),
                 dependents:props.dependents.clone(),

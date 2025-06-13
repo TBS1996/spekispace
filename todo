@@ -662,55 +662,19 @@ then whenever there's a new event run
 it'll remove all the dependencies of the card that is changed
 
 
-
-
-
-
 # main graph
-
 
 maybe that main global graph thing can simply be a collection i make where i incorporate all the collections i think are good
 
 
 # release goals
 
-## todo
-
-- make certain cards trivial, like instances of certain classes
-- make dependency removal more intuitive, not accidentally clicking it away
-- fix dependency removal
-- custom question format for instances
-- add filter cards thing to browsepage
-- sort on browsepage
-- move x to left
-- firebaseprovider use online timestamp for current_time
-- fix bug where card reference dont show up sometimes in cardviewer
-- if too many dependencies of a card in graphview, instead of render, just show like e.g. "100+" on a node and if you press it, it'll open a browse page with all the dependencies listed there.
-- make collections pretty
-
-## done
-
-- suspend cards
-- fix deleted bugs?
-- suspend from review
-- collections 
-- remove all dependencies and dependents of a card in the cache on persist() call
-
-# post-release goals
-
-- see previous reviews on card
-- attributes
-- links embedded in text
-- desktop version
-- priorities
-- audio
-- firestore backups
-- symlink, if you wanna merge a card to another one, turn one card into a symlink to the other card lol. 
-- add sorter stuff (mentioned above)
-- extract provider trait to separate crate, not mentioning speki there
-- proper healthcheck stuff
-- timeseries for syncing upstream, so we don't need to read entire user dir to find out which stuff are modified after given timestamp
-- graphview edges should be diff based on relationship (subclass, instance..)
-- make provider into stream, so no need to wait until all is loaded before you get items
-- natively support composite items in the provider trait (like how card is RawCard, Metadata, and Reviews)
-- tag for a card having all its dependencies in order and stuff (so like, even more finished than finished)
+- fix edit set name stuff
+- delete sets
+- rm debug thing
+- cycle detection
+- invariant checks on run-event (should do eager ledger stuff too then so it's caught early)
+- fix logo
+- clear state button
+- waiting window when state get rebuilt
+- nicer review history thing

@@ -150,9 +150,6 @@ fn fix_lol() {
 
 pub use async_openai::Client;
 
-pub const DEFAULT_FILTER: &'static str =
-    "recall < 0.8 & finished == true & suspended == false & minrecrecall > 0.8 & minrecstab > 50 & lastreview > 0.5 & weeklapses < 3 & monthlapses < 6";
-
 /// We need to re-render cyto instance every time the route changes, so this boolean
 /// is true every time we change route, and is set back to false after the cyto instance is re-rendered
 pub static ROUTE_CHANGE: AtomicBool = AtomicBool::new(false);
