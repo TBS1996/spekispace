@@ -63,8 +63,8 @@
               pkgs.wasm-pack
               pkgs.wasm-bindgen-cli
               rustToolchain
-              pkgs.nodejs_20 # Adds Node.js
-              pkgs.tailwindcss # Adds TailwindCSS
+              pkgs.nodejs_20
+              pkgs.tailwindcss
               pkgs.graphviz
             ];
 
@@ -73,6 +73,11 @@
           ];
 
           shellHook = ''
+            if ! command -v dx >/dev/null; then
+              echo "Installing dioxus-cli with cargo..."
+              cargo install dioxus-cli
+            fi
+
             # For rust-analyzer 'hover' tooltips to work.
             export RUST_SRC_PATH="${rustToolchain}/lib/rustlib/src/rust/library";
             echo "Node.js and TailwindCSS are now available!"
