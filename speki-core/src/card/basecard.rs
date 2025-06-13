@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize, Serializer};
 use std::{
     collections::{HashMap, HashSet},
     fmt::Display,
+    str::FromStr,
 };
 
 pub type CardId = Uuid;
@@ -982,7 +983,7 @@ impl From<String> for BackSide {
     fn from(s: String) -> Self {
         if let Ok(uuid) = Uuid::parse_str(&s) {
             Self::Card(uuid)
-        } else if let Some(timestamp) = TimeStamp::from_string(s.clone()) {
+        } else if let Ok(timestamp) = TimeStamp::from_str(&s) {
             Self::Time(timestamp)
         } else if s.as_str() == Self::INVALID_STR {
             Self::Invalid

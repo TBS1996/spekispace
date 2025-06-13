@@ -1,12 +1,13 @@
 use std::{
     cmp::Ordering,
     fmt::{Display, Formatter},
+    str::FromStr,
 };
 
 use serde::{Deserialize, Serialize};
 
 pub enum Precision {
-    Millenium,
+    millennium,
     Century,
     Decade,
     Year,
@@ -18,7 +19,7 @@ pub enum Precision {
 
 #[derive(Default, PartialOrd, Eq, Hash, PartialEq, Debug, Clone, Serialize, Deserialize)]
 pub struct TimeStamp {
-    millenium: u32,
+    millennium: u32,
     century: Option<u32>,
     decade: Option<u32>,
     year: Option<u32>,
@@ -38,8 +39,8 @@ impl Ord for TimeStamp {
         }
 
         let ord = self
-            .millenium
-            .cmp(&other.millenium)
+            .millennium
+            .cmp(&other.millennium)
             .then_with(|| option_cmp(self.century, other.century))
             .then_with(|| option_cmp(self.decade, other.decade))
             .then_with(|| option_cmp(self.year, other.year))
@@ -75,17 +76,17 @@ impl TimeStamp {
         let era = if self.after_christ { "AD" } else { "BC" };
 
         let cty = match self.century {
-            Some(c) => self.millenium * 10 + c,
+            Some(c) => self.millennium * 10 + c,
             None => {
-                let num = self.millenium + 1;
-                return format!("{}{} millenium {}", num, Self::suffix(num), era);
+                let num = self.millennium + 1;
+                return format!("{}{} millennium {}", num, Self::suffix(num), era);
             }
         };
 
         let decade = match self.decade {
             Some(d) => cty * 10 + d,
             None => {
-                if cty > 10 {
+                if cty > 10 && self.after_christ {
                     return format!("{cty}00s");
                 } else {
                     return format!("{}{} century {}", cty + 1, Self::suffix(cty + 1), era);
@@ -196,7 +197,7 @@ impl TimeStamp {
             s.push('-');
         }
 
-        s.push_str(&self.millenium.to_string());
+        s.push_str(&self.millennium.to_string());
         s.push_str(
             &self
                 .century
@@ -235,76 +236,80 @@ impl TimeStamp {
 
         s
     }
+}
 
-    pub fn from_string(s: String) -> Option<Self> {
+impl FromStr for TimeStamp {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
         let mut selv = Self::default();
         let mut s: Vec<char> = s.chars().collect();
-        let first = s.first()?;
+        let first = s.first().ok_or(())?;
         if first != &'+' && first != &'-' {
             s.insert(0, '+');
         }
 
         let mut iter = s.into_iter();
 
-        match iter.next()? {
+        match iter.next().ok_or(())? {
             '+' => selv.after_christ = true,
             '-' => selv.after_christ = false,
             _ => panic!(),
         }
 
-        selv.millenium = iter.next()?.to_string().parse().ok()?;
+        selv.millennium = iter.next().ok_or(())?.to_string().parse().ok().ok_or(())?;
 
-        selv.century = match iter.next()? {
+        selv.century = match iter.next().ok_or(())? {
             '*' => None,
-            num => Some(num.to_string().parse().ok()?),
+            num => Some(num.to_string().parse().ok().ok_or(())?),
         };
 
-        selv.decade = match iter.next()? {
+        selv.decade = match iter.next().ok_or(())? {
             '*' => None,
-            num => Some(num.to_string().parse().ok()?),
+            num => Some(num.to_string().parse().ok().ok_or(())?),
         };
 
-        selv.year = match iter.next()? {
+        selv.year = match iter.next().ok_or(())? {
             '*' => None,
-            num => Some(num.to_string().parse().ok()?),
+            num => Some(num.to_string().parse().ok().ok_or(())?),
         };
 
         match iter.next() {
             Some('-') => {}
             Some(' ') => {}
-            Some(_) => None?,
-            None => return Some(selv),
+            Some(_) => None.ok_or(())?,
+            None => return Ok(selv),
         }
 
-        selv.month = Some(Self::parse_two_digits(&mut iter)?);
+        selv.month = Some(Self::parse_two_digits(&mut iter).ok_or(())?);
 
         match iter.next() {
             Some('-') => {}
             Some(' ') => {}
-            Some(_) => None?,
-            None => return Some(selv),
+            Some(_) => None.ok_or(())?,
+            None => return Ok(selv),
         }
 
-        selv.day = Some(Self::parse_two_digits(&mut iter)?);
+        selv.day = Some(Self::parse_two_digits(&mut iter).ok_or(())?);
 
         match iter.next() {
             Some('-') => {}
             Some(' ') => {}
-            Some(_) => None?,
-            None => return Some(selv),
+            Some(_) => None.ok_or(())?,
+            None => return Ok(selv),
         }
 
-        selv.hour = Some(Self::parse_two_digits(&mut iter)?);
+        selv.hour = Some(Self::parse_two_digits(&mut iter).ok_or(())?);
 
         match iter.next() {
             Some(':') => {}
-            Some(_) => None?,
-            None => return Some(selv),
+            Some(_) => None.ok_or(())?,
+            None => return Ok(selv),
         }
 
-        selv.minute = Some(Self::parse_two_digits(&mut iter)?);
+        selv.minute = Some(Self::parse_two_digits(&mut iter).ok_or(())?);
 
-        Some(selv)
+        Ok(selv)
     }
 }
 
@@ -314,24 +319,24 @@ mod tests {
 
     #[test]
     fn test_ord() {
-        let foo = TimeStamp::from_string("1950".to_string()).unwrap();
-        let bar = TimeStamp::from_string("19**".to_string()).unwrap();
+        let foo = TimeStamp::from_str("1950").unwrap();
+        let bar = TimeStamp::from_str("19**").unwrap();
         assert!(foo.cmp(&bar).is_eq());
 
-        let foo = TimeStamp::from_string("1850".to_string()).unwrap();
-        let bar = TimeStamp::from_string("19**".to_string()).unwrap();
+        let foo = TimeStamp::from_str("1850").unwrap();
+        let bar = TimeStamp::from_str("19**").unwrap();
         assert!(foo.cmp(&bar).is_le());
 
-        let foo = TimeStamp::from_string("2050".to_string()).unwrap();
-        let bar = TimeStamp::from_string("19**".to_string()).unwrap();
+        let foo = TimeStamp::from_str("2050").unwrap();
+        let bar = TimeStamp::from_str("19**").unwrap();
         assert!(foo.cmp(&bar).is_ge());
 
-        let foo = TimeStamp::from_string("-1950".to_string()).unwrap();
-        let bar = TimeStamp::from_string("-19**".to_string()).unwrap();
+        let foo = TimeStamp::from_str("-1950").unwrap();
+        let bar = TimeStamp::from_str("-19**").unwrap();
         assert!(foo.cmp(&bar).is_eq());
 
-        let foo = TimeStamp::from_string("-1850".to_string()).unwrap();
-        let bar = TimeStamp::from_string("-19**".to_string()).unwrap();
+        let foo = TimeStamp::from_str("-1850").unwrap();
+        let bar = TimeStamp::from_str("-19**").unwrap();
         assert!(foo.cmp(&bar).is_ge());
     }
 }

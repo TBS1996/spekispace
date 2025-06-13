@@ -1,4 +1,7 @@
-use std::fmt::{Debug, Display};
+use std::{
+    fmt::{Debug, Display},
+    str::FromStr,
+};
 
 use dioxus::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -34,6 +37,8 @@ pub fn BackPutRender(
     overlay: Signal<Option<OverlayEnum>>,
     audio: Signal<Option<Audio>>,
 ) -> Element {
+    use std::str::FromStr;
+
     use crate::components::set_card_link;
 
     rsx! {
@@ -62,6 +67,34 @@ pub fn BackPutRender(
 
                     {
                         match *dropdown.selected.read() {
+                            BackOpts::Time => {
+                                let placeholder = if IS_SHORT.cloned() {
+                                    "Back side"
+                                } else {
+                                    ""
+                                };
+                                let mut sig = text.clone();
+                                let interpreted = omtrent::TimeStamp::from_str(&*sig.read()).map(|x|x.to_string()).unwrap_or_default();
+
+
+                                    rsx! {
+                                        div {
+                                            class: "flex flex-row gap-2",
+                                            input {
+                                                class: "flex-1 bg-white border border-gray-300 rounded-md p-2 text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent",
+                                                value: "{sig}",
+                                                placeholder: "{placeholder}",
+                                                oninput: move |evt| sig.set(evt.value()),
+                                            }
+
+                                            span {
+                                                class: "flex-1 text-sm text-gray-500 p-2 bg-gray-50 border border-gray-300 rounded-md",
+                                                "{interpreted}"
+                                            }
+                                        }
+                                    }
+
+                            },
                             BackOpts::Text => {
                                 let placeholder = if IS_SHORT.cloned() {
                                     "Back side"
@@ -223,6 +256,10 @@ impl BackPut {
                 info!("text is: {s}");
                 Some(BackSide::Text(s.into()))
             }
+            BackOpts::Time => match omtrent::TimeStamp::from_str(&*self.text.read()) {
+                Ok(ts) => Some(BackSide::Time(ts)),
+                Err(_) => None,
+            },
         }
     }
 }
@@ -232,6 +269,7 @@ pub enum BackOpts {
     #[default]
     Text,
     Card,
+    Time,
 }
 
 impl Display for BackOpts {
@@ -239,6 +277,7 @@ impl Display for BackOpts {
         let s = match self {
             BackOpts::Text => "🔤",
             BackOpts::Card => "🔗",
+            BackOpts::Time => "🕒",
         };
 
         write!(f, "{s}")

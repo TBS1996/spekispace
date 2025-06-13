@@ -4727,6 +4727,7 @@ dependencies = [
  "js-sys",
  "ledgerstore",
  "nonempty",
+ "omtrent",
  "once_cell",
  "petgraph",
  "rand 0.8.5",
