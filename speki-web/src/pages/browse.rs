@@ -57,7 +57,7 @@ impl BrowseState {
     pub fn new() -> Self {
         info!("creating browse state!");
 
-        let browse_page = CardSelector::new(true, vec![]).with_title("Browse cards".to_string());
+        let browse_page = CardSelector::new(true, vec![]).no_title();
         let prev_cardstate = APP.read().inner().provider.cards.state_hash();
 
         Self {

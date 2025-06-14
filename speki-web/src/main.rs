@@ -432,9 +432,9 @@ fn Wrapper() -> Element {
 #[derive(Copy, Clone, Routable, Debug, PartialEq, Hash, Eq)]
 pub enum Route {
     #[layout(Wrapper)]
-    #[route("/")]
+    #[route("/menu")]
     Menu {},
-    #[route("/review")]
+    #[route("/")]
     Review {},
     #[route("/add")]
     Add {},

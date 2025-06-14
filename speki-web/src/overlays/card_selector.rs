@@ -72,7 +72,7 @@ this will mean a lot of times you dont have to even search
 
 #[derive(Props, Clone)]
 pub struct CardSelector {
-    pub title: String,
+    pub title: Option<String>,
     pub search: Signal<String>,
     pub on_card_selected: MyClosure,
     pub allow_new: bool,
@@ -246,7 +246,7 @@ impl CardSelector {
 
         info!("creating cardselector");
         Self {
-            title: "select card".to_string(),
+            title: Some("select card".to_string()),
             edit_collection: true,
             search,
             on_card_selected: overlay_card_viewer(overlay.clone()),
@@ -292,7 +292,7 @@ impl CardSelector {
 
     pub fn ref_picker(fun: MyClosure, dependents: Vec<Node>, filter: SetExpr) -> Self {
         Self {
-            title: "choose reference".to_string(),
+            title: Some("choose reference".to_string()),
             on_card_selected: fun,
             allow_new: true,
             done: Signal::new_in_scope(false, ScopeId(3)),
@@ -309,7 +309,7 @@ impl CardSelector {
 
     pub fn link_picker(f: MyClosure) -> Self {
         Self {
-            title: "create link".to_string(),
+            title: Some("create link".to_string()),
             on_card_selected: f,
             allow_new: true,
             ..Self::new(false, vec![])
@@ -318,7 +318,7 @@ impl CardSelector {
 
     pub fn dependency_picker(f: MyClosure) -> Self {
         Self {
-            title: "set dependency".to_string(),
+            title: Some("set dependency".to_string()),
             on_card_selected: f,
             allow_new: true,
             ..Self::new(false, vec![])
@@ -351,8 +351,15 @@ impl CardSelector {
     }
 
     pub fn with_title(mut self, title: String) -> Self {
-        self.title = title;
+        self.title = Some(title);
         self
+    }
+
+    pub fn no_title(self) -> Self {
+        Self {
+            title: None,
+            ..self
+        }
     }
 
     pub fn with_allow_new(mut self, allow_new: bool) -> Self {
@@ -396,7 +403,7 @@ impl PartialEq for MyClosure {
 
 #[component]
 pub fn CardSelectorRender(
-    title: String,
+    title: Option<String>,
     search: Signal<String>,
     on_card_selected: MyClosure,
     cards: Resource<Vec<Signal<Card>>>,
@@ -430,9 +437,11 @@ pub fn CardSelectorRender(
         div {
             class: "h-screen flex flex-col w-full max-w-3xl",
 
-            h1 {
-                class: "text-lg font-bold mb-4",
-                "{title}"
+            if let Some(title) = title {
+                h1 {
+                    class: "text-lg font-bold mb-4",
+                    "{title}"
+                }
             }
 
             div {
