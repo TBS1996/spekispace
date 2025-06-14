@@ -392,7 +392,7 @@ impl CardType {
                 name, class, back, ..
             } => {
                 let (class_name, default_question) =
-                    match provider.providers.cards.load(class).map(|x| x.data) {
+                    match provider.providers.cards.load(*class).map(|x| x.data) {
                         Some(CardType::Class {
                             default_question,
                             name,

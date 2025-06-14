@@ -669,8 +669,6 @@ maybe that main global graph thing can simply be a collection i make where i inc
 
 # release goals
 
-- fix edit set name stuff
-- delete sets
 - rm debug thing
 - cycle detection
 - invariant checks on run-event (should do eager ledger stuff too then so it's caught early)

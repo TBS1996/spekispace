@@ -246,7 +246,7 @@ impl<T: LedgerItem> TheLedgerEvent<T> {
     }
 }
 
-#[derive(Clone, Serialize, Deserialize, Debug, Hash)]
+#[derive(Clone, Serialize, Deserialize, Debug, Hash, PartialEq)]
 #[serde(bound(deserialize = "T: LedgerItem + DeserializeOwned"))]
 pub enum TheLedgerAction<T: LedgerItem> {
     Create(T),
@@ -589,6 +589,12 @@ impl<T: LedgerItem + Debug + Send + Sync> Ledger<T> {
     }
 
     pub fn insert_ledger(&self, event: TheLedgerEvent<T>) {
+        if matches!(&event.action, TheLedgerAction::Delete) {
+            if self.load(event.id).is_none() {
+                return;
+            }
+        }
+
         let mut guard = self.ledger.write().unwrap();
         let entry = LedgerEntry::new(guard.last(), event);
         guard.push(entry.clone());
@@ -621,9 +627,7 @@ impl<T: LedgerItem + Debug + Send + Sync> Ledger<T> {
         }
     }
 
-    pub fn load(&self, id: impl AsRef<T::Key>) -> Option<T> {
-        let id = id.as_ref();
-
+    pub fn load(&self, id: T::Key) -> Option<T> {
         /*
         if let Some(item) = self.item_cache.read().unwrap().get(id) {
             tracing::trace!("cache hit for: {:?}", id);
@@ -640,7 +644,7 @@ impl<T: LedgerItem + Debug + Send + Sync> Ledger<T> {
             &self.root
         );
 
-        match self.snap.get(&state, *id) {
+        match self.snap.get(&state, id) {
             Some(item) => {
                 let item: T = serde_json::from_slice(&item).unwrap();
                 /*
@@ -656,7 +660,7 @@ impl<T: LedgerItem + Debug + Send + Sync> Ledger<T> {
         }
     }
 
-    pub fn get_dependencies(&self, id: impl AsRef<T::Key>) -> Vec<T::Key> {
+    pub fn get_dependencies(&self, id: T::Key) -> Vec<T::Key> {
         self.load(id)
             .unwrap()
             .ref_cache()

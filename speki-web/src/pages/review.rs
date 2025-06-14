@@ -12,7 +12,7 @@ use crate::{
     APP,
 };
 use dioxus::prelude::*;
-use ledgerstore::LedgerItem;
+use ledgerstore::{LedgerItem, TheLedgerEvent};
 use speki_core::card::CType;
 use speki_core::cardfilter::{MyNumOrd, NumOrd};
 use speki_core::{
@@ -22,6 +22,7 @@ use speki_core::{
     set::{Input, Set, SetAction, SetEvent, SetExpr, SetExprDiscriminants, SetId},
     Card,
 };
+use std::sync::atomic::AtomicBool;
 use std::{
     cmp::Ordering,
     collections::{BTreeMap, BTreeSet},
@@ -379,6 +380,8 @@ fn RenderSet(
     #[props(default = true)] editable: bool,
 ) -> Element {
     let mut name = set.name.clone();
+    let id = set.id;
+    let mut delete_atomic = set.to_delete.clone();
 
     let ledger = APP.read().inner().provider.sets.clone();
     let filter2 = filter.clone();
@@ -561,6 +564,22 @@ fn RenderSet(
                         "view"
                     }
                 }
+
+                if editable {
+                    button {
+                        class: "{crate::styles::BLACK_BUTTON}",
+                        onclick: move |_|{
+                            delete_atomic.set(true);
+
+                            if !id.is_nil()  {
+                                APP.read().inner().provider.sets.insert_ledger(TheLedgerEvent::new_delete(id));
+                            }
+                        },
+                        "delete"
+                    }
+                }
+
+
             }
             if editable {
                 RenderExpr { filter, inputs: set.expr.cloned().inputs.clone(), ty: set.expr.cloned().ty.clone(), depth: depth + 1 , overlay}
@@ -574,6 +593,7 @@ struct SetEditor {
     id: SetId,
     name: Signal<String>,
     expr: Signal<ExprEditor>,
+    to_delete: Signal<bool>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -766,6 +786,7 @@ impl SetEditor {
             id: set.id,
             name: Signal::new_in_scope(set.name.clone(), ScopeId::APP),
             expr: Signal::new_in_scope(set.expr.clone().into(), ScopeId::APP),
+            to_delete: Signal::new_in_scope(false, ScopeId::APP),
         }
     }
 }
@@ -781,6 +802,13 @@ fn RenderSets(
         name: "all cards".to_string(),
         expr: SetExpr::All,
     });
+
+    let to_delete = sets.iter().position(|set| set.to_delete.cloned());
+
+    if let Some(idx) = to_delete {
+        sets.write().remove(idx);
+        ScopeId::APP.needs_update();
+    }
 
     rsx! {
         div {
