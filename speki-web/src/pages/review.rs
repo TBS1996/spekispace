@@ -38,6 +38,7 @@ use uuid::Uuid;
 #[derive(Clone)]
 pub struct ReviewPage {
     filter: FilterEditor,
+    sets: Signal<Vec<SetEditor>>,
     cardfilter: Memo<CardFilter>,
     overlay: Signal<Option<OverlayEnum>>,
 }
@@ -46,13 +47,29 @@ impl ReviewPage {
     pub fn new() -> Self {
         let filter = FilterEditor::new_default();
         let cardfilter = filter.memo();
-        let selv = Self {
-            filter,
-            cardfilter,
-            overlay: Default::default(),
+
+        let sets: Signal<Vec<SetEditor>> = {
+            let mut sets: Vec<SetEditor> = APP
+                .read()
+                .inner()
+                .provider
+                .sets
+                .load_all()
+                .into_values()
+                .map(|set| SetEditor::new(&set))
+                .collect();
+
+            sets.sort_by_key(|set| set.name.cloned());
+
+            Signal::new_in_scope(sets, ScopeId::APP)
         };
 
-        selv
+        Self {
+            filter,
+            sets,
+            cardfilter,
+            overlay: Default::default(),
+        }
     }
 }
 
@@ -63,21 +80,7 @@ pub fn Review() -> Element {
     tracing::info!("memo lol: {:?}", &state.cardfilter);
 
     let overlay = state.overlay.clone();
-    let sets: Signal<Vec<SetEditor>> = {
-        let mut sets: Vec<SetEditor> = APP
-            .read()
-            .inner()
-            .provider
-            .sets
-            .load_all()
-            .into_values()
-            .map(|set| SetEditor::new(&set))
-            .collect();
-
-        sets.sort_by_key(|set| set.name.cloned());
-
-        Signal::new_in_scope(sets, ScopeId::APP)
-    };
+    let sets = state.sets.clone();
 
     rsx! {
         Overender {
