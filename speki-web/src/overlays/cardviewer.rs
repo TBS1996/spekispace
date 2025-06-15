@@ -407,7 +407,7 @@ fn RenderDependencies(
                         let removed =  dependencies.write().remove(idx);
                         if let Some(id) = card_id {
                             let event = TheLedgerEvent::new(id, CardAction::RemoveDependency(removed.read().id()));
-                            APP.read().inner().provider.cards.insert_ledger(event);
+                            APP.read().inner().provider.cards.insert_ledger(event).unwrap();
                         }
                     },
                     "X"
@@ -1214,7 +1214,7 @@ fn DeleteButton(
         button {
             class: "mt-2 inline-flex items-center text-white bg-gray-800 border-0 py-1 px-3 focus:outline-none hover:bg-gray-700 rounded text-base md:mt-0",
             onclick: move |_| {
-                APP.read().inner().provider.cards.insert_ledger(TheLedgerEvent::new_delete(card));
+                APP.read().inner().provider.cards.insert_ledger(TheLedgerEvent::new_delete(card)).unwrap();
                 isdone.clone().set(true);
             },
             "delete"
@@ -1324,7 +1324,7 @@ fn save_button(CardViewer: CardViewer) -> Element {
                         }
 
                         for event in events {
-                            APP.read().inner().provider.cards.insert_ledger(event);
+                            APP.read().inner().provider.cards.insert_ledger(event).unwrap();
                         }
 
                         for answer in card.answered_attrs {
@@ -1338,7 +1338,7 @@ fn save_button(CardViewer: CardViewer) -> Element {
                                                 let data = CardType::Attribute { attribute: attr_id.id, back: back, instance: id };
                                                 let action = CardAction::UpsertCard(data);
                                                 let event = CardEvent::new(CardId::new_v4(), action);
-                                                APP.read().inner().provider.cards.insert_ledger(event);
+                                                APP.read().inner().provider.cards.insert_ledger(event).unwrap();
                                             }
                                         },
                                         Either::Right(answer) => {
@@ -1347,7 +1347,7 @@ fn save_button(CardViewer: CardViewer) -> Element {
                                             let data = CardType::Attribute { attribute: attr_id.id, back: back, instance: id };
                                             let action = CardAction::UpsertCard(data);
                                             let event = CardEvent::new(CardId::new_v4(), action);
-                                            APP.read().inner().provider.cards.insert_ledger(event);
+                                            APP.read().inner().provider.cards.insert_ledger(event).unwrap();
                                         },
                                     }
                                     }
@@ -1361,7 +1361,7 @@ fn save_button(CardViewer: CardViewer) -> Element {
                                                     let data = CardType::Attribute { attribute: attr_id, back: back, instance: id };
                                                     let action = CardAction::UpsertCard(data);
                                                     let event = CardEvent::new(attr_card_id, action);
-                                                    APP.read().inner().provider.cards.insert_ledger(event);
+                                                    APP.read().inner().provider.cards.insert_ledger(event).unwrap();
                                                 }
                                             }
                                         },
@@ -1371,7 +1371,7 @@ fn save_button(CardViewer: CardViewer) -> Element {
                                             let data = CardType::Attribute { attribute: attr_id, back: back, instance: id };
                                             let action = CardAction::UpsertCard(data);
                                             let event = CardEvent::new(attr_card_id, action);
-                                            APP.read().inner().provider.cards.insert_ledger(event);
+                                            APP.read().inner().provider.cards.insert_ledger(event).unwrap();
                                         },
                                     }
                                 },

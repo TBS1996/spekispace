@@ -15,7 +15,6 @@ use either::Either;
 use nonempty::NonEmpty;
 use serde::Deserializer;
 use serde_json::Value;
-use tracing::info;
 use uuid::Uuid;
 
 use crate::{
@@ -303,7 +302,11 @@ impl Card {
             timestamp: self.current_time(),
         });
         let event = ReviewEvent::new(self.id, action);
-        self.card_provider.providers.run_event(event);
+        self.card_provider
+            .providers
+            .reviews
+            .insert_ledger(event)
+            .unwrap();
         tracing::info!("added recall: {recall:?}");
     }
 
@@ -464,7 +467,11 @@ impl Card {
         self.base = self.base.set_backside(backside);
         let action = CardAction::SetBackRef(reff);
         let event = CardEvent::new(self.id, action);
-        self.card_provider.providers.run_event(event);
+        self.card_provider
+            .providers
+            .cards
+            .insert_ledger(event)
+            .unwrap();
         self
     }
 
@@ -472,7 +479,11 @@ impl Card {
         self.base.explicit_dependencies.insert(dependency);
         let action = CardAction::AddDependency(dependency);
         let event = CardEvent::new(self.id, action);
-        self.card_provider.providers.run_event(event);
+        self.card_provider
+            .providers
+            .cards
+            .insert_ledger(event)
+            .unwrap();
     }
 
     pub fn back_side(&self) -> Option<&BackSide> {
@@ -701,7 +712,11 @@ impl Card {
 
     pub async fn set_suspend(&mut self, suspend: bool) {
         let event = MetaEvent::new(self.id, crate::ledger::MetaAction::Suspend(suspend));
-        self.card_provider.providers.run_event(event);
+        self.card_provider
+            .providers
+            .metadata
+            .insert_ledger(event)
+            .unwrap();
         self.metadata.suspended = suspend.into();
     }
 

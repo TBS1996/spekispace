@@ -432,10 +432,10 @@ fn RenderSet(
 
 
                         let event = SetEvent::new(id, SetAction::SetName(name));
-                        ledger.insert_ledger(event);
+                        ledger.insert_ledger(event).unwrap();
 
                         let event = SetEvent::new(id, SetAction::SetExpr(expr));
-                        ledger.insert_ledger(event);
+                        ledger.insert_ledger(event).unwrap();
 
                     },
                     "save"
@@ -572,7 +572,7 @@ fn RenderSet(
                             delete_atomic.set(true);
 
                             if !id.is_nil()  {
-                                APP.read().inner().provider.sets.insert_ledger(TheLedgerEvent::new_delete(id));
+                                APP.read().inner().provider.sets.insert_ledger(TheLedgerEvent::new_delete(id)).unwrap();
                             }
                         },
                         "delete"

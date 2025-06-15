@@ -869,7 +869,7 @@ impl LedgerItem for RawCard {
         }
     }
 
-    fn run_event(mut self, event: CardAction) -> Result<Self, ()> {
+    fn inner_run_event(mut self, event: CardAction) -> Result<Self, ()> {
         match event {
             CardAction::SetDefaultQuestion(default) => match &mut self.data {
                 CardType::Class {

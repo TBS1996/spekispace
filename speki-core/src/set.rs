@@ -33,7 +33,7 @@ impl LedgerItem for Set {
 
     type PropertyType = String;
 
-    fn run_event(mut self, event: SetAction) -> Result<Self, Self::Error> {
+    fn inner_run_event(mut self, event: SetAction) -> Result<Self, Self::Error> {
         match event {
             SetAction::SetName(name) => self.name = name,
             SetAction::SetExpr(expr) => self.expr = expr,

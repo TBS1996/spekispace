@@ -154,16 +154,6 @@ pub struct Provider {
     pub time: TimeGetter,
 }
 
-impl Provider {
-    pub fn run_event(&self, event: impl Into<Event>) {
-        match event.into() {
-            Event::Meta(event) => self.metadata.insert_ledger(event),
-            Event::History(event) => self.reviews.insert_ledger(event),
-            Event::Card(event) => self.cards.insert_ledger(event),
-        }
-    }
-}
-
 pub type Recaller = Arc<Box<dyn RecallCalc + Send>>;
 pub type TimeGetter = Arc<Box<dyn TimeProvider + Send + Sync>>;
 
@@ -305,7 +295,7 @@ impl App {
         };
         let id = CardId::new_v4();
         let event = CardEvent::new(id, CardAction::UpsertCard(data));
-        self.provider.run_event(event);
+        self.provider.cards.insert_ledger(event).unwrap();
         id
     }
 
@@ -316,7 +306,7 @@ impl App {
             back,
         };
         let event = CardEvent::new(id, CardAction::UpsertCard(data));
-        self.provider.run_event(event);
+        self.provider.cards.insert_ledger(event).unwrap();
     }
 
     pub async fn add_card(&self, front: String, back: impl Into<BackSide>) -> CardId {
@@ -328,7 +318,7 @@ impl App {
 
         let id = CardId::new_v4();
         let event = CardEvent::new(id, CardAction::UpsertCard(data));
-        self.provider.run_event(event);
+        self.provider.cards.insert_ledger(event).unwrap();
         id
     }
 
@@ -338,7 +328,7 @@ impl App {
         };
         let id = CardId::new_v4();
         let event = CardEvent::new(id, CardAction::UpsertCard(data));
-        self.provider.run_event(event);
+        self.provider.cards.insert_ledger(event).unwrap();
         id
     }
 

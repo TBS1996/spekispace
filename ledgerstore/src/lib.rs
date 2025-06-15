@@ -5,7 +5,7 @@ use simpletime::timed;
 use snapstore::fs::{CacheFs, Content, SnapFs};
 use snapstore::mem::SnapMem;
 use snapstore::{HashAndContents, Key};
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, VecDeque};
 use std::fmt::Display;
 use std::fs::{self};
 use std::io::Write;
@@ -27,6 +27,14 @@ pub mod ledger_cache;
 
 pub use snapstore::CacheKey;
 
+#[derive(Debug, Clone)]
+pub enum EventError<T: LedgerItem> {
+    Cycle(Vec<T::Key>),
+    Invariant(T::Error),
+    ItemNotFound,
+    DeletingWithDependencies,
+}
+
 /// Represents how a ledger mutates or creates an item.
 pub trait LedgerItem: Serialize + DeserializeOwned + Hash + Clone + 'static {
     type Key: Copy
@@ -40,15 +48,103 @@ pub trait LedgerItem: Serialize + DeserializeOwned + Hash + Clone + 'static {
         + Send
         + Sync;
     type Error: Debug;
+
+    /// The different ways an item can reference another item
     type RefType: AsRef<str> + Display + Clone + Hash + PartialEq + Eq + Send + Sync;
+
+    /// Cache regarding property of a card so you get like all the cards that have a certain value or whatever
     type PropertyType: AsRef<str> + Display + Clone + Hash + PartialEq + Eq + Send + Sync;
+
+    /// The type that is responsible for mutating the item and thus create a new genreation
     type Modifier: Clone + Debug + Hash + Serialize + DeserializeOwned + Send + Sync;
 
-    fn run_event(self, event: Self::Modifier) -> Result<Self, Self::Error>;
+    /// Modifies `Self`.
+    fn inner_run_event(self, event: Self::Modifier) -> Result<Self, Self::Error>;
+
+    /// Modifies `Self` and checks for cycles and invariants.
+    fn run_event(
+        self,
+        event: Self::Modifier,
+        ledger: &FixedLedger<Self>,
+    ) -> Result<Self, EventError<Self>> {
+        let new = match self.inner_run_event(event) {
+            Ok(item) => item,
+            Err(e) => return Err(EventError::Invariant(e)),
+        };
+
+        if let Some(cycle) = new.find_cycle(ledger) {
+            return Err(EventError::Cycle(cycle));
+        }
+
+        if let Err(e) = new.validate(ledger) {
+            return Err(EventError::Invariant(e));
+        }
+
+        Ok(new)
+    }
 
     fn new_default(id: Self::Key) -> Self;
 
     fn item_id(&self) -> Self::Key;
+
+    fn find_cycle(&self, ledger: &FixedLedger<Self>) -> Option<Vec<Self::Key>> {
+        fn dfs<T: LedgerItem>(
+            current: T::Key,
+            ledger: &FixedLedger<T>,
+            visiting: &mut HashSet<T::Key>,
+            visited: &mut HashSet<T::Key>,
+            parent: &mut HashMap<T::Key, T::Key>,
+            selv: (T::Key, &T),
+        ) -> Option<Vec<T::Key>> {
+            if !visiting.insert(current.clone()) {
+                // cycle start
+                let mut path = vec![current.clone()];
+                let mut cur = current;
+                while let Some(p) = parent.get(&cur) {
+                    path.push(p.clone());
+                    if *p == current {
+                        break;
+                    }
+                    cur = *p;
+                }
+                path.reverse();
+                return Some(path);
+            }
+
+            let dependencies = if selv.0 == current {
+                selv.1.dependencies()
+            } else {
+                ledger.load(current).unwrap().dependencies()
+            };
+
+            for dep in dependencies {
+                if visited.contains(&dep) {
+                    continue;
+                }
+                parent.insert(dep.clone(), current.clone());
+                if let Some(cycle) = dfs(dep, ledger, visiting, visited, parent, selv) {
+                    return Some(cycle);
+                }
+            }
+
+            visiting.remove(&current);
+            visited.insert(current.clone());
+            None
+        }
+
+        let mut visited = HashSet::new();
+        let mut visiting = HashSet::new();
+        let mut parent = HashMap::new();
+
+        dfs(
+            self.item_id(),
+            ledger,
+            &mut visiting,
+            &mut visited,
+            &mut parent,
+            (self.item_id(), self),
+        )
+    }
 
     /// Assertions that should hold true. Like invariants with other cards that it references.
     /// called by run_event, if it returns error after an event is run, the event is not applied.
@@ -588,17 +684,30 @@ impl<T: LedgerItem + Debug + Send + Sync> Ledger<T> {
         self.snap.all_item_ids(&hash)
     }
 
-    pub fn insert_ledger(&self, event: TheLedgerEvent<T>) {
+    pub fn insert_ledger(&self, event: TheLedgerEvent<T>) -> Result<StateHash, EventError<T>> {
         if matches!(&event.action, TheLedgerAction::Delete) {
-            if self.load(event.id).is_none() {
-                return;
+            match self.load(event.id) {
+                Some(item) if !item.dependencies().is_empty() => {
+                    return Err(EventError::DeletingWithDependencies);
+                }
+                Some(_) => {}
+                None => return Err(EventError::ItemNotFound),
             }
         }
+
+        let state_hash = self.state_hash();
+        let borrowed: Option<&str> = state_hash.as_deref();
+
+        let (state_hash, _) = self.run_event(event.clone(), borrowed, true)?;
 
         let mut guard = self.ledger.write().unwrap();
         let entry = LedgerEntry::new(guard.last(), event);
         guard.push(entry.clone());
         entry.save(&self.ledger_path());
+        let ledger_hash = guard.last().unwrap().data_hash();
+        self.save_ledger_state(&ledger_hash, &state_hash);
+
+        Ok(state_hash)
     }
 
     pub fn state_hash(&self) -> Option<StateHash> {
@@ -616,7 +725,7 @@ impl<T: LedgerItem + Debug + Send + Sync> Ledger<T> {
             return self.mem_rebuild();
         }
 
-        self._state_hash(ledger.as_slice())
+        self._state_hash(ledger.as_slice()).unwrap()
     }
 
     pub fn load_last_applied(&self, id: T::Key) -> Option<T> {
@@ -846,6 +955,7 @@ impl<T: LedgerItem + Debug + Send + Sync> Ledger<T> {
 
     fn mem_rebuild(&self) -> Option<StateHash> {
         info!("starting inmemory rebuild");
+        panic!();
         let mut snapmem = SnapMem::<T::Key>::default();
 
         let guard = self.ledger.read().unwrap();
@@ -865,7 +975,7 @@ impl<T: LedgerItem + Debug + Send + Sync> Ledger<T> {
                         .get(&id.to_string())
                         .map(|x| serde_json::from_slice(x.as_slice()).unwrap())
                         .unwrap_or_else(|| T::new_default(id));
-                    let item = item.run_event(m.clone()).unwrap();
+                    //let item = item.run_event(m.clone()).unwrap();
                     let item = serde_json::to_vec(&item).unwrap();
                     snapmem.save(&id.to_string(), item);
                 }
@@ -928,11 +1038,11 @@ impl<T: LedgerItem + Debug + Send + Sync> Ledger<T> {
         return (last_applied, unapplied_entries);
     }
 
-    fn _state_hash(&self, ledger: &[LedgerEntry<T>]) -> Option<StateHash> {
+    fn _state_hash(&self, ledger: &[LedgerEntry<T>]) -> Result<Option<StateHash>, EventError<T>> {
         let (mut last_applied, mut unapplied_entries) = self.applied_status(ledger);
 
         if unapplied_entries.is_empty() {
-            return last_applied;
+            return Ok(last_applied);
         }
 
         //info!("unapplied entries: {unapplied_entries:?}");
@@ -948,7 +1058,7 @@ impl<T: LedgerItem + Debug + Send + Sync> Ledger<T> {
         while let Some(entry) = unapplied_entries.pop() {
             let idx = entry.index;
             let (state_hash, new_contents) =
-                self.run_event(entry.event.clone(), last_applied.as_deref(), modify_cache);
+                self.run_event(entry.event.clone(), last_applied.as_deref(), modify_cache)?;
             if modify_cache {
                 //self.align_item_cache(entry.event.id);
             }
@@ -993,7 +1103,7 @@ impl<T: LedgerItem + Debug + Send + Sync> Ledger<T> {
         to_delete.into_par_iter().for_each(|c| c.delete().unwrap());
 
         trace!("current state_hash: {last_applied:?}");
-        last_applied
+        Ok(last_applied)
     }
 
     /// Creates a symlink from the hash of a ledger event to its corresponding state
@@ -1073,7 +1183,7 @@ impl<T: LedgerItem + Debug + Send + Sync> Ledger<T> {
         event: TheLedgerEvent<T>,
         state_hash: Option<&str>,
         update_cache: bool,
-    ) -> HashAndContents {
+    ) -> Result<HashAndContents, EventError<T>> {
         let mut new_content: Vec<Content> = vec![];
         let prev_state_hash = state_hash;
         if update_cache {
@@ -1115,7 +1225,7 @@ impl<T: LedgerItem + Debug + Send + Sync> Ledger<T> {
                     );
                 }
 
-                return (next_state_hash, new_content);
+                return Ok((next_state_hash, new_content));
             }
         };
 
@@ -1149,8 +1259,7 @@ impl<T: LedgerItem + Debug + Send + Sync> Ledger<T> {
         };
 
         let id = item.item_id();
-        let item = item.run_event(event.clone()).unwrap();
-        item.validate(&cachegetter).unwrap();
+        let item = item.run_event(event.clone(), &cachegetter)?;
         let new_caches = if update_cache {
             item.caches(&cachegetter)
         } else {
@@ -1171,7 +1280,7 @@ impl<T: LedgerItem + Debug + Send + Sync> Ledger<T> {
             self.modify_cache(prev_state_hash, &state_hash, added_caches, removed_caches);
         }
 
-        (state_hash, new_contents)
+        Ok((state_hash, new_contents))
     }
 }
 

@@ -31,7 +31,7 @@ impl LedgerItem for Metadata {
     type RefType = &'static str;
     type Modifier = MetaAction;
 
-    fn run_event(mut self, event: MetaAction) -> Result<Self, ()> {
+    fn inner_run_event(mut self, event: MetaAction) -> Result<Self, ()> {
         match event {
             crate::ledger::MetaAction::Suspend(flag) => self.suspended = flag.into(),
         }

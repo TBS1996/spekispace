@@ -669,10 +669,7 @@ maybe that main global graph thing can simply be a collection i make where i inc
 
 # release goals
 
-- rm debug thing
 - cycle detection
 - invariant checks on run-event (should do eager ledger stuff too then so it's caught early)
-- fix logo
-- clear state button
 - waiting window when state get rebuilt
 - nicer review history thing
