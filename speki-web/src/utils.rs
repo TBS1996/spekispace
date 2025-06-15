@@ -1,18 +1,30 @@
-use std::{fmt::Debug, sync::Arc};
+use std::{fmt::Debug, sync::Arc, time::Duration};
 
 use dioxus::prelude::*;
+use ledgerstore::TimeProvider;
 use speki_core::{card::CardId, Card};
 #[cfg(not(feature = "desktop"))]
 use speki_provider::{DexieProvider, WasmTime};
-use speki_web::{Node, NodeMetadata};
 use tracing::info;
 #[cfg(not(feature = "desktop"))]
 use wasm_bindgen::prelude::*;
 
-use crate::APP;
-
 #[cfg(not(feature = "desktop"))]
 use crate::firebase::{AuthUser, FirestoreProvider};
+
+#[derive(Copy, Clone)]
+pub struct FsTime;
+
+impl TimeProvider for FsTime {
+    fn current_time(&self) -> Duration {
+        Duration::from_secs(
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_secs(),
+        )
+    }
+}
 
 #[derive(Clone)]
 pub struct App(Arc<speki_core::App>);
@@ -37,9 +49,8 @@ impl App {
         use std::path::Path;
 
         use ledgerstore::Ledger;
-        use speki_provider::FsTime;
         //use speki_provider::{FsProvider, FsTime};
-        let root = Path::new("/home/tor/spekifs/snap4");
+        //let root = Path::new("/home/tor/spekifs/snap4");
         let root = Path::new("/home/tor/spekifs/testing");
 
         Self(Arc::new(speki_core::App::new(
@@ -112,80 +123,9 @@ impl Debug for App {
     }
 }
 
-/// **Check if an element is present (Web & Desktop)**
-pub fn is_element_present(id: &str) -> bool {
-    #[cfg(feature = "web")]
-    {
-        return web_sys::window()
-            .and_then(|win| win.document())
-            .unwrap()
-            .get_element_by_id(id)
-            .is_some();
-    }
-
-    #[cfg(feature = "desktop")]
-    {
-        return true;
-    }
-    panic!()
-}
-
 #[cfg(not(feature = "desktop"))]
 #[wasm_bindgen]
 extern "C" {
     #[wasm_bindgen(js_namespace = Date)]
     fn now() -> f64;
-}
-
-/*
-pub async fn sync(agent: AuthUser) {
-    let time_provider = APP.read().0.time_provider.clone();
-    info!("starting sync!");
-
-    *SYNCING.write() = true;
-    let now = time_provider.current_time();
-
-    let fire = async {
-        let mut fire = FirestoreProvider::new(agent);
-        let id = Syncable::<BaseCard>::provider_id(&fire).await;
-        fire.set_id(id);
-        fire
-    };
-
-    let dex = async {
-        let mut dex = DexieProvider::new();
-        let id = Syncable::<BaseCard>::provider_id(&dex).await;
-        dex.set_id(id);
-        dex
-    };
-
-    let (fire, dex) = join(fire, dex).await;
-
-    let cardsync = Syncable::<BaseCard>::sync(fire.clone(), dex.clone());
-    let revsync = Syncable::<speki_core::recall_rate::History>::sync(fire.clone(), dex.clone());
-    let attrsync = Syncable::<AttributeDTO>::sync(fire.clone(), dex.clone());
-    let colsync = Syncable::<Collection>::sync(fire.clone(), dex.clone());
-    let metasync = Syncable::<Metadata>::sync(fire.clone(), dex.clone());
-    let filtersync = Syncable::<FilterItem>::sync(fire.clone(), dex.clone());
-    let audiosync = Syncable::<Audio>::sync(fire.clone(), dex.clone());
-
-    futures::future::join_all(vec![
-        cardsync, revsync, attrsync, colsync, metasync, filtersync, audiosync,
-    ])
-    .await;
-
-    *SYNCING.write() = false;
-    let elapsed = time_provider.current_time() - now;
-
-    info!("done syncing in {} seconds!", elapsed.as_secs_f32());
-}
-    */
-
-pub async fn get_meta(node: &Node) -> NodeMetadata {
-    match node {
-        Node::Card(card_id) => {
-            NodeMetadata::from_card(APP.read().load_card(*card_id).await, false).await
-        }
-        Node::Nope { node, .. } => node.clone(),
-    }
 }

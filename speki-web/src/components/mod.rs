@@ -5,14 +5,12 @@ pub mod cardref;
 pub mod dropdown;
 mod filtereditor;
 pub mod frontside;
-pub mod graph;
 
 pub use backside::BackPut;
 pub use cardref::CardRef;
 pub use dropdown::DropDownMenu;
 pub use filtereditor::*;
 pub use frontside::{CardTy, FrontPut};
-pub use graph::GraphRep;
 use speki_core::{card::CardId, collection::DynCard, Card};
 
 use dioxus::prelude::*;
@@ -106,7 +104,7 @@ pub fn RenderDependents(
                         onclick: move|_|{
                             let card = card.clone();
                             spawn(async move{
-                                let viewer = CardViewer::new_from_card(card, Default::default()).await;
+                                let viewer = CardViewer::new_from_card(card).await;
                                 overlay.clone().set(Some(OverlayEnum::CardViewer(viewer)));
                             });
                         },

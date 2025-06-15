@@ -1,11 +1,10 @@
 [workspace]
-members = ["speki-core", "omtrent", "speki-web", "speki-provider", "snapstore", "ledgerstore", "simpletime", "ledger_macros"]
+members = ["speki-core", "omtrent", "speki-web", "snapstore", "ledgerstore", "simpletime", "ledger_macros"]
 
 resolver = "2"
 
 [workspace.dependencies]
 speki-core = { path = "speki-core" }
-speki-provider = { path = "speki-provider" }
 omtrent = { path = "omtrent" }
 snapstore = { path = "snapstore" }
 ledgerstore = { path = "ledgerstore" }

@@ -76,12 +76,6 @@ pub fn set_refresh_scope(id: String, signal: ScopeId) {
     });
 }
 
-fn trigger_refresh(id: &str) {
-    let scope = REFRESH_SCOPE.with(|provider| provider.borrow().get(id).unwrap().to_owned());
-    info!("updating this scope: {scope:?}");
-    scope.needs_update();
-}
-
 #[cfg(feature = "web")]
 #[wasm_bindgen(js_name = onNodeClick)]
 pub async fn on_node_click(cyto_id: &str, node_id: &str) {

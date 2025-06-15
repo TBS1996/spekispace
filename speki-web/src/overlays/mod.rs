@@ -1,22 +1,19 @@
 pub mod card_selector;
 pub mod cardviewer;
-pub mod itemselector;
 pub mod reviewsession;
-pub mod textinput;
 pub mod uploader;
-pub mod yesno;
+//pub mod yesno;
+//pub mod itemselector;
+//pub mod textinput;
 
 use crate::overlays::{
     card_selector::CardSelector, cardviewer::CardViewer, reviewsession::ReviewState,
-    textinput::TextInput, yesno::Yesno,
 };
 use card_selector::CardSelectorRender;
 use cardviewer::CardViewerRender;
 use dioxus::prelude::*;
 use reviewsession::ReviewRender;
 use std::{fmt::Debug, sync::Arc};
-use textinput::TextInputRender;
-use yesno::YesnoRender;
 
 #[derive(Clone)]
 pub struct OverlayChoice {
@@ -65,30 +62,11 @@ pub struct OverlaySelector {
     pub chosen: Option<Box<OverlayEnum>>,
 }
 
-pub struct Selector<T> {
-    pub title: String,
-    pub choices: Vec<SelectorItem<T>>,
-    pub on_select: Arc<Box<dyn FnOnce(T)>>,
-}
-
-pub struct SelectorItem<T> {
-    pub display: String,
-    pub f: Arc<Box<dyn Fn() -> T>>,
-}
-
-/*
-
-
-
-*/
-
 #[derive(Clone)]
 pub enum OverlayEnum {
     Review(ReviewState),
-    Text(TextInput),
     CardViewer(CardViewer),
     CardSelector(CardSelector),
-    YesNo(Yesno),
     OverlaySelector(OverlaySelector),
 }
 
@@ -97,8 +75,6 @@ impl OverlayEnum {
     pub fn overlay(&self) -> Signal<Option<OverlayEnum>> {
         match self {
             OverlayEnum::Review(elm) => elm.overlay.clone(),
-            OverlayEnum::Text(_) => Signal::new_in_scope(Default::default(), ScopeId::APP),
-            OverlayEnum::YesNo(_) => Signal::new_in_scope(Default::default(), ScopeId::APP),
             OverlayEnum::OverlaySelector(_) => {
                 Signal::new_in_scope(Default::default(), ScopeId::APP)
             }
@@ -110,10 +86,8 @@ impl OverlayEnum {
     pub fn is_done(&self) -> bool {
         match self {
             OverlayEnum::Review(elm) => elm.is_done.cloned(),
-            OverlayEnum::Text(elm) => elm.done.cloned(),
             OverlayEnum::CardViewer(elm) => elm.is_done.cloned(),
             OverlayEnum::CardSelector(elm) => elm.done.cloned(),
-            OverlayEnum::YesNo(elm) => elm.done.cloned(),
             OverlayEnum::OverlaySelector(elm) => elm.chosen.is_some(),
         }
     }
@@ -123,10 +97,8 @@ impl Debug for OverlayEnum {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Review(_) => f.debug_tuple("Review").finish(),
-            Self::Text(_) => f.debug_tuple("Text").finish(),
             Self::CardViewer(_) => f.debug_tuple("card viewer").finish(),
             Self::CardSelector(_) => f.debug_tuple("card selector").finish(),
-            Self::YesNo(_) => f.debug_tuple("yesno").finish(),
             Self::OverlaySelector(_) => f.debug_tuple("overlay selector").finish(),
         }
     }
@@ -169,19 +141,10 @@ pub fn Overender(overlay: Signal<Option<OverlayEnum>>, root: Element) -> Element
                                     overlay: elm.overlay.clone(),
                                 }
                             },
-                            OverlayEnum::Text(elm) => rsx!{
-                                TextInputRender {
-                                    question: elm.question.clone(),
-                                    input_value: elm.input_value.clone(),
-                                    done: elm.done.clone(),
-                                    on_submit: elm.on_submit.clone(),
-                                }
-                            },
                             OverlayEnum::CardViewer(elm) => rsx!{
                                 CardViewerRender {
                                     editor: elm.editor.clone(),
                                     dependents: elm.dependents.clone(),
-                                    graph: elm.graph.clone(),
                                     save_hook: elm.save_hook.clone(),
                                     is_done: elm.is_done.clone(),
                                     old_card: elm.old_card.clone(),
@@ -192,13 +155,6 @@ pub fn Overender(overlay: Signal<Option<OverlayEnum>>, root: Element) -> Element
                             },
                             OverlayEnum::OverlaySelector(elm) => rsx! {
                                 OverlaySelectorRender { title: elm.title.clone(), choices: elm.choices.clone(), overlay: overlay.clone()  }
-                            },
-                            OverlayEnum::YesNo(elm) => rsx! {
-                                YesnoRender {
-                                    question: elm.question.clone(),
-                                    done: elm.done.clone(),
-                                    on_yes: elm.on_yes.clone(),
-                                }
                             },
                             OverlayEnum::CardSelector(elm) => rsx!{
                                 CardSelectorRender {

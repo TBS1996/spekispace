@@ -97,68 +97,6 @@ pub fn Review() -> Element {
 }
 
 #[component]
-fn RecallBar(dist: RecallDist) -> Element {
-    let proportions = dist.proportions();
-
-    rsx!(
-        div {
-            class: "flex w-full h-4 rounded overflow-hidden border border-gray-300",
-            for (percentage, color) in proportions {
-                div {
-                    style: format!(
-                        "width: {}%; background-color: {};",
-                        percentage,
-                        color
-                    ),
-                    key: "{color}",
-                }
-            }
-        }
-    )
-}
-
-#[derive(Default, Clone, PartialEq, Debug)]
-struct RecallDist {
-    p: u32,
-    n1: u32,
-    n2: u32,
-    n3: u32,
-    n4: u32,
-    n5: u32,
-    n6: u32,
-}
-
-impl RecallDist {
-    const HEXP: &str = "#00FFFF";
-    const HEX1: &str = "#FF0D0D";
-    const HEX2: &str = "#FF4E11";
-    const HEX3: &str = "#FF8E15";
-    const HEX4: &str = "#FAB733";
-    const HEX5: &str = "#ACB334";
-    const HEX6: &str = "#69B34C";
-
-    fn total(&self) -> u32 {
-        self.p + self.n1 + self.n2 + self.n3 + self.n4 + self.n5 + self.n6
-    }
-
-    fn proportions(&self) -> Vec<(f32, &'static str)> {
-        let total = self.total();
-        if total == 0 {
-            return vec![];
-        }
-        vec![
-            (self.p as f32 / total as f32 * 100.0, Self::HEXP),
-            (self.n1 as f32 / total as f32 * 100.0, Self::HEX1),
-            (self.n2 as f32 / total as f32 * 100.0, Self::HEX2),
-            (self.n3 as f32 / total as f32 * 100.0, Self::HEX3),
-            (self.n4 as f32 / total as f32 * 100.0, Self::HEX4),
-            (self.n5 as f32 / total as f32 * 100.0, Self::HEX5),
-            (self.n6 as f32 / total as f32 * 100.0, Self::HEX6),
-        ]
-    }
-}
-
-#[component]
 fn RenderInput(
     filter: CardFilter,
     input: InputEditor,
@@ -166,7 +104,6 @@ fn RenderInput(
     overlay: Signal<Option<OverlayEnum>>,
 ) -> Element {
     let ledger = APP.read().inner().provider.sets.clone();
-    let indent = format!("{}• ", " ".repeat(depth));
 
     let leaf = match input {
         InputEditor::Leaf(card) => {

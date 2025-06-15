@@ -23,7 +23,7 @@ use crate::{
     ask_openai,
     components::{
         backside::BackPutRender, cardref::CardRefRender, frontside::FrontPutRender, BackPut,
-        CardRef, CardTy, DropDownMenu, FrontPut, GraphRep, RenderDependents,
+        CardRef, CardTy, DropDownMenu, FrontPut, RenderDependents,
     },
     load_api_key,
     overlays::{
@@ -55,7 +55,6 @@ pub fn CardViewerRender(props: CardViewer) -> Element {
             RenderInputs {
                 editor:props.editor.clone(),
                 dependents:props.dependents.clone(),
-                graph:props.graph.clone(),
                 save_hook:props.save_hook.clone(),
                 is_done:props.is_done.clone(),
                 old_card:props.old_card.clone(),
@@ -119,32 +118,6 @@ impl From<TempNode> for Node {
             }
         }
     }
-}
-
-fn refresh_graph(
-    graph: GraphRep,
-    front: FrontPut,
-    dependencies: Signal<Vec<CardId>>,
-    dependents: Signal<Vec<Node>>,
-    card: Option<NodeMetadata>,
-) {
-    let node = match card {
-        Some(node) => node,
-        None => NodeMetadata {
-            id: NodeId::new_temp(),
-            label: front.text.cloned(),
-            color: "#858585".to_string(),
-            ty: front.dropdown.selected.cloned().to_ctype(),
-            border: true,
-        },
-    };
-
-    graph.new_set_card_rep(node, dependencies.cloned(), dependents.cloned());
-}
-
-struct AttrRep {
-    id: AttributeId,
-    answer: BackSide,
 }
 
 /// All th einfo needed to create the actual card, similar to the cardeditor struct
@@ -394,7 +367,7 @@ fn RenderDependencies(
                     onclick: move|_|{
                         let card = card.clone();
                         spawn(async move{
-                            let viewer = CardViewer::new_from_card(card, Default::default()).await;
+                            let viewer = CardViewer::new_from_card(card).await;
                             overlay.clone().set(Some(OverlayEnum::CardViewer(viewer)));
                         });
                     },
@@ -439,7 +412,6 @@ then when you add a new person instance it'll have those textfields for those qu
 pub struct CardViewer {
     pub editor: CardEditor,
     pub dependents: Signal<Vec<Node>>,
-    pub graph: GraphRep,
     pub save_hook: Option<MyClosure>,
     pub is_done: Signal<bool>,
     pub old_card: Signal<Option<Card>>,
@@ -452,7 +424,6 @@ impl PartialEq for CardViewer {
     fn eq(&self, other: &Self) -> bool {
         self.editor == other.editor
             && self.dependents == other.dependents
-            && self.graph == other.graph
             && self.is_done == other.is_done
             && self.old_card == other.old_card
             && self.old_meta == other.old_meta
@@ -487,53 +458,32 @@ impl CardViewer {
     }
 
     fn select_closure(
-        graph: GraphRep,
         front: FrontPut,
         dependencies: Signal<Vec<Signal<Card>>>,
-        dependents: Signal<Vec<Node>>,
         meta: Option<NodeMetadata>,
     ) -> MyClosure {
         MyClosure::new(move |card: Signal<Card>| {
-            let _graph = graph.clone();
             let _front = front.clone();
             let _meta = meta.clone();
 
             async move {
-                let graph = _graph.clone();
-                let front = _front.clone();
                 let deps = dependencies.clone();
-                let meta = _meta.clone();
                 deps.clone()
                     .write()
                     .retain(|dep| dep.read().id() != card.read().id());
-                //refresh_graph(graph, front, deps, dependents.clone(), meta);
             }
         })
     }
 
-    fn deselect_closure(
-        graph: GraphRep,
-        front: FrontPut,
-        dependencies: Signal<Vec<Signal<Card>>>,
-        dependents: Signal<Vec<Node>>,
-    ) -> MyClosure {
+    fn deselect_closure(dependencies: Signal<Vec<Signal<Card>>>) -> MyClosure {
         MyClosure::new(move |card: Signal<Card>| {
             info!("ref card set ?");
             dependencies.clone().write().push(card);
-            /*
-            refresh_graph(
-                graph.clone(),
-                front.clone(),
-                dependencies,
-                dependents.clone(),
-                None,
-            );
-            */
             async move {}
         })
     }
 
-    pub async fn new_from_card(mut card: Signal<Card>, graph: GraphRep) -> Self {
+    pub async fn new_from_card(mut card: Signal<Card>) -> Self {
         if card.read().is_attribute() {
             let instance = card.read().attribute_instance();
             card = APP.read().load_card_sync(instance);
@@ -543,14 +493,8 @@ impl CardViewer {
 
         let raw_ty = card.read().clone_base();
 
-        graph.new_set_card(card.cloned());
-
         let front = {
             let frnt = FrontPut::new(CardTy::from_ctype(card.read().card_type()));
-            if let Some(id) = card.read().front_audio_id() {
-                //let audio = APP.read().inner().provider.audios.load_item(id).await;
-                //frnt.audio.clone().set(audio);
-            }
             frnt.text.clone().set(raw_ty.data.raw_front());
             frnt
         };
@@ -558,10 +502,6 @@ impl CardViewer {
         let back = {
             let bck =
                 BackPut::new(raw_ty.data.backside().cloned()).with_dependents(tempnode.clone());
-            if let Some(id) = card.read().back_audio_id() {
-                //let audio = APP.read().inner().provider.audios.load_item(id).await;
-                //bck.audio.clone().set(audio);
-            }
 
             let back = match raw_ty.data.backside() {
                 Some(BackSide::Time(ts)) => ts.to_string(),
@@ -573,7 +513,6 @@ impl CardViewer {
             bck
         };
 
-        let graph = graph.with_label(front.text.clone());
         let dependents: Signal<Vec<Node>> = Signal::new_in_scope(Default::default(), ScopeId(3));
         let meta = NodeMetadata::from_card(card.clone(), true).await;
 
@@ -728,20 +667,9 @@ impl CardViewer {
                 ScopeId(3),
             );
 
-            let f = Self::deselect_closure(
-                graph.clone(),
-                front.clone(),
-                dependencies.clone(),
-                dependents,
-            );
+            let f = Self::deselect_closure(dependencies.clone());
 
-            let af = Self::select_closure(
-                graph.clone(),
-                front.clone(),
-                dependencies,
-                dependents,
-                Some(meta.clone()),
-            );
+            let af = Self::select_closure(front.clone(), dependencies, Some(meta.clone()));
 
             let bck = back.on_select(f.clone()).on_deselect(af.clone());
             let concept = concept.on_select(f.clone()).on_deselect(af.clone());
@@ -771,7 +699,6 @@ impl CardViewer {
         Self {
             editor,
             dependents,
-            graph,
             is_done: Signal::new_in_scope(false, ScopeId(3)),
             old_card: Signal::new_in_scope(Some(card.cloned()), ScopeId(3)),
             save_hook: None,
@@ -786,7 +713,6 @@ impl CardViewer {
         let dependencies: Signal<Vec<Signal<Card>>> =
             Signal::new_in_scope(Default::default(), ScopeId::APP);
         let dependents = Signal::new_in_scope(Default::default(), ScopeId(3));
-        let graph = GraphRep::default().with_label(front.text.clone());
 
         let tempnode = TempNode::New {
             id: NodeId::new_temp(),
@@ -796,9 +722,8 @@ impl CardViewer {
         };
 
         let editor = {
-            let af =
-                Self::select_closure(graph.clone(), front.clone(), dependencies, dependents, None);
-            let f = Self::deselect_closure(graph.clone(), front.clone(), dependencies, dependents);
+            let af = Self::select_closure(front.clone(), dependencies, None);
+            let f = Self::deselect_closure(dependencies);
 
             let back = BackPut::new(None)
                 .with_dependents(tempnode.clone())
@@ -826,9 +751,8 @@ impl CardViewer {
             }
         };
 
-        let selv = Self {
+        Self {
             editor,
-            graph,
             is_done: Signal::new_in_scope(false, ScopeId(3)),
             old_card: Signal::new_in_scope(None, ScopeId(3)),
             save_hook: None,
@@ -836,10 +760,7 @@ impl CardViewer {
             tempnode,
             old_meta: Signal::new_in_scope(None, ScopeId::APP),
             overlay: Signal::new_in_scope(Default::default(), ScopeId::APP),
-        };
-
-        selv.set_graph();
-        selv
+        }
     }
 
     pub fn with_dependency(mut self, dep: CardId) -> Self {
@@ -853,25 +774,6 @@ impl CardViewer {
         self.editor.back.reset();
         self.editor.dependencies.clone().write().clear();
         self.old_card.clone().set(None);
-        self.graph.clear().await;
-        //self.editor.concept.reset();
-    }
-
-    pub fn set_graph(&self) {
-        if let Some(card) = self.old_card.cloned() {
-            self.graph.new_set_card(card.clone());
-            return;
-        }
-
-        /*
-        refresh_graph(
-            self.graph.clone(),
-            self.editor.front.clone(),
-            self.editor.dependencies.clone(),
-            self.dependents.clone(),
-            self.old_meta.cloned(),
-        );
-        */
     }
 }
 
@@ -1316,13 +1218,6 @@ fn save_button(CardViewer: CardViewer) -> Element {
                             events.push(CardEvent::new(id, CardAction::AddDependency(dep)));
                         }
 
-                        if let Some(audio) = selv.editor.front.audio.cloned() {
-                            //APP.read().inner().provider.audios.save_item(audio).await;
-                        }
-                        if let Some(audio) = selv.editor.back.audio.cloned() {
-                            //APP.read().inner().provider.audios.save_item(audio).await;
-                        }
-
                         for event in events {
                             APP.read().inner().provider.cards.insert_ledger(event).unwrap();
                         }
@@ -1388,10 +1283,6 @@ fn save_button(CardViewer: CardViewer) -> Element {
                         if let Some(hook) = selveste.save_hook.clone() {
                             hook.call(card).await;
                         }
-                        if let Some(card) = selveste.old_card.cloned() {
-                            info!("setting updated card: {:?}", inner_card);
-                            //card.set(inner_card);
-                        }
 
                         selveste.reset().await;
                         selv.is_done.clone().set(true);
@@ -1422,7 +1313,6 @@ fn add_dep(selv: CardViewer) -> Element {
                 let fun = MyClosure::new(
                     move |card: Signal<Card>| {
                     selv.editor.dependencies.clone().write().push(card);
-                    selv.set_graph();
                     let old_card = selv.old_card.cloned();
                     async move {
                         if let Some(mut old_card) = old_card {

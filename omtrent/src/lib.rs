@@ -7,7 +7,7 @@ use std::{
 use serde::{Deserialize, Serialize};
 
 pub enum Precision {
-    millenium,
+    Millenium,
     Century,
     Decade,
     Year,

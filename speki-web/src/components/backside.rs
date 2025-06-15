@@ -14,7 +14,7 @@ use crate::components::audioupload::AudioUpload;
 use crate::{
     components::{cardref::CardRefRender, dropdown::DropComponent, CardRef, DropDownMenu},
     overlays::{card_selector::MyClosure, cardviewer::TempNode, OverlayEnum},
-    APP, IS_SHORT,
+    APP,
 };
 
 /// Component to create the backside of a card
@@ -45,9 +45,7 @@ pub fn BackPutRender(
         div {
             class: "block text-gray-700 text-sm font-medium max-w-full",
 
-            if !IS_SHORT() {
-                "Back:"
-            }
+            "Back:"
 
             div {
                 class: "backside-editor flex items-center space-x-4",
@@ -68,9 +66,7 @@ pub fn BackPutRender(
                     {
                         match *dropdown.selected.read() {
                             BackOpts::Time => {
-                                let placeholder = if IS_SHORT.cloned() {
-                                    "Back side"
-                                } else {
+                                let placeholder = {
                                     ""
                                 };
                                 let mut sig = text.clone();
@@ -96,9 +92,7 @@ pub fn BackPutRender(
 
                             },
                             BackOpts::Text => {
-                                let placeholder = if IS_SHORT.cloned() {
-                                    "Back side"
-                                } else {
+                                let placeholder = {
                                     ""
                                 };
                                 let mut sig = text.clone();

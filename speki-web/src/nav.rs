@@ -5,25 +5,6 @@ use crate::{firebase, LOGIN_STATE};
 
 use crate::{Route, CURRENT_ROUTE};
 
-pub fn image(src: &str, img_size: usize, spin: bool) -> Element {
-    let size = format!("{}px", img_size);
-
-    let class = if spin { "animate-spin" } else { "" };
-
-    rsx! {
-        div {
-            class: "mr-4 flex-shrink-0 flex items-center justify-center",
-            img {
-                class: "{class}",
-                style: "width: {size}; height: {size};",
-                src: "assets/{src}",
-            }
-        }
-    }
-}
-
-pub static SYNCING: GlobalSignal<bool> = Signal::global(|| false);
-
 fn route_elm(route: Route) -> Element {
     let is_current = CURRENT_ROUTE.cloned() == route;
 

@@ -22,7 +22,6 @@ async-trait.workspace = true
 uuid.workspace = true
 petgraph.workspace = true
 once_cell.workspace = true
-speki-provider = { workspace = true, default-features = false, features = [] }
 strum.workspace = true
 fancy-regex.workspace = true
 eyre.workspace = true
@@ -48,7 +47,6 @@ gloo-utils = { workspace = true, optional = true }
 default = ["desktop"]
 web = [
     "dioxus/web",
-    "speki-provider/dexie",
     "dep:js-sys",
     "dep:wasm-bindgen",
     "dep:wasm-bindgen-futures",
@@ -57,4 +55,4 @@ web = [
     "dep:gloo",
     "dep:gloo-utils"
 ]
-desktop = ["dioxus/desktop", "speki-provider/fs"]
+desktop = ["dioxus/desktop"]

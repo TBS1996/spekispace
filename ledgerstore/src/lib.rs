@@ -453,7 +453,6 @@ pub struct Ledger<T: LedgerItem> {
     root: Arc<PathBuf>,
     gc_keep: usize,
     all_paths: Arc<RwLock<HashMap<StateHash, Arc<HashSet<Content>>>>>,
-    item_cache: Arc<RwLock<HashMap<T::Key, T>>>,
 }
 
 impl<T: LedgerItem> Ledger<T> {
@@ -698,7 +697,6 @@ impl<T: LedgerItem> Ledger<T> {
             root,
             gc_keep: 100,
             all_paths: Default::default(),
-            item_cache: Default::default(),
         };
 
         let ledger = Self::load_ledger(&selv.ledger_path());
@@ -1056,6 +1054,7 @@ impl<T: LedgerItem> Ledger<T> {
         }
     }
 
+    /*
     fn mem_rebuild(&self) -> Option<StateHash> {
         info!("starting inmemory rebuild");
         panic!();
@@ -1110,6 +1109,7 @@ impl<T: LedgerItem> Ledger<T> {
         */
         Some(state_hash)
     }
+    */
 
     /// Returns last applied entry, and list of entries not applied yet.
     fn applied_status(
@@ -1252,37 +1252,6 @@ impl<T: LedgerItem> Ledger<T> {
         }
 
         output
-    }
-
-    fn align_item_cache(&self, modified_item: T::Key) {
-        tracing::trace!("aligning item cache");
-        dbg!();
-
-        let dependents = self.get_dependents(modified_item);
-        dbg!(&dependents);
-        let mut to_delete = Vec::with_capacity(dependents.len() + 1);
-        to_delete.push(modified_item);
-
-        for dep in dependents {
-            if let Ok(dep) = dep.parse::<T::Key>() {
-                to_delete.push(dep);
-            }
-        }
-
-        dbg!();
-
-        let mut guard = self.item_cache.write().unwrap();
-
-        for key in &to_delete {
-            guard.remove(key);
-        }
-
-        tracing::trace!("removed {} items from item cache", to_delete.len());
-    }
-
-    fn clear_item_cache(&self) {
-        info!("clearing item cache");
-        self.item_cache.write().unwrap().clear();
     }
 
     /// Clones the current state, modifies it with the new entry, and returns the hash of the new state.

@@ -18,10 +18,7 @@ use speki_web::Node;
 use tracing::info;
 use uuid::Uuid;
 
-use crate::{
-    components::graph::GraphRep,
-    pages::{ExprEditor, InputEditor, RenderExpr},
-};
+use crate::pages::{ExprEditor, InputEditor, RenderExpr};
 
 use crate::{
     components::{CardTy, FilterComp, FilterEditor},
@@ -33,8 +30,7 @@ use super::OverlayEnum;
 
 pub fn overlay_card_viewer(overlay: Signal<Option<OverlayEnum>>) -> MyClosure {
     MyClosure::new(move |card: Signal<Card>| async move {
-        let graph = GraphRep::new().with_hook(overlay_card_viewer(overlay.clone()));
-        let viewer = CardViewer::new_from_card(card, graph).await;
+        let viewer = CardViewer::new_from_card(card).await;
         overlay.clone().set(Some(OverlayEnum::CardViewer(viewer)));
     })
 }
@@ -200,6 +196,7 @@ impl CardSelector {
                     for (matches, card) in sorted_cards {
                         let entry = cards.get(&card).unwrap();
 
+                        #[allow(deprecated)]
                         let card = entry.write_silent().entry().await.unwrap();
 
                         if forbidden_cards.read().contains(&card.read().id()) {
@@ -305,15 +302,6 @@ impl CardSelector {
         Self::new(false, vec![CardTy::Class])
             .with_title("pick class".into())
             .new_on_card_selected(f)
-    }
-
-    pub fn link_picker(f: MyClosure) -> Self {
-        Self {
-            title: Some("create link".to_string()),
-            on_card_selected: f,
-            allow_new: true,
-            ..Self::new(false, vec![])
-        }
     }
 
     pub fn dependency_picker(f: MyClosure) -> Self {
@@ -496,8 +484,6 @@ fn NewcardButton(
                     .with_allowed_cards(allowed_cards.clone())
                     .with_front_text(search.clone());
 
-                viewer.set_graph();
-
                 overlay.clone().set(Some(OverlayEnum::CardViewer(viewer)));
 
             },
@@ -562,10 +548,6 @@ fn TableRender(
                 }
             }
     }
-}
-
-fn parent_class(card: Signal<Card>) -> Option<String> {
-    None
 }
 
 fn maybe_dur(dur: Option<Duration>) -> String {

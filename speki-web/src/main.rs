@@ -2,9 +2,7 @@
 
 use std::{
     env, fs,
-    path::PathBuf,
     sync::atomic::{AtomicBool, Ordering},
-    time::Duration,
 };
 
 use async_openai::{config::OpenAIConfig, types::CreateCompletionRequestArgs};
@@ -12,17 +10,10 @@ use dioxus::prelude::*;
 use dioxus_logger::tracing::{info, Level};
 #[cfg(not(feature = "desktop"))]
 use firebase::AuthUser;
-use ledgerstore::LedgerEntry;
 use pages::{ImportState, ReviewPage};
-use serde::Deserialize;
-use speki_core::{
-    card::CardId,
-    ledger::{CardAction, CardEvent},
-    recall_rate::{Recall, Review as Xreview, ReviewAction, ReviewEvent},
-};
 
 use crate::{
-    pages::{About, Add, Browse, Import, Menu, Review},
+    pages::{Add, Browse, Import, Review},
     utils::App,
 };
 
@@ -33,120 +24,6 @@ mod nav;
 mod overlays;
 mod pages;
 mod utils;
-
-/*
-
-
-*/
-
-fn fix_history() {
-    #[derive(Deserialize, Debug)]
-    struct Event {
-        id: CardId,
-        grade: Recall,
-        timestamp: Duration,
-    }
-    #[derive(Deserialize, Debug)]
-    struct Record {
-        index: usize,
-        previous: Option<String>,
-        event: Event,
-    }
-
-    let mut recs = vec![];
-    for (idx, entry) in std::fs::read_dir("/home/tor/spekifs/snap4/history/entries")
-        .unwrap()
-        .into_iter()
-        .enumerate()
-    {
-        let entry = entry.unwrap();
-        if idx % 100 == 0 {
-            dbg!(idx);
-        }
-        let s = std::fs::read_to_string(entry.path()).unwrap();
-
-        let record: Record = match serde_json::from_str(&s) {
-            Ok(r) => r,
-            Err(e) => {
-                dbg!(e);
-                print!("{s}");
-                panic!();
-            }
-        };
-        recs.push(record);
-    }
-
-    recs.sort_by_key(|x| x.index);
-
-    let path = PathBuf::from("/home/tor/spekifs/snap4/history/newentries");
-    for record in recs {
-        let event = record.event;
-        let review = Xreview {
-            timestamp: event.timestamp,
-            grade: event.grade,
-        };
-        let event = ReviewEvent::new(event.id, ReviewAction::Insert(review));
-        let entry = LedgerEntry {
-            previous: record.previous,
-            index: record.index,
-            event,
-        };
-
-        entry.save(&path);
-    }
-}
-
-fn fix_lol() {
-    #[derive(Deserialize, Debug)]
-    struct Event {
-        action: Vec<CardAction>,
-        id: CardId,
-    }
-    #[derive(Deserialize, Debug)]
-    struct Record {
-        index: usize,
-        previous: Option<String>,
-        event: Event,
-    }
-
-    let mut recs = vec![];
-    for (idx, entry) in std::fs::read_dir("/home/tor/spekifs/snap4/rawcard/entries")
-        .unwrap()
-        .into_iter()
-        .enumerate()
-    {
-        let entry = entry.unwrap();
-        if idx % 100 == 0 {
-            dbg!(idx);
-        }
-        let s = std::fs::read_to_string(entry.path()).unwrap();
-
-        let record: Record = match serde_json::from_str(&s) {
-            Ok(r) => r,
-            Err(e) => {
-                dbg!(e);
-                print!("{s}");
-                panic!();
-            }
-        };
-        recs.push(record);
-    }
-
-    recs.sort_by_key(|x| x.index);
-
-    let path = PathBuf::from("/home/tor/spekifs/snap4/rawcard/newentries");
-    for record in recs {
-        let mut event = record.event;
-        let event = CardEvent::new(event.id, event.action.remove(0));
-        let entry = LedgerEntry {
-            previous: record.previous,
-            index: record.index,
-            event,
-        };
-
-        entry.save(&path);
-    }
-}
 
 pub use async_openai::Client;
 
@@ -167,91 +44,6 @@ fn load_api_key() -> Option<String> {
             .to_owned(),
     )
 }
-
-/*
-pub async fn ask_openai_card(card: Card) -> String {
-    let provider = APP.read().inner().card_provider.clone();
-
-    let namespace: Option<String> = match card.namespace() {
-        Some(id) => Some(provider.load(id).unwrap().front_side().to_string()),
-        None => None,
-    };
-
-    match card.clone_base().data.clone() {
-        speki_core::CardType::Instance { name, class, .. } => {
-            let class = provider.load(class).unwrap();
-            let mut s = format!(
-                "this card is an instance of the class: {}.",
-                class.front_side().to_string()
-            );
-
-            for parent_class in class.parent_classes() {
-                let parent_class = provider.load(parent_class).unwrap();
-                let x = format!(
-                    "which is a subclass of: {}",
-                    parent_class.front_side().to_string()
-                );
-                s.push_str(&x);
-            }
-        }
-        speki_core::CardType::Normal { front, back } => {},
-        speki_core::CardType::Unfinished { front } => {},
-        speki_core::CardType::Attribute {
-            attribute,
-            back,
-            instance,
-        } => {
-
-        }
-        speki_core::CardType::Class {
-            name, parent_class, ..
-        } => {
-            let mut s = format!("this card is a class type. ");
-
-            for parent_class in card.parent_classes() {
-                let parent_class = provider.load(parent_class).unwrap();
-                let x = format!(
-                    "which is a subclass of: {}",
-                    parent_class.front_side().to_string()
-                );
-                s.push_str(&x);
-            }
-        }
-        speki_core::CardType::Statement { front } => todo!(),
-        speki_core::CardType::Event {
-            front,
-            start_time,
-            end_time,
-            parent_event,
-        } => todo!(),
-    }
-
-    let config = OpenAIConfig::new().with_api_key(load_api_key());
-    let client = Client::with_config(config);
-
-    let prefix: &'static str = "you are a flashcard assistant.
-Answer the user's prompt with the shortest accurate answer possible — one fact, name, or definition. Never explain or elaborate.
-Do not give examples to explain further. keep it very succinct.
-
-If the prompt is not a question but simply hte name of a concept or thing in general, simply define the thing.
-
-user prompt:
-";
-
-    let prompt = format!("{} {}", prefix, prompt.into());
-
-    let request = CreateCompletionRequestArgs::default()
-        .model("gpt-3.5-turbo-instruct")
-        .prompt(prompt)
-        .max_tokens(40_u32)
-        .build()
-        .unwrap();
-
-    let response = client.completions().create(request).await.unwrap();
-
-    response.choices.first().unwrap().text.clone()
-}
-*/
 
 pub async fn ask_openai(key: String, prompt: impl Into<String>) -> String {
     let config = OpenAIConfig::new().with_api_key(key);
@@ -375,8 +167,7 @@ pub struct Point {
 }
 
 static APP: GlobalSignal<App> = Signal::global(App::new);
-static IS_SHORT: GlobalSignal<bool> = Signal::global(|| screen_height_in_inches().unwrap() < 4.);
-static CURRENT_ROUTE: GlobalSignal<Route> = Signal::global(|| Route::Menu {});
+static CURRENT_ROUTE: GlobalSignal<Route> = Signal::global(|| Route::Review {});
 
 #[cfg(not(feature = "desktop"))]
 static LOGIN_STATE: GlobalSignal<Option<AuthUser>> = Signal::global(|| None);
@@ -407,23 +198,11 @@ fn Wrapper() -> Element {
     rsx! {
         div {
             class: "h-screen overflow-hidden flex flex-col",
+            crate::nav::nav {}
 
-            if !IS_SHORT() {
-                crate::nav::nav {}
-
-                div {
-                    class: "flex-1 overflow-hidden",
-                    Outlet::<Route> {}
-                }
-            }
-
-            if IS_SHORT() {
-                div {
-                    class: "flex-1 overflow-hidden",
-                    Outlet::<Route> {}
-                }
-
-                crate::nav::nav {}
+            div {
+                class: "flex-1 overflow-hidden",
+                Outlet::<Route> {}
             }
         }
     }
@@ -432,16 +211,12 @@ fn Wrapper() -> Element {
 #[derive(Copy, Clone, Routable, Debug, PartialEq, Hash, Eq)]
 pub enum Route {
     #[layout(Wrapper)]
-    #[route("/menu")]
-    Menu {},
     #[route("/")]
     Review {},
     #[route("/add")]
     Add {},
     #[route("/browse")]
     Browse {},
-    #[route("/about")]
-    About {},
     #[route("/import")]
     Import {},
     #[route("/debug")]
@@ -451,11 +226,9 @@ pub enum Route {
 impl Route {
     pub fn label(&self) -> &'static str {
         match self {
-            Route::Menu {} => "menu",
             Route::Review {} => "review",
             Route::Add {} => "add cards",
             Route::Browse {} => "browse",
-            Route::About {} => "about",
             Route::Import {} => "import",
             Route::Debug {} => "debug",
         }

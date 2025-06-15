@@ -7,16 +7,6 @@ use dioxus::prelude::*;
 use serde::{Deserialize, Serialize};
 use tracing::trace;
 
-/// just to pass in the displayer thing, cause i can't pass in directly since it needs to implement partialeq mannn...
-#[derive(Clone)]
-pub struct Displayer<T>(pub Arc<Box<dyn Fn(&T) -> String>>);
-
-impl<T> PartialEq for Displayer<T> {
-    fn eq(&self, _: &Self) -> bool {
-        true
-    }
-}
-
 pub type DropdownClosure = Arc<Box<dyn Fn()>>;
 
 pub struct DropdownAction((String, DropdownClosure));

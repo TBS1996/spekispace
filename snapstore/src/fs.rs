@@ -259,9 +259,8 @@ impl<K: Copy + Eq + FromStr + ToString + Hash> SnapFs<K> {
 
         for entry in WalkDir::new(&path).follow_links(true) {
             let Ok(entry) = entry else {
-                dbg!(entry);
+                let _ = dbg!(entry);
                 panic!();
-                continue;
             };
             let path = entry.path();
 
@@ -284,9 +283,8 @@ impl<K: Copy + Eq + FromStr + ToString + Hash> SnapFs<K> {
 
         for entry in WalkDir::new(&path).follow_links(true) {
             let Ok(entry) = entry else {
-                dbg!(entry);
+                let _ = dbg!(entry);
                 panic!();
-                continue;
             };
             let path = entry.path();
 
@@ -691,7 +689,7 @@ impl Content {
         match self {
             Self::File(original) => match hard_link(original, &link) {
                 Ok(()) => {}
-                Err(e) => {}
+                Err(_) => {}
             },
             Self::Symlink(original) => {
                 dbg!(original, link);

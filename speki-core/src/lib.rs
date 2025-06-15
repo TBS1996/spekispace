@@ -3,13 +3,12 @@ use card_provider::CardProvider;
 use cardfilter::CardFilter;
 use dioxus_logger::tracing::info;
 use ledger::{CardAction, CardEvent};
-use ledgerstore::{CacheKey, LedgerItem};
+use ledgerstore::CacheKey;
 use ledgerstore::{Ledger, TimeProvider};
 use metadata::Metadata;
 use recall_rate::History;
 use set::Set;
 use std::fmt::Display;
-use std::ops::Deref;
 use std::{fmt::Debug, sync::Arc, time::Duration};
 use tracing::trace;
 
@@ -33,26 +32,6 @@ pub use recall_rate::SimpleRecall;
 pub struct DepCacheKey {
     id: CardId,
     ty: RefType,
-}
-
-pub struct SavedItem<T: LedgerItem> {
-    id: T::Key,
-    item: T,
-    ledger: Ledger<T>,
-}
-
-impl<T: LedgerItem> SavedItem<T> {
-    pub fn id(&self) -> T::Key {
-        self.id
-    }
-}
-
-impl<T: LedgerItem> Deref for SavedItem<T> {
-    type Target = T;
-
-    fn deref(&self) -> &Self::Target {
-        &self.item
-    }
 }
 
 #[derive(Clone, PartialEq, PartialOrd, Hash, Eq, Debug)]
@@ -124,22 +103,6 @@ impl AsRef<str> for CardProperty {
         }
     }
 }
-
-/*
-impl CardProperty {
-    /// Gets identifier and value of cache entry
-    pub fn to_parts(&self) -> (&'static str, String) {
-        let proptype: &'static str = self.as_ref();
-
-        match self {
-            CardProperty::Bigram([a, b]) => (proptype, format!("{a}{b}")),
-            CardProperty::Suspended(flag) => (proptype, format!("{flag}")),
-            CardProperty::CardType(ctype) => (proptype, format!("{ctype:?}")),
-            CardProperty::AttrId(id) => (proptype, id.to_string()),
-        }
-    }
-}
-0*/
 
 pub trait RecallCalc {
     fn recall_rate(&self, reviews: &History, current_unix: Duration) -> Option<RecallRate>;

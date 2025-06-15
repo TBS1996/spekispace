@@ -6,12 +6,12 @@ use std::{collections::BTreeSet, rc::Rc, sync::Arc};
 use speki_core::{
     card::{CardId, EvalText},
     cardfilter::CardFilter,
-    collection::{DynCard, MaybeCard},
+    collection::DynCard,
     ledger::CardAction,
     recall_rate::Recall,
     Card,
 };
-use tracing::{info, trace};
+use tracing::info;
 
 use crate::{
     components::RenderDependents,
@@ -19,7 +19,6 @@ use crate::{
         card_selector::{CardSelector, MyClosure},
         cardviewer::CardViewer,
     },
-    pages::play_audio,
     APP,
 };
 
@@ -81,12 +80,6 @@ fn ReviewButtons(
                     onclick: move |_| {
 
                         show_backside.set(true);
-
-                        if let Some(audio) = card.read().back_audio() {
-                            play_audio(&audio.data, "audio/mpeg");
-                    }
-
-
                     },
                     "show backside"
                 }
@@ -113,51 +106,6 @@ pub struct ReviewSession {
     cards: Vec<DynCard>,
     filter: CardFilter,
     thecards: BTreeSet<Arc<Card>>,
-}
-
-impl ReviewSession {
-    pub async fn new(cards: Vec<DynCard>, filter: CardFilter) -> Self {
-        let mut selv = Self {
-            cards,
-            filter,
-            thecards: Default::default(),
-        };
-        let thecards = selv.expand().await;
-        selv.thecards = thecards;
-        selv
-    }
-
-    pub async fn expand(&self) -> BTreeSet<Arc<Card>> {
-        let provider = APP.read().inner().card_provider();
-        let mut out: BTreeSet<Arc<Card>> = Default::default();
-
-        for card in &self.cards {
-            let cards = card.evaluate(provider.clone());
-            let cardqty = cards.len();
-            for (idx, card) in cards.into_iter().enumerate() {
-                if idx % 100 == 0 {
-                    trace!("eval {}/{}", idx, cardqty);
-                }
-                let card = match card {
-                    MaybeCard::Id(id) => provider.load(id).unwrap(),
-                    MaybeCard::Card(card) => card,
-                };
-
-                if self.filter.filter(card.clone()).await {
-                    out.insert(card.clone());
-                }
-
-                for dependency in card.recursive_dependencies() {
-                    let card = provider.load(dependency).unwrap();
-                    if self.filter.filter(card.clone()).await {
-                        out.insert(card.clone());
-                    }
-                }
-            }
-        }
-
-        out
-    }
 }
 
 #[component]
@@ -208,10 +156,6 @@ pub fn ReviewRender(
             "4" if bck => Recall::Perfect,
             " " => {
                 show_backside.clone().set(true);
-
-                if let Some(audio) = card.back_audio() {
-                    play_audio(&audio.data, "audio/mpeg");
-                }
 
                 return;
             }
@@ -289,15 +233,6 @@ impl Queue {
 
     fn next(&mut self) {
         if !self.upcoming.is_empty() {
-            let id = self.current().unwrap();
-            spawn(async move {
-                if let Some(card) = APP.read().try_load_card(id).await {
-                    if let Some(audio) = card.clone().read().front_audio() {
-                        play_audio(&audio.data, "audio/mpeg");
-                    }
-                }
-            });
-
             self.passed.push(self.upcoming.remove(0));
         }
     }
@@ -416,7 +351,7 @@ fn Infobar(
                     let overlay = overlay.clone();
                     spawn(async move {
                         let card = card.clone();
-                        let viewer = CardViewer::new_from_card(card, Default::default()).await;
+                        let viewer = CardViewer::new_from_card(card).await;
                         let viewer = OverlayEnum::CardViewer(viewer);
                         overlay.clone().set(Some(viewer));
                     });
@@ -517,7 +452,7 @@ fn RenderDependencies(
                         onclick: move|_|{
                             let card = card.clone();
                             spawn(async move{
-                                let viewer = CardViewer::new_from_card(card, Default::default()).await;
+                                let viewer = CardViewer::new_from_card(card).await;
                                 overlay.clone().set(Some(OverlayEnum::CardViewer(viewer)));
                             });
                         },
@@ -566,7 +501,7 @@ fn RenderEvalText(eval: EvalText, overlay: Signal<Option<OverlayEnum>>) -> Eleme
                                     onclick: move |_| {
                                         spawn(async move {
                                             let card = APP.read().load_card_sync(id);
-                                            let props = CardViewer::new_from_card(card, Default::default()).await;
+                                            let props = CardViewer::new_from_card(card).await;
                                             overlay.clone().set(Some(OverlayEnum::CardViewer(props)));
                                         });
                                     },

@@ -81,8 +81,6 @@ pub type CacheHash = Hashed;
 pub type HashAndContents = (Hashed, Vec<Content>);
 
 use std::fmt::{Debug, Display};
-use std::path::PathBuf;
-use std::sync::Arc;
 use std::hash::{DefaultHasher, Hash, Hasher};
 
 use fs::Content;
@@ -106,12 +104,6 @@ impl<PK: Clone + Display, RK: Clone + Display> Display for CacheKey<PK, RK> {
     }
 }
 
-/// The information needed to locate a leaf directory.
-pub struct LeafKey {
-    state: String,
-    components: Vec<char>,
-}
-
 #[derive(Debug)]
 pub struct KeyFoo<'a> {
     key: &'a str,
@@ -122,31 +114,4 @@ pub(crate) fn get_hash<T: Hash>(item: &T) -> Hashed {
     let mut hasher = DefaultHasher::new();
     item.hash(&mut hasher);
     format!("{:x}", hasher.finish())
-}
-
-/// Hmm do i even need to do that thing where i get an itempath that recursively checks if the path exist at every point
-/// and then create it o nthe fly if not exist when fetching?
-/// can't i just directly see if the leafdir exist, if not, create it, and save each path to it, if it already exist i just don't save it
-
-pub struct LeafdirStorage {
-    blob: Arc<PathBuf>,
-}
-
-impl LeafdirStorage {
-    /// so uh this has to exist i guess, so should be used when fetching an item lol
-    fn leafdir_path(&self, key: LeafKey) -> PathBuf {
-        todo!()
-    }
-
-    /// so when you have some new leafdir to save, this is it lol.
-    /// so let's seee...
-    /// i guess we have to start on the end, save the content as a new leafdir, where the dir name is the hash of its contents
-    fn save_leafdir(
-        &self,
-        prev_hash: Option<&str>,
-        cmps: Vec<char>,
-        contents: Vec<(String, PathBuf)>,
-    ) -> LeafKey {
-        todo!()
-    }
 }

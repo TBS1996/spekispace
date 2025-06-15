@@ -12,7 +12,6 @@ use crate::components::audioupload::AudioUpload;
 use crate::{
     components::{dropdown::DropComponent, DropDownMenu},
     overlays::OverlayEnum,
-    IS_SHORT,
 };
 
 #[derive(EnumIter, Clone, Serialize, Deserialize, PartialEq)]
@@ -66,34 +65,6 @@ pub struct FrontPut {
     pub audio: Signal<Option<Audio>>,
 }
 
-/*
-
-    let selected_text = use_signal(|| "nothing yet".to_string());
-
-    rsx! {
-        div {
-            onmouseup: move |_| {
-                let mut selected_text = selected_text.clone();
-                spawn(async move {
-                    let mut eval = document::eval(r#"
-                        const sel = window.getSelection();
-                        dioxus.send(sel ? sel.toString() : "NO_SELECTION");
-                    "#);
-
-                    if let Ok(val) = eval.recv::<String>().await {
-                        selected_text.set(val);
-                    }
-                });
-            },
-            "Select some text in this box.",
-            p {
-                "You selected: {selected_text}"
-            }
-        }
-    }
-
-*/
-
 #[cfg(feature = "desktop")]
 #[component]
 #[cfg(feature = "desktop")]
@@ -105,14 +76,12 @@ pub fn FrontPutRender(
 ) -> Element {
     use crate::components::set_card_link;
 
-    let placeholder = if IS_SHORT.cloned() { "Front side" } else { "" };
+    let placeholder = "Front side";
 
     rsx! {
         div {
             class: "block text-gray-700 text-sm font-medium",
-            if !IS_SHORT() {
-                "Front:"
-            }
+            "Front:"
 
             div {
                 class: "backside-editor flex items-center space-x-4",

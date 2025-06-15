@@ -192,13 +192,6 @@ pub enum BackSideConstraint {
     Card { ty: Option<CardId> },
 }
 
-/// Generic for a class. Any instance must define it.
-pub struct Generic {
-    id: Uuid,
-    name: String,
-    of_type: Option<CardId>,
-}
-
 #[derive(PartialEq, Debug, Clone, Serialize, Deserialize, Hash, Eq)]
 pub enum CardType {
     /// A specific instance of a class
@@ -339,7 +332,7 @@ impl CardType {
         }
     }
 
-    pub fn name_fixed_ledger(&self, provider: &FixedLedger<RawCard>) -> TextData {
+    pub fn name_fixed_ledger(&self) -> TextData {
         match self {
             CardType::Instance { name, .. } => name.clone(),
             CardType::Normal { front, .. } => front.clone(),
@@ -543,11 +536,7 @@ impl RawCard {
             } => {
                 let attr = self.get_attr_rec(ledger.to_owned()).unwrap();
 
-                let instance = ledger
-                    .load(instance)
-                    .unwrap()
-                    .data
-                    .name_fixed_ledger(ledger);
+                let instance = ledger.load(instance).unwrap().data.name_fixed_ledger();
                 let instance = instance.to_raw();
 
                 let new = attr.pattern.replace("{}", &instance);
@@ -708,7 +697,6 @@ fn resolve_text(txt: String, ledger: &FixedLedger<RawCard>, re: &Regex) -> Strin
             dbg!(&txt);
             dbg!(id);
             panic!();
-            continue;
         };
         let txt = card.cache_front(ledger);
         s.push_str(&resolve_text(txt, ledger, re));
