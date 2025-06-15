@@ -26,7 +26,6 @@ pub fn Import() -> Element {
             dropdown: state.uploader.dropdown.clone(),
             done: state.uploader.done.clone(),
             concept: state.uploader.concept.clone(),
-            overlay: state.uploader.overlay.clone(),
         }
     }
 }

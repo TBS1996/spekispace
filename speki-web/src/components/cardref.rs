@@ -6,6 +6,7 @@ use tracing::info;
 
 use super::CardTy;
 use crate::{
+    append_overlay,
     overlays::{
         card_selector::{CardSelector, MyClosure},
         cardviewer::TempNode,
@@ -40,7 +41,6 @@ impl Debug for CardRef {
 pub fn CardRefRender(
     selected_card: Signal<Option<CardId>>,
     placeholder: &'static str,
-    overlay: Signal<Option<OverlayEnum>>,
     allowed: Vec<CardTy>,
     on_select: Option<MyClosure>,
     on_deselect: Option<MyClosure>,
@@ -94,7 +94,7 @@ pub fn CardRefRender(
                     let  props = CardSelector::ref_picker(fun, dependents, filter.clone())
                         .with_allowed_cards(allowed);
 
-                        overlay.clone().set(Some(OverlayEnum::CardSelector(props)));
+                        append_overlay(OverlayEnum::CardSelector(props));
                 },
             }
             if is_selected {

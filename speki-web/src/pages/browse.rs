@@ -6,7 +6,7 @@ use crate::{
         card_selector::{CardSelector, CardSelectorRender},
         Overender,
     },
-    APP,
+    APP, OVERLAY,
 };
 
 #[derive(Clone)]
@@ -27,7 +27,7 @@ pub fn Browse() -> Element {
         browse_state = BROWSE_STATE.cloned();
     }
 
-    let overlay = browse_state.browse_page.overlay.clone();
+    let overlay = dbg!(OVERLAY.read().get());
 
     rsx! {
         Overender {
@@ -39,12 +39,10 @@ pub fn Browse() -> Element {
                     on_card_selected: browse_state.browse_page.on_card_selected.clone(),
                     cards: browse_state.browse_page.cards.clone(),
                     allow_new: browse_state.browse_page.allow_new.clone(),
-                    done: browse_state.browse_page.done.clone(),
                     dependents: browse_state.browse_page.dependents.clone(),
                     allowed_cards: browse_state.browse_page.allowed_cards.clone(),
                     filtereditor: browse_state.browse_page.filtereditor.clone(),
                     filtermemo: browse_state.browse_page.filtermemo.clone(),
-                    overlay: browse_state.browse_page.overlay.clone(),
                     collection: browse_state.browse_page.collection,
                     edit_collection: browse_state.browse_page.edit_collection,
                 }

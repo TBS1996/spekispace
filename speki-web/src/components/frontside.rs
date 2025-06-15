@@ -9,10 +9,7 @@ use tracing::info;
 #[cfg(feature = "web")]
 use crate::components::audioupload::AudioUpload;
 
-use crate::{
-    components::{dropdown::DropComponent, DropDownMenu},
-    overlays::OverlayEnum,
-};
+use crate::components::{dropdown::DropComponent, DropDownMenu};
 
 #[derive(EnumIter, Clone, Serialize, Deserialize, PartialEq)]
 pub enum CardTy {
@@ -72,7 +69,6 @@ pub fn FrontPutRender(
     dropdown: DropDownMenu<CardTy>,
     mut text: Signal<String>,
     audio: Signal<Option<Audio>>,
-    mut overlay: Signal<Option<OverlayEnum>>,
 ) -> Element {
     use crate::components::set_card_link;
 
@@ -99,8 +95,7 @@ pub fn FrontPutRender(
                     oninput: move |evt| text.set(evt.value()),
                     onmouseup: move |e| {
                         let text = text.clone();
-                        let overlay = overlay.clone();
-                        set_card_link(text, overlay, e.modifiers().shift());
+                        set_card_link(text, e.modifiers().shift());
                     },
                 }
 

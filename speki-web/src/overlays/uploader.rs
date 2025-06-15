@@ -8,7 +8,6 @@ use strum::{EnumIter, IntoEnumIterator};
 
 use crate::{
     components::{cardref::CardRefRender, dropdown::DropComponent, CardRef, CardTy, DropDownMenu},
-    overlays::OverlayEnum,
     APP,
 };
 
@@ -87,7 +86,6 @@ pub struct Uploader {
     pub dropdown: DropDownMenu<Extraction>,
     pub done: Signal<bool>,
     pub concept: CardRef,
-    pub overlay: Signal<Option<OverlayEnum>>,
 }
 
 impl Uploader {
@@ -131,7 +129,6 @@ impl Uploader {
             done: Signal::new_in_scope(Default::default(), ScopeId(3)),
             dropdown,
             concept,
-            overlay: Default::default(),
         }
     }
 }
@@ -162,7 +159,6 @@ pub fn UploadRender(props: Uploader) -> Element {
     let concept = props.concept.clone();
     let concept2 = props.concept.clone();
     let selv = props.clone();
-    let overlay = props.overlay.clone();
 
     rsx! {
         div {
@@ -183,7 +179,6 @@ pub fn UploadRender(props: Uploader) -> Element {
                             on_deselect: concept.on_deselect.clone(),
                             dependent: concept.dependent.clone(),
                             allowed: concept.allowed.clone(),
-                            overlay: overlay.clone(),
                         },
                     }
 

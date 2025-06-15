@@ -20,7 +20,7 @@ use speki_web::{Node, NodeId, NodeMetadata};
 use tracing::info;
 
 use crate::{
-    ask_openai,
+    append_overlay, ask_openai,
     components::{
         backside::BackPutRender, cardref::CardRefRender, frontside::FrontPutRender, BackPut,
         CardRef, CardTy, DropDownMenu, FrontPut, RenderDependents,
@@ -30,7 +30,7 @@ use crate::{
         card_selector::{CardSelector, MyClosure},
         OverlayEnum,
     },
-    APP,
+    pop_overlay, APP,
 };
 
 #[component]
@@ -56,16 +56,14 @@ pub fn CardViewerRender(props: CardViewer) -> Element {
                 editor:props.editor.clone(),
                 dependents:props.dependents.clone(),
                 save_hook:props.save_hook.clone(),
-                is_done:props.is_done.clone(),
                 old_card:props.old_card.clone(),
                 old_meta:props.old_meta.clone(),
                 tempnode:props.tempnode.clone(),
-                overlay:props.overlay.clone(),
             }
 
-            RenderDependencies { card_text: props.editor.front.text.clone(), card_id: old_card, dependencies: props.editor.dependencies.clone(), overlay: props.overlay.clone()}
+            RenderDependencies { card_text: props.editor.front.text.clone(), card_id: old_card, dependencies: props.editor.dependencies.clone()}
             if let Some(card_id) = old_card {
-                RenderDependents { card_id, overlay: props.overlay.clone(), hidden: false}
+                RenderDependents { card_id, hidden: false}
             }
         }
     }
@@ -316,7 +314,6 @@ fn RenderDependencies(
     card_text: Signal<String>,
     card_id: Option<CardId>,
     dependencies: Signal<Vec<Signal<Card>>>,
-    overlay: Signal<Option<OverlayEnum>>,
 ) -> Element {
     let show_graph = "opacity-100 visible";
 
@@ -352,7 +349,7 @@ fn RenderDependencies(
                                 if let Some(id)  = card_id {
                                     props = props.with_forbidden_cards(vec![id]);
                                 }
-                                overlay.clone().set(Some(OverlayEnum::CardSelector(props)));
+                                append_overlay(OverlayEnum::CardSelector(props));
                             });
                         },
                         "➕"
@@ -368,7 +365,7 @@ fn RenderDependencies(
                         let card = card.clone();
                         spawn(async move{
                             let viewer = CardViewer::new_from_card(card).await;
-                            overlay.clone().set(Some(OverlayEnum::CardViewer(viewer)));
+                            append_overlay(OverlayEnum::CardViewer(viewer));
                         });
                     },
                     "{card}"
@@ -413,22 +410,18 @@ pub struct CardViewer {
     pub editor: CardEditor,
     pub dependents: Signal<Vec<Node>>,
     pub save_hook: Option<MyClosure>,
-    pub is_done: Signal<bool>,
     pub old_card: Signal<Option<Card>>,
     pub old_meta: Signal<Option<NodeMetadata>>,
     pub tempnode: TempNode,
-    pub overlay: Signal<Option<OverlayEnum>>,
 }
 
 impl PartialEq for CardViewer {
     fn eq(&self, other: &Self) -> bool {
         self.editor == other.editor
             && self.dependents == other.dependents
-            && self.is_done == other.is_done
             && self.old_card == other.old_card
             && self.old_meta == other.old_meta
             && self.tempnode == other.tempnode
-            && self.overlay == other.overlay
     }
 }
 
@@ -699,12 +692,10 @@ impl CardViewer {
         Self {
             editor,
             dependents,
-            is_done: Signal::new_in_scope(false, ScopeId(3)),
             old_card: Signal::new_in_scope(Some(card.cloned()), ScopeId(3)),
             save_hook: None,
             tempnode,
             old_meta: Signal::new_in_scope(Some(meta), ScopeId::APP),
-            overlay: Signal::new_in_scope(Default::default(), ScopeId::APP),
         }
     }
 
@@ -753,13 +744,11 @@ impl CardViewer {
 
         Self {
             editor,
-            is_done: Signal::new_in_scope(false, ScopeId(3)),
             old_card: Signal::new_in_scope(None, ScopeId(3)),
             save_hook: None,
             dependents,
             tempnode,
             old_meta: Signal::new_in_scope(None, ScopeId::APP),
-            overlay: Signal::new_in_scope(Default::default(), ScopeId::APP),
         }
     }
 
@@ -797,7 +786,6 @@ fn RenderInputs(props: CardViewer) -> Element {
                 back: props.editor.back.clone(),
                 default_question: props.editor.default_question.clone(),
                 concept: props.editor.concept.clone(),
-                overlay: props.overlay.clone(),
                 ty: ty.cloned(),
                 card_id,
                 namespace: props.editor.namespace.clone(),
@@ -808,7 +796,7 @@ fn RenderInputs(props: CardViewer) -> Element {
         div {
             if let Some(card) = props.old_card.cloned() {
                 if deletable {
-                    DeleteButton{card: card.id(), isdone: props.is_done.clone(), overlay: props.overlay.clone()}
+                    DeleteButton{card: card.id()}
                 }
                 Suspend { card: props.old_card.clone() }
             }
@@ -830,7 +818,6 @@ fn InputElements(
     back: BackPut,
     default_question: Signal<String>,
     concept: CardRef,
-    overlay: Signal<Option<OverlayEnum>>,
     ty: CardTy,
     card_id: Option<CardId>,
     namespace: CardRef,
@@ -844,7 +831,7 @@ fn InputElements(
     let inner_attrs = attrs.cloned();
 
     rsx! {
-        FrontPutRender { dropdown: front.dropdown.clone(), text: front.text.clone(), audio: front.audio.clone(), overlay: overlay.clone() }
+        FrontPutRender { dropdown: front.dropdown.clone(), text: front.text.clone(), audio: front.audio.clone() }
 
         div {
             class: "block text-gray-700 text-sm font-medium mb-2",
@@ -857,7 +844,6 @@ fn InputElements(
                 on_deselect: namespace.on_deselect.clone(),
                 dependent: namespace.dependent.clone(),
                 allowed: namespace.allowed.clone(),
-                overlay: overlay.clone(),
                 filter: namespace.filter.clone(),
             },
         }
@@ -870,7 +856,6 @@ fn InputElements(
                     text: back.text.clone(),
                     dropdown: back.dropdown.clone(),
                     ref_card: back.ref_card.clone(),
-                    overlay: overlay.clone(),
                     audio: back.audio.clone(),
                 }
             },
@@ -880,7 +865,6 @@ fn InputElements(
                     text: back.text.clone(),
                     dropdown: back.dropdown.clone(),
                     ref_card: back.ref_card.clone(),
-                    overlay: overlay.clone(),
                     audio: back.audio.clone(),
                 }
 
@@ -896,7 +880,6 @@ fn InputElements(
                         on_deselect: concept.on_deselect.clone(),
                         dependent: concept.dependent.clone(),
                         allowed: concept.allowed.clone(),
-                        overlay: overlay.clone(),
                         filter: concept.filter.clone(),
                     },
 
@@ -908,7 +891,6 @@ fn InputElements(
                     text: back.text.clone(),
                     dropdown: back.dropdown.clone(),
                     ref_card: back.ref_card.clone(),
-                    overlay: overlay.clone(),
                     audio: back.audio.clone(),
                 }
 
@@ -923,7 +905,6 @@ fn InputElements(
                         on_deselect: concept.on_deselect.clone(),
                         dependent: concept.dependent.clone(),
                         allowed: concept.allowed.clone(),
-                        overlay: overlay.clone(),
                         filter: concept.filter.clone(),
                     },
                 }
@@ -945,7 +926,6 @@ fn InputElements(
                                                 text: answer.text.clone(),
                                                 dropdown: answer.dropdown.clone(),
                                                 ref_card: answer.ref_card.clone(),
-                                                overlay: overlay.clone(),
                                                 audio: answer.audio.clone(),
                                             }
                                         }
@@ -957,7 +937,6 @@ fn InputElements(
                                             CardRefRender {
                                                 selected_card: answer.selected_card(),
                                                 placeholder: "pick ittt",
-                                                overlay: overlay.clone(),
                                                 allowed: vec![CardTy::Instance],
                                                 filter: answer.filter.clone(),
                                              }
@@ -977,7 +956,6 @@ fn InputElements(
                                                             text: answer.text.clone(),
                                                             dropdown: answer.dropdown.clone(),
                                                             ref_card: answer.ref_card.clone(),
-                                                            overlay: overlay.clone(),
                                                             audio: answer.audio.clone(),
                                                         }
                                                     }
@@ -989,7 +967,6 @@ fn InputElements(
                                                         CardRefRender {
                                                             selected_card: answer.selected_card(),
                                                             placeholder: "pick ittt",
-                                                            overlay: overlay.clone(),
                                                             allowed: vec![CardTy::Instance],
                                                             filter: answer.filter.clone(),
                                                         }
@@ -1051,7 +1028,7 @@ fn InputElements(
                         oninput: move |evt| pattern.set(evt.value()),
                     }
 
-                    CardRefRender { selected_card: backty.selected_card(), placeholder: "answer type", allowed: vec![CardTy::Class] , overlay: overlay.clone(), filter: speki_core::set::SetExpr::union_with([DynCard::CardType(speki_core::card::CType::Class)])}
+                    CardRefRender { selected_card: backty.selected_card(), placeholder: "answer type", allowed: vec![CardTy::Class] , filter: speki_core::set::SetExpr::union_with([DynCard::CardType(speki_core::card::CType::Class)])}
 
                     }
                 }
@@ -1107,17 +1084,13 @@ fn DisplayHistory(history: MyHistory, now: Duration) -> Element {
 }
 
 #[component]
-fn DeleteButton(
-    card: CardId,
-    isdone: Signal<bool>,
-    overlay: Signal<Option<OverlayEnum>>,
-) -> Element {
+fn DeleteButton(card: CardId) -> Element {
     rsx! {
         button {
             class: "mt-2 inline-flex items-center text-white bg-gray-800 border-0 py-1 px-3 focus:outline-none hover:bg-gray-700 rounded text-base md:mt-0",
             onclick: move |_| {
                 APP.read().inner().provider.cards.insert_ledger(TheLedgerEvent::new_delete(card)).unwrap();
-                isdone.clone().set(true);
+                pop_overlay();
             },
             "delete"
         }
@@ -1204,8 +1177,6 @@ fn save_button(CardViewer: CardViewer) -> Element {
                 if let Some(card) = selv.editor.clone().into_cardrep() {
                     let selveste = selv.clone();
                     spawn(async move {
-
-
                         let mut events: Vec<CardEvent> = vec![];
 
                         let id = selveste.old_card.cloned().map(|card|card.id()).unwrap_or_else(CardId::new_v4);
@@ -1285,7 +1256,7 @@ fn save_button(CardViewer: CardViewer) -> Element {
                         }
 
                         selveste.reset().await;
-                        selv.is_done.clone().set(true);
+                        pop_overlay();
                     });
                 }
             },
@@ -1302,7 +1273,6 @@ fn save_button(CardViewer: CardViewer) -> Element {
 fn add_dep(selv: CardViewer) -> Element {
     let selv = selv.clone();
     let front = selv.editor.front.text.cloned();
-    let overlay = selv.overlay.clone();
     rsx! {
         button {
             class: "mt-2 inline-flex items-center text-white bg-gray-800 border-0 py-1 px-3 focus:outline-none hover:bg-gray-700 rounded text-base md:mt-0",
@@ -1316,23 +1286,18 @@ fn add_dep(selv: CardViewer) -> Element {
                     let old_card = selv.old_card.cloned();
                     async move {
                         if let Some(mut old_card) = old_card {
-                            old_card.add_dependency(card.read().id()).await;
+                        old_card.add_dependency(card.read().id()).await;
+                            }
                         }
                     }
-                }
-
-
-            );
+                );
 
                 info!("1 scope is ! {:?}", current_scope_id().unwrap());
                 let thefront = front.clone();
-
-                spawn(async move {
-                    let dependent: Node = selv2.tempnode.clone().into();
-                    let props = CardSelector::dependency_picker(fun).with_dependents(vec![dependent]).with_default_search(thefront.clone());
-                    overlay.clone().set(Some(OverlayEnum::CardSelector(props)));
-                    info!("2 scope is ! {:?}", current_scope_id().unwrap());
-                });
+                let dependent: Node = selv2.tempnode.clone().into();
+                let props = CardSelector::dependency_picker(fun).with_dependents(vec![dependent]).with_default_search(thefront.clone());
+                append_overlay(OverlayEnum::CardSelector(props));
+                info!("2 scope is ! {:?}", current_scope_id().unwrap());
             },
             "add dependency"
         }

@@ -1,5 +1,5 @@
-use crate::styles;
 use crate::{
+    append_overlay,
     components::{
         dropdown::{ActionDropdown, DropComponent, DropdownAction, DropdownClosure},
         FilterComp, FilterEditor,
@@ -11,6 +11,7 @@ use crate::{
     },
     APP,
 };
+use crate::{styles, OVERLAY};
 use dioxus::prelude::*;
 use ledgerstore::{LedgerItem, TheLedgerEvent};
 use speki_core::card::CType;
@@ -40,7 +41,6 @@ pub struct ReviewPage {
     filter: FilterEditor,
     sets: Signal<Vec<SetEditor>>,
     cardfilter: Memo<CardFilter>,
-    overlay: Signal<Option<OverlayEnum>>,
 }
 
 impl ReviewPage {
@@ -68,7 +68,6 @@ impl ReviewPage {
             filter,
             sets,
             cardfilter,
-            overlay: Default::default(),
         }
     }
 }
@@ -79,7 +78,7 @@ pub fn Review() -> Element {
     let editor = state.filter.clone();
     tracing::info!("memo lol: {:?}", &state.cardfilter);
 
-    let overlay = state.overlay.clone();
+    let overlay = OVERLAY.read().get();
     let sets = state.sets.clone();
 
     rsx! {
@@ -89,7 +88,7 @@ pub fn Review() -> Element {
                 div {
                     class: "flex flex-row items-start min-h-screen space-y-4 justify-start w-full",
                     FilterComp {editor}
-                    RenderSets {filter: state.filter.to_filter(), sets, overlay }
+                    RenderSets {filter: state.filter.to_filter(), sets }
                 }
             }
         }
@@ -101,7 +100,6 @@ fn RenderInput(
     filter: CardFilter,
     input: InputEditor,
     #[props(default = 0)] depth: usize,
-    overlay: Signal<Option<OverlayEnum>>,
 ) -> Element {
     let ledger = APP.read().inner().provider.sets.clone();
 
@@ -125,12 +123,12 @@ fn RenderInput(
                     p { "{leaf}" }}
             },
             InputEditor::Reference(id) => {
-                rsx!{RenderSet { filter, set: SetEditor::new(&ledger.load(id).unwrap()), depth: depth + 1, overlay}}
+                rsx!{RenderSet { filter, set: SetEditor::new(&ledger.load(id).unwrap()), depth: depth + 1}}
             },
             InputEditor::Expr(expr) => {
                 rsx!{
 
-                    RenderExpr {filter, inputs: expr.inputs.clone(), ty: expr.ty.clone(), depth: depth + 1, overlay}
+                    RenderExpr {filter, inputs: expr.inputs.clone(), ty: expr.ty.clone(), depth: depth + 1}
                 }
             },
         }
@@ -160,7 +158,6 @@ pub fn RenderExpr(
     filter: CardFilter,
     inputs: Signal<Vec<InputEditor>>,
     ty: Signal<SetExprDiscriminants>,
-    overlay: Signal<Option<OverlayEnum>>,
     #[props(default = 0)] depth: usize,
 ) -> Element {
     let class = format!("pl-{}", depth * 4);
@@ -261,7 +258,7 @@ pub fn RenderExpr(
             ],
             chosen: None,
         };
-        overlay.clone().set(Some(OverlayEnum::OverlaySelector(sel)));
+        append_overlay(OverlayEnum::OverlaySelector(sel));
     }));
 
     let expr_opt = DropdownAction::new("expr".to_string(), expr_func);
@@ -299,7 +296,7 @@ pub fn RenderExpr(
                         },
                         "❌"
                     }
-                    RenderInput { filter: filter.clone(), input: input.clone(), depth: depth + 1, overlay }
+                    RenderInput { filter: filter.clone(), input: input.clone(), depth: depth + 1 }
                 }
 
             }
@@ -312,7 +309,6 @@ fn RenderSet(
     filter: CardFilter,
     set: SetEditor,
     #[props(default = 0)] depth: usize,
-    overlay: Signal<Option<OverlayEnum>>,
     #[props(default = true)] editable: bool,
 ) -> Element {
     let mut name = set.name.clone();
@@ -435,9 +431,7 @@ fn RenderSet(
 
 
                             let revses = OverlayEnum::Review(ReviewState::new(filtered_cards));
-                            overlay.clone().set(Some(revses));
-
-
+                            append_overlay(revses);
                         });
 
 
@@ -495,7 +489,7 @@ fn RenderSet(
                             let expr = real_set.clone().unwrap();
                             let title = set_name.clone();
                             let viewer = CardSelector::new(false, vec![]).with_set(expr).with_title(title).with_edit_collection(false);
-                            overlay.set(Some(OverlayEnum::CardSelector(viewer)));
+                            append_overlay(OverlayEnum::CardSelector(viewer));
                         },
                         "view"
                     }
@@ -518,7 +512,7 @@ fn RenderSet(
 
             }
             if editable {
-                RenderExpr { filter, inputs: set.expr.cloned().inputs.clone(), ty: set.expr.cloned().ty.clone(), depth: depth + 1 , overlay}
+                RenderExpr { filter, inputs: set.expr.cloned().inputs.clone(), ty: set.expr.cloned().ty.clone(), depth: depth + 1}
             }
         }
     }
@@ -728,11 +722,7 @@ impl SetEditor {
 }
 
 #[component]
-fn RenderSets(
-    filter: CardFilter,
-    sets: Signal<Vec<SetEditor>>,
-    overlay: Signal<Option<OverlayEnum>>,
-) -> Element {
+fn RenderSets(filter: CardFilter, sets: Signal<Vec<SetEditor>>) -> Element {
     let all_set: SetEditor = SetEditor::new(&Set {
         id: Uuid::nil(),
         name: "all cards".to_string(),
@@ -749,9 +739,9 @@ fn RenderSets(
     rsx! {
         div {
             class: "flex flex-col mb-10",
-            RenderSet { filter: filter.clone(), set: all_set , overlay, editable: false}
+            RenderSet { filter: filter.clone(), set: all_set, editable: false}
             for set in sets.cloned() {
-                RenderSet { filter: filter.clone(), set , overlay}
+                RenderSet { filter: filter.clone(), set}
             }
 
             button {

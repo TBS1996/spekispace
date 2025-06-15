@@ -2,7 +2,10 @@
 
 use std::{
     env, fs,
-    sync::atomic::{AtomicBool, Ordering},
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc,
+    },
 };
 
 use async_openai::{config::OpenAIConfig, types::CreateCompletionRequestArgs};
@@ -13,6 +16,7 @@ use firebase::AuthUser;
 use pages::{ImportState, ReviewPage};
 
 use crate::{
+    overlays::OverlayEnum,
     pages::{Add, Browse, Import, Review},
     utils::App,
 };
@@ -168,6 +172,107 @@ pub struct Point {
 
 static APP: GlobalSignal<App> = Signal::global(App::new);
 static CURRENT_ROUTE: GlobalSignal<Route> = Signal::global(|| Route::Review {});
+pub static OVERLAY: GlobalSignal<Overlays> = Signal::global(Default::default);
+
+pub fn pop_overlay() {
+    OVERLAY.write().pop();
+}
+
+pub fn append_overlay(overlay: OverlayEnum) {
+    OVERLAY.write().append(overlay);
+}
+
+pub fn set_overlay(overlay: Option<OverlayEnum>) {
+    OVERLAY.write().set(overlay);
+}
+
+#[derive(Debug, Default)]
+pub struct Overlays {
+    review: (Signal<Option<Arc<OverlayEnum>>>, Vec<Arc<OverlayEnum>>),
+    add_cards: (Signal<Option<Arc<OverlayEnum>>>, Vec<Arc<OverlayEnum>>),
+    browse: (Signal<Option<Arc<OverlayEnum>>>, Vec<Arc<OverlayEnum>>),
+}
+
+impl Overlays {
+    pub fn get(&self) -> Signal<Option<Arc<OverlayEnum>>> {
+        let route = CURRENT_ROUTE.cloned();
+
+        match route {
+            Route::Review {} => self.review.0.clone(),
+            Route::Add {} => self.add_cards.0.clone(),
+            Route::Browse {} => self.browse.0.clone(),
+            _ => todo!(),
+        }
+    }
+
+    pub fn set(&mut self, new_overlay: Option<OverlayEnum>) {
+        let new_overlay = new_overlay.map(Arc::new);
+        let route = CURRENT_ROUTE.cloned();
+
+        match route {
+            Route::Review {} => {
+                self.review.0.set(new_overlay.clone());
+                self.review.1.pop();
+                self.review.1.extend(new_overlay);
+            }
+            Route::Add {} => {
+                self.add_cards.0.set(new_overlay.clone());
+                self.add_cards.1.pop();
+                self.add_cards.1.extend(new_overlay);
+            }
+            Route::Browse {} => {
+                self.browse.0.set(new_overlay.clone());
+                self.browse.1.pop();
+                self.browse.1.extend(new_overlay);
+            }
+            _ => todo!(),
+        }
+    }
+
+    pub fn append(&mut self, new_overlay: OverlayEnum) {
+        let new_overlay = Arc::new(new_overlay);
+        let route = CURRENT_ROUTE.cloned();
+
+        match route {
+            Route::Review {} => {
+                self.review.0.set(Some(new_overlay.clone()));
+                self.review.1.push(new_overlay);
+            }
+            Route::Add {} => {
+                self.add_cards.0.set(Some(new_overlay.clone()));
+                self.add_cards.1.push(new_overlay);
+            }
+            Route::Browse {} => {
+                self.browse.0.set(Some(new_overlay.clone()));
+                self.browse.1.push(new_overlay);
+            }
+            _ => todo!(),
+        }
+    }
+
+    pub fn pop(&mut self) {
+        let route = CURRENT_ROUTE.cloned();
+
+        match route {
+            Route::Review {} => {
+                self.review.1.pop();
+                let new = self.review.1.last().cloned();
+                self.review.0.set(new);
+            }
+            Route::Add {} => {
+                self.add_cards.1.pop();
+                let new = self.add_cards.1.last().cloned();
+                self.add_cards.0.set(new);
+            }
+            Route::Browse {} => {
+                self.browse.1.pop();
+                let new = self.browse.1.last().cloned();
+                self.browse.0.set(new);
+            }
+            _ => todo!(),
+        }
+    }
+}
 
 #[cfg(not(feature = "desktop"))]
 static LOGIN_STATE: GlobalSignal<Option<AuthUser>> = Signal::global(|| None);

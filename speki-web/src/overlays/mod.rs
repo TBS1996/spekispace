@@ -6,8 +6,9 @@ pub mod uploader;
 //pub mod itemselector;
 //pub mod textinput;
 
-use crate::overlays::{
-    card_selector::CardSelector, cardviewer::CardViewer, reviewsession::ReviewState,
+use crate::{
+    overlays::{card_selector::CardSelector, cardviewer::CardViewer, reviewsession::ReviewState},
+    pop_overlay, set_overlay,
 };
 use card_selector::CardSelectorRender;
 use cardviewer::CardViewerRender;
@@ -30,11 +31,7 @@ impl PartialEq for OverlayChoice {
 impl Eq for OverlayChoice {}
 
 #[component]
-pub fn OverlaySelectorRender(
-    title: String,
-    choices: Vec<OverlayChoice>,
-    overlay: Signal<Option<OverlayEnum>>,
-) -> Element {
+pub fn OverlaySelectorRender(title: String, choices: Vec<OverlayChoice>) -> Element {
     rsx! {
         p{"{title}"}
 
@@ -46,7 +43,7 @@ pub fn OverlaySelectorRender(
                 button {
                     onclick: move |_|{
                         let new = (choice.overlay)();
-                        overlay.clone().set(new);
+                        set_overlay(new);
                     },
                     "{choice.display}"
                 }
@@ -70,29 +67,6 @@ pub enum OverlayEnum {
     OverlaySelector(OverlaySelector),
 }
 
-impl OverlayEnum {
-    /// The overlay belonging to the overlay
-    pub fn overlay(&self) -> Signal<Option<OverlayEnum>> {
-        match self {
-            OverlayEnum::Review(elm) => elm.overlay.clone(),
-            OverlayEnum::OverlaySelector(_) => {
-                Signal::new_in_scope(Default::default(), ScopeId::APP)
-            }
-            OverlayEnum::CardViewer(elm) => elm.overlay.clone(),
-            OverlayEnum::CardSelector(elm) => elm.overlay.clone(),
-        }
-    }
-
-    pub fn is_done(&self) -> bool {
-        match self {
-            OverlayEnum::Review(elm) => elm.is_done.cloned(),
-            OverlayEnum::CardViewer(elm) => elm.is_done.cloned(),
-            OverlayEnum::CardSelector(elm) => elm.done.cloned(),
-            OverlayEnum::OverlaySelector(elm) => elm.chosen.is_some(),
-        }
-    }
-}
-
 impl Debug for OverlayEnum {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -110,35 +84,27 @@ impl Debug for OverlayEnum {
 /// todo: should overlay be a memo or something of done signal ? i mean, when we press done, overlay should be closed? or is that unceessary
 /// abstraction?
 #[component]
-pub fn Overender(overlay: Signal<Option<OverlayEnum>>, root: Element) -> Element {
-    // If the given view has an overlay, before we render it we check if the overlay is marked as done
-    // if marked as done, we set the overlay to none and in the next block will render the current view instead.
-    if overlay.as_ref().is_some_and(|ol| ol.is_done()) {
-        overlay.set(None);
-    }
-
+pub fn Overender(overlay: Signal<Option<Arc<OverlayEnum>>>, root: Element) -> Element {
     rsx! {
         match overlay.cloned() {
             None => root,
             Some(elm) => {
-                let theoverlay = elm.overlay(); // the overlay of the overlay, so to speak.
-                let root = rsx!{
+                rsx!{
                     div {
                         button {
                             onclick: move |_| {
                                 // Note that pressing X will close its parents overlay, which represents the current view.
-                                overlay.clone().set(None);
+                                pop_overlay();
                             },
                             "❌"
                         }
 
-                        match elm {
+                        match &*elm {
                             OverlayEnum::Review(elm) => rsx!{
                                 ReviewRender {
                                     queue: elm.queue.clone(),
                                     show_backside: elm.show_backside.clone(),
                                     tot: elm.tot_len,
-                                    overlay: elm.overlay.clone(),
                                 }
                             },
                             OverlayEnum::CardViewer(elm) => rsx!{
@@ -146,15 +112,13 @@ pub fn Overender(overlay: Signal<Option<OverlayEnum>>, root: Element) -> Element
                                     editor: elm.editor.clone(),
                                     dependents: elm.dependents.clone(),
                                     save_hook: elm.save_hook.clone(),
-                                    is_done: elm.is_done.clone(),
                                     old_card: elm.old_card.clone(),
                                     old_meta: elm.old_meta.clone(),
                                     tempnode: elm.tempnode.clone(),
-                                    overlay: elm.overlay.clone(),
                                 }
                             },
                             OverlayEnum::OverlaySelector(elm) => rsx! {
-                                OverlaySelectorRender { title: elm.title.clone(), choices: elm.choices.clone(), overlay: overlay.clone()  }
+                                OverlaySelectorRender { title: elm.title.clone(), choices: elm.choices.clone()}
                             },
                             OverlayEnum::CardSelector(elm) => rsx!{
                                 CardSelectorRender {
@@ -163,21 +127,17 @@ pub fn Overender(overlay: Signal<Option<OverlayEnum>>, root: Element) -> Element
                                     on_card_selected: elm.on_card_selected.clone(),
                                     cards: elm.cards.clone(),
                                     allow_new: elm.allow_new.clone(),
-                                    done: elm.done.clone(),
                                     dependents: elm.dependents.clone(),
                                     allowed_cards: elm.allowed_cards.clone(),
                                     filtereditor: elm.filtereditor.clone(),
                                     filtermemo: elm.filtermemo.clone(),
-                                    overlay: elm.overlay.clone(),
-                                    collection: elm.collection,
+                                    collection: elm.collection.clone(),
                                     edit_collection: elm.edit_collection,
                                 }
                             },
                         }
                     }
-                };
-
-                rsx! { Overender {overlay: theoverlay, root} }
+                }
             }
         }
     }

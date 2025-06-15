@@ -1,8 +1,11 @@
 use dioxus::prelude::*;
 
 use crate::{
-    overlays::cardviewer::{CardViewer, CardViewerRender},
-    overlays::Overender,
+    overlays::{
+        cardviewer::{CardViewer, CardViewerRender},
+        Overender,
+    },
+    OVERLAY,
 };
 
 static ADD_CARDS: GlobalSignal<AddCardState> = Signal::global(AddCardState::new);
@@ -23,21 +26,20 @@ impl AddCardState {
 #[component]
 pub fn Add() -> Element {
     let selv = ADD_CARDS.cloned();
+    let overlay = OVERLAY.read().get();
 
     rsx! {
         Overender {
-            overlay: selv.viewer.overlay.clone(),
+            overlay,
             root:
-            rsx! {
-                CardViewerRender {
-                    editor: selv.viewer.editor.clone(),
-                    dependents: selv.viewer.dependents.clone(),
-                    save_hook: selv.viewer.save_hook.clone(),
-                    is_done: selv.viewer.is_done.clone(),
-                    old_card: selv.viewer.old_card.clone(),
-                    old_meta: selv.viewer.old_meta.clone(),
-                    tempnode: selv.viewer.tempnode.clone(),
-                    overlay: selv.viewer.overlay.clone(),
+                rsx! {
+                    CardViewerRender {
+                        editor: selv.viewer.editor.clone(),
+                        dependents: selv.viewer.dependents.clone(),
+                        save_hook: selv.viewer.save_hook.clone(),
+                        old_card: selv.viewer.old_card.clone(),
+                        old_meta: selv.viewer.old_meta.clone(),
+                        tempnode: selv.viewer.tempnode.clone(),
                 }
             }
         }

@@ -14,12 +14,13 @@ use speki_core::{
 use tracing::info;
 
 use crate::{
+    append_overlay,
     components::RenderDependents,
     overlays::{
         card_selector::{CardSelector, MyClosure},
         cardviewer::CardViewer,
     },
-    APP,
+    pop_overlay, APP,
 };
 
 use super::OverlayEnum;
@@ -113,12 +114,10 @@ pub fn ReviewRender(
     queue: Signal<Queue>,
     show_backside: Signal<bool>,
     tot: Resource<usize>,
-    overlay: Signal<Option<OverlayEnum>>,
 ) -> Element {
     let card_id = match queue.read().current() {
         Some(id) => id,
         None => {
-            debug_assert!(false);
             return rsx! {"if you can read this, i messed up"};
         }
     };
@@ -178,7 +177,6 @@ pub fn ReviewRender(
                         class: "flex-none w-full",
                         Infobar {
                             card: card.clone(),
-                            overlay: overlay.clone(),
                             tot,
                             queue: queue.clone(),
 
@@ -194,13 +192,11 @@ pub fn ReviewRender(
                             RenderDependencies{
                                 card: card.clone(),
                                 explicit_dependencies,
-                                overlay: overlay.clone(),
                                 show_backside: show_backside.cloned(),
                                 queue: queue.clone(),
                             }
                             RenderDependents{
                                 card_id: card.id(),
-                                overlay: overlay.clone(),
                                 hidden: !(*show_backside.read()),
                             }
                         }
@@ -209,7 +205,7 @@ pub fn ReviewRender(
                             class: "flex-none w-full md:w-1/2 p-4 box-border overflow-y-auto overflow-x-hidden order-2 md:order-1",
                             style: "min-height: 0; max-height: 100%;",
                              CardSides {
-                                front, back, queue, card, show_backside, overlay: overlay.clone()
+                                front, back, queue, card, show_backside,
                              }
                         }
                     }
@@ -234,6 +230,11 @@ impl Queue {
     fn next(&mut self) {
         if !self.upcoming.is_empty() {
             self.passed.push(self.upcoming.remove(0));
+            if self.upcoming.is_empty() {
+                pop_overlay();
+            }
+        } else {
+            pop_overlay();
         }
     }
 
@@ -256,14 +257,12 @@ pub struct ReviewState {
     pub tot_len: Resource<usize>,
     pub show_backside: Signal<bool>,
     pub is_done: Memo<bool>,
-    pub overlay: Signal<Option<OverlayEnum>>,
 }
 
 impl ReviewState {
     pub fn new(thecards: Vec<CardId>) -> Self {
         info!("start review for {} cards", thecards.len());
 
-        let overlay: Signal<Option<OverlayEnum>> = Signal::new_in_scope(None, ScopeId::APP);
         let queue: Signal<Queue> = Signal::new_in_scope(Queue::new(thecards), ScopeId::APP);
 
         let is_done: Memo<bool> =
@@ -276,18 +275,12 @@ impl ReviewState {
             show_backside: Signal::new_in_scope(Default::default(), ScopeId::APP),
             is_done,
             queue,
-            overlay,
         }
     }
 }
 
 #[component]
-fn Infobar(
-    card: Arc<Card>,
-    overlay: Signal<Option<OverlayEnum>>,
-    tot: Resource<usize>,
-    queue: Signal<Queue>,
-) -> Element {
+fn Infobar(card: Arc<Card>, tot: Resource<usize>, queue: Signal<Queue>) -> Element {
     let card = Signal::new_in_scope(Arc::unwrap_or_clone(card), ScopeId::APP);
     let tot = queue.read().tot_len();
     let pos = queue.read().passed_len();
@@ -312,7 +305,7 @@ fn Infobar(
                         .collect();
                     spawn(async move {
                         let props = CardSelector::new(false, Default::default()).with_dyncards(passed).with_edit_collection(false);
-                        overlay.clone().set(Some(OverlayEnum::CardSelector(props)));
+                        append_overlay(OverlayEnum::CardSelector(props));
                     });
                 },
                 "{pos}"
@@ -337,7 +330,7 @@ fn Infobar(
                     };
                     spawn(async move {
                         let props = CardSelector::new(false, Default::default()).with_dyncards(total).with_edit_collection(false);
-                        overlay.clone().set(Some(OverlayEnum::CardSelector(props)));
+                        append_overlay(OverlayEnum::CardSelector(props));
                     });
                 },
                 "{tot}"
@@ -345,18 +338,17 @@ fn Infobar(
         }
     }
             button {
-                class: "cursor-pointer text-gray-500 hover:text-gray-700",
+                class: "{crate::styles::BLACK_BUTTON}",
                 onclick: move |_| {
                     let card = card2.clone();
-                    let overlay = overlay.clone();
                     spawn(async move {
                         let card = card.clone();
                         let viewer = CardViewer::new_from_card(card).await;
                         let viewer = OverlayEnum::CardViewer(viewer);
-                        overlay.clone().set(Some(viewer));
+                        append_overlay(viewer);
                     });
                 },
-                "✏️"
+                "edit"
             }
             Suspend {
                 card,
@@ -391,7 +383,6 @@ fn Suspend(card: Signal<Card>, mut queue: Signal<Queue>) -> Element {
 fn RenderDependencies(
     mut card: Arc<Card>,
     explicit_dependencies: Vec<Signal<Card>>,
-    overlay: Signal<Option<OverlayEnum>>,
     show_backside: bool,
     queue: Signal<Queue>,
 ) -> Element {
@@ -437,7 +428,7 @@ fn RenderDependencies(
                             spawn(async move {
                                 let front = format!("{}{}", card.print(), card.display_backside());
                                 let props = CardSelector::dependency_picker(fun).with_default_search(front).with_forbidden_cards(vec![card.id()]);
-                                overlay.clone().set(Some(OverlayEnum::CardSelector(props)));
+                                append_overlay(OverlayEnum::CardSelector(props));
                             });
                         },
                         "➕"
@@ -453,7 +444,7 @@ fn RenderDependencies(
                             let card = card.clone();
                             spawn(async move{
                                 let viewer = CardViewer::new_from_card(card).await;
-                                overlay.clone().set(Some(OverlayEnum::CardViewer(viewer)));
+                                append_overlay(OverlayEnum::CardViewer(viewer));
                             });
                         },
                         "{card}"
@@ -482,7 +473,7 @@ fn RenderDependencies(
 }
 
 #[component]
-fn RenderEvalText(eval: EvalText, overlay: Signal<Option<OverlayEnum>>) -> Element {
+fn RenderEvalText(eval: EvalText) -> Element {
     rsx! {
         div {
             class: "text-lg text-gray-700 text-center",
@@ -502,7 +493,7 @@ fn RenderEvalText(eval: EvalText, overlay: Signal<Option<OverlayEnum>>) -> Eleme
                                         spawn(async move {
                                             let card = APP.read().load_card_sync(id);
                                             let props = CardViewer::new_from_card(card).await;
-                                            overlay.clone().set(Some(OverlayEnum::CardViewer(props)));
+                                            append_overlay(OverlayEnum::CardViewer(props));
                                         });
                                     },
                                     " {s}"
@@ -523,7 +514,6 @@ fn CardSides(
     show_backside: Signal<bool>,
     card: Arc<Card>,
     queue: Signal<Queue>,
-    overlay: Signal<Option<OverlayEnum>>,
 ) -> Element {
     let card = Signal::new_in_scope(Arc::unwrap_or_clone(card), ScopeId::APP);
 
@@ -540,7 +530,7 @@ fn CardSides(
 
             div {
                 class: "mb-10",
-                RenderEvalText { eval: front, overlay: overlay.clone() }
+                RenderEvalText { eval: front}
             }
 
 
@@ -554,7 +544,7 @@ fn CardSides(
                     style: "margin-top: 4px; margin-bottom: 12px;",
                 }
 
-                RenderEvalText { eval: back, overlay: overlay.clone() }
+                RenderEvalText { eval: back}
 
             }
 

@@ -16,6 +16,7 @@ use speki_core::{card::CardId, collection::DynCard, Card};
 use dioxus::prelude::*;
 
 use crate::{
+    append_overlay,
     overlays::{
         card_selector::{CardSelector, MyClosure},
         cardviewer::CardViewer,
@@ -25,11 +26,7 @@ use crate::{
 };
 
 #[component]
-pub fn RenderDependents(
-    card_id: CardId,
-    overlay: Signal<Option<OverlayEnum>>,
-    hidden: bool,
-) -> Element {
+pub fn RenderDependents(card_id: CardId, hidden: bool) -> Element {
     let show_graph = if !hidden {
         "opacity-100 visible"
     } else {
@@ -77,7 +74,7 @@ pub fn RenderDependents(
                         onclick: move |_| {
                             spawn(async move {
                                 let props = CardViewer::new().with_dependency(card_id);
-                                overlay.clone().set(Some(OverlayEnum::CardViewer(props)));
+                                append_overlay(OverlayEnum::CardViewer(props));
                             });
                         },
 
@@ -92,7 +89,7 @@ pub fn RenderDependents(
                     onclick: move|_|{
                         spawn(async move{
                             let props = CardSelector::new(false, Default::default()).with_dyncards(vec![DynCard::Dependents(card_id)]);
-                            overlay.clone().set(Some(OverlayEnum::CardSelector(props)));
+                            append_overlay(OverlayEnum::CardSelector(props));
                         });
                     },
                     "view {qty} dependents"
@@ -105,7 +102,7 @@ pub fn RenderDependents(
                             let card = card.clone();
                             spawn(async move{
                                 let viewer = CardViewer::new_from_card(card).await;
-                                overlay.clone().set(Some(OverlayEnum::CardViewer(viewer)));
+                                append_overlay(OverlayEnum::CardViewer(viewer));
                             });
                         },
                         "{card}"
@@ -116,7 +113,7 @@ pub fn RenderDependents(
     }
 }
 
-pub fn set_card_link(text: Signal<String>, mut overlay: Signal<Option<OverlayEnum>>, alias: bool) {
+pub fn set_card_link(text: Signal<String>, alias: bool) {
     let mut eval = document::eval(
         r#"
         const sel = window.getSelection();
@@ -145,7 +142,7 @@ pub fn set_card_link(text: Signal<String>, mut overlay: Signal<Option<OverlayEnu
                 .new_on_card_selected(f)
                 .with_default_search(theval)
                 .with_allow_new(true);
-            overlay.set(Some(OverlayEnum::CardSelector(props)));
+            append_overlay(OverlayEnum::CardSelector(props));
         }
     });
 }

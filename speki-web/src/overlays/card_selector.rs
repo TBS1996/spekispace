@@ -18,7 +18,11 @@ use speki_web::Node;
 use tracing::info;
 use uuid::Uuid;
 
-use crate::pages::{ExprEditor, InputEditor, RenderExpr};
+use crate::{
+    append_overlay,
+    pages::{ExprEditor, InputEditor, RenderExpr},
+    set_overlay,
+};
 
 use crate::{
     components::{CardTy, FilterComp, FilterEditor},
@@ -28,10 +32,10 @@ use crate::{
 
 use super::OverlayEnum;
 
-pub fn overlay_card_viewer(overlay: Signal<Option<OverlayEnum>>) -> MyClosure {
+pub fn overlay_card_viewer() -> MyClosure {
     MyClosure::new(move |card: Signal<Card>| async move {
         let viewer = CardViewer::new_from_card(card).await;
-        overlay.clone().set(Some(OverlayEnum::CardViewer(viewer)));
+        append_overlay(OverlayEnum::CardViewer(viewer));
     })
 }
 
@@ -72,12 +76,10 @@ pub struct CardSelector {
     pub search: Signal<String>,
     pub on_card_selected: MyClosure,
     pub allow_new: bool,
-    pub done: Signal<bool>,
     pub dependents: Signal<Vec<Node>>,
     pub allowed_cards: Signal<Vec<CardTy>>,
     pub filtereditor: FilterEditor,
     pub filtermemo: Memo<Option<CardFilter>>,
-    pub overlay: Signal<Option<OverlayEnum>>,
     pub collection: ExprEditor,
     pub edit_collection: bool,
     pub cards: Resource<Vec<Signal<Card>>>,
@@ -132,9 +134,6 @@ impl CardSelector {
                 }
             })
         });
-
-        let overlay: Signal<Option<OverlayEnum>> =
-            Signal::new_in_scope(Default::default(), ScopeId::APP);
 
         let collection: ExprEditor = ExprEditor::from(filter);
         let col_cards = collection.expanded();
@@ -246,15 +245,13 @@ impl CardSelector {
             title: Some("select card".to_string()),
             edit_collection: true,
             search,
-            on_card_selected: overlay_card_viewer(overlay.clone()),
+            on_card_selected: overlay_card_viewer(),
             cards,
             allow_new: false,
-            done: Signal::new_in_scope(Default::default(), ScopeId::APP),
             dependents: Signal::new_in_scope(Default::default(), ScopeId::APP),
             allowed_cards,
             filtereditor,
             filtermemo,
-            overlay,
             collection,
             col_cards,
             default_search,
@@ -292,7 +289,6 @@ impl CardSelector {
             title: Some("choose reference".to_string()),
             on_card_selected: fun,
             allow_new: true,
-            done: Signal::new_in_scope(false, ScopeId(3)),
             dependents: Signal::new_in_scope(dependents, ScopeId(3)),
             ..Self::new_with_filter(false, vec![], filter)
         }
@@ -396,12 +392,10 @@ pub fn CardSelectorRender(
     on_card_selected: MyClosure,
     cards: Resource<Vec<Signal<Card>>>,
     allow_new: bool,
-    done: Signal<bool>,
     dependents: Signal<Vec<Node>>,
     allowed_cards: Signal<Vec<CardTy>>,
     filtereditor: FilterEditor,
     filtermemo: Memo<Option<CardFilter>>,
-    overlay: Signal<Option<OverlayEnum>>,
     collection: ExprEditor,
     edit_collection: bool,
 ) -> Element {
@@ -418,7 +412,7 @@ pub fn CardSelectorRender(
             }
 
             if edit_collection {
-                RenderExpr { filter, inputs: collection.inputs.clone(), ty: collection.ty.clone(), overlay: overlay.clone() }
+                RenderExpr { filter, inputs: collection.inputs.clone(), ty: collection.ty.clone()}
             }
         }
 
@@ -434,7 +428,7 @@ pub fn CardSelectorRender(
 
             div {
                 if allow_new {
-                    NewcardButton { on_card_selected: on_card_selected.clone(), done, overlay, dependents: dependents(), allowed_cards: allowed_cards.cloned(), search }
+                    NewcardButton { on_card_selected: on_card_selected.clone(), dependents: dependents(), allowed_cards: allowed_cards.cloned(), search }
                 }
 
                 input {
@@ -445,7 +439,7 @@ pub fn CardSelectorRender(
             }
 
             TableRender {
-                cards, on_card_selected, done
+                cards, on_card_selected
               }
             }
         }
@@ -455,8 +449,6 @@ pub fn CardSelectorRender(
 #[component]
 fn NewcardButton(
     on_card_selected: MyClosure,
-    done: Signal<bool>,
-    overlay: Signal<Option<OverlayEnum>>,
     dependents: Vec<Node>,
     allowed_cards: Vec<CardTy>,
     search: String,
@@ -467,14 +459,12 @@ fn NewcardButton(
             class: "bg-blue-500 text-white font-medium px-4 py-2 rounded-md hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-300 mr-10",
             onclick: move |_| {
 
-                let done = done.clone();
                 let closure = closure.clone();
                 let hook = MyClosure::new(move |card: Signal<Card>| {
                     let closure = closure.clone();
 
                     async move {
                         closure.call(card).await;
-                        done.clone().set(true);
                     }
                 });
 
@@ -484,7 +474,7 @@ fn NewcardButton(
                     .with_allowed_cards(allowed_cards.clone())
                     .with_front_text(search.clone());
 
-                overlay.clone().set(Some(OverlayEnum::CardViewer(viewer)));
+                set_overlay(Some(OverlayEnum::CardViewer(viewer)));
 
             },
             "new card"
@@ -493,11 +483,7 @@ fn NewcardButton(
 }
 
 #[component]
-fn TableRender(
-    cards: Resource<Vec<Signal<Card>>>,
-    on_card_selected: MyClosure,
-    done: Signal<bool>,
-) -> Element {
+fn TableRender(cards: Resource<Vec<Signal<Card>>>, on_card_selected: MyClosure) -> Element {
     let closure = Arc::new(on_card_selected.clone());
 
     let filtered_cards: Vec<_> = cards
@@ -506,47 +492,45 @@ fn TableRender(
         .into_iter()
         .take(1000)
         .zip(std::iter::repeat_with(|| Arc::clone(&closure)))
-        .map(|(card, closure)| (card.clone(), closure, done.clone()))
+        .map(|(card, closure)| (card.clone(), closure))
         .collect();
 
     rsx! {
-            div {
-                class: "flex-1 overflow-y-auto",
-                table {
-                    class: "min-w-full table-fixed border-collapse border border-gray-200",
-                    thead {
-                        class: "bg-gray-500",
-                        tr {
-                            th { class: "border border-gray-300 px-4 py-2 w-2/3", "Front" }
-                            th { class: "border border-gray-300 px-4 py-2 w-1/12", "Recall" }
-                            th { class: "border border-gray-300 px-4 py-2 w-1/12", "Stability" }
-                            th { class: "border border-gray-300 px-4 py-2 w-1/24", "Ty" }
-                        }
+        div {
+            class: "flex-1 overflow-y-auto",
+            table {
+                class: "min-w-full table-fixed border-collapse border border-gray-200",
+                thead {
+                    class: "bg-gray-500",
+                    tr {
+                        th { class: "border border-gray-300 px-4 py-2 w-2/3", "Front" }
+                        th { class: "border border-gray-300 px-4 py-2 w-1/12", "Recall" }
+                        th { class: "border border-gray-300 px-4 py-2 w-1/12", "Stability" }
+                        th { class: "border border-gray-300 px-4 py-2 w-1/24", "Ty" }
                     }
-                    tbody {
-                        for (card, _closure, is_done) in filtered_cards {
-                            tr {
-                                class: "hover:bg-gray-50 cursor-pointer",
-                                onclick: move |_| {
-                                    info!("clicky");
-                                    let card = card.clone();
-                                    let closure = _closure.clone();
-                                    let done = is_done.clone();
-                                    spawn(async move {
-                                        closure.call(card).await;
-                                        done.clone().set(true);
-                                    });
-                                },
+                }
+                tbody {
+                    for (card, _closure) in filtered_cards {
+                        tr {
+                            class: "hover:bg-gray-50 cursor-pointer",
+                            onclick: move |_| {
+                                info!("clicky");
+                                let card = card.clone();
+                                let closure = _closure.clone();
+                                spawn(async move {
+                                    closure.call(card).await;
+                                });
+                            },
 
-                                td { class: "border border-gray-300 px-4 py-2 w-2/3", "{card}" }
-                                td { class: "border border-gray-300 px-4 py-2 w-1/12", "{card.read().recall_rate().unwrap_or_default():.2}" }
-                                td { class: "border border-gray-300 px-4 py-2 w-1/12", "{maybe_dur(card.read().maturity())}"}
-                                td { class: "border border-gray-300 px-4 py-2 w-1/24", "{card.read().card_type().short_form()}" }
-                            }
+                            td { class: "border border-gray-300 px-4 py-2 w-2/3", "{card}" }
+                            td { class: "border border-gray-300 px-4 py-2 w-1/12", "{card.read().recall_rate().unwrap_or_default():.2}" }
+                            td { class: "border border-gray-300 px-4 py-2 w-1/12", "{maybe_dur(card.read().maturity())}"}
+                            td { class: "border border-gray-300 px-4 py-2 w-1/24", "{card.read().card_type().short_form()}" }
                         }
                     }
                 }
             }
+        }
     }
 }
 

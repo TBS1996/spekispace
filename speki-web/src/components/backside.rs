@@ -13,7 +13,7 @@ use tracing::info;
 use crate::components::audioupload::AudioUpload;
 use crate::{
     components::{cardref::CardRefRender, dropdown::DropComponent, CardRef, DropDownMenu},
-    overlays::{card_selector::MyClosure, cardviewer::TempNode, OverlayEnum},
+    overlays::{card_selector::MyClosure, cardviewer::TempNode},
     APP,
 };
 
@@ -34,7 +34,6 @@ pub fn BackPutRender(
     text: Signal<String>,
     dropdown: DropDownMenu<BackOpts>,
     ref_card: CardRef,
-    overlay: Signal<Option<OverlayEnum>>,
     audio: Signal<Option<Audio>>,
 ) -> Element {
     use std::str::FromStr;
@@ -106,8 +105,7 @@ pub fn BackPutRender(
                                         onmouseup: move |e| {
                                             let with_alias = e.modifiers().shift();
                                             let text = text.clone();
-                                            let overlay = overlay.clone();
-                                            set_card_link(text, overlay, with_alias);
+                                            set_card_link(text, with_alias);
                                         },
                                     }
                                 }
@@ -121,7 +119,6 @@ pub fn BackPutRender(
                                     dependent: ref_card.dependent.clone(),
                                     allowed: ref_card.allowed.clone(),
                                     filter: ref_card.filter.clone(),
-                                    overlay,
                                 }
                             },
                         }
