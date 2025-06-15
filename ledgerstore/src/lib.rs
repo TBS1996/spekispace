@@ -36,7 +36,9 @@ pub enum EventError<T: LedgerItem> {
 }
 
 /// Represents how a ledger mutates or creates an item.
-pub trait LedgerItem: Serialize + DeserializeOwned + Hash + Clone + 'static {
+pub trait LedgerItem:
+    Serialize + DeserializeOwned + Hash + Clone + Debug + Send + Sync + Eq + PartialEq + 'static
+{
     type Key: Copy
         + Eq
         + Hash
@@ -72,12 +74,20 @@ pub trait LedgerItem: Serialize + DeserializeOwned + Hash + Clone + 'static {
             Err(e) => return Err(EventError::Invariant(e)),
         };
 
-        if let Some(cycle) = new.find_cycle(ledger) {
+        let ledger = NewFixedLedger::new(ledger.clone(), new.clone());
+
+        if let Some(cycle) = new.find_cycle(&ledger) {
             return Err(EventError::Cycle(cycle));
         }
 
-        if let Err(e) = new.validate(ledger) {
+        if let Err(e) = new.validate(&ledger) {
             return Err(EventError::Invariant(e));
+        }
+
+        for dep in new.recursive_dependents(&ledger) {
+            if let Err(e) = dep.validate(&ledger) {
+                return Err(EventError::Invariant(e));
+            }
         }
 
         Ok(new)
@@ -87,7 +97,7 @@ pub trait LedgerItem: Serialize + DeserializeOwned + Hash + Clone + 'static {
 
     fn item_id(&self) -> Self::Key;
 
-    fn find_cycle(&self, ledger: &FixedLedger<Self>) -> Option<Vec<Self::Key>> {
+    fn find_cycle(&self, ledger: &NewFixedLedger<Self>) -> Option<Vec<Self::Key>> {
         fn dfs<T: LedgerItem>(
             current: T::Key,
             ledger: &FixedLedger<T>,
@@ -138,7 +148,7 @@ pub trait LedgerItem: Serialize + DeserializeOwned + Hash + Clone + 'static {
 
         dfs(
             self.item_id(),
-            ledger,
+            &ledger.fixed,
             &mut visiting,
             &mut visited,
             &mut parent,
@@ -148,7 +158,7 @@ pub trait LedgerItem: Serialize + DeserializeOwned + Hash + Clone + 'static {
 
     /// Assertions that should hold true. Like invariants with other cards that it references.
     /// called by run_event, if it returns error after an event is run, the event is not applied.
-    fn validate(&self, ledger: &FixedLedger<Self>) -> Result<(), Self::Error> {
+    fn validate(&self, ledger: &NewFixedLedger<Self>) -> Result<(), Self::Error> {
         let _ = ledger;
         Ok(())
     }
@@ -163,6 +173,45 @@ pub trait LedgerItem: Serialize + DeserializeOwned + Hash + Clone + 'static {
 
     fn dependencies(&self) -> HashSet<Self::Key> {
         self.ref_cache().into_values().flatten().collect()
+    }
+
+    fn recursive_dependents(&self, ledger: &NewFixedLedger<Self>) -> HashSet<Self>
+    where
+        Self: Sized,
+    {
+        let mut out: HashSet<Self> = HashSet::new();
+        let mut visited: HashSet<Self::Key> = HashSet::new();
+
+        fn visit<T: LedgerItem>(
+            key: T::Key,
+            ledger: &FixedLedger<T>,
+            out: &mut HashSet<T>,
+            visited: &mut HashSet<T::Key>,
+        ) where
+            T: Sized,
+        {
+            if !visited.insert(key) {
+                return;
+            }
+
+            if let Some(item) = ledger.load(key) {
+                out.insert(item.clone());
+
+                for dep_key in item.dependents(ledger) {
+                    visit(dep_key, ledger, out, visited);
+                }
+            }
+        }
+
+        for dep_key in self.dependents(&ledger.fixed) {
+            visit(dep_key, &ledger.fixed, &mut out, &mut visited);
+        }
+
+        out
+    }
+
+    fn dependents(&self, ledger: &FixedLedger<Self>) -> HashSet<Self::Key> {
+        ledger.get_dependents(self.item_id()).into_iter().collect()
     }
 
     /// List of defined properties that this item has.
@@ -241,6 +290,37 @@ pub type StateHash = Hashed;
 pub type LedgerHash = Hashed;
 pub type CacheHash = Hashed;
 
+#[derive(Clone)]
+pub struct NewFixedLedger<T: LedgerItem> {
+    pub fixed: FixedLedger<T>,
+    pub new: Arc<T>,
+}
+
+impl<T: LedgerItem> NewFixedLedger<T> {
+    pub fn new(ledger: FixedLedger<T>, new: T) -> Self {
+        Self {
+            fixed: ledger,
+            new: Arc::new(new),
+        }
+    }
+
+    pub fn load(&self, id: T::Key) -> Option<T> {
+        if self.new.item_id() == id {
+            Some(Arc::unwrap_or_clone(self.new.clone()))
+        } else {
+            self.fixed.load(id)
+        }
+    }
+
+    pub fn get_dependents(&self, id: T::Key) -> Vec<T::Key> {
+        if self.new.item_id() == id {
+            vec![]
+        } else {
+            self.fixed.get_dependents(id)
+        }
+    }
+}
+
 /*
 some idea..
 
@@ -292,6 +372,24 @@ impl<T: LedgerItem> FixedLedger<T> {
             Either::Right(mem) => mem
                 .get(&id.to_string())
                 .map(|data| serde_json::from_slice(&data).unwrap()),
+        }
+    }
+
+    pub fn get_dependents(&self, id: T::Key) -> Vec<T::Key> {
+        let Some(hash) = self.hash.as_deref() else {
+            return vec![];
+        };
+
+        match &self.inner {
+            Either::Left(ledger) => ledger
+                .get_the_cache(hash, &CacheKey::Dependents { id: id.to_string() })
+                .into_iter()
+                .map(|k| match k.parse() {
+                    Ok(k) => k,
+                    Err(_) => panic!(),
+                })
+                .collect(),
+            Either::Right(_) => todo!(),
         }
     }
 }
@@ -361,7 +459,7 @@ pub struct Ledger<T: LedgerItem> {
     item_cache: Arc<RwLock<HashMap<T::Key, T>>>,
 }
 
-impl<T: LedgerItem + Debug + Send + Sync> Ledger<T> {
+impl<T: LedgerItem> Ledger<T> {
     /// Map from a state hash, to a cash hash
     fn cache_map(&self) -> PathBuf {
         let p = self.root.join("cache").join("map");
@@ -413,7 +511,7 @@ impl<T: LedgerItem + Debug + Send + Sync> Ledger<T> {
     /// but if you rebuild entire kw store from ledger then updating cache for each gen takes too long
     /// so in htat case it'll just rebuild entire ledger then create a new cache snapshot  from scratch
     /// but in normal mode when one event run at a time it'll update the cachestate incrementally
-    fn get_the_cache(
+    pub fn get_the_cache(
         &self,
         state_hash: &str,
         cache_key: &CacheKey<T::PropertyType, T::RefType>,
@@ -588,7 +686,7 @@ impl<T: LedgerItem + Debug + Send + Sync> Ledger<T> {
     }
 }
 
-impl<T: LedgerItem + Debug + Send + Sync> Ledger<T> {
+impl<T: LedgerItem> Ledger<T> {
     pub fn new(root: &Path) -> Self {
         let root = Arc::new(PathBuf::from(root).join(Self::item_name()));
         fs::create_dir_all(&*root).unwrap();
@@ -687,7 +785,7 @@ impl<T: LedgerItem + Debug + Send + Sync> Ledger<T> {
     pub fn insert_ledger(&self, event: TheLedgerEvent<T>) -> Result<StateHash, EventError<T>> {
         if matches!(&event.action, TheLedgerAction::Delete) {
             match self.load(event.id) {
-                Some(item) if !item.dependencies().is_empty() => {
+                Some(_) if !self.get_dependents(event.id).is_empty() => {
                     return Err(EventError::DeletingWithDependencies);
                 }
                 Some(_) => {}
@@ -722,7 +820,7 @@ impl<T: LedgerItem + Debug + Send + Sync> Ledger<T> {
         }
 
         if !self.has_statehash() {
-            return self.mem_rebuild();
+            //return self.mem_rebuild();
         }
 
         self._state_hash(ledger.as_slice()).unwrap()
@@ -1259,7 +1357,7 @@ impl<T: LedgerItem + Debug + Send + Sync> Ledger<T> {
         };
 
         let id = item.item_id();
-        let item = item.run_event(event.clone(), &cachegetter)?;
+        let item = dbg!(item.run_event(event.clone(), &cachegetter))?;
         let new_caches = if update_cache {
             item.caches(&cachegetter)
         } else {

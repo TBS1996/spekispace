@@ -335,6 +335,7 @@ impl<K: Copy + Eq + FromStr + ToString + Hash> SnapFs<K> {
         item: Vec<u8>,
         new_content: &mut Vec<Content>,
     ) -> HashAndContents {
+        //panic!();
         let key = key.to_string();
         let key = key.as_str();
         let key = KeyFoo {

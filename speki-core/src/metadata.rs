@@ -9,7 +9,7 @@ use uuid::Uuid;
 
 use crate::{card::CardId, ledger::MetaAction};
 
-#[derive(Clone, Debug, Default, Deserialize, Serialize, Hash)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize, Hash, PartialEq, Eq)]
 pub struct Metadata {
     pub suspended: IsSuspended,
     id: Uuid,

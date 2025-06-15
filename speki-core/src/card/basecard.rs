@@ -1,7 +1,7 @@
 use super::*;
 use crate::{audio::AudioId, card_provider::CardProvider, CardProperty, RefType};
 use either::Either;
-use ledgerstore::{FixedLedger, LedgerItem};
+use ledgerstore::{FixedLedger, LedgerItem, NewFixedLedger};
 use omtrent::TimeStamp;
 use serde::{Deserialize, Serialize, Serializer};
 use std::{
@@ -180,10 +180,11 @@ pub type AttributeId = Uuid;
 /// For example, all instances of `Person` can have the quesiton "when was {} born?"
 ///
 /// Instances refer to both direct instances of the class, and instances of any sub-classes of the class.
-#[derive(PartialEq, Debug, Clone, Serialize, Deserialize, Hash)]
+#[derive(PartialEq, Debug, Clone, Serialize, Deserialize, Hash, Eq)]
 pub struct Attrv2 {
     pub id: AttributeId,
     pub pattern: String,
+    //
     pub back_type: Option<CardId>,
 }
 
@@ -198,7 +199,7 @@ pub struct Generic {
     of_type: Option<CardId>,
 }
 
-#[derive(PartialEq, Debug, Clone, Serialize, Deserialize, Hash)]
+#[derive(PartialEq, Debug, Clone, Serialize, Deserialize, Hash, Eq)]
 pub enum CardType {
     /// A specific instance of a class
     /// For example, the instance might be Elvis Presley where the concept would be "Person"
@@ -493,6 +494,13 @@ impl CardType {
         }
     }
 
+    pub fn parent_class(&self) -> Option<CardId> {
+        match self {
+            CardType::Class { parent_class, .. } => *parent_class,
+            _ => None,
+        }
+    }
+
     pub fn is_class(&self) -> bool {
         matches!(self, Self::Class { .. })
     }
@@ -504,7 +512,7 @@ impl CardType {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, Hash)]
+#[derive(Serialize, Deserialize, Debug, Clone, Hash, PartialEq, Eq)]
 pub struct RawCard {
     pub id: Uuid,
     /// The context of which the name of the card makes sense. For example, instead of writing `kubernetes node`, you can just
@@ -720,12 +728,147 @@ fn resolve_card(card: &RawCard, ledger: &FixedLedger<RawCard>) -> String {
     resolve_text(card.cache_front(ledger), ledger, &uuid_regex)
 }
 
+#[derive(Debug)]
+pub enum CardError {
+    InstanceOfNonClass,
+    AttributeOfNonInstance,
+    MissingAttribute,
+    DefaultQuestionNotClass,
+    WrongCardType,
+    AnswerMustBeCard,
+    SubClassOfNonClass,
+    BackTypeMustBeClass,
+}
+
+fn instance_is_of_type(instance: CardId, ty: CardId, ledger: &NewFixedLedger<RawCard>) -> bool {
+    let instance = ledger.load(instance).unwrap();
+    assert!(instance.data.is_instance());
+
+    get_parent_classes(ty, ledger)
+        .into_iter()
+        .find(|class| class.id == ty)
+        .is_some()
+}
+
+fn get_parent_classes(class: CardId, ledger: &NewFixedLedger<RawCard>) -> Vec<RawCard> {
+    let class = ledger.load(class).unwrap();
+    let mut classes: Vec<RawCard> = vec![class.clone()];
+    assert!(class.data.is_class());
+    let mut parent_class = class.parent_class();
+
+    while let Some(parent) = parent_class {
+        let class = ledger.load(parent).unwrap();
+        assert!(class.data.is_class());
+        parent_class = class.parent_class();
+        classes.push(class);
+    }
+
+    classes
+}
+
+fn get_attributes(class: CardId, ledger: &NewFixedLedger<RawCard>) -> Vec<Attrv2> {
+    let mut out: Vec<Attrv2> = vec![];
+    for class in get_parent_classes(class, ledger) {
+        if let CardType::Class { attrs, .. } = class.data {
+            out.extend(attrs);
+        } else {
+            panic!()
+        }
+    }
+    out
+}
+
 impl LedgerItem for RawCard {
-    type Error = ();
+    type Error = CardError;
     type Key = CardId;
     type RefType = RefType;
     type PropertyType = CardProperty;
     type Modifier = CardAction;
+
+    fn validate(&self, ledger: &NewFixedLedger<Self>) -> Result<(), Self::Error> {
+        match &self.data {
+            CardType::Instance {
+                name: _,
+                back: _,
+                class,
+            } => {
+                if !ledger.load(*class).unwrap().data.is_class() {
+                    return Err(CardError::InstanceOfNonClass);
+                }
+            }
+
+            CardType::Normal { front: _, back: _ } => {}
+            CardType::Unfinished { front: _ } => {}
+            CardType::Attribute {
+                attribute,
+                back: _,
+                instance,
+            } => {
+                if let CardType::Instance {
+                    name: _,
+                    back,
+                    class,
+                } = ledger.load(*instance).unwrap().data
+                {
+                    let class = ledger.load(class).unwrap();
+                    if class.data.is_class() {
+                        let attrs = get_attributes(class.id, &ledger);
+                        match attrs.into_iter().find(|attr| attr.id == *attribute) {
+                            Some(Attrv2 {
+                                back_type: Some(back_type),
+                                ..
+                            }) => {
+                                if let Some(BackSide::Card(answer)) = back {
+                                    if !instance_is_of_type(answer, back_type, &ledger) {
+                                        return Err(CardError::WrongCardType);
+                                    }
+                                } else {
+                                    return Err(CardError::AnswerMustBeCard);
+                                }
+                            }
+                            Some(_) => {}
+                            None => return Err(CardError::MissingAttribute),
+                        }
+                    } else {
+                        return Err(CardError::InstanceOfNonClass);
+                    }
+                } else {
+                    return Err(CardError::AttributeOfNonInstance);
+                }
+            }
+            CardType::Class {
+                name: _,
+                back: _,
+                parent_class,
+                default_question: _,
+                attrs,
+            } => {
+                if let Some(parent) = parent_class {
+                    if !ledger.load(*parent).unwrap().data.is_class() {
+                        return Err(CardError::SubClassOfNonClass);
+                    }
+                }
+
+                for attr in attrs {
+                    if let Some(back_type) = attr.back_type {
+                        if !ledger.load(back_type).unwrap().data.is_class() {
+                            return Err(CardError::BackTypeMustBeClass);
+                        }
+                    }
+                }
+            }
+            CardType::Statement { front: _ } => {}
+            // todo lol
+            CardType::Event {
+                front: _,
+                start_time: _,
+                end_time: _,
+                parent_event: _,
+            } => {}
+        }
+
+        Ok(())
+    }
 
     fn ref_cache(&self) -> HashMap<Self::RefType, HashSet<CardId>> {
         let mut out: HashMap<Self::RefType, HashSet<Uuid>> = Default::default();
@@ -869,14 +1012,14 @@ impl LedgerItem for RawCard {
         }
     }
 
-    fn inner_run_event(mut self, event: CardAction) -> Result<Self, ()> {
+    fn inner_run_event(mut self, event: CardAction) -> Result<Self, Self::Error> {
         match event {
             CardAction::SetDefaultQuestion(default) => match &mut self.data {
                 CardType::Class {
                     ref mut default_question,
                     ..
                 } => *default_question = default.map(|s| TextData::from_raw(&s)),
-                _ => return Err(()),
+                _ => return Err(CardError::DefaultQuestionNotClass),
             },
             CardAction::SetFrontAudio(audio) => {
                 self.front_audio = audio;

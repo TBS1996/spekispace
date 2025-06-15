@@ -57,7 +57,7 @@ impl LedgerItem for Set {
 
 pub type SetId = Uuid;
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Hash)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Hash, Eq)]
 pub struct Set {
     pub id: SetId,
     pub name: String,
