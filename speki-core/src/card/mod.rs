@@ -12,6 +12,7 @@ pub mod basecard;
 pub use basecard::*;
 
 use either::Either;
+use ledgerstore::{EventError, StateHash};
 use nonempty::NonEmpty;
 use serde::Deserializer;
 use serde_json::Value;
@@ -462,28 +463,23 @@ impl Card {
         }
     }
 
-    pub async fn set_ref(mut self, reff: CardId) -> Card {
+    pub async fn set_ref(mut self, reff: CardId) -> Result<Card, EventError<RawCard>> {
         let backside = BackSide::Card(reff);
         self.base = self.base.set_backside(backside);
         let action = CardAction::SetBackRef(reff);
         let event = CardEvent::new(self.id, action);
-        self.card_provider
-            .providers
-            .cards
-            .insert_ledger(event)
-            .unwrap();
-        self
+        self.card_provider.providers.cards.insert_ledger(event)?;
+        Ok(self)
     }
 
-    pub async fn add_dependency(&mut self, dependency: CardId) {
+    pub async fn add_dependency(
+        &mut self,
+        dependency: CardId,
+    ) -> Result<StateHash, EventError<RawCard>> {
         self.base.explicit_dependencies.insert(dependency);
         let action = CardAction::AddDependency(dependency);
         let event = CardEvent::new(self.id, action);
-        self.card_provider
-            .providers
-            .cards
-            .insert_ledger(event)
-            .unwrap();
+        self.card_provider.providers.cards.insert_ledger(event)
     }
 
     pub fn back_side(&self) -> Option<&BackSide> {

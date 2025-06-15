@@ -28,6 +28,7 @@ use crate::{
     load_api_key,
     overlays::{
         card_selector::{CardSelector, MyClosure},
+        notice::Notice,
         OverlayEnum,
     },
     pop_overlay, APP,
@@ -1204,7 +1205,9 @@ fn save_button(CardViewer: CardViewer) -> Element {
                                                 let data = CardType::Attribute { attribute: attr_id.id, back: back, instance: id };
                                                 let action = CardAction::UpsertCard(data);
                                                 let event = CardEvent::new(CardId::new_v4(), action);
-                                                APP.read().inner().provider.cards.insert_ledger(event).unwrap();
+                                                if let Err(e) = APP.read().inner().provider.cards.insert_ledger(event) {
+                                                    append_overlay(OverlayEnum::Notice(Notice::new_from_debug(e)));
+                                                }
                                             }
                                         },
                                         Either::Right(answer) => {
@@ -1213,7 +1216,9 @@ fn save_button(CardViewer: CardViewer) -> Element {
                                             let data = CardType::Attribute { attribute: attr_id.id, back: back, instance: id };
                                             let action = CardAction::UpsertCard(data);
                                             let event = CardEvent::new(CardId::new_v4(), action);
-                                            APP.read().inner().provider.cards.insert_ledger(event).unwrap();
+                                            if let Err(e) = APP.read().inner().provider.cards.insert_ledger(event) {
+                                                append_overlay(OverlayEnum::Notice(Notice::new_from_debug(e)));
+                                            }
                                         },
                                     }
                                     }
@@ -1227,7 +1232,9 @@ fn save_button(CardViewer: CardViewer) -> Element {
                                                     let data = CardType::Attribute { attribute: attr_id, back: back, instance: id };
                                                     let action = CardAction::UpsertCard(data);
                                                     let event = CardEvent::new(attr_card_id, action);
-                                                    APP.read().inner().provider.cards.insert_ledger(event).unwrap();
+                                                    if let Err(e) = APP.read().inner().provider.cards.insert_ledger(event) {
+                                                        append_overlay(OverlayEnum::Notice(Notice::new_from_debug(e)));
+                                                    }
                                                 }
                                             }
                                         },
@@ -1237,7 +1244,9 @@ fn save_button(CardViewer: CardViewer) -> Element {
                                             let data = CardType::Attribute { attribute: attr_id, back: back, instance: id };
                                             let action = CardAction::UpsertCard(data);
                                             let event = CardEvent::new(attr_card_id, action);
-                                            APP.read().inner().provider.cards.insert_ledger(event).unwrap();
+                                            if let Err(e) = APP.read().inner().provider.cards.insert_ledger(event) {
+                                                append_overlay(OverlayEnum::Notice(Notice::new_from_debug(e)));
+                                            }
                                         },
                                     }
                                 },
@@ -1286,7 +1295,11 @@ fn add_dep(selv: CardViewer) -> Element {
                     let old_card = selv.old_card.cloned();
                     async move {
                         if let Some(mut old_card) = old_card {
-                        old_card.add_dependency(card.read().id()).await;
+                        if let Err(e) = old_card.add_dependency(card.read().id()).await {
+                            append_overlay(
+                                OverlayEnum::Notice(Notice::new_from_debug(e))
+                            );
+                        }
                             }
                         }
                     }

@@ -1,13 +1,20 @@
 pub mod card_selector;
 pub mod cardviewer;
+pub mod notice;
 pub mod reviewsession;
 pub mod uploader;
+
 //pub mod yesno;
 //pub mod itemselector;
 //pub mod textinput;
 
 use crate::{
-    overlays::{card_selector::CardSelector, cardviewer::CardViewer, reviewsession::ReviewState},
+    overlays::{
+        card_selector::CardSelector,
+        cardviewer::CardViewer,
+        notice::{Notice, NoticeRender},
+        reviewsession::ReviewState,
+    },
     pop_overlay, set_overlay,
 };
 use card_selector::CardSelectorRender;
@@ -65,6 +72,7 @@ pub enum OverlayEnum {
     CardViewer(CardViewer),
     CardSelector(CardSelector),
     OverlaySelector(OverlaySelector),
+    Notice(Notice),
 }
 
 impl Debug for OverlayEnum {
@@ -74,6 +82,7 @@ impl Debug for OverlayEnum {
             Self::CardViewer(_) => f.debug_tuple("card viewer").finish(),
             Self::CardSelector(_) => f.debug_tuple("card selector").finish(),
             Self::OverlaySelector(_) => f.debug_tuple("overlay selector").finish(),
+            Self::Notice(_) => f.debug_tuple("notice").finish(),
         }
     }
 }
@@ -120,6 +129,13 @@ pub fn Overender(overlay: Signal<Option<Arc<OverlayEnum>>>, root: Element) -> El
                             OverlayEnum::OverlaySelector(elm) => rsx! {
                                 OverlaySelectorRender { title: elm.title.clone(), choices: elm.choices.clone()}
                             },
+
+                            OverlayEnum::Notice(elm) => {
+                                rsx! {
+                                    NoticeRender { text: elm.text.clone() }
+                                }
+                            }
+
                             OverlayEnum::CardSelector(elm) => rsx!{
                                 CardSelectorRender {
                                     title: elm.title.clone(),
