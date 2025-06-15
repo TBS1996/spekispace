@@ -1,17 +1,15 @@
 use std::{
     collections::{BTreeMap, HashMap, HashSet},
     marker::PhantomData,
-    path::{Path, PathBuf},
+    path::PathBuf,
     str::FromStr,
-    sync::Arc,
 };
 
 use std::hash::Hash;
-use tracing::trace;
 
 use crate::{
-    Hashed, Key, KeyFoo,
-    fs::{Content, Dir, FsDir, SnapFs, get_key_components},
+    Hashed, Key,
+    fs::{Dir, FsDir, SnapFs, get_key_components},
     get_hash,
 };
 

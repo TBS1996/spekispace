@@ -193,7 +193,7 @@ pub fn GraphRepRender(
                             let (Some(from), Some(to)) = (from.card_id(), to.card_id()) else {
                                 return;
                             };
-                            let mut first = app.load_card(from).await;
+                            let first = app.load_card(from).await;
                             //first.write().rm_dependency(to).await;
 
                             inner.set_origin(Node::Card(from)).await;

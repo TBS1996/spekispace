@@ -1,18 +1,15 @@
 use either::Either;
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
-use simpletime::timed;
 use snapstore::fs::{CacheFs, Content, SnapFs};
 use snapstore::mem::SnapMem;
 use snapstore::{HashAndContents, Key};
-use std::collections::{BTreeSet, VecDeque};
 use std::fmt::Display;
 use std::fs::{self};
 use std::io::Write;
 use std::os::unix::fs::symlink;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
-use std::time::Duration;
 use std::vec::Vec;
 use std::{
     collections::{HashMap, HashSet},
@@ -474,6 +471,7 @@ impl<T: LedgerItem> Ledger<T> {
             dbg!(original);
             dbg!(link);
             dbg!(e);
+            //panic!();
         }
     }
 
@@ -793,16 +791,23 @@ impl<T: LedgerItem> Ledger<T> {
             }
         }
 
-        let state_hash = self.state_hash();
-        let borrowed: Option<&str> = state_hash.as_deref();
+        let old_state_hash = self.state_hash();
+        let borrowed: Option<&str> = old_state_hash.as_deref();
 
         let (state_hash, _) = self.run_event(event.clone(), borrowed, true)?;
+
+        if Some(&state_hash) == old_state_hash.as_ref() {
+            tracing::info!("not inserting ledger because it didn't change anything");
+            return Ok(state_hash);
+        }
 
         let mut guard = self.ledger.write().unwrap();
         let entry = LedgerEntry::new(guard.last(), event);
         guard.push(entry.clone());
-        entry.save(&self.ledger_path());
+
         let ledger_hash = guard.last().unwrap().data_hash();
+        entry.save(&self.ledger_path());
+
         self.save_ledger_state(&ledger_hash, &state_hash);
 
         Ok(state_hash)
@@ -1205,11 +1210,16 @@ impl<T: LedgerItem> Ledger<T> {
     }
 
     /// Creates a symlink from the hash of a ledger event to its corresponding state
-    fn save_ledger_state(&self, ledger_hash: &str, state_hash: &str) {
+    fn save_ledger_state(&self, ledger_hash: &str, state_hash: &str) -> bool {
         let sp = self.snap.the_full_blob_path(state_hash);
         assert!(sp.exists());
         let ledger_path = self.state_map_path().join(ledger_hash);
-        symlink(sp, ledger_path).unwrap();
+        if ledger_path.exists() {
+            true
+        } else {
+            symlink(sp, ledger_path).unwrap();
+            false
+        }
     }
 
     fn load_ledger(space: &Path) -> Vec<LedgerEntry<T>> {
@@ -1357,7 +1367,7 @@ impl<T: LedgerItem> Ledger<T> {
         };
 
         let id = item.item_id();
-        let item = dbg!(item.run_event(event.clone(), &cachegetter))?;
+        let item = item.run_event(event.clone(), &cachegetter)?;
         let new_caches = if update_cache {
             item.caches(&cachegetter)
         } else {

@@ -2,7 +2,7 @@ use card::{BackSide, CardId, RawCard, RecallRate, TextData};
 use card_provider::CardProvider;
 use cardfilter::CardFilter;
 use dioxus_logger::tracing::info;
-use ledger::{CardAction, CardEvent, Event};
+use ledger::{CardAction, CardEvent};
 use ledgerstore::{CacheKey, LedgerItem};
 use ledgerstore::{Ledger, TimeProvider};
 use metadata::Metadata;

@@ -14,7 +14,7 @@ use crate::{
 use dioxus::prelude::*;
 use ledgerstore::{LedgerItem, TheLedgerEvent};
 use speki_core::card::CType;
-use speki_core::cardfilter::{MyNumOrd, NumOrd};
+use speki_core::cardfilter::MyNumOrd;
 use speki_core::{
     card::CardId,
     cardfilter::CardFilter,
@@ -22,7 +22,6 @@ use speki_core::{
     set::{Input, Set, SetAction, SetEvent, SetExpr, SetExprDiscriminants, SetId},
     Card,
 };
-use std::sync::atomic::AtomicBool;
 use std::{
     cmp::Ordering,
     collections::{BTreeMap, BTreeSet},

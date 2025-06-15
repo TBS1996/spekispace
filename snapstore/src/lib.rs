@@ -83,10 +83,7 @@ pub type HashAndContents = (Hashed, Vec<Content>);
 use std::fmt::{Debug, Display};
 use std::path::PathBuf;
 use std::sync::Arc;
-use std::{
-    collections::{HashMap, HashSet},
-    hash::{DefaultHasher, Hash, Hasher},
-};
+use std::hash::{DefaultHasher, Hash, Hasher};
 
 use fs::Content;
 

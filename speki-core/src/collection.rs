@@ -1,7 +1,6 @@
 use std::{cmp::Ordering, sync::Arc};
 
 use serde::{Deserialize, Serialize};
-use tracing::error;
 
 use crate::{
     card::{CType, CardId},
