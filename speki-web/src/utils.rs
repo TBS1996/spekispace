@@ -50,8 +50,8 @@ impl App {
 
         use ledgerstore::Ledger;
         //use speki_provider::{FsProvider, FsTime};
-        //let root = Path::new("/home/tor/spekifs/snap4");
-        let root = Path::new("/home/tor/spekifs/testing");
+        //let root = Path::new("/home/tor/spekifs/testing");
+        let root = Path::new("/home/tor/spekifs/snap4");
 
         Self(Arc::new(speki_core::App::new(
             speki_core::SimpleRecall,
@@ -67,52 +67,32 @@ impl App {
         self.0.clone()
     }
 
-    pub async fn fill_cache(&self) {
-        self.0.fill_index_cache().await;
-    }
-
-    pub async fn try_load_card(&self, id: CardId) -> Option<Signal<Card>> {
+    pub fn try_load_card(&self, id: CardId) -> Option<Signal<Card>> {
         self.0
             .load_card(id)
-            .await
             .map(|c| Signal::new_in_scope(c, ScopeId::APP))
     }
 
-    pub fn load_card_sync(&self, id: CardId) -> Signal<Card> {
-        Signal::new_in_scope(
-            self.0
-                .load_card_sync(id)
-                .expect(&format!("unable to load card with id: {id}")),
-            ScopeId::APP,
-        )
-    }
-
-    pub async fn load_card(&self, id: CardId) -> Signal<Card> {
+    pub fn load_card(&self, id: CardId) -> Signal<Card> {
         Signal::new_in_scope(
             self.0
                 .load_card(id)
-                .await
                 .expect(&format!("unable to load card with id: {id}")),
             ScopeId::APP,
         )
     }
 
-    pub async fn new_instance(
-        &self,
-        front: String,
-        back: Option<String>,
-        class: CardId,
-    ) -> Arc<Card> {
+    pub fn new_instance(&self, front: String, back: Option<String>, class: CardId) -> Arc<Card> {
         info!("new simple");
-        let id = self.0.add_instance(front, back, class).await;
-        let card = Arc::new(self.0.load_card(id).await.unwrap());
+        let id = self.0.add_instance(front, back, class);
+        let card = Arc::new(self.0.load_card(id).unwrap());
         card
     }
 
-    pub async fn new_simple(&self, front: String, back: String) -> Arc<Card> {
+    pub fn new_simple(&self, front: String, back: String) -> Arc<Card> {
         info!("new simple");
-        let id = self.0.add_card(front, back).await;
-        let card = Arc::new(self.0.load_card(id).await.unwrap());
+        let id = self.0.add_card(front, back);
+        let card = Arc::new(self.0.load_card(id).unwrap());
         card
     }
 }

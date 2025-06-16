@@ -123,7 +123,7 @@ pub struct NodeMetadata {
 }
 
 impl NodeMetadata {
-    pub async fn from_card(card: Signal<Card>, is_origin: bool) -> Self {
+    pub fn from_card(card: Signal<Card>, is_origin: bool) -> Self {
         let label = card.read().print();
         let color = match card.read().recall_rate() {
             Some(rate) => rate_to_color(rate as f64 * 100.),
@@ -157,7 +157,6 @@ impl Node {
         match self {
             Node::Card(id) => app
                 .load_card(*id)
-                .await
                 .unwrap()
                 .dependents()
                 .into_iter()
@@ -170,7 +169,6 @@ impl Node {
         match self {
             Node::Card(id) => app
                 .load_card(*id)
-                .await
                 .unwrap()
                 .dependencies()
                 .into_iter()

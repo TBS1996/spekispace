@@ -119,20 +119,6 @@ pub fn TheApp() -> Element {
     use_context_provider(ImportState::new);
     use_context_provider(ReviewPage::new);
 
-    spawn(async move {
-        #[cfg(not(feature = "desktop"))]
-        {
-            if let Some(currauth) = firebase::current_sign_in().await {
-                *LOGIN_STATE.write() = Some(currauth);
-                info!("user logged in!");
-            } else {
-                info!("no user logged in!");
-            }
-        }
-
-        APP.read().fill_cache().await;
-    });
-
     rsx! {
         document::Link {
             rel: "stylesheet",

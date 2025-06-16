@@ -364,10 +364,8 @@ fn RenderDependencies(
                     class: "mb-1 p-1 bg-gray-100 rounded-md text-left",
                     onclick: move|_|{
                         let card = card.clone();
-                        spawn(async move{
-                            let viewer = CardViewer::new_from_card(card).await;
-                            append_overlay(OverlayEnum::CardViewer(viewer));
-                        });
+                        let viewer = CardViewer::new_from_card(card);
+                        append_overlay(OverlayEnum::CardViewer(viewer));
                     },
                     "{card}"
                 }
@@ -477,10 +475,10 @@ impl CardViewer {
         })
     }
 
-    pub async fn new_from_card(mut card: Signal<Card>) -> Self {
+    pub fn new_from_card(mut card: Signal<Card>) -> Self {
         if card.read().is_attribute() {
             let instance = card.read().attribute_instance();
-            card = APP.read().load_card_sync(instance);
+            card = APP.read().load_card(instance);
         }
 
         let tempnode = TempNode::Old(card.read().id());
@@ -508,7 +506,7 @@ impl CardViewer {
         };
 
         let dependents: Signal<Vec<Node>> = Signal::new_in_scope(Default::default(), ScopeId(3));
-        let meta = NodeMetadata::from_card(card.clone(), true).await;
+        let meta = NodeMetadata::from_card(card.clone(), true);
 
         let editor = {
             let concept = {
@@ -516,7 +514,7 @@ impl CardViewer {
                     .with_dependents(tempnode.clone())
                     .with_allowed(vec![CardTy::Class]);
                 if let Some(class) = raw_ty.data.class() {
-                    let class = APP.read().load_card(class).await;
+                    let class = APP.read().load_card(class);
                     concept.set_ref(class);
                 }
 
@@ -627,7 +625,7 @@ impl CardViewer {
                     let cref = CardRef::new();
 
                     if let Some(ty) = attr.back_type {
-                        let card = APP.read().load_card_sync(ty);
+                        let card = APP.read().load_card(ty);
                         cref.set_ref(card);
                     }
 
@@ -645,7 +643,7 @@ impl CardViewer {
                 let namespace = CardRef::new();
 
                 if let Some(card) = card.read().namespace() {
-                    let card = APP.read().load_card(card).await;
+                    let card = APP.read().load_card(card);
                     namespace.set_ref(card);
                 }
 
@@ -656,7 +654,7 @@ impl CardViewer {
                 card.read()
                     .explicit_dependencies()
                     .into_iter()
-                    .map(|id| APP.read().load_card_sync(id))
+                    .map(|id| APP.read().load_card(id))
                     .collect(),
                 ScopeId(3),
             );
@@ -754,7 +752,7 @@ impl CardViewer {
     }
 
     pub fn with_dependency(mut self, dep: CardId) -> Self {
-        let card = APP.read().load_card_sync(dep);
+        let card = APP.read().load_card(dep);
         self.editor.dependencies.push(card);
         self
     }
@@ -1080,6 +1078,7 @@ fn DisplayHistory(history: MyHistory, now: Duration) -> Element {
     };
 
     rsx! {
+        span {}
         p{"{output}"}
     }
 }
@@ -1113,7 +1112,7 @@ fn Suspend(card: Signal<Option<Card>>) -> Element {
             onclick: move |_| {
                 let mut card = card.clone();
                 spawn(async move {
-                    card.set_suspend(!is_suspended).await;
+                    card.set_suspend(!is_suspended);
                 });
             },
             "{txt}"
@@ -1295,7 +1294,7 @@ fn add_dep(selv: CardViewer) -> Element {
                     let old_card = selv.old_card.cloned();
                     async move {
                         if let Some(mut old_card) = old_card {
-                        if let Err(e) = old_card.add_dependency(card.read().id()).await {
+                        if let Err(e) = old_card.add_dependency(card.read().id()) {
                             append_overlay(
                                 OverlayEnum::Notice(Notice::new_from_debug(e))
                             );

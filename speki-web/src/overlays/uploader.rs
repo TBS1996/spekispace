@@ -277,12 +277,12 @@ pub fn UploadRender(props: Uploader) -> Element {
                             match concept.selected_card().cloned() {
                                 Some(class) => {
                                     for card in entries {
-                                        app.new_instance(card.q, Some(card.a), class).await;
+                                        app.new_instance(card.q, Some(card.a), class);
                                     }
                                 },
                                 None => {
                                     for card in entries {
-                                        app.new_simple(card.q, card.a).await;
+                                        app.new_simple(card.q, card.a);
                                     }
                                 },
                             }

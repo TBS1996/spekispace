@@ -7,7 +7,6 @@ use std::{collections::BTreeSet, fmt::Debug, sync::Arc};
 
 #[derive(Clone)]
 pub struct CardProvider {
-    //cards: Arc<RwLock<HashMap<CardId, Arc<Card>>>>,
     pub providers: Provider,
     time_provider: TimeGetter,
     recaller: Recaller,
@@ -27,7 +26,7 @@ impl CardProvider {
         self.providers.cards.load_ids().into_iter().collect()
     }
 
-    pub async fn load_all(&self) -> Vec<Arc<Card>> {
+    pub fn load_all(&self) -> Vec<Arc<Card>> {
         info!("load all");
         let mut out: Vec<Arc<Card>> = vec![];
         let ids = self.load_all_card_ids();

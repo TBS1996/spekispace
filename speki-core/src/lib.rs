@@ -159,27 +159,6 @@ impl App {
             sets: set_provider,
         };
 
-        /*
-        let mut map: HashMap<CardId, Vec<Attrv2>> = Default::default();
-        for attribute in provider.attrs.load_all().into_values() {
-            let attr = Attrv2 {
-                id: attribute.id,
-                pattern: attribute.pattern,
-                back_type: attribute.back_type,
-            };
-
-            map.entry(attribute.class).or_default().push(attr);
-        }
-
-        for (card, attributes) in map {
-            for attr in attributes {
-                let action = CardAction::InsertAttr(attr);
-                let event = CardEvent::new(card, action);
-                provider.cards.insert_ledger(event);
-            }
-        }
-        */
-
         let card_provider =
             CardProvider::new(provider.clone(), time_provider.clone(), recaller.clone());
 
@@ -202,19 +181,8 @@ impl App {
         info!("cache filled in {:.4} seconds!", elapsed.as_secs_f32());
     }
 
-    pub async fn fill_index_cache(&self) {
-        info!("filling ascii bigram indices");
-        let start = self.time_provider.current_time();
-        //bruh(self.provider.reviews.clone()).await;
-        let elapsed = self.time_provider.current_time() - start;
-        info!(
-            "ascii bigram indices filled in {:.4} seconds!",
-            elapsed.as_secs_f32()
-        );
-    }
-
-    pub async fn load_all_cards(&self) -> Vec<Arc<Card>> {
-        self.card_provider.load_all().await
+    pub fn load_all_cards(&self) -> Vec<Arc<Card>> {
+        self.card_provider.load_all()
     }
 
     pub fn load_card_sync(&self, id: CardId) -> Option<Card> {
@@ -224,7 +192,7 @@ impl App {
         Some(Arc::unwrap_or_clone(card?))
     }
 
-    pub async fn load_card(&self, id: CardId) -> Option<Card> {
+    pub fn load_card(&self, id: CardId) -> Option<Card> {
         self.load_card_sync(id)
     }
 
@@ -232,19 +200,19 @@ impl App {
         self.card_provider.load_all_card_ids()
     }
 
-    pub async fn cards_filtered(&self, filter: CardFilter) -> Vec<Arc<Card>> {
-        let cards = self.load_all_cards().await;
+    pub fn cards_filtered(&self, filter: CardFilter) -> Vec<Arc<Card>> {
+        let cards = self.load_all_cards();
         let mut ids = vec![];
 
         for card in cards {
-            if filter.filter(card.clone()).await {
+            if filter.filter(card.clone()) {
                 ids.push(card);
             }
         }
         ids
     }
 
-    pub async fn add_instance(
+    pub fn add_instance(
         &self,
         front: String,
         back: Option<impl Into<BackSide>>,
@@ -272,7 +240,7 @@ impl App {
         self.provider.cards.insert_ledger(event).unwrap();
     }
 
-    pub async fn add_card(&self, front: String, back: impl Into<BackSide>) -> CardId {
+    pub fn add_card(&self, front: String, back: impl Into<BackSide>) -> CardId {
         let back = back.into();
         let data = CardType::Normal {
             front: TextData::from_raw(&front),
@@ -295,17 +263,16 @@ impl App {
         id
     }
 
-    pub async fn load_class_cards(&self) -> Vec<Arc<Card>> {
+    pub fn load_class_cards(&self) -> Vec<Arc<Card>> {
         self.load_all_cards()
-            .await
             .into_iter()
             .filter(|card| card.is_class())
             .collect()
     }
 }
 
-pub async fn as_graph(app: &App) -> String {
-    graphviz::export(app).await
+pub fn as_graph(app: &App) -> String {
+    graphviz::export(app)
 }
 
 pub mod graphviz {
@@ -368,8 +335,8 @@ pub mod graphviz {
         dot
     }
 
-    pub async fn export(app: &App) -> String {
-        let cards = app.load_all_cards().await;
+    pub fn export(app: &App) -> String {
+        let cards = app.load_all_cards();
         export_cards(cards)
     }
 

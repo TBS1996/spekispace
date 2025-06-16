@@ -413,7 +413,7 @@ fn RenderSet(
 
 
                             for card in cards_with_deps {
-                                if filter.filter(card.clone()).await {
+                                if filter.filter(card.clone()) {
                                     filtered_cards.push(card);
                                 }
                             }

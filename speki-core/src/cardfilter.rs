@@ -76,7 +76,7 @@ pub struct CardFilter {
 }
 
 impl CardFilter {
-    pub async fn filter(&self, card: Arc<Card>) -> bool {
+    pub fn filter(&self, card: Arc<Card>) -> bool {
         let CardFilter {
             recall,
             rec_recall,
@@ -134,7 +134,7 @@ impl CardFilter {
         }
 
         if let Some(NumOp { ord, num }) = rec_recall {
-            let recall = card.min_rec_recall_rate().await;
+            let recall = card.min_rec_recall_rate();
 
             match ord {
                 MyNumOrd::Equal => {

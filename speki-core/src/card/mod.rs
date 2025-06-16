@@ -472,10 +472,7 @@ impl Card {
         Ok(self)
     }
 
-    pub async fn add_dependency(
-        &mut self,
-        dependency: CardId,
-    ) -> Result<StateHash, EventError<RawCard>> {
+    pub fn add_dependency(&mut self, dependency: CardId) -> Result<StateHash, EventError<RawCard>> {
         self.base.explicit_dependencies.insert(dependency);
         let action = CardAction::AddDependency(dependency);
         let event = CardEvent::new(self.id, action);
@@ -571,7 +568,7 @@ impl Card {
         deps
     }
 
-    pub async fn min_rec_recall_rate(&self) -> RecallRate {
+    pub fn min_rec_recall_rate(&self) -> RecallRate {
         tracing::trace!("min rec recall of {}", self.id);
         let mut min_recall: RecallRate = 1.0;
 
@@ -706,7 +703,7 @@ impl Card {
         self.metadata.suspended.is_suspended()
     }
 
-    pub async fn set_suspend(&mut self, suspend: bool) {
+    pub fn set_suspend(&mut self, suspend: bool) {
         let event = MetaEvent::new(self.id, crate::ledger::MetaAction::Suspend(suspend));
         self.card_provider
             .providers

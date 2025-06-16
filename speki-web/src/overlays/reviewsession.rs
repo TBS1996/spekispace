@@ -134,7 +134,7 @@ pub fn ReviewRender(
         let mut deps: Vec<Signal<Card>> = vec![];
 
         for dep in &card.explicit_dependencies() {
-            let dep = APP.read().load_card_sync(*dep);
+            let dep = APP.read().load_card(*dep);
             deps.push(dep);
         }
         deps
@@ -341,12 +341,10 @@ fn Infobar(card: Arc<Card>, tot: Resource<usize>, queue: Signal<Queue>) -> Eleme
                 class: "{crate::styles::BLACK_BUTTON}",
                 onclick: move |_| {
                     let card = card2.clone();
-                    spawn(async move {
-                        let card = card.clone();
-                        let viewer = CardViewer::new_from_card(card).await;
-                        let viewer = OverlayEnum::CardViewer(viewer);
-                        append_overlay(viewer);
-                    });
+                    let card = card.clone();
+                    let viewer = CardViewer::new_from_card(card);
+                    let viewer = OverlayEnum::CardViewer(viewer);
+                    append_overlay(viewer);
                 },
                 "edit"
             }
@@ -370,7 +368,7 @@ fn Suspend(card: Signal<Card>, mut queue: Signal<Queue>) -> Element {
                 let card = card.clone();
                 spawn(async move {
                     let mut card = card;
-                    card.write().set_suspend(!is_suspended).await;
+                    card.write().set_suspend(!is_suspended);
                     queue.write().next();
                 });
             },
@@ -419,7 +417,7 @@ fn RenderDependencies(
                                 let  old_card = currcard.clone();
                                 async move {
                                     let mut old_card = Arc::unwrap_or_clone(old_card);
-                                    old_card.add_dependency(card.read().id()).await;
+                                    old_card.add_dependency(card.read().id()).unwrap();
                                     let _ = queue.write();
                                 }
                             });
@@ -442,10 +440,8 @@ fn RenderDependencies(
                         class: "mb-1 p-1 bg-gray-100 rounded-md text-left",
                         onclick: move|_|{
                             let card = card.clone();
-                            spawn(async move{
-                                let viewer = CardViewer::new_from_card(card).await;
-                                append_overlay(OverlayEnum::CardViewer(viewer));
-                            });
+                            let viewer = CardViewer::new_from_card(card);
+                            append_overlay(OverlayEnum::CardViewer(viewer));
                         },
                         "{card}"
                     }
@@ -490,11 +486,9 @@ fn RenderEvalText(eval: EvalText) -> Element {
                                 button {
                                     class: "inline underline text-blue-600 hover:text-blue-800",
                                     onclick: move |_| {
-                                        spawn(async move {
-                                            let card = APP.read().load_card_sync(id);
-                                            let props = CardViewer::new_from_card(card).await;
-                                            append_overlay(OverlayEnum::CardViewer(props));
-                                        });
+                                        let card = APP.read().load_card(id);
+                                        let props = CardViewer::new_from_card(card);
+                                        append_overlay(OverlayEnum::CardViewer(props));
                                     },
                                     " {s}"
                                 }

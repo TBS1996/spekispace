@@ -47,7 +47,7 @@ pub fn RenderDependents(card_id: CardId, hidden: bool) -> Element {
         } else {
             for id in dep_ids {
                 let id: CardId = id.parse().unwrap();
-                let card = APP.read().load_card_sync(id);
+                let card = APP.read().load_card(id);
                 inner.push(card);
             }
             (inner, qty)
@@ -100,10 +100,8 @@ pub fn RenderDependents(card_id: CardId, hidden: bool) -> Element {
                         class: "mb-1 p-1 bg-gray-100 rounded-md text-left",
                         onclick: move|_|{
                             let card = card.clone();
-                            spawn(async move{
-                                let viewer = CardViewer::new_from_card(card).await;
-                                append_overlay(OverlayEnum::CardViewer(viewer));
-                            });
+                            let viewer = CardViewer::new_from_card(card);
+                            append_overlay(OverlayEnum::CardViewer(viewer));
                         },
                         "{card}"
                     }

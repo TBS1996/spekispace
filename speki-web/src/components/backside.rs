@@ -197,7 +197,7 @@ impl BackPut {
         let default = default.unwrap_or_default();
         let ref_card = CardRef::new();
         if let Some(card) = default.as_card() {
-            let card = APP.read().load_card_sync(card);
+            let card = APP.read().load_card(card);
             ref_card.set_ref(card);
         }
 

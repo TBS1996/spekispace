@@ -34,7 +34,7 @@ use super::OverlayEnum;
 
 pub fn overlay_card_viewer() -> MyClosure {
     MyClosure::new(move |card: Signal<Card>| async move {
-        let viewer = CardViewer::new_from_card(card).await;
+        let viewer = CardViewer::new_from_card(card);
         append_overlay(OverlayEnum::CardViewer(viewer));
     })
 }
@@ -52,7 +52,7 @@ impl MaybeEntry {
             Self::No(id) => id,
         };
 
-        let card = APP.read().try_load_card(*id).await?;
+        let card = APP.read().try_load_card(*id)?;
 
         *self = Self::Yes(card.clone());
         Some(card)
@@ -212,7 +212,7 @@ impl CardSelector {
                                 .contains(&CardTy::from_ctype(card.read().card_type()))
                         {
                             let flag = match filtermemo.cloned() {
-                                Some(filter) => filter.filter(Arc::new(card.cloned())).await,
+                                Some(filter) => filter.filter(Arc::new(card.cloned())),
                                 None => true,
                             };
 

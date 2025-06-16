@@ -51,12 +51,7 @@ pub fn CardRefRender(
 
     let card_display: Memo<String> = ScopeId::APP.in_runtime(|| {
         use_memo(move || match selected_card.read().as_ref() {
-            Some(card_id) => APP
-                .read()
-                .load_card_sync(*card_id)
-                .read()
-                .name()
-                .to_string(),
+            Some(card_id) => APP.read().load_card(*card_id).read().name().to_string(),
             None => String::new(),
         })
     });
@@ -105,7 +100,7 @@ pub fn CardRefRender(
                         let on_deselect = on_deselect.clone();
                         spawn(async move {
                             if let Some(card) = selected_card.cloned(){
-                                let card = APP.cloned().load_card(card).await;
+                                let card = APP.cloned().load_card(card);
                                 if let Some(f) = on_deselect.clone(){
                                     f.call(card).await;
                                 }
