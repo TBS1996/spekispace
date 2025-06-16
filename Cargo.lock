@@ -4093,30 +4093,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "speki-core"
-version = "0.1.10"
-dependencies = [
- "deunicode",
- "dioxus-logger",
- "either",
- "fancy-regex",
- "futures",
- "gkquad",
- "ledgerstore",
- "nonempty",
- "omtrent",
- "serde",
- "serde_json",
- "strum",
- "tokio",
- "toml",
- "tracing",
- "tracing-subscriber",
- "uuid",
-]
-
-[[package]]
-name = "speki-web"
+name = "speki"
 version = "0.1.0"
 dependencies = [
  "dioxus",
@@ -4137,6 +4114,29 @@ dependencies = [
  "serde_json",
  "speki-core",
  "strum",
+ "toml",
+ "tracing",
+ "tracing-subscriber",
+ "uuid",
+]
+
+[[package]]
+name = "speki-core"
+version = "0.1.10"
+dependencies = [
+ "deunicode",
+ "dioxus-logger",
+ "either",
+ "fancy-regex",
+ "futures",
+ "gkquad",
+ "ledgerstore",
+ "nonempty",
+ "omtrent",
+ "serde",
+ "serde_json",
+ "strum",
+ "tokio",
  "toml",
  "tracing",
  "tracing-subscriber",

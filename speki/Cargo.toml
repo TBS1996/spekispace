@@ -1,5 +1,5 @@
 [package]
-name = "speki-web"
+name = "speki"
 version = "0.1.0"
 authors = ["tor <tor.saebjornsen@cognite.com>"]
 edition = "2021"

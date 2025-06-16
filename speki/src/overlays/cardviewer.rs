@@ -16,7 +16,7 @@ use speki_core::{
     Card, CardType, RefType,
 };
 
-use speki_web::{Node, NodeId, NodeMetadata};
+use speki::{Node, NodeId, NodeMetadata};
 use tracing::info;
 
 use crate::{

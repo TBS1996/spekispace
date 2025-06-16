@@ -7,6 +7,7 @@ use std::{
 };
 
 use dioxus::prelude::*;
+use speki::Node;
 use speki_core::{
     card::{bigrams, normalize_string, CardId},
     cardfilter::CardFilter,
@@ -14,7 +15,6 @@ use speki_core::{
     set::{SetExpr, SetExprDiscriminants},
     Card, CardProperty,
 };
-use speki_web::Node;
 use tracing::info;
 use uuid::Uuid;
 
