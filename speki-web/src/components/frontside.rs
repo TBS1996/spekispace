@@ -6,9 +6,6 @@ use speki_core::{audio::Audio, card::CType};
 use strum::{EnumIter, IntoEnumIterator};
 use tracing::info;
 
-#[cfg(feature = "web")]
-use crate::components::audioupload::AudioUpload;
-
 use crate::components::{dropdown::DropComponent, DropDownMenu};
 
 #[derive(EnumIter, Clone, Serialize, Deserialize, PartialEq)]
@@ -99,48 +96,6 @@ pub fn FrontPutRender(
                     },
                 }
 
-
-            }
-        }
-    }
-}
-
-#[cfg(feature = "web")]
-#[component]
-#[cfg(feature = "web")]
-pub fn FrontPutRender(
-    dropdown: DropDownMenu<CardTy>,
-    text: Signal<String>,
-    audio: Signal<Option<Audio>>,
-) -> Element {
-    let placeholder = if IS_SHORT.cloned() { "Front side" } else { "" };
-
-    rsx! {
-        div {
-            class: "block text-gray-700 text-sm font-medium ",
-            if !IS_SHORT() {
-                "Front:"
-            }
-
-            div {
-                class: "backside-editor flex items-center space-x-4",
-
-                input {
-                    class: "bg-white w-full border border-gray-300 rounded-md p-2 mb-4 text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent",
-                    placeholder: "{placeholder}",
-                    value: "{text}",
-                    oninput: move |evt| text.set(evt.value()),
-                }
-
-
-                div {
-                    class: "flex-shrink-0",
-                    style: "width: 65px;",
-                    DropComponent {options: dropdown.options.clone(), selected: dropdown.selected.clone()}
-                }
-
-
-                AudioUpload { audio }
 
             }
         }

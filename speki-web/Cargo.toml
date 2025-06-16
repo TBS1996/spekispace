@@ -9,7 +9,7 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 
-dioxus = { version = "0.6.1", features = ["router"] } # No default "web" feature
+dioxus = { version = "0.6.1", features = ["router"] } 
 dioxus-logger.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
@@ -18,41 +18,19 @@ futures-util.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 toml.workspace = true
-async-trait.workspace = true
 uuid.workspace = true
 petgraph.workspace = true
 once_cell.workspace = true
 strum.workspace = true
 fancy-regex.workspace = true
-eyre.workspace = true
-async-recursion.workspace = true
 speki-core = { path = "../speki-core" }
 ledgerstore.workspace = true
 either.workspace = true
 nonempty.workspace = true
 rand.workspace = true
-async-openai.workspace = true
 omtrent.workspace = true
-
-# WebAssembly-specific dependencies (optional)
-wasm-bindgen = { workspace = true, optional = true }
-wasm-bindgen-futures = { workspace = true, optional = true }
-serde-wasm-bindgen = { workspace = true, optional = true }
-js-sys = { workspace = true, optional = true }
-web-sys = { workspace = true, optional = true }
-gloo = { workspace = true, optional = true }
-gloo-utils = { workspace = true, optional = true }
+dirs.workspace = true
 
 [features]
 default = ["desktop"]
-web = [
-    "dioxus/web",
-    "dep:js-sys",
-    "dep:wasm-bindgen",
-    "dep:wasm-bindgen-futures",
-    "dep:serde-wasm-bindgen",
-    "dep:web-sys",
-    "dep:gloo",
-    "dep:gloo-utils"
-]
 desktop = ["dioxus/desktop"]

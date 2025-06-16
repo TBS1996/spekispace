@@ -1,8 +1,5 @@
 use dioxus::prelude::*;
 
-#[cfg(feature = "web")]
-use crate::{firebase, LOGIN_STATE};
-
 use crate::{Route, CURRENT_ROUTE};
 
 fn route_elm(route: Route) -> Element {

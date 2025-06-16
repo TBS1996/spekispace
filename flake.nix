@@ -55,6 +55,27 @@
           ];
         };
 
+        packages.default = pkgs.rustPlatform.buildRustPackage {
+          pname = "speki";
+          version = "0.1.0";
+
+          src = ./.;
+
+          cargoLock = {
+            lockFile = ./Cargo.lock;
+          };
+
+          nativeBuildInputs = [pkgs.pkg-config];
+          buildInputs = rustBuildInputs;
+
+          meta = {
+            description = "ontological flashcard app";
+            license = pkgs.lib.licenses.mit;
+            maintainers = with pkgs.lib.maintainers; [];
+            platforms = pkgs.lib.platforms.all;
+          };
+        };
+
         devShells.default = pkgs.mkShell {
           name = "dioxus-dev";
           buildInputs =

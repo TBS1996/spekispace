@@ -20,12 +20,11 @@ use speki_web::{Node, NodeId, NodeMetadata};
 use tracing::info;
 
 use crate::{
-    append_overlay, ask_openai,
+    append_overlay,
     components::{
         backside::BackPutRender, cardref::CardRefRender, frontside::FrontPutRender, BackPut,
         CardRef, CardTy, DropDownMenu, FrontPut, RenderDependents,
     },
-    load_api_key,
     overlays::{
         card_selector::{CardSelector, MyClosure},
         notice::Notice,
@@ -775,9 +774,6 @@ fn RenderInputs(props: CardViewer) -> Element {
         None => false,
     };
 
-    let api_key = load_api_key();
-    let ai_enabled = api_key.is_some() && !props.editor.front.text.read().trim().is_empty();
-
     rsx! {
         div {
             InputElements {
@@ -803,10 +799,6 @@ fn RenderInputs(props: CardViewer) -> Element {
             add_dep { selv: props.clone() }
 
             save_button { CardViewer: props.clone() }
-
-            if ai_enabled {
-                AiComplete { CardViewer: props.clone(), api_key }
-            }
         }
     }
 }
@@ -1121,35 +1113,6 @@ fn Suspend(card: Signal<Option<Card>>) -> Element {
 }
 
 #[component]
-fn AiComplete(CardViewer: CardViewer, api_key: Option<String>) -> Element {
-    let selv = CardViewer.clone();
-
-    let class = "mt-2 inline-flex items-center text-white bg-gray-800 border-0 py-1 px-3 focus:outline-none hover:bg-gray-700 rounded text-base md:mt-0";
-
-    rsx! {
-        button {
-            class: "{class}",
-            onclick: move |_| {
-                let front: String = selv.editor.front.text.cloned();
-                if front.trim().is_empty() {
-                    return;
-                }
-
-                let back = selv.editor.back.text.clone();
-                let key = api_key.clone();
-
-                spawn(async move {
-                    let response = ask_openai(key.clone().unwrap(), front).await;
-                    back.clone().set(response);
-                });
-
-            },
-            "ai complete"
-        }
-    }
-}
-
-#[component]
 fn save_button(CardViewer: CardViewer) -> Element {
     let selv = CardViewer.clone();
 
@@ -1190,7 +1153,10 @@ fn save_button(CardViewer: CardViewer) -> Element {
                         }
 
                         for event in events {
-                            APP.read().inner().provider.cards.insert_ledger(event).unwrap();
+                            if let Err(e) = APP.read().inner().provider.cards.insert_ledger(event) {
+                                append_overlay(OverlayEnum::Notice(Notice::new_from_debug(e)));
+                                return;
+                            }
                         }
 
                         for answer in card.answered_attrs {
@@ -1206,6 +1172,7 @@ fn save_button(CardViewer: CardViewer) -> Element {
                                                 let event = CardEvent::new(CardId::new_v4(), action);
                                                 if let Err(e) = APP.read().inner().provider.cards.insert_ledger(event) {
                                                     append_overlay(OverlayEnum::Notice(Notice::new_from_debug(e)));
+                                                    return;
                                                 }
                                             }
                                         },
@@ -1217,6 +1184,7 @@ fn save_button(CardViewer: CardViewer) -> Element {
                                             let event = CardEvent::new(CardId::new_v4(), action);
                                             if let Err(e) = APP.read().inner().provider.cards.insert_ledger(event) {
                                                 append_overlay(OverlayEnum::Notice(Notice::new_from_debug(e)));
+                                                return;
                                             }
                                         },
                                     }
@@ -1233,6 +1201,7 @@ fn save_button(CardViewer: CardViewer) -> Element {
                                                     let event = CardEvent::new(attr_card_id, action);
                                                     if let Err(e) = APP.read().inner().provider.cards.insert_ledger(event) {
                                                         append_overlay(OverlayEnum::Notice(Notice::new_from_debug(e)));
+                                                        return;
                                                     }
                                                 }
                                             }
@@ -1245,6 +1214,7 @@ fn save_button(CardViewer: CardViewer) -> Element {
                                             let event = CardEvent::new(attr_card_id, action);
                                             if let Err(e) = APP.read().inner().provider.cards.insert_ledger(event) {
                                                 append_overlay(OverlayEnum::Notice(Notice::new_from_debug(e)));
+                                                return;
                                             }
                                         },
                                     }

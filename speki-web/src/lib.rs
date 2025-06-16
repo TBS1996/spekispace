@@ -7,9 +7,6 @@ use speki_core::{App, Card};
 use tracing::info;
 use uuid::Uuid;
 
-#[cfg(feature = "web")]
-use wasm_bindgen::prelude::*;
-
 #[derive(Clone, Debug)]
 pub enum GraphAction {
     NodeClick(NodeId),
@@ -74,33 +71,6 @@ pub fn set_refresh_scope(id: String, signal: ScopeId) {
     REFRESH_SCOPE.with(|s| {
         s.borrow_mut().insert(id, signal);
     });
-}
-
-#[cfg(feature = "web")]
-#[wasm_bindgen(js_name = onNodeClick)]
-pub async fn on_node_click(cyto_id: &str, node_id: &str) {
-    info!("cyto id: {cyto_id}");
-    info!("!! clicked node: {node_id}");
-    let id = NodeId::from_string(node_id);
-
-    set_graphaction(cyto_id.to_string(), GraphAction::NodeClick(id));
-    trigger_refresh(cyto_id);
-}
-
-#[cfg(feature = "web")]
-#[wasm_bindgen(js_name = onEdgeClick)]
-pub async fn on_edge_click(cyto_id: &str, source: &str, target: &str) {
-    info!("okcyto id: {cyto_id}");
-    info!("clicked node from {source} to {target}");
-
-    let source = NodeId::from_string(source);
-    let target = NodeId::from_string(target);
-
-    set_graphaction(
-        cyto_id.to_string(),
-        GraphAction::EdgeClick((source, target)),
-    );
-    trigger_refresh(cyto_id);
 }
 
 fn rate_to_color(rate: f64) -> String {

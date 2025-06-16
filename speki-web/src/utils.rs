@@ -30,36 +30,17 @@ impl TimeProvider for FsTime {
 pub struct App(Arc<speki_core::App>);
 
 impl App {
-    #[cfg(not(feature = "desktop"))]
     pub fn new() -> Self {
-        use speki_dto::Ledger;
-
-        Self(Arc::new(speki_core::App::new(
-            speki_core::SimpleRecall,
-            WasmTime,
-            Ledger::new(Box::new(DexieProvider::new())),
-            Ledger::new(Box::new(DexieProvider::new())),
-            Ledger::new(Box::new(DexieProvider::new())),
-            Ledger::new(Box::new(DexieProvider::new())),
-        )))
-    }
-
-    #[cfg(feature = "desktop")]
-    pub fn new() -> Self {
-        use std::path::Path;
-
         use ledgerstore::Ledger;
-        //use speki_provider::{FsProvider, FsTime};
-        //let root = Path::new("/home/tor/spekifs/testing");
-        let root = Path::new("/home/tor/spekifs/snap4");
+        let root = dirs::data_local_dir().unwrap().join("speki");
 
         Self(Arc::new(speki_core::App::new(
             speki_core::SimpleRecall,
             FsTime,
-            Ledger::new(root),
-            Ledger::new(root),
-            Ledger::new(root),
-            Ledger::new(root),
+            Ledger::new(&root),
+            Ledger::new(&root),
+            Ledger::new(&root),
+            Ledger::new(&root),
         )))
     }
 
