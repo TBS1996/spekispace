@@ -27,11 +27,12 @@ mod utils;
 /// is true every time we change route, and is set back to false after the cyto instance is re-rendered
 pub static ROUTE_CHANGE: AtomicBool = AtomicBool::new(false);
 
+const TAILWIND_CSS: &str = include_str!("../public/tailwind.css");
+
 fn main() {
+    std::env::set_var("GDK_BACKEND", "x11");
     dioxus_logger::init(Level::INFO).expect("failed to init logger");
-    info!("starting app");
-    let id = current_scope_id();
-    info!("omg very scope id: {id:?}");
+    info!("starting speki");
 
     dioxus::launch(TheApp);
 }
@@ -44,10 +45,7 @@ pub fn TheApp() -> Element {
     use_context_provider(ReviewPage::new);
 
     rsx! {
-        document::Link {
-            rel: "stylesheet",
-            href: asset!("/public/tailwind.css")
-        }
+        style { dangerous_inner_html: "{TAILWIND_CSS}" }
 
         div {
             class: "w-screen min-h-screen",

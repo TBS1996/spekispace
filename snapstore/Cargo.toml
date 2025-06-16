@@ -1,9 +1,7 @@
-cargo-features = ["edition2024"]
-
 [package]
 name = "snapstore"
 version = "0.1.1"
-edition = "2024"
+edition = "2021"
 authors = ["tor torberge@outlook.com"]
 description = "snapshot based database"
 license = "GPL-2.0-only"

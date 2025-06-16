@@ -4120,6 +4120,7 @@ name = "speki-web"
 version = "0.1.0"
 dependencies = [
  "dioxus",
+ "dioxus-desktop",
  "dioxus-logger",
  "dirs 5.0.1",
  "either",

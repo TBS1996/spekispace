@@ -30,6 +30,7 @@ nonempty.workspace = true
 rand.workspace = true
 omtrent.workspace = true
 dirs.workspace = true
+dioxus-desktop = "0.6.1"
 
 [features]
 default = ["desktop"]
