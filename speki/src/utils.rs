@@ -3,14 +3,7 @@ use std::{fmt::Debug, sync::Arc, time::Duration};
 use dioxus::prelude::*;
 use ledgerstore::TimeProvider;
 use speki_core::{card::CardId, Card};
-#[cfg(not(feature = "desktop"))]
-use speki_provider::{DexieProvider, WasmTime};
 use tracing::info;
-#[cfg(not(feature = "desktop"))]
-use wasm_bindgen::prelude::*;
-
-#[cfg(not(feature = "desktop"))]
-use crate::firebase::{AuthUser, FirestoreProvider};
 
 #[derive(Copy, Clone)]
 pub struct FsTime;
@@ -33,6 +26,7 @@ impl App {
     pub fn new() -> Self {
         use ledgerstore::Ledger;
         let root = dirs::data_local_dir().unwrap().join("speki");
+        //let root = std::path::PathBuf::from("/home/tor/spekifs/snap4");
 
         Self(Arc::new(speki_core::App::new(
             speki_core::SimpleRecall,
@@ -82,11 +76,4 @@ impl Debug for App {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_tuple("App").field(&self.0).finish()
     }
-}
-
-#[cfg(not(feature = "desktop"))]
-#[wasm_bindgen]
-extern "C" {
-    #[wasm_bindgen(js_namespace = Date)]
-    fn now() -> f64;
 }

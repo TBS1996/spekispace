@@ -1,9 +1,10 @@
 use either::Either;
 use rayon::prelude::*;
-use serde::{Deserialize, Serialize, de::DeserializeOwned};
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use snapstore::fs::{CacheFs, Content, SnapFs};
 use snapstore::mem::SnapMem;
 use snapstore::{HashAndContents, Key};
+use std::collections::VecDeque;
 use std::fmt::Display;
 use std::fs::{self};
 use std::io::Write;
@@ -121,7 +122,10 @@ pub trait LedgerItem:
             let dependencies = if selv.0 == current {
                 selv.1.dependencies()
             } else {
-                ledger.load(current).unwrap().dependencies()
+                ledger
+                    .load(current)
+                    .map(|x| x.dependencies())
+                    .unwrap_or_default()
             };
 
             for dep in dependencies {
@@ -231,7 +235,7 @@ pub trait LedgerItem:
     where
         Self: LedgerItem,
     {
-        info!("fetching caches for item: {:?}", self.item_id());
+        trace!("fetching caches for item: {:?}", self.item_id());
 
         let mut out: HashSet<(CacheKey<Self::PropertyType, Self::RefType>, String)> =
             Default::default();
@@ -778,6 +782,76 @@ impl<T: LedgerItem> Ledger<T> {
         self.snap.all_item_ids(&hash)
     }
 
+    pub fn topological_sort(&self) -> Vec<T> {
+        let mut all: VecDeque<(T::Key, T)> = self.load_all().into_iter().collect();
+        let item_len = all.len();
+        let mut out = Vec::with_capacity(item_len);
+        let mut popped: HashSet<T::Key> = HashSet::with_capacity(item_len);
+        let mut count = 0;
+        let mut since_insert = 0;
+
+        while out.len() != item_len {
+            count += 1;
+            since_insert += 1;
+
+            if since_insert > item_len {
+                dbg!(count);
+                dbg!(all.len());
+                dbg!(all);
+                panic!();
+            }
+
+            if count % 1000 == 0 {
+                dbg!(count);
+                dbg!(all.len());
+                dbg!(out.len());
+            }
+
+            let (key, item) = all.pop_back().unwrap();
+
+            if item.dependencies().iter().all(|dep| popped.contains(dep)) {
+                out.push(item);
+                popped.insert(key);
+                since_insert = 0;
+            } else {
+                all.push_front((key, item));
+            }
+        }
+
+        out
+    }
+
+    pub fn save_pruned(&self) {
+        info!("save pruned");
+        let events: Vec<TheLedgerEvent<T>> = self
+            .topological_sort()
+            .into_iter()
+            .map(|item: T| TheLedgerEvent {
+                id: item.item_id(),
+                action: TheLedgerAction::Create(item),
+            })
+            .collect();
+
+        dbg!();
+        let mut entries: Vec<LedgerEntry<T>> = vec![];
+
+        for event in events {
+            let entry = LedgerEntry::new(entries.last(), event);
+            entries.push(entry);
+        }
+        dbg!();
+
+        let mut path = self.ledger_path();
+        path.pop();
+        path = path.join("pruned_entries");
+
+        std::fs::create_dir_all(&path).unwrap();
+
+        for entry in entries {
+            entry.save(&path);
+        }
+    }
+
     pub fn insert_ledger(&self, event: TheLedgerEvent<T>) -> Result<StateHash, EventError<T>> {
         if matches!(&event.action, TheLedgerAction::Delete) {
             match self.load(event.id) {
@@ -1156,8 +1230,6 @@ impl<T: LedgerItem> Ledger<T> {
         let modify_cache = unapplied_entries.len() < 100;
 
         info!("start apply unapplied!");
-        dbg!(&unapplied_entries);
-        dbg!(modify_cache);
         while let Some(entry) = unapplied_entries.pop() {
             let idx = entry.index;
             let (state_hash, new_contents) =
@@ -1269,7 +1341,20 @@ impl<T: LedgerItem> Ledger<T> {
 
         let id = event.id;
         let event = match event.action {
-            TheLedgerAction::Create(_) => todo!(),
+            TheLedgerAction::Create(item) => {
+                let cachegetter = self.cachegetter(state_hash.map(|x| x.to_string()));
+                let caches = item.caches(&cachegetter);
+                let empty: HashSet<(CacheKey<_, _>, String)> = Default::default();
+                let caches = caches.difference(&empty);
+                let caches: Vec<&(CacheKey<T::PropertyType, T::RefType>, String)> =
+                    caches.into_iter().collect();
+                let item = serde_json::to_vec(&item).unwrap();
+                let (next_state_hash, _) = self.snap.save(state_hash, id, item, &mut new_content);
+                if update_cache {
+                    self.modify_cache(prev_state_hash, &next_state_hash, caches, vec![]);
+                }
+                return Ok((next_state_hash, new_content));
+            }
             TheLedgerAction::Modify(m) => m,
             TheLedgerAction::Delete => {
                 info!("deletingg!!");
@@ -1326,7 +1411,6 @@ impl<T: LedgerItem> Ledger<T> {
 
         let hashed = state_hash.map(|x| x.to_owned());
 
-        dbg!(&hashed);
         let cachegetter = self.cachegetter(hashed);
 
         let old_cache = if !new_item && update_cache {

@@ -890,8 +890,6 @@ impl LedgerItem for RawCard {
                 out.entry(RefType::Instance).or_default().insert(*class);
             }
             CardType::Attribute { instance, .. } => {
-                // bruh
-                // this allows us to, what? search for an instance, and get all the attribute cards for it? includingt his card? yeahhh
                 out.entry(RefType::AttrClass).or_default().insert(*instance);
             }
             CardType::Class {

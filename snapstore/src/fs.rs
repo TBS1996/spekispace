@@ -15,7 +15,7 @@ use std::{
 use tracing::trace;
 use walkdir::WalkDir;
 
-use crate::{CacheKey, HashAndContents, KeyFoo, get_hash};
+use crate::{get_hash, CacheKey, HashAndContents, KeyFoo};
 use rayon::prelude::*;
 
 type Hashed = String;
@@ -260,6 +260,7 @@ impl<K: Copy + Eq + FromStr + ToString + Hash> SnapFs<K> {
         for entry in WalkDir::new(&path).follow_links(true) {
             let Ok(entry) = entry else {
                 let _ = dbg!(entry);
+                continue;
                 panic!();
             };
             let path = entry.path();
@@ -284,6 +285,7 @@ impl<K: Copy + Eq + FromStr + ToString + Hash> SnapFs<K> {
         for entry in WalkDir::new(&path).follow_links(true) {
             let Ok(entry) = entry else {
                 let _ = dbg!(entry);
+                continue;
                 panic!();
             };
             let path = entry.path();
@@ -670,17 +672,20 @@ impl Content {
     }
 
     pub fn delete(self) -> io::Result<()> {
-        match self {
+        let debug = format!("{:?}", &self);
+        let res = match self {
             Content::File(p) => fs::remove_file(&p),
-            Content::Symlink(p) => {
-                std::fs::remove_file(p).unwrap();
-                Ok(())
-            }
-            Content::Dir(p) => {
-                std::fs::remove_dir_all(&p).unwrap();
-                Ok(())
-            }
+            Content::Symlink(p) => std::fs::remove_file(p),
+            Content::Dir(p) => std::fs::remove_dir_all(&p),
+        };
+
+        if res.is_err() {
+            dbg!(debug);
+            res.unwrap();
+            panic!();
         }
+
+        res
     }
 
     /// Creates a symlink in case of a directory, hardlink for files.

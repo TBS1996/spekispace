@@ -148,6 +148,9 @@ impl App {
     {
         info!("initialtize app");
 
+        //card_provider.save_pruned();
+        //panic!();
+
         let time_provider: TimeGetter = Arc::new(Box::new(time_provider));
         let recaller: Recaller = Arc::new(Box::new(recall_calc));
 
