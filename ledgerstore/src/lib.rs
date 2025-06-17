@@ -25,6 +25,8 @@ pub mod ledger_cache;
 
 pub use snapstore::CacheKey;
 
+use crate::block_chain::BlockChain;
+
 #[derive(Debug, Clone)]
 pub enum EventError<T: LedgerItem> {
     Cycle(Vec<T::Key>),
@@ -449,9 +451,122 @@ pub enum TheLedgerAction<T: LedgerItem> {
     Delete,
 }
 
+mod block_chain {
+    use std::{
+        collections::HashMap,
+        path::{Path, PathBuf},
+        sync::{Arc, RwLock},
+    };
+
+    use crate::{load_file_contents, Hashed, LedgerEntry, LedgerHash, LedgerItem, TheLedgerEvent};
+
+    #[derive(Clone)]
+    pub struct BlockChain<T: LedgerItem> {
+        cached: Arc<RwLock<Vec<LedgerEntry<T>>>>,
+        index_to_hash: Arc<RwLock<HashMap<LedgerHash, usize>>>,
+        entries_path: Arc<PathBuf>,
+    }
+
+    impl<T: LedgerItem> BlockChain<T> {
+        pub fn new(path: PathBuf) -> Self {
+            std::fs::create_dir_all(&path).unwrap();
+            let cached = Self::load_ledger(&path);
+            let mut index_to_hash: HashMap<LedgerHash, usize> = Default::default();
+
+            for entry in &cached {
+                index_to_hash.insert(entry.data_hash(), entry.index);
+            }
+
+            Self {
+                cached: Arc::new(RwLock::new(cached)),
+                index_to_hash: Arc::new(RwLock::new(index_to_hash)),
+                entries_path: Arc::new(path),
+            }
+        }
+
+        pub fn chain_to_hash(&self, hash: &LedgerHash) -> Vec<LedgerEntry<T>> {
+            let index = *self.index_to_hash.read().unwrap().get(hash).unwrap();
+            let guard = self.cached.read().unwrap();
+            guard[..index].to_vec()
+        }
+
+        pub fn hash_from_index(&self, index: usize) -> Hashed {
+            self.cached.read().unwrap().get(index).unwrap().data_hash()
+        }
+
+        pub fn current_hash(&self) -> Option<Hashed> {
+            self.current_head().map(|entry| entry.data_hash())
+        }
+
+        fn current_index(&self) -> usize {
+            self.cached.read().unwrap().len()
+        }
+
+        fn current_head(&self) -> Option<LedgerEntry<T>> {
+            self.cached.read().unwrap().last().cloned()
+        }
+
+        pub fn save(&self, event: TheLedgerEvent<T>) -> Hashed {
+            use std::io::Write;
+
+            let previous = self.current_head();
+            let entry = LedgerEntry::new(previous.as_ref(), event);
+            let index = self.current_index();
+            let ledger_hash = entry.data_hash();
+
+            let name = format!("{:06}", self.current_index());
+            let path = &self.entries_path.join(name);
+            assert!(!path.exists());
+            let mut file = std::fs::File::create_new(path).unwrap();
+
+            let serialized = serde_json::to_string_pretty(&entry).unwrap();
+            file.write_all(serialized.as_bytes()).unwrap();
+            self.cached.write().unwrap().push(entry);
+            self.index_to_hash
+                .write()
+                .unwrap()
+                .insert(ledger_hash.clone(), index);
+
+            self.current_hash().unwrap()
+        }
+
+        fn load_ledger(space: &Path) -> Vec<LedgerEntry<T>> {
+            let mut foo: Vec<(usize, LedgerEntry<T>)> = {
+                let map: HashMap<String, Vec<u8>> = load_file_contents(space);
+                let mut foo: Vec<(usize, LedgerEntry<T>)> = Default::default();
+
+                if map.is_empty() {
+                    return vec![];
+                }
+
+                for (_hash, value) in map.into_iter() {
+                    let action: LedgerEntry<T> = serde_json::from_slice(&value).unwrap();
+                    let idx = action.index;
+                    foo.push((idx, action));
+                }
+
+                foo
+            };
+
+            foo.sort_by_key(|k| k.0);
+
+            let mut output: Vec<LedgerEntry<T>> = vec![];
+            let mut _prev_hash: Option<String> = None;
+
+            for (_, entry) in foo {
+                //assert_eq!(entry.previous.clone(), prev_hash);
+                //_prev_hash = Some(entry.data_hash());
+                output.push(entry);
+            }
+
+            output
+        }
+    }
+}
+
 #[derive(Clone)]
 pub struct Ledger<T: LedgerItem> {
-    ledger: Arc<RwLock<Vec<LedgerEntry<T>>>>,
+    ledger: BlockChain<T>,
     snap: SnapFs<T::Key>,
     cache: CacheFs<T::PropertyType, T::RefType>,
     root: Arc<PathBuf>,
@@ -694,18 +809,16 @@ impl<T: LedgerItem> Ledger<T> {
 
         let snap = SnapFs::new((*root).clone());
         let cache = CacheFs::new((root.join("cache")).clone(), 3);
-        let selv = Self {
-            ledger: Default::default(),
+        let ledger_path = root.join("entries");
+
+        Self {
+            ledger: BlockChain::new(ledger_path),
             snap,
             cache,
             root,
             gc_keep: 100,
             all_paths: Default::default(),
-        };
-
-        let ledger = Self::load_ledger(&selv.ledger_path());
-        *selv.ledger.write().unwrap() = ledger;
-        selv
+        }
     }
 
     fn snapshot_refs(&self) -> PathBuf {
@@ -731,9 +844,7 @@ impl<T: LedgerItem> Ledger<T> {
 
     fn current_reftrack_name(&self, index: usize) -> String {
         let last_snap_idx = index - (index % self.gc_keep);
-        let curr = self.ledger.read().unwrap();
-
-        let hash = curr.get(last_snap_idx).unwrap().data_hash();
+        let hash = self.ledger.hash_from_index(last_snap_idx);
         format!("{hash}-{last_snap_idx}")
     }
 
@@ -782,6 +893,7 @@ impl<T: LedgerItem> Ledger<T> {
         self.snap.all_item_ids(&hash)
     }
 
+    /// Sorts all the items topologically, so that no item in the vector depends on an item after its position.
     pub fn topological_sort(&self) -> Vec<T> {
         let mut all: VecDeque<(T::Key, T)> = self.load_all().into_iter().collect();
         let item_len = all.len();
@@ -821,6 +933,7 @@ impl<T: LedgerItem> Ledger<T> {
         out
     }
 
+    /// Will create a new pruned blockchain by loading all the items and using the `Create` ledger action
     pub fn save_pruned(&self) {
         info!("save pruned");
         let events: Vec<TheLedgerEvent<T>> = self
@@ -832,14 +945,12 @@ impl<T: LedgerItem> Ledger<T> {
             })
             .collect();
 
-        dbg!();
         let mut entries: Vec<LedgerEntry<T>> = vec![];
 
         for event in events {
             let entry = LedgerEntry::new(entries.last(), event);
             entries.push(entry);
         }
-        dbg!();
 
         let mut path = self.ledger_path();
         path.pop();
@@ -873,38 +984,27 @@ impl<T: LedgerItem> Ledger<T> {
             return Ok(state_hash);
         }
 
-        let mut guard = self.ledger.write().unwrap();
-        let entry = LedgerEntry::new(guard.last(), event);
-        guard.push(entry.clone());
-
-        let ledger_hash = guard.last().unwrap().data_hash();
-        entry.save(&self.ledger_path());
-
-        self.save_ledger_state(&ledger_hash, &state_hash);
+        let new_ledger_hash = self.ledger.save(event);
+        self.save_ledger_state(&new_ledger_hash, &state_hash);
 
         Ok(state_hash)
     }
 
     pub fn state_hash(&self) -> Option<StateHash> {
         trace!("retrieving current state hash");
-        let ledger = self.ledger.try_read().unwrap();
-        if ledger.is_empty() {
-            return None;
-        }
 
-        if let Some(ledger_hash) = ledger.last().map(|x| x.data_hash()) {
-            trace!("ledger hash: {ledger_hash} for {:?}", &self.root);
-        }
+        let ledger_hash = self.ledger.current_hash()?;
+        trace!("ledger hash: {ledger_hash} for {:?}", &self.root);
 
         if !self.has_statehash() {
             //return self.mem_rebuild();
         }
 
-        self._state_hash(ledger.as_slice()).unwrap()
+        self._state_hash(ledger_hash).unwrap()
     }
 
     pub fn load_last_applied(&self, id: T::Key) -> Option<T> {
-        let (last_applied, _) = self.applied_status(self.ledger.read().unwrap().as_slice());
+        let (last_applied, _) = self.applied_status(&self.ledger.current_hash()?);
         match self.snap.get(&last_applied?, id) {
             Some(item) => serde_json::from_slice(&item).unwrap(),
             None => None,
@@ -995,10 +1095,10 @@ impl<T: LedgerItem> Ledger<T> {
     fn garbage_collection(&self, index: usize) -> Option<(HashSet<Content>, HashSet<LedgerHash>)> {
         info!("GARBAGE COLLECTION;;");
 
-        let guard = self.ledger.read().unwrap();
+        let guard = self.ledger.chain_to_hash(&self.ledger.current_hash()?);
 
         if guard.is_empty() {
-            return None;
+            panic!();
         }
 
         /// lets see...
@@ -1186,12 +1286,11 @@ impl<T: LedgerItem> Ledger<T> {
     */
 
     /// Returns last applied entry, and list of entries not applied yet.
-    fn applied_status(
-        &self,
-        ledger: &[LedgerEntry<T>],
-    ) -> (Option<StateHash>, Vec<LedgerEntry<T>>) {
+    fn applied_status(&self, ledger: &LedgerHash) -> (Option<StateHash>, Vec<LedgerEntry<T>>) {
         trace!("_state_hash @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@");
         let mut unapplied_entries: Vec<LedgerEntry<T>> = vec![];
+
+        let ledger = self.ledger.chain_to_hash(ledger);
 
         if ledger.is_empty() {
             trace!("ledger is empty");
@@ -1215,8 +1314,8 @@ impl<T: LedgerItem> Ledger<T> {
         return (last_applied, unapplied_entries);
     }
 
-    fn _state_hash(&self, ledger: &[LedgerEntry<T>]) -> Result<Option<StateHash>, EventError<T>> {
-        let (mut last_applied, mut unapplied_entries) = self.applied_status(ledger);
+    fn _state_hash(&self, ledger: LedgerHash) -> Result<Option<StateHash>, EventError<T>> {
+        let (mut last_applied, mut unapplied_entries) = self.applied_status(&ledger);
 
         if unapplied_entries.is_empty() {
             return Ok(last_applied);
@@ -1292,38 +1391,6 @@ impl<T: LedgerItem> Ledger<T> {
             symlink(sp, ledger_path).unwrap();
             false
         }
-    }
-
-    fn load_ledger(space: &Path) -> Vec<LedgerEntry<T>> {
-        let mut foo: Vec<(usize, LedgerEntry<T>)> = {
-            let map: HashMap<String, Vec<u8>> = load_file_contents(space);
-            let mut foo: Vec<(usize, LedgerEntry<T>)> = Default::default();
-
-            if map.is_empty() {
-                return vec![];
-            }
-
-            for (_hash, value) in map.into_iter() {
-                let action: LedgerEntry<T> = serde_json::from_slice(&value).unwrap();
-                let idx = action.index;
-                foo.push((idx, action));
-            }
-
-            foo
-        };
-
-        foo.sort_by_key(|k| k.0);
-
-        let mut output: Vec<LedgerEntry<T>> = vec![];
-        let mut _prev_hash: Option<String> = None;
-
-        for (_, entry) in foo {
-            //assert_eq!(entry.previous.clone(), prev_hash);
-            //_prev_hash = Some(entry.data_hash());
-            output.push(entry);
-        }
-
-        output
     }
 
     /// Clones the current state, modifies it with the new entry, and returns the hash of the new state.
