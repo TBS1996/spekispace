@@ -272,25 +272,22 @@ pub fn UploadRender(props: Uploader) -> Element {
                         let entries = cards.cloned();
                         let content = content.clone();
                         let concept = concept2.clone();
-                        spawn(async move {
-
-                            match concept.selected_card().cloned() {
-                                Some(class) => {
-                                    for card in entries {
-                                        app.new_instance(card.q, Some(card.a), class);
-                                    }
-                                },
-                                None => {
-                                    for card in entries {
-                                        app.new_simple(card.q, card.a);
-                                    }
-                                },
-                            }
+                        match concept.selected_card().cloned() {
+                            Some(class) => {
+                                for card in entries {
+                                    app.new_instance(card.q, Some(card.a), class);
+                                }
+                            },
+                            None => {
+                                for card in entries {
+                                    app.new_simple(card.q, card.a);
+                                }
+                            },
+                        }
 
 
-                            content.clone().set(Default::default());
-                            cards.clone().set(Default::default());
-                        });
+                        content.clone().set(Default::default());
+                        cards.clone().set(Default::default());
                     },
                     "Save Cards"
                 }

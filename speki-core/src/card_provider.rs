@@ -1,6 +1,6 @@
 use crate::{
-    audio::Audio, card::CardId, metadata::Metadata, recall_rate::History, Card, Provider, Recaller,
-    TimeGetter,
+    audio::Audio, card::CardId, metadata::Metadata, recall_rate::History, Card, FsTime, Provider,
+    SimpleRecall,
 };
 use dioxus_logger::tracing::{info, trace};
 use std::{collections::BTreeSet, fmt::Debug, sync::Arc};
@@ -8,8 +8,8 @@ use std::{collections::BTreeSet, fmt::Debug, sync::Arc};
 #[derive(Clone)]
 pub struct CardProvider {
     pub providers: Provider,
-    time_provider: TimeGetter,
-    recaller: Recaller,
+    time_provider: FsTime,
+    recaller: SimpleRecall,
 }
 
 impl Debug for CardProvider {
@@ -50,10 +50,6 @@ impl CardProvider {
     }
 
     pub fn load(&self, id: CardId) -> Option<Arc<Card>> {
-        //if let Some(card) = self.cards.read().unwrap().get(&id).cloned() {
-        //    return Some(card);
-        //}
-
         let base = self.providers.cards.load(id)?;
         let history = match self.providers.reviews.load(id) {
             Some(revs) => revs,
@@ -77,16 +73,14 @@ impl CardProvider {
             back_audio,
         ));
 
-        //self.cards.write().unwrap().insert(id, card.clone());
-
         Some(card)
     }
 
-    pub fn time_provider(&self) -> TimeGetter {
+    pub fn time_provider(&self) -> FsTime {
         self.time_provider.clone()
     }
 
-    pub fn new(provider: Provider, time_provider: TimeGetter, recaller: Recaller) -> Self {
+    pub fn new(provider: Provider, time_provider: FsTime, recaller: SimpleRecall) -> Self {
         Self {
             time_provider,
             recaller,

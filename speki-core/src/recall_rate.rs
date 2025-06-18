@@ -4,15 +4,13 @@ use ledgerstore::{LedgerItem, TheLedgerEvent};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::{
-    card::{CardId, RecallRate},
-    RecallCalc,
-};
+use crate::card::{CardId, RecallRate};
 
+#[derive(Clone, Copy)]
 pub struct SimpleRecall;
 
-impl RecallCalc for SimpleRecall {
-    fn recall_rate(&self, reviews: &History, current_unix: Duration) -> Option<RecallRate> {
+impl SimpleRecall {
+    pub fn recall_rate(&self, reviews: &History, current_unix: Duration) -> Option<RecallRate> {
         simple_recall_rate(reviews, current_unix)
     }
 }

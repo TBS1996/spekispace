@@ -1,7 +1,5 @@
 use std::{
     collections::{BTreeMap, BTreeSet},
-    future::Future,
-    pin::Pin,
     sync::Arc,
     time::Duration,
 };
@@ -33,7 +31,7 @@ use crate::{
 use super::OverlayEnum;
 
 pub fn overlay_card_viewer() -> MyClosure {
-    MyClosure::new(move |card: Signal<Card>| async move {
+    MyClosure::new(move |card: Signal<Card>| {
         let viewer = CardViewer::new_from_card(card);
         append_overlay(OverlayEnum::CardViewer(viewer));
     })
@@ -46,7 +44,7 @@ pub enum MaybeEntry {
 }
 
 impl MaybeEntry {
-    pub async fn entry(&mut self) -> Option<Signal<Card>> {
+    pub fn entry(&mut self) -> Option<Signal<Card>> {
         let id = match self {
             Self::Yes(card) => return Some(card.clone()),
             Self::No(id) => id,
@@ -196,7 +194,7 @@ impl CardSelector {
                         let entry = cards.get(&card).unwrap();
 
                         #[allow(deprecated)]
-                        let card = entry.write_silent().entry().await.unwrap();
+                        let card = entry.write_silent().entry().unwrap();
 
                         if forbidden_cards.read().contains(&card.read().id()) {
                             continue;
@@ -359,23 +357,18 @@ impl PartialEq for CardSelector {
 }
 
 #[derive(Clone)]
-pub struct MyClosure(
-    pub Arc<Box<dyn Fn(Signal<Card>) -> Pin<Box<dyn Future<Output = ()> + 'static>> + 'static>>,
-);
+pub struct MyClosure(pub Arc<Box<dyn Fn(Signal<Card>)>>);
 
 impl MyClosure {
-    pub fn new<F, Fut>(func: F) -> Self
+    pub fn new<F>(func: F) -> Self
     where
-        F: Fn(Signal<Card>) -> Fut + 'static,
-        Fut: Future<Output = ()> + 'static,
+        F: Fn(Signal<Card>) + 'static,
     {
-        MyClosure(Arc::new(Box::new(move |card| {
-            Box::pin(func(card)) as Pin<Box<dyn Future<Output = ()>>>
-        })))
+        MyClosure(Arc::new(Box::new(func)))
     }
 
-    pub async fn call(&self, card: Signal<Card>) {
-        (self.0)(card).await;
+    pub fn call(&self, card: Signal<Card>) {
+        (self.0)(card)
     }
 }
 
@@ -461,11 +454,8 @@ fn NewcardButton(
 
                 let closure = closure.clone();
                 let hook = MyClosure::new(move |card: Signal<Card>| {
-                    let closure = closure.clone();
-
-                    async move {
-                        closure.call(card).await;
-                    }
+                let closure = closure.clone();
+                closure.call(card);
                 });
 
                 let viewer = CardViewer::new()
@@ -517,9 +507,7 @@ fn TableRender(cards: Resource<Vec<Signal<Card>>>, on_card_selected: MyClosure) 
                                 info!("clicky");
                                 let card = card.clone();
                                 let closure = _closure.clone();
-                                spawn(async move {
-                                    closure.call(card).await;
-                                });
+                                closure.call(card);
                             },
 
                             td { class: "border border-gray-300 px-4 py-2 w-2/3", "{card}" }

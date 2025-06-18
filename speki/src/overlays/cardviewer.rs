@@ -16,6 +16,7 @@ use speki_core::{
     Card, CardType, RefType,
 };
 
+use ledgerstore::TimeProvider;
 use speki::{Node, NodeId, NodeMetadata};
 use tracing::info;
 
@@ -335,22 +336,18 @@ fn RenderDependencies(
                         class: "p-1 hover:bg-gray-200 hover:border-gray-400 border border-transparent rounded-md transition-colors",
                         onclick: move |_| {
                             let currcard = card_text.cloned();
-                            let mut depsig = dependencies.clone();
+                            let depsig = dependencies.clone();
 
                             let fun = MyClosure::new(move |card: Signal<Card>| {
-                                async move {
-                                    depsig.write().push(card);
-                                }
+                                depsig.clone().write().push(card);
                             });
 
-                            spawn(async move {
-                                let front = currcard.clone();
-                                let mut props = CardSelector::dependency_picker(fun).with_default_search(front);
-                                if let Some(id)  = card_id {
-                                    props = props.with_forbidden_cards(vec![id]);
-                                }
-                                append_overlay(OverlayEnum::CardSelector(props));
-                            });
+                            let front = currcard.clone();
+                            let mut props = CardSelector::dependency_picker(fun).with_default_search(front);
+                            if let Some(id)  = card_id {
+                                props = props.with_forbidden_cards(vec![id]);
+                            }
+                            append_overlay(OverlayEnum::CardSelector(props));
                         },
                         "➕"
                     }
@@ -457,12 +454,10 @@ impl CardViewer {
             let _front = front.clone();
             let _meta = meta.clone();
 
-            async move {
-                let deps = dependencies.clone();
-                deps.clone()
-                    .write()
-                    .retain(|dep| dep.read().id() != card.read().id());
-            }
+            let deps = dependencies.clone();
+            deps.clone()
+                .write()
+                .retain(|dep| dep.read().id() != card.read().id());
         })
     }
 
@@ -470,7 +465,6 @@ impl CardViewer {
         MyClosure::new(move |card: Signal<Card>| {
             info!("ref card set ?");
             dependencies.clone().write().push(card);
-            async move {}
         })
     }
 
@@ -756,7 +750,7 @@ impl CardViewer {
         self
     }
 
-    async fn reset(&self) {
+    fn reset(&self) {
         self.editor.front.reset();
         self.editor.back.reset();
         self.editor.dependencies.clone().write().clear();
@@ -1103,9 +1097,7 @@ fn Suspend(card: Signal<Option<Card>>) -> Element {
             class: "mt-2 inline-flex items-center text-white bg-gray-800 border-0 py-1 px-3 focus:outline-none hover:bg-gray-700 rounded text-base md:mt-0",
             onclick: move |_| {
                 let mut card = card.clone();
-                spawn(async move {
-                    card.set_suspend(!is_suspended);
-                });
+                card.set_suspend(!is_suspended);
             },
             "{txt}"
         }
@@ -1137,78 +1129,67 @@ fn save_button(CardViewer: CardViewer) -> Element {
             class: "{class}",
             disabled: !enabled,
             onclick: move |_| {
-                if let Some(card) = selv.editor.clone().into_cardrep() {
-                    let selveste = selv.clone();
-                    spawn(async move {
-                        let mut events: Vec<CardEvent> = vec![];
+                let Some(card) = selv.editor.clone().into_cardrep() else {
+                    return;
+                };
 
-                        let id = selveste.old_card.cloned().map(|card|card.id()).unwrap_or_else(CardId::new_v4);
-                        events.push(CardEvent::new(id, CardAction::UpsertCard(card.ty)));
-                        events.push(CardEvent::new(id, CardAction::SetFrontAudio (card.front_audio)));
-                        events.push(CardEvent::new(id, CardAction::SetBackAudio ( card.back_audio)));
-                        events.push(CardEvent::new(id, CardAction::SetNamespace ( card.namespace)));
+                let selveste = selv.clone();
+                let mut events: Vec<CardEvent> = vec![];
 
-                        for dep in card.deps {
-                            events.push(CardEvent::new(id, CardAction::AddDependency(dep)));
-                        }
+                let id = selveste.old_card.cloned().map(|card|card.id()).unwrap_or_else(CardId::new_v4);
+                events.push(CardEvent::new(id, CardAction::UpsertCard(card.ty)));
+                events.push(CardEvent::new(id, CardAction::SetFrontAudio (card.front_audio)));
+                events.push(CardEvent::new(id, CardAction::SetBackAudio ( card.back_audio)));
+                events.push(CardEvent::new(id, CardAction::SetNamespace ( card.namespace)));
 
-                        for event in events {
-                            if let Err(e) = APP.read().inner().provider.cards.insert_ledger(event) {
-                                append_overlay(OverlayEnum::Notice(Notice::new_from_debug(e)));
-                                return;
-                            }
-                        }
+                for dep in card.deps {
+                    events.push(CardEvent::new(id, CardAction::AddDependency(dep)));
+                }
 
-                        for answer in card.answered_attrs {
+                for event in events {
+                    if let Err(e) = APP.read().inner().provider.cards.insert_ledger(event) {
+                        append_overlay(OverlayEnum::Notice(Notice::new_from_debug(e)));
+                        return;
+                    }
+                }
+
+                for answer in card.answered_attrs {
+                    match answer {
+                        AttrAnswer::New { attr_id, question: _, answer } => {
+                            if let Some(answer) = answer.cloned() {
+
                             match answer {
-                                AttrAnswer::New { attr_id, question: _, answer } => {
-                                    if let Some(answer) = answer.cloned() {
-
-                                    match answer {
-                                        Either::Left(answer) => {
-                                            if let Some(back) = answer.to_backside() {
-                                                let data = CardType::Attribute { attribute: attr_id.id, back: back, instance: id };
-                                                let action = CardAction::UpsertCard(data);
-                                                let event = CardEvent::new(CardId::new_v4(), action);
-                                                if let Err(e) = APP.read().inner().provider.cards.insert_ledger(event) {
-                                                    append_overlay(OverlayEnum::Notice(Notice::new_from_debug(e)));
-                                                    return;
-                                                }
-                                            }
-                                        },
-                                        Either::Right(answer) => {
-                                            let card = answer.selected_card().cloned().unwrap();
-                                            let back = BackSide::Card(card);
-                                            let data = CardType::Attribute { attribute: attr_id.id, back: back, instance: id };
-                                            let action = CardAction::UpsertCard(data);
-                                            let event = CardEvent::new(CardId::new_v4(), action);
-                                            if let Err(e) = APP.read().inner().provider.cards.insert_ledger(event) {
-                                                append_overlay(OverlayEnum::Notice(Notice::new_from_debug(e)));
-                                                return;
-                                            }
-                                        },
-                                    }
+                                Either::Left(answer) => {
+                                    if let Some(back) = answer.to_backside() {
+                                        let data = CardType::Attribute { attribute: attr_id.id, back: back, instance: id };
+                                        let action = CardAction::UpsertCard(data);
+                                        let event = CardEvent::new(CardId::new_v4(), action);
+                                        if let Err(e) = APP.read().inner().provider.cards.insert_ledger(event) {
+                                            append_overlay(OverlayEnum::Notice(Notice::new_from_debug(e)));
+                                            return;
+                                        }
                                     }
                                 },
-                                AttrAnswer::Old { id: attr_card_id, question: _, answer, attr_id } => {
-                                    let prev_back = APP.read().inner().card_provider.providers.cards.load(id).unwrap().ref_backside().cloned().unwrap();
-                                    match answer {
-                                        Either::Left(answer) => {
-                                            if let Some(back) = answer.to_backside() {
-                                                if back != prev_back {
-                                                    let data = CardType::Attribute { attribute: attr_id, back: back, instance: id };
-                                                    let action = CardAction::UpsertCard(data);
-                                                    let event = CardEvent::new(attr_card_id, action);
-                                                    if let Err(e) = APP.read().inner().provider.cards.insert_ledger(event) {
-                                                        append_overlay(OverlayEnum::Notice(Notice::new_from_debug(e)));
-                                                        return;
-                                                    }
-                                                }
-                                            }
-                                        },
-                                        Either::Right(answer) => {
-                                            let card = answer.selected_card().cloned().unwrap();
-                                            let back = BackSide::Card(card);
+                                Either::Right(answer) => {
+                                    let card = answer.selected_card().cloned().unwrap();
+                                    let back = BackSide::Card(card);
+                                    let data = CardType::Attribute { attribute: attr_id.id, back: back, instance: id };
+                                    let action = CardAction::UpsertCard(data);
+                                    let event = CardEvent::new(CardId::new_v4(), action);
+                                    if let Err(e) = APP.read().inner().provider.cards.insert_ledger(event) {
+                                        append_overlay(OverlayEnum::Notice(Notice::new_from_debug(e)));
+                                        return;
+                                    }
+                                },
+                            }
+                            }
+                        },
+                        AttrAnswer::Old { id: attr_card_id, question: _, answer, attr_id } => {
+                            let prev_back = APP.read().inner().card_provider.providers.cards.load(id).unwrap().ref_backside().cloned().unwrap();
+                            match answer {
+                                Either::Left(answer) => {
+                                    if let Some(back) = answer.to_backside() {
+                                        if back != prev_back {
                                             let data = CardType::Attribute { attribute: attr_id, back: back, instance: id };
                                             let action = CardAction::UpsertCard(data);
                                             let event = CardEvent::new(attr_card_id, action);
@@ -1216,27 +1197,38 @@ fn save_button(CardViewer: CardViewer) -> Element {
                                                 append_overlay(OverlayEnum::Notice(Notice::new_from_debug(e)));
                                                 return;
                                             }
-                                        },
+                                        }
+                                    }
+                                },
+                                Either::Right(answer) => {
+                                    let card = answer.selected_card().cloned().unwrap();
+                                    let back = BackSide::Card(card);
+                                    let data = CardType::Attribute { attribute: attr_id, back: back, instance: id };
+                                    let action = CardAction::UpsertCard(data);
+                                    let event = CardEvent::new(attr_card_id, action);
+                                    if let Err(e) = APP.read().inner().provider.cards.insert_ledger(event) {
+                                        append_overlay(OverlayEnum::Notice(Notice::new_from_debug(e)));
+                                        return;
                                     }
                                 },
                             }
-                        }
-
-                        let Some(card) = APP.read().inner().card_provider().load(id) else {
-                            dbg!(id);
-                            panic!();
-                        };
-
-                        let inner_card = Arc::unwrap_or_clone(card);
-                        let card = Signal::new_in_scope(inner_card.clone(),  ScopeId::APP);
-                        if let Some(hook) = selveste.save_hook.clone() {
-                            hook.call(card).await;
-                        }
-
-                        selveste.reset().await;
-                        pop_overlay();
-                    });
+                        },
+                    }
                 }
+
+                let Some(card) = APP.read().inner().card_provider().load(id) else {
+                    dbg!(id);
+                    panic!();
+                };
+
+                let inner_card = Arc::unwrap_or_clone(card);
+                let card = Signal::new_in_scope(inner_card.clone(),  ScopeId::APP);
+                if let Some(hook) = selveste.save_hook.clone() {
+                    hook.call(card);
+                }
+
+                selveste.reset();
+                pop_overlay();
             },
             if is_new {
                 "create"
@@ -1262,14 +1254,12 @@ fn add_dep(selv: CardViewer) -> Element {
                     move |card: Signal<Card>| {
                     selv.editor.dependencies.clone().write().push(card);
                     let old_card = selv.old_card.cloned();
-                    async move {
-                        if let Some(mut old_card) = old_card {
-                        if let Err(e) = old_card.add_dependency(card.read().id()) {
-                            append_overlay(
-                                OverlayEnum::Notice(Notice::new_from_debug(e))
-                            );
-                        }
-                            }
+                    if let Some(mut old_card) = old_card {
+                    if let Err(e) = old_card.add_dependency(card.read().id()) {
+                        append_overlay(
+                            OverlayEnum::Notice(Notice::new_from_debug(e))
+                        );
+                    }
                         }
                     }
                 );

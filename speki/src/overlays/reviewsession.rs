@@ -303,10 +303,8 @@ fn Infobar(card: Arc<Card>, tot: Resource<usize>, queue: Signal<Queue>) -> Eleme
                         .into_iter()
                         .map(DynCard::Card)
                         .collect();
-                    spawn(async move {
-                        let props = CardSelector::new(false, Default::default()).with_dyncards(passed).with_edit_collection(false);
-                        append_overlay(OverlayEnum::CardSelector(props));
-                    });
+                    let props = CardSelector::new(false, Default::default()).with_dyncards(passed).with_edit_collection(false);
+                    append_overlay(OverlayEnum::CardSelector(props));
                 },
                 "{pos}"
             }
@@ -328,10 +326,8 @@ fn Infobar(card: Arc<Card>, tot: Resource<usize>, queue: Signal<Queue>) -> Eleme
                         passed.extend(upcoming);
                         passed
                     };
-                    spawn(async move {
-                        let props = CardSelector::new(false, Default::default()).with_dyncards(total).with_edit_collection(false);
-                        append_overlay(OverlayEnum::CardSelector(props));
-                    });
+                    let props = CardSelector::new(false, Default::default()).with_dyncards(total).with_edit_collection(false);
+                    append_overlay(OverlayEnum::CardSelector(props));
                 },
                 "{tot}"
             }
@@ -366,11 +362,9 @@ fn Suspend(card: Signal<Card>, mut queue: Signal<Queue>) -> Element {
             class: "mt-2 inline-flex items-center text-white bg-gray-800 border-0 py-1 px-3 focus:outline-none hover:bg-gray-700 rounded text-base md:mt-0",
             onclick: move |_| {
                 let card = card.clone();
-                spawn(async move {
-                    let mut card = card;
-                    card.write().set_suspend(!is_suspended);
-                    queue.write().next();
-                });
+                let mut card = card;
+                card.write().set_suspend(!is_suspended);
+                queue.write().next();
             },
             "{txt}"
         }
@@ -415,19 +409,15 @@ fn RenderDependencies(
 
                             let fun = MyClosure::new(move |card: Signal<Card>| {
                                 let  old_card = currcard.clone();
-                                async move {
-                                    let mut old_card = Arc::unwrap_or_clone(old_card);
-                                    old_card.add_dependency(card.read().id()).unwrap();
-                                    let _ = queue.write();
-                                }
+                                let mut old_card = Arc::unwrap_or_clone(old_card);
+                                old_card.add_dependency(card.read().id()).unwrap();
+                                let _ = queue.clone().write();
                             });
 
                             let card = card.clone();
-                            spawn(async move {
-                                let front = format!("{}{}", card.print(), card.display_backside());
-                                let props = CardSelector::dependency_picker(fun).with_default_search(front).with_forbidden_cards(vec![card.id()]);
-                                append_overlay(OverlayEnum::CardSelector(props));
-                            });
+                            let front = format!("{}{}", card.print(), card.display_backside());
+                            let props = CardSelector::dependency_picker(fun).with_default_search(front).with_forbidden_cards(vec![card.id()]);
+                            append_overlay(OverlayEnum::CardSelector(props));
                         },
                         "➕"
                     }

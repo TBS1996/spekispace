@@ -1,23 +1,8 @@
-use std::{fmt::Debug, sync::Arc, time::Duration};
+use std::{fmt::Debug, sync::Arc};
 
 use dioxus::prelude::*;
-use ledgerstore::TimeProvider;
 use speki_core::{card::CardId, Card};
 use tracing::info;
-
-#[derive(Copy, Clone)]
-pub struct FsTime;
-
-impl TimeProvider for FsTime {
-    fn current_time(&self) -> Duration {
-        Duration::from_secs(
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_secs(),
-        )
-    }
-}
 
 #[derive(Clone)]
 pub struct App(Arc<speki_core::App>);
@@ -29,8 +14,6 @@ impl App {
         //let root = std::path::PathBuf::from("/home/tor/spekifs/snap4");
 
         Self(Arc::new(speki_core::App::new(
-            speki_core::SimpleRecall,
-            FsTime,
             Ledger::new(&root),
             Ledger::new(&root),
             Ledger::new(&root),

@@ -70,10 +70,8 @@ pub fn RenderDependents(card_id: CardId, hidden: bool) -> Element {
                     button {
                         class: "p-1 hover:bg-gray-200 hover:border-gray-400 border border-transparent rounded-md transition-colors",
                         onclick: move |_| {
-                            spawn(async move {
-                                let props = CardViewer::new().with_dependency(card_id);
-                                append_overlay(OverlayEnum::CardViewer(props));
-                            });
+                            let props = CardViewer::new().with_dependency(card_id);
+                            append_overlay(OverlayEnum::CardViewer(props));
                         },
 
 
@@ -85,10 +83,8 @@ pub fn RenderDependents(card_id: CardId, hidden: bool) -> Element {
                 button {
                     class: "mb-1 p-1 bg-gray-100 rounded-md text-left",
                     onclick: move|_|{
-                        spawn(async move{
-                            let props = CardSelector::new(false, Default::default()).with_dyncards(vec![DynCard::Dependents(card_id)]);
-                            append_overlay(OverlayEnum::CardSelector(props));
-                        });
+                        let props = CardSelector::new(false, Default::default()).with_dyncards(vec![DynCard::Dependents(card_id)]);
+                        append_overlay(OverlayEnum::CardSelector(props));
                     },
                     "view {qty} dependents"
                 }
@@ -131,7 +127,6 @@ pub fn set_card_link(text: Signal<String>, alias: bool) {
                     format!("[[{}]]", card.read().id())
                 };
                 text.clone().set(text.cloned().replace(&val, &s));
-                async move {}
             });
 
             let props = CardSelector::new(false, vec![])

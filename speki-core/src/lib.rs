@@ -1,4 +1,4 @@
-use card::{BackSide, CardId, RawCard, RecallRate, TextData};
+use card::{BackSide, CardId, RawCard, TextData};
 use card_provider::CardProvider;
 use cardfilter::CardFilter;
 use dioxus_logger::tracing::info;
@@ -104,8 +104,18 @@ impl AsRef<str> for CardProperty {
     }
 }
 
-pub trait RecallCalc {
-    fn recall_rate(&self, reviews: &History, current_unix: Duration) -> Option<RecallRate>;
+#[derive(Copy, Clone)]
+pub struct FsTime;
+
+impl TimeProvider for FsTime {
+    fn current_time(&self) -> Duration {
+        Duration::from_secs(
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_secs(),
+        )
+    }
 }
 
 #[derive(Clone)]
@@ -114,17 +124,14 @@ pub struct Provider {
     pub sets: Ledger<Set>,
     pub reviews: Ledger<History>,
     pub metadata: Ledger<Metadata>,
-    pub time: TimeGetter,
+    pub time: FsTime,
 }
-
-pub type Recaller = Arc<Box<dyn RecallCalc + Send>>;
-pub type TimeGetter = Arc<Box<dyn TimeProvider + Send + Sync>>;
 
 pub struct App {
     pub provider: Provider,
     pub card_provider: CardProvider,
-    pub time_provider: TimeGetter,
-    pub recaller: Recaller,
+    pub time_provider: FsTime,
+    pub recaller: SimpleRecall,
 }
 
 impl Debug for App {
@@ -134,42 +141,32 @@ impl Debug for App {
 }
 
 impl App {
-    pub fn new<A, B>(
-        recall_calc: A,
-        time_provider: B,
+    pub fn new(
         card_provider: Ledger<RawCard>,
         history_provider: Ledger<History>,
         meta_provider: Ledger<Metadata>,
         set_provider: Ledger<Set>,
-    ) -> Self
-    where
-        A: RecallCalc + 'static + Send,
-        B: TimeProvider + 'static + Send + Sync,
-    {
+    ) -> Self {
         info!("initialtize app");
 
         //card_provider.save_pruned();
         //panic!();
 
-        let time_provider: TimeGetter = Arc::new(Box::new(time_provider));
-        let recaller: Recaller = Arc::new(Box::new(recall_calc));
-
         let provider = Provider {
             cards: card_provider,
             reviews: history_provider,
             metadata: meta_provider,
-            time: time_provider.clone(),
+            time: FsTime,
             sets: set_provider,
         };
 
-        let card_provider =
-            CardProvider::new(provider.clone(), time_provider.clone(), recaller.clone());
+        let card_provider = CardProvider::new(provider.clone(), FsTime, SimpleRecall);
 
         Self {
             provider,
             card_provider,
-            time_provider,
-            recaller,
+            time_provider: FsTime,
+            recaller: SimpleRecall,
         }
     }
 

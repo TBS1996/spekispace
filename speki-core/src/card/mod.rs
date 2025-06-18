@@ -12,7 +12,7 @@ pub mod basecard;
 pub use basecard::*;
 
 use either::Either;
-use ledgerstore::{EventError, StateHash};
+use ledgerstore::{EventError, LedgerItem, NewFixedLedger, StateHash, TimeProvider};
 use nonempty::NonEmpty;
 use serde::Deserializer;
 use serde_json::Value;
@@ -24,7 +24,7 @@ use crate::{
     ledger::{CardAction, CardEvent, MetaEvent},
     metadata::Metadata,
     recall_rate::{History, Recall, Review, ReviewAction, ReviewEvent, SimpleRecall},
-    RecallCalc, Recaller, TimeGetter,
+    FsTime,
 };
 
 pub type RecallRate = f32;
@@ -138,7 +138,7 @@ pub struct Card {
     metadata: Metadata,
     history: History,
     card_provider: CardProvider,
-    recaller: Recaller,
+    recaller: SimpleRecall,
 }
 
 impl PartialEq for Card {
@@ -311,7 +311,7 @@ impl Card {
         tracing::info!("added recall: {recall:?}");
     }
 
-    pub fn time_provider(&self) -> TimeGetter {
+    pub fn time_provider(&self) -> FsTime {
         self.card_provider.time_provider()
     }
 
@@ -340,7 +340,7 @@ impl Card {
         history: History,
         metadata: Metadata,
         card_provider: CardProvider,
-        recaller: Recaller,
+        recaller: SimpleRecall,
         front_audio: Option<Audio>,
         back_audio: Option<Audio>,
     ) -> Self {
@@ -483,67 +483,16 @@ impl Card {
         self.base.data.backside()
     }
 
-    pub fn recursive_dependents(&self) -> Vec<CardId> {
-        use std::collections::VecDeque;
+    pub fn recursive_dependents(&self) -> HashSet<CardId> {
+        let ledger = self
+            .card_provider
+            .providers
+            .cards
+            .cachegetter(self.card_provider.providers.cards.state_hash());
 
-        let mut deps = vec![];
-        let mut visited: HashSet<CardId> = Default::default();
-        let mut stack = VecDeque::new();
-        stack.push_back((self.id(), vec![self.id()]));
+        let ledger = NewFixedLedger::new(ledger, self.base.clone());
 
-        while let Some((id, path)) = stack.pop_back() {
-            if visited.contains(&id) {
-                continue;
-            }
-
-            if self.id() != id {
-                visited.insert(id);
-                deps.push(id);
-            }
-
-            for dep_str in self.card_provider.providers.cards.get_dependents(id) {
-                let dep: CardId = dep_str.parse().unwrap();
-
-                if path.contains(&dep) {
-                    panic!(
-                        "Cycle detected: {}",
-                        path.iter()
-                            .chain(std::iter::once(&dep))
-                            .map(|id| format!(
-                                "({id}: {})",
-                                self.card_provider.load(*id).unwrap().base.data.raw_front()
-                            ))
-                            .collect::<Vec<_>>()
-                            .join(" -> ")
-                    );
-                }
-
-                let mut new_path = path.clone();
-                new_path.push(dep);
-                stack.push_back((dep, new_path));
-            }
-        }
-
-        deps
-    }
-
-    pub fn recursive_dependencies_as_card(&self) -> Vec<Arc<Card>> {
-        tracing::trace!("getting dependencies of: {}", self.id);
-        let mut deps = vec![];
-        let mut stack = vec![Arc::new(self.clone())];
-
-        while let Some(card) = stack.pop() {
-            if self.id() != card.id() {
-                deps.push(card.clone());
-            }
-
-            for dep in card.dependencies() {
-                let dep = self.card_provider.load(dep).unwrap();
-                stack.push(dep);
-            }
-        }
-
-        deps
+        self.base.recursive_dependent_ids(&ledger)
     }
 
     pub fn recursive_dependencies(&self) -> Vec<CardId> {

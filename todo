@@ -623,6 +623,13 @@ could try to figure out if a change in a card updates any dependencies or not bu
 
 so sometimes, a concept has multiple names to it. not sure how to encode that properly. 
 
+# Store recursive dependents/dependencies in tree structure kinda
+
+maybe a way to quickly store like the dag would be that each item hsa a folder, with a textfile like 'item' or whatever
+and then a bunch of symlinks to its dependencies 
+
+so you can just like do recursively walk the tree down to get all the items
+ehh fast but, shitty space complexity ig
 
 # Fail on dependnecies during review
 

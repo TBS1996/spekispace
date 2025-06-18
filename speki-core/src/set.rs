@@ -99,7 +99,7 @@ impl Default for SetExpr {
 
 impl Input {
     pub fn eval(&self, provider: &CardProvider) -> BTreeSet<MaybeCard> {
-        match self {
+        let res = match self {
             Input::Leaf(dc) => dc.evaluate(provider.clone()).into_iter().collect(),
             Input::Reference(id) => provider
                 .providers
@@ -109,7 +109,9 @@ impl Input {
                 .expr
                 .eval(provider),
             Input::Expr(expr) => expr.eval(provider),
-        }
+        };
+        dbg!("evaluated: {:?}", self);
+        res
     }
 }
 

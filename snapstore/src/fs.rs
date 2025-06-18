@@ -260,7 +260,6 @@ impl<K: Copy + Eq + FromStr + ToString + Hash> SnapFs<K> {
         for entry in WalkDir::new(&path).follow_links(true) {
             let Ok(entry) = entry else {
                 let _ = dbg!(entry);
-                continue;
                 panic!();
             };
             let path = entry.path();
@@ -285,7 +284,6 @@ impl<K: Copy + Eq + FromStr + ToString + Hash> SnapFs<K> {
         for entry in WalkDir::new(&path).follow_links(true) {
             let Ok(entry) = entry else {
                 let _ = dbg!(entry);
-                continue;
                 panic!();
             };
             let path = entry.path();

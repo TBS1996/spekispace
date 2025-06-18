@@ -178,6 +178,39 @@ pub trait LedgerItem:
         self.ref_cache().into_values().flatten().collect()
     }
 
+    fn recursive_dependent_ids(&self, ledger: &NewFixedLedger<Self>) -> HashSet<Self::Key>
+    where
+        Self: Sized,
+    {
+        let mut out: HashSet<Self::Key> = HashSet::new();
+        let mut visited: HashSet<Self::Key> = HashSet::new();
+
+        fn visit<T: LedgerItem>(
+            key: T::Key,
+            ledger: &FixedLedger<T>,
+            out: &mut HashSet<T::Key>,
+            visited: &mut HashSet<T::Key>,
+        ) where
+            T: Sized,
+        {
+            if !visited.insert(key) {
+                return;
+            }
+
+            out.insert(key);
+
+            for dep_key in ledger.get_dependents(key) {
+                visit(dep_key, ledger, out, visited);
+            }
+        }
+
+        for dep_key in self.dependents(&ledger.fixed) {
+            visit(dep_key, &ledger.fixed, &mut out, &mut visited);
+        }
+
+        out
+    }
+
     fn recursive_dependents(&self, ledger: &NewFixedLedger<Self>) -> HashSet<Self>
     where
         Self: Sized,
@@ -639,12 +672,49 @@ impl<T: LedgerItem> Ledger<T> {
         self.cache.get_cache(&cache_hash, cache_key)
     }
 
-    fn cachegetter(&self, hash: Option<String>) -> FixedLedger<T> {
+    pub fn cachegetter(&self, hash: Option<String>) -> FixedLedger<T> {
         let selv = self.clone();
         FixedLedger {
             inner: Either::Left(selv),
             hash: hash.into(),
         }
+    }
+
+    fn recursive_dependencies(&self, id: T::Key) -> HashSet<T::Key> {
+        tracing::trace!("getting dependencies of: {:?}", id);
+        let mut deps = HashSet::default();
+        let mut stack = vec![id];
+
+        while let Some(stack_id) = stack.pop() {
+            if id != stack_id {
+                deps.insert(stack_id);
+            }
+
+            let item = self.load(stack_id).unwrap();
+
+            for dep in item.dependencies() {
+                stack.push(dep);
+            }
+        }
+
+        deps
+    }
+
+    pub fn clever_recursive_dependencies(
+        &self,
+        items: impl IntoIterator<Item = T::Key>,
+    ) -> HashSet<T::Key> {
+        let mut dependencies = HashSet::default();
+
+        for item in items {
+            if dependencies.contains(&item) {
+                continue;
+            } else {
+                dependencies.extend(self.recursive_dependencies(item));
+            }
+        }
+
+        dependencies
     }
 
     fn rebuild_the_cache(
@@ -1391,6 +1461,13 @@ impl<T: LedgerItem> Ledger<T> {
             symlink(sp, ledger_path).unwrap();
             false
         }
+    }
+
+    pub fn recursive_dependents(&self, item: T::Key) -> HashSet<T> {
+        let ledger = self.cachegetter(self.ledger.current_hash());
+        let item = self.load(item).unwrap();
+        let ledger = NewFixedLedger::new(ledger, item.clone());
+        item.recursive_dependents(&ledger)
     }
 
     /// Clones the current state, modifies it with the new entry, and returns the hash of the new state.

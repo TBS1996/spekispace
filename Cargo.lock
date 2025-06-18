@@ -4110,6 +4110,7 @@ dependencies = [
  "once_cell",
  "petgraph",
  "rand 0.8.5",
+ "rayon",
  "serde",
  "serde_json",
  "speki-core",

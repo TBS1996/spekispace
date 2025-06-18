@@ -25,7 +25,7 @@ use speki_core::{
 };
 use std::{
     cmp::Ordering,
-    collections::{BTreeMap, BTreeSet},
+    collections::{BTreeMap, BTreeSet, HashSet},
     fmt::Debug,
     fs,
     io::Write,
@@ -177,7 +177,6 @@ pub fn RenderExpr(
                         let leaf = DynCard::Card(card.read().id());
                         let input = InputEditor::Leaf(leaf);
                         inputs.clone().write().push(input);
-                        async move {}
                     };
                     let overlay =
                         CardSelector::new(false, vec![]).new_on_card_selected(MyClosure::new(f));
@@ -206,7 +205,6 @@ pub fn RenderExpr(
                         let leaf = DynCard::Instances(card.read().id());
                         let input = InputEditor::Leaf(leaf);
                         inputs.clone().write().push(input);
-                        async move {}
                     };
                     let overlay = CardSelector::class_picker(MyClosure::new(f));
                     Some(OverlayEnum::CardSelector(overlay))
@@ -228,7 +226,6 @@ pub fn RenderExpr(
                         let leaf = DynCard::RecDependents(card.read().id());
                         let input = InputEditor::Leaf(leaf);
                         inputs.clone().write().push(input);
-                        async move {}
                     };
                     let overlay =
                         CardSelector::new(false, vec![]).new_on_card_selected(MyClosure::new(f));
@@ -379,6 +376,7 @@ fn RenderSet(
                 button {
                     class: "{crate::styles::BLACK_BUTTON}",
                     onclick: move |_| {
+                            dbg!();
                         let expr: SetExpr = match SetExpr::try_from(set.expr.cloned()) {
                             Ok(t) => t,
                             Err(s) => {
@@ -388,53 +386,79 @@ fn RenderSet(
                         };
 
                         let filter = filter2.clone();
-                        spawn(async move {
-                            let provider = APP.read().inner().card_provider.clone();
-                            let cards = expr.eval(&provider);
+                        dbg!();
+                        let provider = APP.read().inner().card_provider.clone();
+                        dbg!();
+                        let cards = expr.eval(&provider);
+                        dbg!();
 
-                            let mut cards_with_deps: BTreeSet<Arc<Card>> = Default::default();
+                        let card_ids: HashSet<CardId> = cards.iter().map(|card|card.id()).collect();
+                        dbg!();
+                        let all_recursive_dependencies = APP.read().inner().provider.cards.clever_recursive_dependencies(card_ids);
+                        dbg!(cards.len());
 
-                            for card in cards {
-                                let card = match card {
-                                    MaybeCard::Card(card) => card,
-                                    MaybeCard::Id(id) => {
+                        let mut cards_with_deps: BTreeSet<Arc<Card>> = Default::default();
+
+                        for (idx, card) in cards.into_iter().enumerate() {
+                            if idx % 50 == 0 {
+                                dbg!(idx);
+                            }
+
+                            let card = match card {
+                                MaybeCard::Card(card) => card,
+                                MaybeCard::Id(id) => {
                                     provider.load(id).unwrap()
-                                    },
-                                };
+                                },
+                            };
 
-                                for dep_card in card.recursive_dependencies_as_card(){
-                                    cards_with_deps.insert(dep_card);
-                                }
+                            cards_with_deps.insert(card);
+                        }
 
-                                cards_with_deps.insert(card);
+                        dbg!();
+
+                        for card in all_recursive_dependencies {
+                            let card = provider.load(card).unwrap();
+                            cards_with_deps.insert(card);
+                        }
+
+
+
+                        dbg!();
+
+
+                        use rayon::prelude::*;
+
+
+                        let filtered_cards: Vec<Arc<Card>> = cards_with_deps
+                            .iter()
+                            .cloned()
+                            .collect::<Vec<Arc<Card>>>()
+                            .into_par_iter()
+                            .filter(|card| filter.filter(card.clone()))
+                            .collect();
+
+                        dbg!();
+
+
+                        if let Some(recall) = filter.recall {
+                            if recall.ord == MyNumOrd::Less {
+                                //filtered_cards.retain(|card| card.full_recall_rate().unwrap_or_default() < recall.num);
                             }
+                        }
 
-                            let mut filtered_cards: Vec<Arc<Card>> = vec![];
-
-
-                            for card in cards_with_deps {
-                                if filter.filter(card.clone()) {
-                                    filtered_cards.push(card);
-                                }
-                            }
-
-                            if let Some(recall) = filter.recall {
-                                if recall.ord == MyNumOrd::Less {
-                                    //filtered_cards.retain(|card| card.full_recall_rate().unwrap_or_default() < recall.num);
-                                }
-                            }
-
-                            let mut filtered_cards: Vec<CardId> = filtered_cards.into_iter().map(|card|card.id()).collect();
-
-                            use rand::seq::SliceRandom;
-                            filtered_cards.shuffle(&mut rand::thread_rng());
+                        let mut filtered_cards: Vec<CardId> = filtered_cards.into_iter().map(|card|card.id()).collect();
+                        dbg!();
 
 
-                            let revses = OverlayEnum::Review(ReviewState::new(filtered_cards));
-                            append_overlay(revses);
-                        });
+                        use rand::seq::SliceRandom;
+                        filtered_cards.shuffle(&mut rand::thread_rng());
+
+                        dbg!();
 
 
+
+                        let revses = OverlayEnum::Review(ReviewState::new(filtered_cards));
+                        append_overlay(revses);
                     },
                     "review"
                 }

@@ -69,15 +69,13 @@ pub fn CardRefRender(
                     let fun = MyClosure::new(move |card: Signal<Card>| {
                         info!("x1");
                         let f = f.clone();
-                        async move {
                         if let Some(fun) = f.clone() {
                             info!("x2");
-                            fun.0(card.clone()).await;
+                            fun.0(card.clone());
                         }
 
                         let id = card.read().id();
                         selected_card.clone().set(Some(id));
-                        }
                     });
 
                     let dependents = dependent
@@ -98,17 +96,15 @@ pub fn CardRefRender(
                     onclick: move |_| {
                         info!("clicked a button");
                         let on_deselect = on_deselect.clone();
-                        spawn(async move {
-                            if let Some(card) = selected_card.cloned(){
-                                let card = APP.cloned().load_card(card);
-                                if let Some(f) = on_deselect.clone(){
-                                    f.call(card).await;
-                                }
-
+                        if let Some(card) = selected_card.cloned(){
+                            let card = APP.cloned().load_card(card);
+                            if let Some(f) = on_deselect.clone(){
+                                f.call(card);
                             }
 
-                            selected_card.clone().set(None);
-                        });
+                        }
+
+                        selected_card.clone().set(None);
                     },
                     "X",
                 }
