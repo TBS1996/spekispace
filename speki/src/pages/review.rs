@@ -586,12 +586,12 @@ pub struct ExprEditor {
 }
 
 impl ExprEditor {
-    pub fn expanded(&self) -> Resource<BTreeMap<Uuid, Signal<MaybeEntry>>> {
+    pub fn expanded(&self) -> Memo<BTreeMap<Uuid, Signal<MaybeEntry>>> {
         info!("lets expand!");
         let selv = self.clone();
         ScopeId::APP.in_runtime(|| {
             let selv = selv.clone();
-            use_resource(move || {
+            use_memo(move || {
                 let selv = selv.clone();
 
                 let res = match dbg!(SetExpr::try_from(selv)) {
@@ -616,7 +616,7 @@ impl ExprEditor {
                     Err(_) => Default::default(),
                 };
 
-                async move { res }
+                res
             })
         })
     }

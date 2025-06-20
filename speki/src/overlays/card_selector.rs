@@ -80,8 +80,8 @@ pub struct CardSelector {
     pub filtermemo: Memo<Option<CardFilter>>,
     pub collection: ExprEditor,
     pub edit_collection: bool,
-    pub cards: Resource<Vec<Signal<Card>>>,
-    pub col_cards: Resource<BTreeMap<Uuid, Signal<MaybeEntry>>>,
+    pub cards: Memo<Vec<Signal<Card>>>,
+    pub col_cards: Memo<BTreeMap<Uuid, Signal<MaybeEntry>>>,
     pub default_search: Signal<Option<String>>,
     pub forbidden_cards: Signal<BTreeSet<CardId>>,
 }
@@ -138,99 +138,94 @@ impl CardSelector {
             let allowed = allowed.clone();
             let cards = col_cards.clone();
             let search = normalized_search.clone();
-            use_resource(move || {
+            use_memo(move || {
                 let allowed_cards = allowed.clone();
                 let search = search.cloned();
 
-                async move {
-                    let allowed_cards = allowed_cards.clone();
-                    let mut filtered_cards: Vec<(u32, Signal<Card>)> = Default::default();
+                let allowed_cards = allowed_cards.clone();
+                let mut filtered_cards: Vec<(u32, Signal<Card>)> = Default::default();
 
-                    let Some(cards) = cards.as_ref() else {
-                        info!("fuck! :O ");
-                        return vec![];
-                    };
+                let cards = cards.read();
 
-                    info!("so many cards! {}", cards.len());
+                info!("so many cards! {}", cards.len());
 
-                    let sorted_cards: Vec<(u32, CardId)> = if search.chars().count() < 2 {
-                        cards.iter().map(|x| (0, *x.0)).collect()
-                    } else {
-                        let mut matching_cards: BTreeMap<Uuid, u32> = BTreeMap::new();
-                        let bigrams = bigrams(search.as_ref());
+                let sorted_cards: Vec<(u32, CardId)> = if search.chars().count() < 2 {
+                    cards.iter().map(|x| (0, *x.0)).collect()
+                } else {
+                    let mut matching_cards: BTreeMap<Uuid, u32> = BTreeMap::new();
+                    let bigrams = bigrams(search.as_ref());
 
-                        for bigram in bigrams {
-                            let indices = APP
-                                .read()
-                                .inner()
-                                .card_provider
-                                .providers
-                                .cards
-                                .get_prop_cache(
-                                    CardProperty::Bigram,
-                                    format!("{}{}", bigram[0], bigram[1]),
-                                );
+                    for bigram in bigrams {
+                        let indices = APP
+                            .read()
+                            .inner()
+                            .card_provider
+                            .providers
+                            .cards
+                            .get_prop_cache(
+                                CardProperty::Bigram,
+                                format!("{}{}", bigram[0], bigram[1]),
+                            );
 
-                            for id in indices {
-                                if cards.contains_key(&id) {
-                                    *matching_cards.entry(id).or_insert(0) += 1;
-                                }
-                            }
-                        }
-
-                        info!("sorting cards");
-                        let mut sorted_cards: Vec<_> = matching_cards.into_iter().collect();
-                        sorted_cards.sort_by(|a, b| b.1.cmp(&a.1));
-                        sorted_cards.into_iter().map(|c| (c.1, c.0)).collect()
-                    };
-
-                    info!("{} cards sorted", sorted_cards.len());
-
-                    for (matches, card) in sorted_cards {
-                        let entry = cards.get(&card).unwrap();
-
-                        #[allow(deprecated)]
-                        let card = entry.write_silent().entry().unwrap();
-
-                        if forbidden_cards.read().contains(&card.read().id()) {
-                            continue;
-                        }
-
-                        if filtered_cards.len() > 100 {
-                            break;
-                        }
-
-                        if allowed_cards.is_empty()
-                            || allowed_cards
-                                .read()
-                                .contains(&CardTy::from_ctype(card.read().card_type()))
-                        {
-                            let flag = match filtermemo.cloned() {
-                                Some(filter) => filter.filter(Arc::new(card.cloned())),
-                                None => true,
-                            };
-
-                            if flag {
-                                filtered_cards.push((matches, card));
+                        for id in indices {
+                            if cards.contains_key(&id) {
+                                *matching_cards.entry(id).or_insert(0) += 1;
                             }
                         }
                     }
 
-                    info!("done filtering :)");
+                    info!("sorting cards");
+                    let mut sorted_cards: Vec<_> = matching_cards.into_iter().collect();
+                    sorted_cards.sort_by(|a, b| b.1.cmp(&a.1));
+                    sorted_cards.into_iter().map(|c| (c.1, c.0)).collect()
+                };
 
-                    filtered_cards.sort_by(|a, b| {
-                        let ord_key = b.0.cmp(&a.0);
-                        if ord_key == std::cmp::Ordering::Equal {
-                            let card_a = a.1.read();
-                            let card_b = b.1.read();
-                            card_a.name().len().cmp(&card_b.name().len())
-                        } else {
-                            ord_key
+                info!("{} cards sorted", sorted_cards.len());
+
+                for (matches, card) in sorted_cards {
+                    let entry = cards.get(&card).unwrap();
+
+                    #[allow(deprecated)]
+                    let card = entry.write_silent().entry().unwrap();
+
+                    if forbidden_cards.read().contains(&card.read().id()) {
+                        continue;
+                    }
+
+                    if filtered_cards.len() > 100 {
+                        break;
+                    }
+
+                    if allowed_cards.is_empty()
+                        || allowed_cards
+                            .read()
+                            .contains(&CardTy::from_ctype(card.read().card_type()))
+                    {
+                        let flag = match filtermemo.cloned() {
+                            Some(filter) => filter.filter(Arc::new(card.cloned())),
+                            None => true,
+                        };
+
+                        if flag {
+                            filtered_cards.push((matches, card));
                         }
-                    });
-
-                    filtered_cards.into_iter().map(|x| x.1).collect()
+                    }
                 }
+
+                info!("done filtering :)");
+
+                filtered_cards.sort_by(|a, b| {
+                    let ord_key = b.0.cmp(&a.0);
+                    if ord_key == std::cmp::Ordering::Equal {
+                        let card_a = a.1.read();
+                        let card_b = b.1.read();
+                        card_a.name().len().cmp(&card_b.name().len())
+                    } else {
+                        ord_key
+                    }
+                });
+
+                filtered_cards.into_iter().map(|x| x.1).collect()
             })
         });
 
@@ -379,7 +374,7 @@ pub fn CardSelectorRender(
     title: Option<String>,
     search: Signal<String>,
     on_card_selected: MyClosure,
-    cards: Resource<Vec<Signal<Card>>>,
+    cards: Memo<Vec<Signal<Card>>>,
     allow_new: bool,
     dependents: Signal<Vec<Node>>,
     allowed_cards: Signal<Vec<CardTy>>,
@@ -469,12 +464,11 @@ fn NewcardButton(
 }
 
 #[component]
-fn TableRender(cards: Resource<Vec<Signal<Card>>>, on_card_selected: MyClosure) -> Element {
+fn TableRender(cards: Memo<Vec<Signal<Card>>>, on_card_selected: MyClosure) -> Element {
     let closure = Arc::new(on_card_selected.clone());
 
     let filtered_cards: Vec<_> = cards
         .cloned()
-        .unwrap_or_default()
         .into_iter()
         .take(1000)
         .zip(std::iter::repeat_with(|| Arc::clone(&closure)))

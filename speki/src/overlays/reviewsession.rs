@@ -113,7 +113,7 @@ pub struct ReviewSession {
 pub fn ReviewRender(
     queue: Signal<Queue>,
     show_backside: Signal<bool>,
-    tot: Resource<usize>,
+    tot: Memo<usize>,
 ) -> Element {
     let card_id = match queue.read().current() {
         Some(id) => id,
@@ -254,7 +254,7 @@ impl Queue {
 #[derive(Clone, Debug)]
 pub struct ReviewState {
     pub queue: Signal<Queue>,
-    pub tot_len: Resource<usize>,
+    pub tot_len: Memo<usize>,
     pub show_backside: Signal<bool>,
     pub is_done: Memo<bool>,
 }
@@ -268,8 +268,7 @@ impl ReviewState {
         let is_done: Memo<bool> =
             ScopeId::APP.in_runtime(|| use_memo(move || queue.read().current().is_none()));
 
-        let tot_len =
-            ScopeId::APP.in_runtime(|| use_resource(move || async move { queue.read().tot_len() }));
+        let tot_len = ScopeId::APP.in_runtime(|| use_memo(move || queue.read().tot_len()));
         Self {
             tot_len,
             show_backside: Signal::new_in_scope(Default::default(), ScopeId::APP),
@@ -280,7 +279,7 @@ impl ReviewState {
 }
 
 #[component]
-fn Infobar(card: Arc<Card>, tot: Resource<usize>, queue: Signal<Queue>) -> Element {
+fn Infobar(card: Arc<Card>, tot: Memo<usize>, queue: Signal<Queue>) -> Element {
     let card = Signal::new_in_scope(Arc::unwrap_or_clone(card), ScopeId::APP);
     let tot = queue.read().tot_len();
     let pos = queue.read().passed_len();
