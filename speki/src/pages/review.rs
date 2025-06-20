@@ -513,7 +513,7 @@ fn RenderSet(
                             let expr = real_set.clone().unwrap();
                             dbg!(&expr);
                             let title = set_name.clone();
-                            let viewer = CardSelector::new(false, vec![]).with_set(expr).with_title(title).with_edit_collection(false);
+                            let viewer = CardSelector::new_with_filter(false, vec![], expr).with_title(title).with_edit_collection(false);
                             append_overlay(OverlayEnum::CardSelector(viewer));
                         },
                         "view"
@@ -594,7 +594,7 @@ impl ExprEditor {
             use_resource(move || {
                 let selv = selv.clone();
 
-                let res = match SetExpr::try_from(selv) {
+                let res = match dbg!(SetExpr::try_from(selv)) {
                     Ok(expr) => {
                         let provider = APP.read().inner().card_provider.clone();
                         let mut out: BTreeMap<Uuid, Signal<MaybeEntry>> = Default::default();
