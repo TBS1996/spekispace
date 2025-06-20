@@ -763,7 +763,7 @@ fn RenderSets(filter: CardFilter, sets: Signal<Vec<SetEditor>>) -> Element {
 
     rsx! {
         div {
-            class: "flex flex-col mb-10",
+            class: "overflow-y-auto max-h-[80vh] space-y-2 pr-2",
             RenderSet { filter: filter.clone(), set: all_set, editable: false}
             for set in sets.cloned() {
                 RenderSet { filter: filter.clone(), set}
