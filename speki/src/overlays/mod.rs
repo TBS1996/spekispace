@@ -4,10 +4,6 @@ pub mod notice;
 pub mod reviewsession;
 pub mod uploader;
 
-//pub mod yesno;
-//pub mod itemselector;
-//pub mod textinput;
-
 use crate::{
     overlays::{
         card_selector::CardSelector,
@@ -40,15 +36,18 @@ impl Eq for OverlayChoice {}
 #[component]
 pub fn OverlaySelectorRender(title: String, choices: Vec<OverlayChoice>) -> Element {
     rsx! {
-        p{"{title}"}
-
         div {
-            class: "flex flex-col",
+            class: "flex flex-col items-center",
+
+            p {
+                class: "text-3xl font-bold text-center mb-4",
+                "{title}"
+            }
 
             for choice in choices {
-
                 button {
-                    onclick: move |_|{
+                    class: "w-48 my-2 {crate::styles::BLACK_BUTTON}",
+                    onclick: move |_| {
                         let new = (choice.overlay)();
                         set_overlay(new);
                     },

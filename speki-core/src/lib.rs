@@ -149,9 +149,6 @@ impl App {
     ) -> Self {
         info!("initialtize app");
 
-        //card_provider.save_pruned();
-        //panic!();
-
         let provider = Provider {
             cards: card_provider,
             reviews: history_provider,

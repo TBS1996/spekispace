@@ -11,7 +11,6 @@ pub struct App(Arc<speki_core::App>);
 impl App {
     pub fn new() -> Self {
         let root = dirs::data_local_dir().unwrap().join("speki");
-        //let root = std::path::PathBuf::from("/home/tor/spekifs/snap4");
 
         Self(Arc::new(speki_core::App::new(
             Ledger::new(root.clone()),

@@ -184,7 +184,7 @@ pub fn RenderExpr(
             };
 
             OverlayChoice {
-                display: "Add card".to_string(),
+                display: "single card".to_string(),
                 overlay: f,
             }
         };
@@ -239,7 +239,7 @@ pub fn RenderExpr(
         };
 
         let sel = OverlaySelector {
-            title: "dyn ty".to_string(),
+            title: "leaf type".to_string(),
             choices: vec![
                 leaf_card,
                 instances,
