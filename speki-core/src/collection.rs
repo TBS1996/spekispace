@@ -52,7 +52,7 @@ impl DynCard {
             DynCard::Card(id) => name(id),
             DynCard::Instances(id) => format!("instances: {}", name(id)),
             DynCard::Dependents(id) => format!("dependents: {}", name(id)),
-            DynCard::RecDependents(id) => format!("rec dependents: {}", name(id)),
+            DynCard::RecDependents(id) => format!("dependents: {}", name(id)),
             DynCard::CardType(ctype) => {
                 format!("card type: {ctype}")
             }

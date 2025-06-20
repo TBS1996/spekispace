@@ -288,7 +288,7 @@ pub fn RenderExpr(
                         onclick: move |_| {
                             inputs.write().retain(|x|x != &input);
                         },
-                        "❌"
+                        "🗑️"
                     }
                     RenderInput { filter: filter.clone(), input: input.clone(), depth: depth + 1 }
                 }
