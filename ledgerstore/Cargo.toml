@@ -14,7 +14,6 @@ toml.workspace = true
 tracing.workspace = true
 futures.workspace = true
 nonempty.workspace = true
-snapstore.workspace = true
 walkdir.workspace = true
 rayon.workspace = true
 either.workspace = true

@@ -1,14 +1,7 @@
-use either::Either;
-use rayon::prelude::*;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
-use snapstore::fs::{CacheFs, Content, SnapFs};
-use snapstore::mem::SnapMem;
-use snapstore::{HashAndContents, Key};
-use std::collections::VecDeque;
 use std::fmt::Display;
-use std::fs::{self};
+use std::fs::{self, hard_link};
 use std::io::Write;
-use std::os::unix::fs::symlink;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::vec::Vec;
@@ -18,12 +11,33 @@ use std::{
     hash::{DefaultHasher, Hash, Hasher},
     sync::{Arc, RwLock},
 };
-use tracing::{info, trace};
+use tracing::trace;
 use uuid::Uuid;
 
 pub mod ledger_cache;
 
-pub use snapstore::CacheKey;
+#[derive(Debug, Clone, Hash, Eq, PartialEq, Ord, PartialOrd)]
+pub enum CacheKey<T: LedgerItem> {
+    Property {
+        property: T::PropertyType,
+        value: String,
+    },
+    ItemRef {
+        reftype: T::RefType,
+        id: T::Key,
+    },
+}
+
+impl<T: LedgerItem> Display for CacheKey<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let s = match self {
+            Self::Property { property, value } => format!("{property}:{value}"),
+            Self::ItemRef { reftype, id } => format!("{reftype}:{id:?}"),
+        };
+
+        write!(f, "{}", s)
+    }
+}
 
 use crate::block_chain::BlockChain;
 
@@ -63,44 +77,55 @@ pub trait LedgerItem:
     /// Modifies `Self`.
     fn inner_run_event(self, event: Self::Modifier) -> Result<Self, Self::Error>;
 
+    fn verify(self, ledger: &Ledger<Self>) -> Result<Self, EventError<Self>> {
+        let ledger = OverrideLedger::new(ledger, self.clone());
+
+        if let Some(cycle) = self.find_cycle(&ledger) {
+            return Err(EventError::Cycle(cycle));
+        }
+
+        if let Err(e) = self.validate(&ledger) {
+            return Err(EventError::Invariant(e));
+        }
+
+        let generic_ledger = LedgerType::OverRide(ledger.clone());
+
+        for dep in self.recursive_dependents(&generic_ledger) {
+            if let Err(e) = dep.validate(&ledger) {
+                return Err(EventError::Invariant(e));
+            }
+        }
+
+        Ok(self)
+    }
+
     /// Modifies `Self` and checks for cycles and invariants.
     fn run_event(
         self,
         event: Self::Modifier,
-        ledger: &FixedLedger<Self>,
+        ledger: &Ledger<Self>,
+        verify: bool,
     ) -> Result<Self, EventError<Self>> {
         let new = match self.inner_run_event(event) {
             Ok(item) => item,
             Err(e) => return Err(EventError::Invariant(e)),
         };
 
-        let ledger = NewFixedLedger::new(ledger.clone(), new.clone());
-
-        if let Some(cycle) = new.find_cycle(&ledger) {
-            return Err(EventError::Cycle(cycle));
+        if verify {
+            new.verify(ledger)
+        } else {
+            Ok(new)
         }
-
-        if let Err(e) = new.validate(&ledger) {
-            return Err(EventError::Invariant(e));
-        }
-
-        for dep in new.recursive_dependents(&ledger) {
-            if let Err(e) = dep.validate(&ledger) {
-                return Err(EventError::Invariant(e));
-            }
-        }
-
-        Ok(new)
     }
 
     fn new_default(id: Self::Key) -> Self;
 
     fn item_id(&self) -> Self::Key;
 
-    fn find_cycle(&self, ledger: &NewFixedLedger<Self>) -> Option<Vec<Self::Key>> {
+    fn find_cycle(&self, ledger: &OverrideLedger<Self>) -> Option<Vec<Self::Key>> {
         fn dfs<T: LedgerItem>(
             current: T::Key,
-            ledger: &FixedLedger<T>,
+            ledger: &OverrideLedger<T>,
             visiting: &mut HashSet<T::Key>,
             visited: &mut HashSet<T::Key>,
             parent: &mut HashMap<T::Key, T::Key>,
@@ -124,10 +149,7 @@ pub trait LedgerItem:
             let dependencies = if selv.0 == current {
                 selv.1.dependencies()
             } else {
-                ledger
-                    .load(current)
-                    .map(|x| x.dependencies())
-                    .unwrap_or_default()
+                ledger.load(current).dependencies()
             };
 
             for dep in dependencies {
@@ -151,7 +173,7 @@ pub trait LedgerItem:
 
         dfs(
             self.item_id(),
-            &ledger.fixed,
+            &ledger,
             &mut visiting,
             &mut visited,
             &mut parent,
@@ -161,7 +183,7 @@ pub trait LedgerItem:
 
     /// Assertions that should hold true. Like invariants with other cards that it references.
     /// called by run_event, if it returns error after an event is run, the event is not applied.
-    fn validate(&self, ledger: &NewFixedLedger<Self>) -> Result<(), Self::Error> {
+    fn validate(&self, ledger: &OverrideLedger<Self>) -> Result<(), Self::Error> {
         let _ = ledger;
         Ok(())
     }
@@ -178,7 +200,7 @@ pub trait LedgerItem:
         self.ref_cache().into_values().flatten().collect()
     }
 
-    fn recursive_dependent_ids(&self, ledger: &NewFixedLedger<Self>) -> HashSet<Self::Key>
+    fn recursive_dependent_ids(&self, ledger: &LedgerType<Self>) -> HashSet<Self::Key>
     where
         Self: Sized,
     {
@@ -187,7 +209,7 @@ pub trait LedgerItem:
 
         fn visit<T: LedgerItem>(
             key: T::Key,
-            ledger: &FixedLedger<T>,
+            ledger: &LedgerType<T>,
             out: &mut HashSet<T::Key>,
             visited: &mut HashSet<T::Key>,
         ) where
@@ -199,19 +221,19 @@ pub trait LedgerItem:
 
             out.insert(key);
 
-            for dep_key in ledger.get_dependents(key) {
+            for dep_key in ledger.dependents(key) {
                 visit(dep_key, ledger, out, visited);
             }
         }
 
-        for dep_key in self.dependents(&ledger.fixed) {
-            visit(dep_key, &ledger.fixed, &mut out, &mut visited);
+        for dep_key in self.dependents(&ledger) {
+            visit(dep_key, &ledger, &mut out, &mut visited);
         }
 
         out
     }
 
-    fn recursive_dependents(&self, ledger: &NewFixedLedger<Self>) -> HashSet<Self>
+    fn recursive_dependents(&self, ledger: &LedgerType<Self>) -> HashSet<Self>
     where
         Self: Sized,
     {
@@ -220,7 +242,7 @@ pub trait LedgerItem:
 
         fn visit<T: LedgerItem>(
             key: T::Key,
-            ledger: &FixedLedger<T>,
+            ledger: &LedgerType<T>,
             out: &mut HashSet<T>,
             visited: &mut HashSet<T::Key>,
         ) where
@@ -229,25 +251,27 @@ pub trait LedgerItem:
             if !visited.insert(key) {
                 return;
             }
+            let item = ledger.load(key);
 
-            if let Some(item) = ledger.load(key) {
-                out.insert(item.clone());
+            out.insert(item.clone());
 
-                for dep_key in item.dependents(ledger) {
-                    visit(dep_key, ledger, out, visited);
-                }
+            for dep_key in item.dependents(ledger) {
+                visit(dep_key, ledger, out, visited);
             }
         }
 
-        for dep_key in self.dependents(&ledger.fixed) {
-            visit(dep_key, &ledger.fixed, &mut out, &mut visited);
+        for dep_key in self.dependents(&ledger) {
+            visit(dep_key, &ledger, &mut out, &mut visited);
         }
 
         out
     }
 
-    fn dependents(&self, ledger: &FixedLedger<Self>) -> HashSet<Self::Key> {
-        ledger.get_dependents(self.item_id()).into_iter().collect()
+    fn dependents(&self, ledger: &LedgerType<Self>) -> HashSet<Self::Key> {
+        match ledger {
+            LedgerType::OverRide(ledger) => ledger.dependents(self.item_id()),
+            LedgerType::Normal(ledger) => ledger.dependents(self.item_id()),
+        }
     }
 
     /// List of defined properties that this item has.
@@ -255,7 +279,7 @@ pub trait LedgerItem:
     /// The property keys are predefined, hence theyre static str
     /// the String is the Value which could be anything.
     /// For example ("suspended", true).
-    fn properties_cache(&self, ledger: &FixedLedger<Self>) -> HashSet<(Self::PropertyType, String)>
+    fn properties_cache(&self, ledger: &Ledger<Self>) -> HashSet<(Self::PropertyType, String)>
     where
         Self: LedgerItem,
     {
@@ -263,18 +287,24 @@ pub trait LedgerItem:
         Default::default()
     }
 
-    fn caches(
-        &self,
-        ledger: &FixedLedger<Self>,
-    ) -> HashSet<(CacheKey<Self::PropertyType, Self::RefType>, String)>
+    fn listed_cache(&self, ledger: &Ledger<Self>) -> HashMap<CacheKey<Self>, HashSet<Self::Key>> {
+        let mut out: HashMap<CacheKey<Self>, HashSet<Self::Key>> = HashMap::default();
+
+        for (key, id) in self.caches(ledger) {
+            out.entry(key).or_default().insert(id);
+        }
+
+        out
+    }
+
+    fn caches(&self, ledger: &Ledger<Self>) -> HashSet<(CacheKey<Self>, Self::Key)>
     where
         Self: LedgerItem,
     {
         trace!("fetching caches for item: {:?}", self.item_id());
 
-        let mut out: HashSet<(CacheKey<Self::PropertyType, Self::RefType>, String)> =
-            Default::default();
-        let id = self.item_id().to_string();
+        let mut out: HashSet<(CacheKey<Self>, Self::Key)> = Default::default();
+        let id = self.item_id();
 
         for (property, value) in self.properties_cache(ledger) {
             out.insert((CacheKey::Property { property, value }, id.clone()));
@@ -283,17 +313,11 @@ pub trait LedgerItem:
         for (reftype, ids) in self.ref_cache() {
             for ref_id in ids {
                 out.insert((
-                    CacheKey::Dependents {
-                        id: ref_id.to_string(),
-                    },
-                    id.to_string(),
-                ));
-                out.insert((
                     CacheKey::ItemRef {
                         reftype: reftype.clone(),
-                        id: ref_id.to_string(),
+                        id: ref_id,
                     },
-                    id.to_string(),
+                    id,
                 ));
             }
         }
@@ -326,110 +350,6 @@ pub type StateHash = Hashed;
 pub type LedgerHash = Hashed;
 pub type CacheHash = Hashed;
 
-#[derive(Clone)]
-pub struct NewFixedLedger<T: LedgerItem> {
-    pub fixed: FixedLedger<T>,
-    pub new: Arc<T>,
-}
-
-impl<T: LedgerItem> NewFixedLedger<T> {
-    pub fn new(ledger: FixedLedger<T>, new: T) -> Self {
-        Self {
-            fixed: ledger,
-            new: Arc::new(new),
-        }
-    }
-
-    pub fn load(&self, id: T::Key) -> Option<T> {
-        if self.new.item_id() == id {
-            Some(Arc::unwrap_or_clone(self.new.clone()))
-        } else {
-            self.fixed.load(id)
-        }
-    }
-
-    pub fn get_dependents(&self, id: T::Key) -> Vec<T::Key> {
-        if self.new.item_id() == id {
-            vec![]
-        } else {
-            self.fixed.get_dependents(id)
-        }
-    }
-}
-
-/*
-some idea..
-
-instead of returning T, it'll return something like Stored<T>,
-
-this wraps T internally and implements deref -> T so you have access to it directly, no mutation though which you shouldn't be able to do anyway
-since "mutation" is done by creating new snapshots instead
-
-should be a macro to specify that a method returns a KeyRef, this will automatically take care of the reverse-index caching
-
-so if you have a dependencies() method you can annotate it and it'll update the cache with reverse-index of dependencies
-then this Saved<T> will have a generated method that let's you get the dependents
-
-for annotating methods of refkeys, it'll accept any methods that return either Vec<ItemKey>, ItemKey, or Option<ItemKey>, i guess
-
-this Stored<T> will also allow you to instead of inserting new events by passing in an itemkey and the action, simply pass in the action directly in Stored<T>
-
-and internally it'll use the Ledger struct and pass in its own itemkey to update the ledger
-this method should consume Self and return a new version of itself.
-
-note: should there be a way to communicate to other in-memory Stored<T> that they are no longer valid?
-if so, it can be tricky, cause then the other ones inmemory might have invalid reads like if it's deleted or smth
-
-also if you annotate like a dependencies() method, should we override it and create a similar method that instead of returning the keyrefs, returns Stored<T> instead?
-since we can load them from Ledger?
-
-
-maybe a way to have different ledgers communicate sorta, and declare that the id in two
-ledgers represent the same thing? like how review ID refer to cardId ?
-*/
-
-/// A ledger fixed to a certain hash.
-#[derive(Clone)]
-pub struct FixedLedger<T: LedgerItem> {
-    inner: Either<Ledger<T>, SnapMem<T::Key>>,
-    hash: Option<StateHash>,
-}
-
-impl<T: LedgerItem> FixedLedger<T> {
-    pub fn load(&self, id: T::Key) -> Option<T> {
-        match &self.inner {
-            Either::Left(ledger) => {
-                let state = self.hash.as_ref()?;
-                match ledger.snap.get(state, id) {
-                    Some(item) => serde_json::from_slice(&item).unwrap(),
-                    None => None,
-                }
-            }
-            Either::Right(mem) => mem
-                .get(&id.to_string())
-                .map(|data| serde_json::from_slice(&data).unwrap()),
-        }
-    }
-
-    pub fn get_dependents(&self, id: T::Key) -> Vec<T::Key> {
-        let Some(hash) = self.hash.as_deref() else {
-            return vec![];
-        };
-
-        match &self.inner {
-            Either::Left(ledger) => ledger
-                .get_the_cache(hash, &CacheKey::Dependents { id: id.to_string() })
-                .into_iter()
-                .map(|k| match k.parse() {
-                    Ok(k) => k,
-                    Err(_) => panic!(),
-                })
-                .collect(),
-            Either::Right(_) => todo!(),
-        }
-    }
-}
-
 #[derive(Clone, Serialize, Deserialize, Debug, Hash)]
 #[serde(bound(deserialize = "T: LedgerItem + DeserializeOwned,
                    T::Key: DeserializeOwned"))]
@@ -461,7 +381,11 @@ pub struct TheLedgerEvent<T: LedgerItem> {
 }
 
 impl<T: LedgerItem> TheLedgerEvent<T> {
-    pub fn new(id: T::Key, action: T::Modifier) -> Self {
+    pub fn new(id: T::Key, action: TheLedgerAction<T>) -> Self {
+        Self { id, action }
+    }
+
+    pub fn new_modify(id: T::Key, action: T::Modifier) -> Self {
         Self {
             id,
             action: TheLedgerAction::Modify(action),
@@ -517,10 +441,8 @@ mod block_chain {
             }
         }
 
-        pub fn chain_to_hash(&self, hash: &LedgerHash) -> Vec<LedgerEntry<T>> {
-            let index = *self.index_to_hash.read().unwrap().get(hash).unwrap();
-            let guard = self.cached.read().unwrap();
-            guard[..index].to_vec()
+        pub fn chain(&self) -> Vec<LedgerEntry<T>> {
+            self.cached.read().unwrap().clone()
         }
 
         pub fn hash_from_index(&self, index: usize) -> Hashed {
@@ -564,6 +486,7 @@ mod block_chain {
         }
 
         fn load_ledger(space: &Path) -> Vec<LedgerEntry<T>> {
+            dbg!(space);
             let mut foo: Vec<(usize, LedgerEntry<T>)> = {
                 let map: HashMap<String, Vec<u8>> = load_file_contents(space);
                 let mut foo: Vec<(usize, LedgerEntry<T>)> = Default::default();
@@ -597,648 +520,132 @@ mod block_chain {
     }
 }
 
+#[derive(Clone, Debug, Serialize, Deserialize)]
+struct TheStateHash {
+    ledger_hash: Hashed,
+    state_hash: Hashed,
+}
+
+enum LedgerType<T: LedgerItem> {
+    OverRide(OverrideLedger<T>),
+    Normal(Ledger<T>),
+}
+
+impl<T: LedgerItem> LedgerType<T> {
+    fn load(&self, key: T::Key) -> T {
+        match self {
+            LedgerType::OverRide(ledger) => ledger.load(key),
+            LedgerType::Normal(ledger) => ledger.load(key),
+        }
+    }
+
+    fn dependents(&self, key: T::Key) -> HashSet<T::Key> {
+        match self {
+            LedgerType::OverRide(ledger) => ledger.dependents(key),
+            LedgerType::Normal(ledger) => ledger.dependents(key),
+        }
+    }
+}
+
+impl<T: LedgerItem> From<Ledger<T>> for LedgerType<T> {
+    fn from(value: Ledger<T>) -> Self {
+        Self::Normal(value)
+    }
+}
+
+impl<T: LedgerItem> From<OverrideLedger<T>> for LedgerType<T> {
+    fn from(value: OverrideLedger<T>) -> Self {
+        Self::OverRide(value)
+    }
+}
+
+/// Before inserting an item into the state, we want to check if all invariants are still upheld.
+/// This struct therefore contain the new item we want to validate.
+/// This allows us to pass in this in validation functions so when we check the new/modified items dependencies it'll use the current state for other items,
+/// but when it checks invariants based on the new item it'll load the new/modified item from memory
 #[derive(Clone)]
-pub struct Ledger<T: LedgerItem> {
-    ledger: BlockChain<T>,
-    snap: SnapFs<T::Key>,
-    cache: CacheFs<T::PropertyType, T::RefType>,
-    root: Arc<PathBuf>,
-    gc_keep: usize,
-    all_paths: Arc<RwLock<HashMap<StateHash, Arc<HashSet<Content>>>>>,
+pub struct OverrideLedger<T: LedgerItem> {
+    inner: Ledger<T>,
+    new: T,
+    new_id: T::Key,
 }
 
-impl<T: LedgerItem> Ledger<T> {
-    /// Map from a state hash, to a cash hash
-    fn cache_map(&self) -> PathBuf {
-        let p = self.root.join("cache").join("map");
-        std::fs::create_dir_all(&p).unwrap();
-        p
-    }
-
-    fn insert_cache_map(&self, cache_hash: &str, state_hash: &str) {
-        let original = self.cache.the_full_blob_path(cache_hash);
-        let link = self.cache_map().join(state_hash);
-        if let Err(e) = symlink(&original, &link) {
-            dbg!(original);
-            dbg!(link);
-            dbg!(e);
-            //panic!();
-        }
-    }
-
-    fn try_get_cache_hash(&self, state_hash: &str) -> Option<CacheHash> {
-        let path = self.cache_map().join(state_hash);
-        if !path.exists() {
-            return None;
-        };
-        Some(
-            std::fs::read_link(&path)
-                .unwrap()
-                .file_name()
-                .unwrap()
-                .to_str()
-                .unwrap()
-                .to_string(),
-        )
-    }
-
-    fn get_cache_hash(&self, state: &str) -> Option<CacheHash> {
-        match self.try_get_cache_hash(state) {
-            Some(hash) => Some(hash),
-            None => {
-                let hash = self.rebuild_cache(state)?;
-                self.insert_cache_map(&hash, state);
-                Some(hash)
-            }
-        }
-    }
-
-    /// lets see lol, there should be a map of statehash to cachehash
-    /// if theres not, rebuild entire cachehash from statehash
-    ///
-    /// each time you run event on the kw store it should update the cache hash
-    /// but if you rebuild entire kw store from ledger then updating cache for each gen takes too long
-    /// so in htat case it'll just rebuild entire ledger then create a new cache snapshot  from scratch
-    /// but in normal mode when one event run at a time it'll update the cachestate incrementally
-    pub fn get_the_cache(
-        &self,
-        state_hash: &str,
-        cache_key: &CacheKey<T::PropertyType, T::RefType>,
-    ) -> Vec<Key> {
-        let Some(cache_hash) = self.get_cache_hash(state_hash) else {
-            return vec![];
-        };
-
-        self.cache.get_cache(&cache_hash, cache_key)
-    }
-
-    pub fn cachegetter(&self, hash: Option<String>) -> FixedLedger<T> {
-        let selv = self.clone();
-        FixedLedger {
-            inner: Either::Left(selv),
-            hash: hash.into(),
-        }
-    }
-
-    fn recursive_dependencies(&self, id: T::Key) -> HashSet<T::Key> {
-        tracing::trace!("getting dependencies of: {:?}", id);
-        let mut deps = HashSet::default();
-        let mut stack = vec![id];
-
-        while let Some(stack_id) = stack.pop() {
-            if id != stack_id {
-                deps.insert(stack_id);
-            }
-
-            let item = self.load(stack_id).unwrap();
-
-            for dep in item.dependencies() {
-                stack.push(dep);
-            }
-        }
-
-        deps
-    }
-
-    pub fn clever_recursive_dependencies(
-        &self,
-        items: impl IntoIterator<Item = T::Key>,
-    ) -> HashSet<T::Key> {
-        let mut dependencies = HashSet::default();
-
-        for item in items {
-            if dependencies.contains(&item) {
-                continue;
-            } else {
-                dependencies.extend(self.recursive_dependencies(item));
-            }
-        }
-
-        dependencies
-    }
-
-    fn rebuild_the_cache(
-        &self,
-        items: HashMap<T::Key, T>,
-        fixed: FixedLedger<T>,
-    ) -> Option<CacheHash>
-    where
-        T: Send + Sync, // Add this bound if not already present
-        T::PropertyType: Send + Sync + 'static,
-        T::RefType: Send + Sync + 'static,
-    {
-        info!("rebuilding cache maan");
-
-        use rayon::prelude::*;
-
-        let caches: HashSet<(CacheKey<T::PropertyType, T::RefType>, String)> = items
-            .into_par_iter() // Parallel iterator
-            .map(|(_, item)| item.caches(&fixed)) // Returns an iterator
-            .flatten() // Flattens all those iterators
-            .collect(); // Collects into a HashSet
-
-        let cache_map: HashMap<CacheKey<T::PropertyType, T::RefType>, Vec<String>> = {
-            let mut cache_map: HashMap<CacheKey<T::PropertyType, T::RefType>, Vec<String>> =
-                Default::default();
-            for (idx, (key, item)) in caches.into_iter().enumerate() {
-                if idx % 1000 == 0 {
-                    info!("inserted {}/{}", idx, cache_map.len());
-                }
-                cache_map.entry(key).or_default().push(item);
-            }
-            cache_map
-        };
-
-        let mut stringied_keys: HashSet<String> = Default::default();
-
-        for key in cache_map.clone() {
-            let stringified = key.0.to_string();
-            if !stringied_keys.insert(stringified.clone()) {
-                //
-                panic!();
-            }
-        }
-
-        let mut stringied_keys: HashMap<String, CacheKey<T::PropertyType, T::RefType>> =
-            Default::default();
-
-        for key in cache_map.clone() {
-            let stringified = key.0.to_string();
-            if let Some(_) = stringied_keys.insert(stringified.clone(), key.0.clone()) {
-                panic!();
-            }
-        }
-
-        let map_len = cache_map.len();
-
-        let mut cache_hash: Option<String> = None;
-
-        for (idx, (key, item)) in cache_map.clone().into_iter().enumerate() {
-            if idx % 1000 == 0 && idx != 0 {
-                info!("hey inserted {}/{}", idx, map_len);
-            }
-
-            if let Some(cachehash) = cache_hash.as_ref() {
-                let before = self.cache.get_cache(cachehash, &key);
-                if !before.is_empty() {
-
-                    //
-                }
-            }
-
-            let mut inserted: Vec<String> = item.to_vec();
-            let (top, _leaf) =
-                self.cache
-                    .save_cache(cache_hash.as_deref(), &key, item, &mut vec![]);
-            cache_hash = Some(top);
-            let mut retrieved = self
-                .cache
-                .get_cache(cache_hash.clone().unwrap().as_str(), &key);
-            inserted.sort();
-            retrieved.sort();
-
-            if inserted != retrieved {
-                //
-            }
-        }
-
-        cache_hash
-    }
-
-    /// This will go through the entire state and create a hash for it
-    fn rebuild_cache(&self, state_hash: &str) -> Option<CacheHash> {
-        let items = self.load_all_on_state(state_hash);
-        self.rebuild_the_cache(items, self.cachegetter(Some(state_hash.to_string())))
-    }
-
-    fn modify_cache(
-        &self,
-        prev_state_hash: Option<&str>,
-        next_state_hash: &str,
-        mut insert: Vec<&(CacheKey<T::PropertyType, T::RefType>, String)>,
-        remove: Vec<&(CacheKey<T::PropertyType, T::RefType>, String)>,
-    ) {
-        info!("modify cache!");
-
-        if insert.is_empty() && remove.is_empty() {
-            if let Some(prev_state) = prev_state_hash {
-                if let Some(cache_hash) = self.try_get_cache_hash(prev_state) {
-                    self.insert_cache_map(&cache_hash, next_state_hash);
-                }
-            }
-
-            return;
-        }
-
-        let mut cache_hash = match prev_state_hash {
-            Some(prev_state) => match self.try_get_cache_hash(prev_state) {
-                Some(cache_hash) => cache_hash,
-                None => {
-                    info!("rebuild cache cause not in map");
-                    if let Some(cache_hash) = self.rebuild_cache(next_state_hash) {
-                        self.insert_cache_map(&cache_hash, next_state_hash);
-                    }
-                    return;
-                }
-            },
-            None => match insert.pop() {
-                Some((key, item)) => {
-                    self.cache
-                        .save_cache(None, key, vec![item.to_string()], &mut vec![])
-                        .0
-                }
-                None => {
-                    panic!();
-                }
-            },
-        };
-
-        info!("starting inserting of caches");
-        for (key, item) in insert {
-            let (hash, _c) =
-                self.cache
-                    .save_cache(Some(&cache_hash), key, vec![item.to_string()], &mut vec![]);
-            cache_hash = hash;
-        }
-
-        info!("starting removing of caches");
-        for (key, item) in remove {
-            let (hash, _c) = self.cache.remove_cache(&cache_hash, key, item, &mut vec![]);
-            cache_hash = hash;
-        }
-
-        info!("insertinng cache map entry");
-        self.insert_cache_map(&cache_hash, next_state_hash);
-    }
-}
-
-impl<T: LedgerItem> Ledger<T> {
-    pub fn new(root: &Path) -> Self {
-        let root = Arc::new(PathBuf::from(root).join(Self::item_name()));
-        fs::create_dir_all(&*root).unwrap();
-
-        let snap = SnapFs::new((*root).clone());
-        let cache = CacheFs::new((root.join("cache")).clone(), 3);
-        let ledger_path = root.join("entries");
+impl<T: LedgerItem> OverrideLedger<T> {
+    pub fn new(inner: &Ledger<T>, new: T) -> Self {
+        let new_id = new.item_id();
 
         Self {
-            ledger: BlockChain::new(ledger_path),
-            snap,
-            cache,
-            root,
-            gc_keep: 100,
-            all_paths: Default::default(),
+            inner: inner.clone(),
+            new,
+            new_id,
         }
     }
 
-    fn snapshot_refs(&self) -> PathBuf {
-        let p = self.root.join("snaprefs");
-        fs::create_dir_all(&p).unwrap();
-        p
-    }
-
-    fn append_ref(&self, index: usize, c: HashSet<Content>) {
-        let mut lines: Vec<&str> = Vec::with_capacity(c.len());
-        for c in &c {
-            let line = c.as_os_str().to_str().unwrap();
-            lines.push(line);
-        }
-        let p = self.current_reftrack_path(index);
-        append_line_to_file(&p, lines).unwrap();
-    }
-
-    fn current_reftrack_path(&self, index: usize) -> PathBuf {
-        let name = self.current_reftrack_name(index);
-        self.snapshot_refs().join(&name)
-    }
-
-    fn current_reftrack_name(&self, index: usize) -> String {
-        let last_snap_idx = index - (index % self.gc_keep);
-        let hash = self.ledger.hash_from_index(last_snap_idx);
-        format!("{hash}-{last_snap_idx}")
-    }
-
-    fn new_paths_after_snapshot(&self, index: usize) -> HashSet<Content> {
-        let mut out: HashSet<Content> = Default::default();
-
-        let path = self.current_reftrack_path(index);
-        let Ok(content) = fs::read_to_string(&path) else {
-            return out;
-        };
-
-        for line in content.lines() {
-            let x: &str = line;
-            let p = PathBuf::from(x);
-            let c = Content::new(p);
-            out.insert(c);
-        }
-
-        out
-    }
-
-    pub fn load_all_on_state(&self, hash: &str) -> HashMap<T::Key, T> {
-        let res: HashMap<T::Key, T> = self
-            .snap
-            .get_all(hash)
-            .into_iter()
-            .map(|(key, val)| (key, serde_json::from_slice(&val).unwrap()))
-            .collect();
-        dbg!(res.len());
-        dbg!(hash);
-        res
-    }
-
-    pub fn load_all(&self) -> HashMap<T::Key, T> {
-        let Some(hash) = self.state_hash() else {
-            return Default::default();
-        };
-
-        self.load_all_on_state(&hash)
-    }
-
-    pub fn load_ids(&self) -> HashSet<T::Key> {
-        let Some(hash) = self.state_hash() else {
-            return Default::default();
-        };
-        self.snap.all_item_ids(&hash)
-    }
-
-    /// Sorts all the items topologically, so that no item in the vector depends on an item after its position.
-    pub fn topological_sort(&self) -> Vec<T> {
-        let mut all: VecDeque<(T::Key, T)> = self.load_all().into_iter().collect();
-        let item_len = all.len();
-        let mut out = Vec::with_capacity(item_len);
-        let mut popped: HashSet<T::Key> = HashSet::with_capacity(item_len);
-        let mut count = 0;
-        let mut since_insert = 0;
-
-        while out.len() != item_len {
-            count += 1;
-            since_insert += 1;
-
-            if since_insert > item_len {
-                dbg!(count);
-                dbg!(all.len());
-                dbg!(all);
-                panic!();
-            }
-
-            if count % 1000 == 0 {
-                dbg!(count);
-                dbg!(all.len());
-                dbg!(out.len());
-            }
-
-            let (key, item) = all.pop_back().unwrap();
-
-            if item.dependencies().iter().all(|dep| popped.contains(dep)) {
-                out.push(item);
-                popped.insert(key);
-                since_insert = 0;
-            } else {
-                all.push_front((key, item));
-            }
-        }
-
-        out
-    }
-
-    /// Will create a new pruned blockchain by loading all the items and using the `Create` ledger action
-    pub fn save_pruned(&self) {
-        info!("save pruned");
-        let events: Vec<TheLedgerEvent<T>> = self
-            .topological_sort()
-            .into_iter()
-            .map(|item: T| TheLedgerEvent {
-                id: item.item_id(),
-                action: TheLedgerAction::Create(item),
-            })
-            .collect();
-
-        let mut entries: Vec<LedgerEntry<T>> = vec![];
-
-        for event in events {
-            let entry = LedgerEntry::new(entries.last(), event);
-            entries.push(entry);
-        }
-
-        let mut path = self.ledger_path();
-        path.pop();
-        path = path.join("pruned_entries");
-
-        std::fs::create_dir_all(&path).unwrap();
-
-        for entry in entries {
-            entry.save(&path);
-        }
-    }
-
-    pub fn insert_ledger(&self, event: TheLedgerEvent<T>) -> Result<StateHash, EventError<T>> {
-        if matches!(&event.action, TheLedgerAction::Delete) {
-            match self.load(event.id) {
-                Some(_) if !self.get_dependents(event.id).is_empty() => {
-                    return Err(EventError::DeletingWithDependencies);
-                }
-                Some(_) => {}
-                None => return Err(EventError::ItemNotFound),
-            }
-        }
-
-        let old_state_hash = self.state_hash();
-        let borrowed: Option<&str> = old_state_hash.as_deref();
-
-        let (state_hash, _) = self.run_event(event.clone(), borrowed, true)?;
-
-        if Some(&state_hash) == old_state_hash.as_ref() {
-            tracing::info!("not inserting ledger because it didn't change anything");
-            return Ok(state_hash);
-        }
-
-        let new_ledger_hash = self.ledger.save(event);
-        self.save_ledger_state(&new_ledger_hash, &state_hash);
-
-        Ok(state_hash)
-    }
-
-    pub fn state_hash(&self) -> Option<StateHash> {
-        trace!("retrieving current state hash");
-
-        let ledger_hash = self.ledger.current_hash()?;
-        trace!("ledger hash: {ledger_hash} for {:?}", &self.root);
-
-        if !self.has_statehash() {
-            //return self.mem_rebuild();
-        }
-
-        self._state_hash(ledger_hash).unwrap()
-    }
-
-    pub fn load_last_applied(&self, id: T::Key) -> Option<T> {
-        let (last_applied, _) = self.applied_status(&self.ledger.current_hash()?);
-        match self.snap.get(&last_applied?, id) {
-            Some(item) => serde_json::from_slice(&item).unwrap(),
-            None => None,
-        }
-    }
-
-    pub fn load(&self, id: T::Key) -> Option<T> {
-        /*
-        if let Some(item) = self.item_cache.read().unwrap().get(id) {
-            tracing::trace!("cache hit for: {:?}", id);
-            return Some(item.clone());
+    pub fn load(&self, key: T::Key) -> T {
+        if self.new_id == key {
+            self.new.clone()
         } else {
-            tracing::trace!("cache miss for: {:?}", id);
-        }
-        */
-
-        trace!("load item from ledger: {id:?}");
-        let state = self.state_hash()?;
-        trace!(
-            "loading item from state: {state} item : {id:?}, root: {:?}",
-            &self.root
-        );
-
-        match self.snap.get(&state, id) {
-            Some(item) => {
-                let item: T = serde_json::from_slice(&item).unwrap();
-                /*
-                self.item_cache
-                    .write()
-                    .unwrap()
-                    .insert(id.clone(), item.clone());
-                */
-                Some(item)
-            }
-
-            None => None,
+            self.inner.load(key)
         }
     }
 
-    pub fn get_dependencies(&self, id: T::Key) -> Vec<T::Key> {
-        self.load(id)
-            .unwrap()
-            .ref_cache()
-            .into_values()
-            .flatten()
-            .collect()
+    pub fn dependencies(&self, key: T::Key) -> HashSet<T::Key> {
+        self.load(key).dependencies()
     }
 
-    pub fn get_dependents(&self, id: T::Key) -> Vec<String> {
-        let key = CacheKey::Dependents { id: id.to_string() };
-        self.get_cache(key)
-    }
+    pub fn dependents(&self, key: T::Key) -> HashSet<T::Key> {
+        let mut dependents = self.inner.dependents(key);
 
-    pub fn get_prop_cache(&self, key: T::PropertyType, value: String) -> Vec<String> {
-        let key = CacheKey::Property {
-            property: key,
-            value,
+        if self.new.dependencies().contains(&key) {
+            dependents.insert(self.new_id);
+        }
+
+        dependents
+    }
+}
+
+struct ModifyResult<T: LedgerItem> {
+    key: T::Key,
+    item: Option<T>,
+    added_caches: HashSet<(CacheKey<T>, T::Key)>,
+    removed_caches: HashSet<(CacheKey<T>, T::Key)>,
+}
+
+#[derive(Clone)]
+pub struct Ledger<T: LedgerItem> {
+    entries: BlockChain<T>,
+    root: Arc<PathBuf>,
+    properties: Arc<PathBuf>,
+    items: Arc<PathBuf>,
+    ledger_hash: Arc<PathBuf>,
+}
+
+impl<T: LedgerItem> Ledger<T> {
+    pub fn new(root: PathBuf) -> Self {
+        let root = root.join(Self::item_name());
+        let entries = BlockChain::new(root.join("entries"));
+        let root = root.join("state");
+
+        let properties = root.join("properties");
+        let items = root.join("items");
+        let ledger_hash = root.join("applied");
+
+        std::fs::create_dir_all(&properties).unwrap();
+        std::fs::create_dir_all(&items).unwrap();
+
+        let selv = Self {
+            root: Arc::new(root),
+            properties: Arc::new(properties),
+            items: Arc::new(items),
+            ledger_hash: Arc::new(ledger_hash),
+            entries,
         };
 
-        self.get_cache(key)
-    }
-
-    pub fn get_ref_cache(&self, key: T::RefType, id: T::Key) -> Vec<String> {
-        let key = CacheKey::ItemRef {
-            reftype: key,
-            id: id.to_string(),
-        };
-
-        self.get_cache(key)
-    }
-
-    fn get_cache(&self, cache_key: CacheKey<T::PropertyType, T::RefType>) -> Vec<String> {
-        let Some(hash) = self.state_hash() else {
-            return vec![];
-        };
-
-        let cache = self.get_the_cache(&hash, &cache_key);
-
-        cache
-    }
-
-    /// Hmm maybe we can have a textfile containg all the paths to keep, like those on every 1000 snapshot, so garbage collection will be esasy
-    /// like we can just load that list any time so we won't have to run through all and do
-    /// wait no, a textfile for each snapshot, that contains all the new paths that came after that snapshot until next snapshot
-    /// so if the gc interval is 100, we the state of snapshot 500 is ABCD, there'd be a file named ABCD500
-    /// for each new state after 500, we add all the new paths to it
-    /// when we reach 600, we check how many of those paths are in 600, the ones that are not can be safely removed
-    fn garbage_collection(&self, index: usize) -> Option<(HashSet<Content>, HashSet<LedgerHash>)> {
-        info!("GARBAGE COLLECTION;;");
-
-        let guard = self.ledger.chain_to_hash(&self.ledger.current_hash()?);
-
-        if guard.is_empty() {
-            panic!();
+        if selv.entries.current_hash() != selv.currently_applied_ledger_hash() {
+            selv.apply();
         }
 
-        /// lets see...
-        /// we just need to see if there are _any_ states existing between two snapshots
-        /// if there is, we load all the paths from the first snapshot
-        /// then we load all the paths from the second snapshot
-        /// then we load all the newly added paths between that from the ref thing
-        /// we remove all the paths from the newref which don't exist in either the prev or new snapshot
-        /// then we remove all the ledgerstate -> hashstate references between the snaps
-        #[derive(Clone)]
-        struct CleanupStates {
-            states: HashSet<LedgerHash>,
-        }
-
-        let clean_states: CleanupStates = {
-            let mut curr_clean = CleanupStates {
-                states: Default::default(),
-            };
-
-            for entry in guard.iter() {
-                if entry.index < index {
-                    continue;
-                } else if entry.index == index + self.gc_keep {
-                    break;
-                } else if self.try_get_state_hash(&entry.data_hash()).is_some() {
-                    curr_clean.states.insert(entry.data_hash());
-                }
-            }
-
-            curr_clean
-        };
-
-        let mut to_delete: HashSet<Content> = Default::default();
-
-        if clean_states.states.is_empty() {
-            return Default::default();
-        }
-
-        let prev_state_hash = self.try_get_state_hash(&guard[index].data_hash())?;
-        let next_state_hash = self.try_get_state_hash(&guard[index + self.gc_keep].data_hash())?;
-
-        let old_contents = self.get_all_paths(&prev_state_hash);
-        let new_contents = self.get_all_paths(&next_state_hash);
-        let added_contents = self.new_paths_after_snapshot(index);
-
-        for content in added_contents {
-            if !old_contents.contains(&content) && !new_contents.contains(&content) {
-                to_delete.insert(content);
-            }
-        }
-
-        Some((to_delete, clean_states.states))
-    }
-
-    fn get_all_paths(&self, hash: &StateHash) -> Arc<HashSet<Content>> {
-        if let Some(c) = self.all_paths.read().unwrap().get(hash) {
-            return c.clone();
-        }
-
-        let paths = Arc::new(self.snap.all_paths(hash));
-
-        self.all_paths
-            .write()
-            .unwrap()
-            .insert(hash.clone(), paths.clone());
-        paths
-    }
-
-    fn formatter(name: &str) -> String {
-        name.split("::").last().unwrap().to_lowercase()
+        selv
     }
 
     fn item_name() -> &'static str {
@@ -1263,358 +670,443 @@ impl<T: LedgerItem> Ledger<T> {
         leaked
     }
 
-    fn state_map_path(&self) -> PathBuf {
-        let p = self.root.join("states");
-        fs::create_dir_all(&p).unwrap();
-        p
+    fn formatter(name: &str) -> String {
+        name.split("::").last().unwrap().to_lowercase()
     }
 
-    fn ledger_path(&self) -> PathBuf {
-        let p = self.root.join("entries");
-        fs::create_dir_all(&p).unwrap();
-        p
+    fn verify_all(&self) -> Result<(), EventError<T>> {
+        Ok(())
     }
 
-    fn has_statehash(&self) -> bool {
-        let path = self.state_map_path();
-        let mut entries = fs::read_dir(path).unwrap();
-        entries.next().is_some()
+    fn apply(&self) {
+        fs::remove_dir_all(&*self.items).unwrap();
+        fs::remove_dir_all(&*self.properties).unwrap();
+
+        fs::create_dir(&*self.items).unwrap();
+        fs::create_dir(&*self.properties).unwrap();
+
+        for (idx, entry) in self.entries.chain().into_iter().enumerate() {
+            if idx % 50 == 0 {
+                dbg!(idx);
+            };
+
+            self.modify_it(entry.event, false, false).unwrap();
+        }
     }
 
-    fn try_get_state_hash(&self, ledger_hash: &str) -> Option<StateHash> {
-        let path = self.state_map_path().join(ledger_hash);
-        if !path.exists() {
-            None
-        } else {
-            Some(
-                fs::read_link(&path)
+    pub fn load_all(&self) -> HashSet<T> {
+        let ids = self.load_ids();
+        let mut out = HashSet::with_capacity(ids.len());
+
+        for id in ids {
+            out.insert(self.load(id));
+        }
+
+        out
+    }
+
+    pub fn load_ids(&self) -> HashSet<T::Key> {
+        let mut entries: Vec<PathBuf> = vec![];
+
+        for entry in fs::read_dir(self.items.as_path()).unwrap() {
+            let entry = entry.unwrap().path();
+            entries.push(entry);
+        }
+        let mut keys: HashSet<T::Key> = HashSet::default();
+
+        for entry in entries {
+            for entry in fs::read_dir(entry).unwrap() {
+                match entry
                     .unwrap()
                     .file_name()
-                    .unwrap()
                     .to_str()
                     .unwrap()
-                    .to_string(),
-            )
-        }
-    }
-
-    /*
-    fn mem_rebuild(&self) -> Option<StateHash> {
-        info!("starting inmemory rebuild");
-        panic!();
-        let mut snapmem = SnapMem::<T::Key>::default();
-
-        let guard = self.ledger.read().unwrap();
-
-        if guard.is_empty() {
-            return None;
-        }
-
-        for event in guard.iter() {
-            let id = event.event.id;
-            let key = id.to_string();
-
-            match &event.event.action {
-                TheLedgerAction::Create(_) => todo!(),
-                TheLedgerAction::Modify(m) => {
-                    let item = snapmem
-                        .get(&id.to_string())
-                        .map(|x| serde_json::from_slice(x.as_slice()).unwrap())
-                        .unwrap_or_else(|| T::new_default(id));
-                    //let item = item.run_event(m.clone()).unwrap();
-                    let item = serde_json::to_vec(&item).unwrap();
-                    snapmem.save(&id.to_string(), item);
-                }
-                TheLedgerAction::Delete => {
-                    snapmem.remove(&key);
-                }
-            }
-        }
-
-        info!("persisting inmem to fs");
-        let (state_hash, items) = snapmem.clone().persist(self.snap.clone());
-        let items: HashMap<String, T> = items
-            .into_iter()
-            .map(|(key, val)| (key, serde_json::from_slice(&val).unwrap()))
-            .collect();
-        let ledger_hash = guard.last().unwrap().data_hash();
-        self.save_ledger_state(&ledger_hash, &state_hash);
-        info!("inmemory rebuild persisted!!");
-
-        /*
-        let fixed = Either::Right(snapmem);
-        let fixed = FixedLedger {
-            inner: fixed,
-            hash: None,
-        };
-        if let Some(cache_hash) = self.rebuild_the_cache(items, fixed) {
-            self.insert_cache_map(&cache_hash, &state_hash);
-        }
-        */
-        Some(state_hash)
-    }
-    */
-
-    /// Returns last applied entry, and list of entries not applied yet.
-    fn applied_status(&self, ledger: &LedgerHash) -> (Option<StateHash>, Vec<LedgerEntry<T>>) {
-        trace!("_state_hash @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@");
-        let mut unapplied_entries: Vec<LedgerEntry<T>> = vec![];
-
-        let ledger = self.ledger.chain_to_hash(ledger);
-
-        if ledger.is_empty() {
-            trace!("ledger is empty");
-            return (None, unapplied_entries);
-        }
-
-        let ledger = ledger.iter().rev();
-
-        let mut last_applied = None;
-
-        for entry in ledger {
-            let ledger_hash = entry.data_hash();
-            if let Some(state_hash) = self.try_get_state_hash(&ledger_hash) {
-                last_applied = Some(state_hash);
-                break;
-            } else {
-                unapplied_entries.push(entry.clone());
-            }
-        }
-
-        return (last_applied, unapplied_entries);
-    }
-
-    fn _state_hash(&self, ledger: LedgerHash) -> Result<Option<StateHash>, EventError<T>> {
-        let (mut last_applied, mut unapplied_entries) = self.applied_status(&ledger);
-
-        if unapplied_entries.is_empty() {
-            return Ok(last_applied);
-        }
-
-        //info!("unapplied entries: {unapplied_entries:?}");
-
-        let mut to_delete: HashSet<Content> = Default::default();
-        let mut cleanup_states: HashSet<LedgerHash> = Default::default();
-
-        let modify_cache = unapplied_entries.len() < 100;
-
-        info!("start apply unapplied!");
-        while let Some(entry) = unapplied_entries.pop() {
-            let idx = entry.index;
-            let (state_hash, new_contents) =
-                self.run_event(entry.event.clone(), last_applied.as_deref(), modify_cache)?;
-            if modify_cache {
-                //self.align_item_cache(entry.event.id);
-            }
-            self.save_ledger_state(&entry.data_hash(), &state_hash);
-            last_applied = Some(state_hash);
-            if modify_cache {
-                info!("new last applied: {last_applied:?}");
-            } else {
-                let len = unapplied_entries.len();
-                if len % 100 == 0 {
-                    info!("remaining unapplied: {len}");
-                }
-            }
-
-            let new_contents: HashSet<Content> = new_contents.into_iter().collect();
-
-            self.append_ref(idx, new_contents);
-
-            if entry.index % self.gc_keep == 0 && self.gc_keep < entry.index {
-                if let Some((content, states)) = self.garbage_collection(entry.index - self.gc_keep)
+                    .parse::<T::Key>()
                 {
-                    to_delete.extend(content);
-                    cleanup_states.extend(states);
-                } else {
-                    tracing::warn!("failed to do garbage collection for index: {}", entry.index);
-                }
+                    Ok(key) => keys.insert(key),
+                    Err(_) => panic!(),
+                };
             }
         }
 
-        if !modify_cache {
-            //self.clear_item_cache();
-        }
-
-        let state_root = Arc::new(self.root.join("states"));
-        info!("deleting state map entries");
-        cleanup_states.par_iter().for_each(|state| {
-            let p = state_root.join(state);
-            fs::remove_file(&p).unwrap();
-        });
-
-        info!("deleting {} blobs", to_delete.len());
-        to_delete.into_par_iter().for_each(|c| c.delete().unwrap());
-
-        trace!("current state_hash: {last_applied:?}");
-        Ok(last_applied)
+        keys
     }
 
-    /// Creates a symlink from the hash of a ledger event to its corresponding state
-    fn save_ledger_state(&self, ledger_hash: &str, state_hash: &str) -> bool {
-        let sp = self.snap.the_full_blob_path(state_hash);
-        assert!(sp.exists());
-        let ledger_path = self.state_map_path().join(ledger_hash);
-        if ledger_path.exists() {
-            true
+    pub fn get_prop_cache(&self, property: T::PropertyType, value: String) -> HashSet<T::Key> {
+        let path = self.properties.join(property.to_string()).join(&value);
+        if !path.exists() {
+            Default::default()
         } else {
-            symlink(sp, ledger_path).unwrap();
-            false
+            let mut out = HashSet::default();
+            for entry in fs::read_dir(&path).unwrap() {
+                match entry
+                    .unwrap()
+                    .file_name()
+                    .to_str()
+                    .unwrap()
+                    .parse::<T::Key>()
+                {
+                    Ok(key) => out.insert(key),
+                    Err(_e) => {
+                        dbg!(property.to_string(), value);
+                        panic!();
+                    }
+                };
+            }
+            out
         }
     }
 
-    pub fn recursive_dependents(&self, item: T::Key) -> HashSet<T> {
-        let ledger = self.cachegetter(self.ledger.current_hash());
-        let item = self.load(item).unwrap();
-        let ledger = NewFixedLedger::new(ledger, item.clone());
-        item.recursive_dependents(&ledger)
+    fn item_keys_from_file(path: &Path) -> HashSet<T::Key> {
+        if !path.is_file() {
+            return Default::default();
+        }
+
+        let mut out: HashSet<T::Key> = Default::default();
+        for line in fs::read_to_string(path).unwrap().lines() {
+            let key: T::Key = match line.parse() {
+                Ok(key) => key,
+                Err(_) => panic!(),
+            };
+
+            out.insert(key);
+        }
+        out
     }
 
-    /// Clones the current state, modifies it with the new entry, and returns the hash of the new state.
-    fn run_event(
+    fn collect_item_keys_in_dir(dir: &Path) -> HashSet<T::Key> {
+        let mut out: HashSet<T::Key> = Default::default();
+
+        if !dir.is_dir() {
+            return Default::default();
+        }
+
+        for entry in fs::read_dir(dir).unwrap() {
+            let entry = entry.unwrap().path();
+            out.extend(Self::item_keys_from_file(&entry));
+        }
+
+        out
+    }
+
+    fn dependencies_dir(&self, key: T::Key) -> PathBuf {
+        let p = self.item_dir_from_key(key).join("dependencies");
+        std::fs::create_dir_all(&p).unwrap();
+        p
+    }
+
+    fn dependents_dir(&self, key: T::Key) -> PathBuf {
+        let p = self.item_dir_from_key(key).join("dependents");
+        std::fs::create_dir_all(&p).unwrap();
+        p
+    }
+
+    pub fn get_ref_cache(&self, key: T::Key, ty: T::RefType) -> HashSet<T::Key> {
+        let path = self.dependents_dir(key).join(ty.to_string());
+        Self::item_keys_from_file(&path)
+    }
+
+    pub fn dependencies(&self, key: T::Key) -> HashSet<T::Key> {
+        Self::collect_item_keys_in_dir(&self.dependencies_dir(key))
+    }
+
+    pub fn dependents(&self, key: T::Key) -> HashSet<T::Key> {
+        Self::collect_item_keys_in_dir(&self.dependents_dir(key))
+    }
+
+    pub fn recursive_dependencies(&self, key: T::Key) -> HashSet<T::Key>
+    where
+        Self: Sized,
+    {
+        let mut out: HashSet<T::Key> = HashSet::new();
+        let mut visited: HashSet<T::Key> = HashSet::new();
+
+        fn visit<T: LedgerItem>(
+            key: T::Key,
+            ledger: &Ledger<T>,
+            out: &mut HashSet<T::Key>,
+            visited: &mut HashSet<T::Key>,
+        ) where
+            T: Sized,
+        {
+            if !visited.insert(key) {
+                return;
+            }
+
+            out.insert(key);
+
+            for dep_key in ledger.dependencies(key) {
+                visit(dep_key, ledger, out, visited);
+            }
+        }
+
+        for dep_key in self.dependencies(key) {
+            visit(dep_key, self, &mut out, &mut visited);
+        }
+
+        out
+    }
+    pub fn recursive_dependents(&self, key: T::Key) -> HashSet<T::Key>
+    where
+        Self: Sized,
+    {
+        let mut out: HashSet<T::Key> = HashSet::new();
+        let mut visited: HashSet<T::Key> = HashSet::new();
+
+        fn visit<T: LedgerItem>(
+            key: T::Key,
+            ledger: &Ledger<T>,
+            out: &mut HashSet<T::Key>,
+            visited: &mut HashSet<T::Key>,
+        ) where
+            T: Sized,
+        {
+            if !visited.insert(key) {
+                return;
+            }
+
+            out.insert(key);
+
+            for dep_key in ledger.dependents(key) {
+                visit(dep_key, ledger, out, visited);
+            }
+        }
+
+        for dep_key in self.dependents(key) {
+            visit(dep_key, self, &mut out, &mut visited);
+        }
+
+        out
+    }
+
+    fn set_ledger_hash(&self, hash: LedgerHash) {
+        let mut f = fs::File::create(&*self.ledger_hash).unwrap();
+        f.write_all(hash.as_bytes()).unwrap();
+    }
+
+    pub fn currently_applied_ledger_hash(&self) -> Option<LedgerHash> {
+        fs::read_to_string(&*self.ledger_hash).ok()
+    }
+
+    fn deleted_file(&self) -> std::fs::File {
+        std::fs::File::create(self.root.join("deleted")).unwrap()
+    }
+
+    fn get_caches(&self, key: CacheKey<T>) {
+        match key {
+            CacheKey::Property { property, value } => {}
+            CacheKey::ItemRef { reftype, id } => todo!(),
+        }
+    }
+
+    fn remove_dependent(&self, key: T::Key, ty: T::RefType, dependent: T::Key) {
+        let mut dependents = self.get_ref_cache(key, ty.clone());
+        assert!(dependents.remove(&dependent));
+        let path = self.dependents_dir(key).join(ty.to_string());
+        Self::keys_to_file(&path, dependents);
+    }
+
+    fn remove_property(&self, key: T::Key, property: T::PropertyType, value: String) {
+        let path = self
+            .properties
+            .join(property.to_string())
+            .join(value)
+            .join(key.to_string());
+        std::fs::remove_file(&path).unwrap();
+    }
+
+    fn insert_property(&self, key: T::Key, property: T::PropertyType, value: String) {
+        let path = self.properties.join(property.to_string()).join(&value);
+        std::fs::create_dir_all(&path).unwrap();
+        let link = path.join(key.to_string());
+        if link.exists() {
+            return;
+        }
+        let original = self.item_file(key);
+
+        if !original.is_file() {
+            dbg!(&link, original, key, property.to_string(), value);
+            panic!();
+        }
+
+        hard_link(original, link).unwrap();
+    }
+
+    fn keys_to_file(path: &Path, keys: HashSet<T::Key>) {
+        let mut s = String::new();
+        for key in keys {
+            s.push_str(&format!("{}\n", key.to_string()));
+        }
+
+        let mut f = fs::File::create(&path).unwrap();
+        f.write(&s.as_bytes()).unwrap();
+    }
+
+    fn insert_dependent(&self, key: T::Key, ty: T::RefType, dependent: T::Key) {
+        let mut dependents = self.get_ref_cache(key, ty.clone());
+        dependents.insert(dependent);
+        let path = self.dependents_dir(key).join(ty.to_string());
+        Self::keys_to_file(&path, dependents);
+    }
+
+    pub fn _modify(
         &self,
         event: TheLedgerEvent<T>,
-        state_hash: Option<&str>,
-        update_cache: bool,
-    ) -> Result<HashAndContents, EventError<T>> {
-        let mut new_content: Vec<Content> = vec![];
-        let prev_state_hash = state_hash;
-        if update_cache {
-            //info!("running event: {event:?} on hash {state_hash:?}");
-        }
-
-        let id = event.id;
-        let event = match event.action {
-            TheLedgerAction::Create(item) => {
-                let cachegetter = self.cachegetter(state_hash.map(|x| x.to_string()));
-                let caches = item.caches(&cachegetter);
-                let empty: HashSet<(CacheKey<_, _>, String)> = Default::default();
-                let caches = caches.difference(&empty);
-                let caches: Vec<&(CacheKey<T::PropertyType, T::RefType>, String)> =
-                    caches.into_iter().collect();
-                let item = serde_json::to_vec(&item).unwrap();
-                let (next_state_hash, _) = self.snap.save(state_hash, id, item, &mut new_content);
-                if update_cache {
-                    self.modify_cache(prev_state_hash, &next_state_hash, caches, vec![]);
-                }
-                return Ok((next_state_hash, new_content));
-            }
-            TheLedgerAction::Modify(m) => m,
-            TheLedgerAction::Delete => {
-                info!("deletingg!!");
-
-                let state_hash = state_hash.unwrap();
-                let item = self.snap.get(state_hash, id).unwrap();
-                let item: T = serde_json::from_slice(&item).unwrap();
-
-                let cachegetter = self.cachegetter(Some(state_hash.to_string()));
-                let next_state_hash = self.snap.remove(state_hash, id, &mut new_content);
-
-                let old_cache = if update_cache {
-                    item.caches(&cachegetter)
-                } else {
-                    Default::default()
+        verify: bool,
+    ) -> Result<ModifyResult<T>, EventError<T>> {
+        let key = event.id;
+        let (old_caches, new_caches, item) = match event.action.clone() {
+            TheLedgerAction::Modify(action) => {
+                let (old_caches, old_item) = match self.try_load(key) {
+                    Some(item) => (item.caches(self), item),
+                    None => (Default::default(), T::new_default(key)),
                 };
-
-                // lazy so i just make an empty set to copy the code below lol
-                let empty: HashSet<(CacheKey<_, _>, String)> = Default::default();
-                let old_cache = old_cache.difference(&empty);
-                let old_cache: Vec<&(CacheKey<T::PropertyType, T::RefType>, String)> =
-                    old_cache.into_iter().collect();
-
-                if update_cache {
-                    self.modify_cache(
-                        Some(state_hash),
-                        &next_state_hash,
-                        Default::default(),
-                        old_cache,
-                    );
+                let modified_item = old_item.run_event(action, self, verify)?;
+                let new_caches = modified_item.caches(self);
+                (old_caches, new_caches, Some(modified_item))
+            }
+            TheLedgerAction::Create(mut item) => {
+                if verify {
+                    item = item.verify(self)?;
                 }
-
-                return Ok((next_state_hash, new_content));
+                let caches = item.caches(self);
+                (HashSet::default(), caches, Some(item))
+            }
+            TheLedgerAction::Delete => {
+                let old_item = self.load(key);
+                let old_caches = old_item.caches(self);
+                (old_caches, Default::default(), None)
             }
         };
 
-        let mut new_item = true;
-        let item = match state_hash {
-            Some(hash) => {
-                match self
-                    .snap
-                    .get(hash, id)
-                    .map(|v| serde_json::from_slice(&v).unwrap())
-                {
-                    Some(item) => {
-                        new_item = false;
-                        item
-                    }
-                    None => T::new_default(id),
-                }
-            }
-            None => T::new_default(id),
-        };
+        let added_caches = &new_caches - &old_caches;
+        let removed_caches = &old_caches - &new_caches;
 
-        let hashed = state_hash.map(|x| x.to_owned());
-
-        let cachegetter = self.cachegetter(hashed);
-
-        let old_cache = if !new_item && update_cache {
-            item.caches(&cachegetter)
-        } else {
-            Default::default()
-        };
-
-        let id = item.item_id();
-        let item = item.run_event(event.clone(), &cachegetter)?;
-        let new_caches = if update_cache {
-            item.caches(&cachegetter)
-        } else {
-            Default::default()
-        };
-
-        let item = serde_json::to_vec(&item).unwrap();
-        let (state_hash, new_contents) = self.snap.save(state_hash, id, item, &mut new_content);
-
-        let added_caches = new_caches.difference(&old_cache);
-        let added_caches: Vec<&(CacheKey<T::PropertyType, T::RefType>, String)> =
-            added_caches.collect();
-        let removed_caches: Vec<&(CacheKey<T::PropertyType, T::RefType>, String)> =
-            old_cache.difference(&new_caches).collect();
-
-        if update_cache {
-            info!("done running event, new statehash: {state_hash}");
-            self.modify_cache(prev_state_hash, &state_hash, added_caches, removed_caches);
-        }
-
-        Ok((state_hash, new_contents))
-    }
-}
-
-/*
-impl<'de, T, A> Deserialize<'de> for LedgerEntry<T, A>
-where
-    A: Hash + Debug,
-    T: LedgerItem<A>,
-{
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        #[derive(Deserialize)]
-        struct LedgerEntryHelper<T, A> {
-            previous: Option<Hashed>,
-            index: usize,
-            event: TheLedgerEvent<T, A>,
-        }
-
-        let helper = LedgerEntryHelper::deserialize(deserializer)?;
-        Ok(LedgerEntry {
-            previous: helper.previous,
-            index: helper.index,
-            event: helper.event,
+        Ok(ModifyResult {
+            key,
+            item,
+            added_caches,
+            removed_caches,
         })
     }
+
+    pub fn run_result(&self, res: ModifyResult<T>) -> Result<(), EventError<T>> {
+        let ModifyResult {
+            key,
+            item,
+            added_caches,
+            removed_caches,
+        } = res;
+
+        match item {
+            Some(item) => self.save(item),
+            None => {
+                debug_assert!(added_caches.is_empty());
+                self.remove(key);
+            }
+        }
+
+        for cache in added_caches {
+            let key: T::Key = cache.1;
+            match cache.0 {
+                CacheKey::ItemRef { reftype, id } => {
+                    self.insert_dependent(id, reftype, key);
+                }
+                CacheKey::Property { property, value } => {
+                    self.insert_property(key, property, value);
+                }
+            }
+        }
+
+        for cache in removed_caches {
+            let key: T::Key = cache.1;
+            match cache.0 {
+                CacheKey::ItemRef { reftype, id } => {
+                    self.remove_dependent(key, reftype, id);
+                }
+                CacheKey::Property { property, value } => {
+                    self.remove_property(key, property, value);
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    pub fn modify_it(
+        &self,
+        event: TheLedgerEvent<T>,
+        save: bool,
+        verify: bool,
+    ) -> Result<(), EventError<T>> {
+        let res = self._modify(event.clone(), verify)?;
+        self.run_result(res).unwrap();
+        if save {
+            let hash = self.entries.save(event);
+            self.set_ledger_hash(hash);
+        }
+        Ok(())
+    }
+
+    pub fn modify(&self, event: TheLedgerEvent<T>) -> Result<(), EventError<T>> {
+        self.modify_it(event, true, true)
+    }
+
+    pub fn remove(&self, key: T::Key) {
+        let path = self.item_dir_from_key(key);
+        std::fs::remove_dir_all(path).unwrap();
+    }
+
+    pub fn save(&self, item: T) {
+        let key = item.item_id();
+        let item_path = self.item_dir_from_key(key);
+        std::fs::create_dir_all(&item_path).unwrap();
+        let serialized = serde_json::to_string_pretty(&item).unwrap();
+        let mut f = std::fs::File::create(&item_path.join("item")).unwrap();
+        use std::io::Write;
+
+        f.write_all(serialized.as_bytes()).unwrap();
+    }
+
+    fn item_dir_from_key(&self, key: T::Key) -> PathBuf {
+        let key = key.to_string();
+        let mut chars = key.chars();
+
+        let prefix = if let (Some(ch1), Some(ch2)) = (chars.next(), chars.next()) {
+            format!("{}{}", ch1, ch2)
+        } else {
+            panic!();
+        };
+
+        self.items.join(prefix).join(key)
+    }
+
+    fn item_file(&self, key: T::Key) -> PathBuf {
+        self.item_dir_from_key(key).join("item")
+    }
+
+    pub fn try_load(&self, key: T::Key) -> Option<T> {
+        if self.item_dir_from_key(key).join("item").exists() {
+            Some(self.load(key))
+        } else {
+            None
+        }
+    }
+
+    pub fn load(&self, key: T::Key) -> T {
+        let path = self.item_file(key);
+        let s = fs::read_to_string(&path);
+        match s {
+            Ok(s) => serde_json::from_str(&s).unwrap(),
+            Err(e) => {
+                dbg!(e);
+                dbg!(key);
+                dbg!(path);
+                panic!();
+            }
+        }
+    }
 }
-*/
 
 impl<T: LedgerItem> LedgerEntry<T> {
     fn new(previous: Option<&Self>, event: TheLedgerEvent<T>) -> Self {

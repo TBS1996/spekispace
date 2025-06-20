@@ -68,9 +68,9 @@ impl DynCard {
                 for instance in provider
                     .providers
                     .cards
-                    .get_ref_cache(RefType::Instance, *id)
+                    .get_ref_cache(*id, RefType::Instance)
                 {
-                    output.push(MaybeCard::Id(instance.parse().unwrap()));
+                    output.push(MaybeCard::Id(instance));
                 }
 
                 output
@@ -80,7 +80,7 @@ impl DynCard {
                 .cards
                 .get_prop_cache(CardProperty::CardType, ty.to_string())
                 .into_iter()
-                .map(|id| MaybeCard::Id(id.parse().unwrap()))
+                .map(|id| MaybeCard::Id(id))
                 .collect(),
 
             DynCard::Dependents(id) => match provider.load(*id) {

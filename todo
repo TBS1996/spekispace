@@ -669,6 +669,55 @@ then whenever there's a new event run
 it'll remove all the dependencies of the card that is changed
 
 
+# db overhaul
+
+screw the snapshot thing 
+
+can still keep ledger though but should modify in-place, will make life easier.
+can also keep a hash of all the content though just for soundness, like so we have a ledger->hash map.
+
+each item have its own directory 
+
+like 
+
+{key_id}/
+item (file with actual contents)
+then a list of dependent stuff
+either, a textfile for each dependent type that has a list of key_ids
+or a folder with hardlinks to the items 
+
+this will more tightly couple the caching with the store though but i think that's fine, maybe even preferable
+
+yeah ok to ensure the state is up to date with ledger
+just have a current_state_hash file, which contains the hash of the ledger and the hash of the state
+so when in the program you check the ledger hash and ensure it's the same as in that file, if not, nuke the state and rebuild everything
+
+i'd say put dependencies also in textfile, one textfile per dep type
+then it's a nice symmetry to cleanly mirror the dependent thing 
+
+like say a dependency type is called instance
+
+A is instance of B
+
+so A has like
+
+dependency-instance -> B
+
+B has
+
+dependent-instance -> A
+
+or maybe two folders within one is called dependencies and the other dependents and within that keep files with just the name of the dependency/dependent 
+
+could also make the dependency textfiles the source of truth, so instead of them being derived from item.
+so like if i wanna add a dependency, in my program i'd have a wrapper around my item that holds the values from these dependency textfiles basically
+
+for now the wrapper can just be like a HashMap<RefType, HashSet<key>>. and when i wanna use it i have to do like a get or whatever
+but would be neat if i can just create my own functions like "instance" and annotate it or something
+
+wait no lol that don't work cause the dependencies can be inside other things like textlinks, would only work with dependenceis that are in normal container
+
+
 # main graph
 
 maybe that main global graph thing can simply be a collection i make where i incorporate all the collections i think are good

@@ -175,7 +175,6 @@ impl CardSelector {
                                 );
 
                             for id in indices {
-                                let id: Uuid = id.parse().unwrap();
                                 if cards.contains_key(&id) {
                                     *matching_cards.entry(id).or_insert(0) += 1;
                                 }

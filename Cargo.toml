@@ -1,12 +1,11 @@
 [workspace]
-members = ["speki-core", "omtrent", "speki", "snapstore", "ledgerstore"]
+members = ["speki-core", "omtrent", "speki", "ledgerstore"]
 
 resolver = "2"
 
 [workspace.dependencies]
 speki-core = { path = "speki-core" }
 omtrent = { path = "omtrent" }
-snapstore = { path = "snapstore" }
 ledgerstore = { path = "ledgerstore" }
 either = "1.15.0"
 serde = { version = "1.0", features = ["derive"] }

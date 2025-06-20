@@ -101,13 +101,7 @@ impl Input {
     pub fn eval(&self, provider: &CardProvider) -> BTreeSet<MaybeCard> {
         let res = match self {
             Input::Leaf(dc) => dc.evaluate(provider.clone()).into_iter().collect(),
-            Input::Reference(id) => provider
-                .providers
-                .sets
-                .load(*id)
-                .unwrap()
-                .expr
-                .eval(provider),
+            Input::Reference(id) => provider.providers.sets.load(*id).expr.eval(provider),
             Input::Expr(expr) => expr.eval(provider),
         };
         dbg!("evaluated: {:?}", self);

@@ -371,8 +371,8 @@ fn RenderDependencies(
                     onclick: move |_|{
                         let removed =  dependencies.write().remove(idx);
                         if let Some(id) = card_id {
-                            let event = TheLedgerEvent::new(id, CardAction::RemoveDependency(removed.read().id()));
-                            APP.read().inner().provider.cards.insert_ledger(event).unwrap();
+                            let event = TheLedgerEvent::new_modify(id, CardAction::RemoveDependency(removed.read().id()));
+                            APP.read().inner().provider.cards.modify(event).unwrap();
                         }
                     },
                     "X"
@@ -527,9 +527,9 @@ impl CardViewer {
                 // all cards that are an attribute card based on a given instance.
                 // wait, isnt this all we need? damn..
                 let attr_cards_based_on_instance: BTreeSet<Arc<Card>> = card_ledger
-                    .get_ref_cache(RefType::AttrClass, curr_card.read().id())
+                    .get_ref_cache(curr_card.read().id(), RefType::AttrClass)
                     .into_iter()
-                    .map(|id| provider.load(id.parse().unwrap()).unwrap())
+                    .map(|id| provider.load(id).unwrap())
                     .collect();
 
                 attrs.retain(|attr_id| {
@@ -1075,7 +1075,7 @@ fn DeleteButton(card: CardId) -> Element {
         button {
             class: "mt-2 inline-flex items-center text-white bg-gray-800 border-0 py-1 px-3 focus:outline-none hover:bg-gray-700 rounded text-base md:mt-0",
             onclick: move |_| {
-                APP.read().inner().provider.cards.insert_ledger(TheLedgerEvent::new_delete(card)).unwrap();
+                APP.read().inner().provider.cards.modify(TheLedgerEvent::new_delete(card)).unwrap();
                 pop_overlay();
             },
             "delete"
@@ -1137,17 +1137,17 @@ fn save_button(CardViewer: CardViewer) -> Element {
                 let mut events: Vec<CardEvent> = vec![];
 
                 let id = selveste.old_card.cloned().map(|card|card.id()).unwrap_or_else(CardId::new_v4);
-                events.push(CardEvent::new(id, CardAction::UpsertCard(card.ty)));
-                events.push(CardEvent::new(id, CardAction::SetFrontAudio (card.front_audio)));
-                events.push(CardEvent::new(id, CardAction::SetBackAudio ( card.back_audio)));
-                events.push(CardEvent::new(id, CardAction::SetNamespace ( card.namespace)));
+                events.push(CardEvent::new_modify(id, CardAction::UpsertCard(card.ty)));
+                events.push(CardEvent::new_modify(id, CardAction::SetFrontAudio (card.front_audio)));
+                events.push(CardEvent::new_modify(id, CardAction::SetBackAudio ( card.back_audio)));
+                events.push(CardEvent::new_modify(id, CardAction::SetNamespace ( card.namespace)));
 
                 for dep in card.deps {
-                    events.push(CardEvent::new(id, CardAction::AddDependency(dep)));
+                    events.push(CardEvent::new_modify(id, CardAction::AddDependency(dep)));
                 }
 
                 for event in events {
-                    if let Err(e) = APP.read().inner().provider.cards.insert_ledger(event) {
+                    if let Err(e) = APP.read().inner().provider.cards.modify(event) {
                         append_overlay(OverlayEnum::Notice(Notice::new_from_debug(e)));
                         return;
                     }
@@ -1163,8 +1163,8 @@ fn save_button(CardViewer: CardViewer) -> Element {
                                     if let Some(back) = answer.to_backside() {
                                         let data = CardType::Attribute { attribute: attr_id.id, back: back, instance: id };
                                         let action = CardAction::UpsertCard(data);
-                                        let event = CardEvent::new(CardId::new_v4(), action);
-                                        if let Err(e) = APP.read().inner().provider.cards.insert_ledger(event) {
+                                        let event = CardEvent::new_modify(CardId::new_v4(), action);
+                                        if let Err(e) = APP.read().inner().provider.cards.modify(event) {
                                             append_overlay(OverlayEnum::Notice(Notice::new_from_debug(e)));
                                             return;
                                         }
@@ -1175,8 +1175,8 @@ fn save_button(CardViewer: CardViewer) -> Element {
                                     let back = BackSide::Card(card);
                                     let data = CardType::Attribute { attribute: attr_id.id, back: back, instance: id };
                                     let action = CardAction::UpsertCard(data);
-                                    let event = CardEvent::new(CardId::new_v4(), action);
-                                    if let Err(e) = APP.read().inner().provider.cards.insert_ledger(event) {
+                                    let event = CardEvent::new_modify(CardId::new_v4(), action);
+                                    if let Err(e) = APP.read().inner().provider.cards.modify(event) {
                                         append_overlay(OverlayEnum::Notice(Notice::new_from_debug(e)));
                                         return;
                                     }
@@ -1185,15 +1185,15 @@ fn save_button(CardViewer: CardViewer) -> Element {
                             }
                         },
                         AttrAnswer::Old { id: attr_card_id, question: _, answer, attr_id } => {
-                            let prev_back = APP.read().inner().card_provider.providers.cards.load(id).unwrap().ref_backside().cloned().unwrap();
+                            let prev_back = APP.read().inner().card_provider.providers.cards.load(id).ref_backside().cloned().unwrap();
                             match answer {
                                 Either::Left(answer) => {
                                     if let Some(back) = answer.to_backside() {
                                         if back != prev_back {
                                             let data = CardType::Attribute { attribute: attr_id, back: back, instance: id };
                                             let action = CardAction::UpsertCard(data);
-                                            let event = CardEvent::new(attr_card_id, action);
-                                            if let Err(e) = APP.read().inner().provider.cards.insert_ledger(event) {
+                                            let event = CardEvent::new_modify(attr_card_id, action);
+                                            if let Err(e) = APP.read().inner().provider.cards.modify(event) {
                                                 append_overlay(OverlayEnum::Notice(Notice::new_from_debug(e)));
                                                 return;
                                             }
@@ -1205,8 +1205,8 @@ fn save_button(CardViewer: CardViewer) -> Element {
                                     let back = BackSide::Card(card);
                                     let data = CardType::Attribute { attribute: attr_id, back: back, instance: id };
                                     let action = CardAction::UpsertCard(data);
-                                    let event = CardEvent::new(attr_card_id, action);
-                                    if let Err(e) = APP.read().inner().provider.cards.insert_ledger(event) {
+                                    let event = CardEvent::new_modify(attr_card_id, action);
+                                    if let Err(e) = APP.read().inner().provider.cards.modify(event) {
                                         append_overlay(OverlayEnum::Notice(Notice::new_from_debug(e)));
                                         return;
                                     }

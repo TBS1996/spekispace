@@ -55,7 +55,7 @@ impl ReviewPage {
                 .provider
                 .sets
                 .load_all()
-                .into_values()
+                .into_iter()
                 .map(|set| SetEditor::new(&set))
                 .collect();
 
@@ -123,7 +123,7 @@ fn RenderInput(
                     p { "{leaf}" }}
             },
             InputEditor::Reference(id) => {
-                rsx!{RenderSet { filter, set: SetEditor::new(&ledger.load(id).unwrap()), depth: depth + 1}}
+                rsx!{RenderSet { filter, set: SetEditor::new(&ledger.load(id)), depth: depth + 1}}
             },
             InputEditor::Expr(expr) => {
                 rsx!{
@@ -318,7 +318,7 @@ fn RenderSet(
     let real_set = SetExpr::try_from(set.expr.cloned());
 
     let save_button: bool = match real_set.clone() {
-        Ok(set_expr) => match APP.read().inner().provider.sets.load(set.id) {
+        Ok(set_expr) => match APP.read().inner().provider.sets.try_load(set.id) {
             Some(old_set) => old_set.expr != set_expr || old_set.name != set.name.cloned(),
             None => true,
         },
@@ -360,11 +360,11 @@ fn RenderSet(
                         let id = set.id;
 
 
-                        let event = SetEvent::new(id, SetAction::SetName(name));
-                        ledger.insert_ledger(event).unwrap();
+                        let event = SetEvent::new_modify(id, SetAction::SetName(name));
+                        ledger.modify(event).unwrap();
 
-                        let event = SetEvent::new(id, SetAction::SetExpr(expr));
-                        ledger.insert_ledger(event).unwrap();
+                        let event = SetEvent::new_modify(id, SetAction::SetExpr(expr));
+                        ledger.modify(event).unwrap();
 
                     },
                     "save"
@@ -394,7 +394,7 @@ fn RenderSet(
 
                         let card_ids: HashSet<CardId> = cards.iter().map(|card|card.id()).collect();
                         dbg!();
-                        let all_recursive_dependencies = APP.read().inner().provider.cards.clever_recursive_dependencies(card_ids);
+                        let all_recursive_dependencies: HashSet<CardId> = card_ids.iter().map(|id|APP.read().inner().provider.cards.recursive_dependencies(*id)).flatten().collect();
                         dbg!(cards.len());
 
                         let mut cards_with_deps: BTreeSet<Arc<Card>> = Default::default();
@@ -526,7 +526,7 @@ fn RenderSet(
                             delete_atomic.set(true);
 
                             if !id.is_nil()  {
-                                APP.read().inner().provider.sets.insert_ledger(TheLedgerEvent::new_delete(id)).unwrap();
+                                APP.read().inner().provider.sets.modify(TheLedgerEvent::new_delete(id)).unwrap();
                             }
                         },
                         "delete"

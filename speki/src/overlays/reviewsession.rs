@@ -442,8 +442,8 @@ fn RenderDependencies(
                             let mut thecard = card.clone();
                             let removed =  wtf.clone().get(idx).cloned().unwrap();
                             let id = card.read().id();
-                            let event = TheLedgerEvent::new(id, CardAction::RemoveDependency(removed.read().id()));
-                            APP.read().inner().provider.cards.insert_ledger(event).unwrap();
+                            let event = TheLedgerEvent::new_modify(id, CardAction::RemoveDependency(removed.read().id()));
+                            APP.read().inner().provider.cards.modify(event).unwrap();
 
                             let new_card = Arc::unwrap_or_clone(APP.read().inner().card_provider.load(id).unwrap());
                             thecard.set(new_card);

@@ -12,7 +12,7 @@ pub mod basecard;
 pub use basecard::*;
 
 use either::Either;
-use ledgerstore::{EventError, LedgerItem, NewFixedLedger, StateHash, TimeProvider};
+use ledgerstore::{EventError, TheLedgerAction, TimeProvider};
 use nonempty::NonEmpty;
 use serde::Deserializer;
 use serde_json::Value;
@@ -195,7 +195,7 @@ impl Card {
         }
 
         for class in self.parent_classes() {
-            let card = self.card_provider.providers.cards.load(class).unwrap();
+            let card = self.card_provider.providers.cards.load(class);
             if let CardType::Class { attrs, .. } = card.data {
                 output.extend(attrs);
             }
@@ -281,8 +281,7 @@ impl Card {
     pub fn dependents_ids(&self) -> BTreeSet<CardId> {
         let id = self.id;
         let mut stack = BTreeSet::new();
-        for dep in self.card_provider.providers.cards.get_dependents(id) {
-            let dep: CardId = dep.parse().unwrap();
+        for dep in self.card_provider.providers.cards.dependents(id) {
             stack.insert(dep);
         }
         stack
@@ -302,12 +301,10 @@ impl Card {
             grade: recall,
             timestamp: self.current_time(),
         });
-        let event = ReviewEvent::new(self.id, action);
-        self.card_provider
-            .providers
-            .reviews
-            .insert_ledger(event)
-            .unwrap();
+
+        let event = ReviewEvent::new_modify(self.id, action);
+
+        self.card_provider.providers.reviews.modify(event).unwrap();
         tracing::info!("added recall: {recall:?}");
     }
 
@@ -346,15 +343,8 @@ impl Card {
     ) -> Self {
         let id = base.id;
 
-        let raw_front = |id: Uuid| -> String {
-            card_provider
-                .providers
-                .cards
-                .load(id)
-                .unwrap()
-                .data
-                .raw_front()
-        };
+        let raw_front =
+            |id: Uuid| -> String { card_provider.providers.cards.load(id).data.raw_front() };
 
         let from_back =
             |back: &BackSide| -> EvalText { EvalText::from_backside(back, &card_provider) };
@@ -374,24 +364,12 @@ impl Card {
             } => match (back, parent_class) {
                 (Some(theback), Some(pcl)) if theback.is_empty_text() => {
                     EvalText::just_some_string(
-                        card_provider
-                            .providers
-                            .cards
-                            .load(*pcl)
-                            .unwrap()
-                            .data
-                            .raw_front(),
+                        card_provider.providers.cards.load(*pcl).data.raw_front(),
                         &card_provider,
                     )
                 }
                 (None, Some(pcl)) => EvalText::just_some_string(
-                    card_provider
-                        .providers
-                        .cards
-                        .load(*pcl)
-                        .unwrap()
-                        .data
-                        .raw_front(),
+                    card_provider.providers.cards.load(*pcl).data.raw_front(),
                     &card_provider,
                 ),
                 (Some(back), None) => from_back(back),
@@ -467,16 +445,16 @@ impl Card {
         let backside = BackSide::Card(reff);
         self.base = self.base.set_backside(backside);
         let action = CardAction::SetBackRef(reff);
-        let event = CardEvent::new(self.id, action);
-        self.card_provider.providers.cards.insert_ledger(event)?;
+        let event = CardEvent::new_modify(self.id, action);
+        self.card_provider.providers.cards.modify(event).unwrap();
         Ok(self)
     }
 
-    pub fn add_dependency(&mut self, dependency: CardId) -> Result<StateHash, EventError<RawCard>> {
+    pub fn add_dependency(&mut self, dependency: CardId) -> Result<(), EventError<RawCard>> {
         self.base.explicit_dependencies.insert(dependency);
         let action = CardAction::AddDependency(dependency);
-        let event = CardEvent::new(self.id, action);
-        self.card_provider.providers.cards.insert_ledger(event)
+        let event = CardEvent::new_modify(self.id, action);
+        self.card_provider.providers.cards.modify(event)
     }
 
     pub fn back_side(&self) -> Option<&BackSide> {
@@ -484,15 +462,10 @@ impl Card {
     }
 
     pub fn recursive_dependents(&self) -> HashSet<CardId> {
-        let ledger = self
-            .card_provider
+        self.card_provider
             .providers
             .cards
-            .cachegetter(self.card_provider.providers.cards.state_hash());
-
-        let ledger = NewFixedLedger::new(ledger, self.base.clone());
-
-        self.base.recursive_dependent_ids(&ledger)
+            .recursive_dependents(self.id)
     }
 
     pub fn recursive_dependencies(&self) -> Vec<CardId> {
@@ -569,7 +542,7 @@ impl Card {
     pub fn full_history(&self) -> History {
         let mut reviews: Vec<Review> = vec![];
         for dep in self.dependents_ids() {
-            let Some(history) = self.card_provider.providers.reviews.load(dep) else {
+            let Some(history) = self.card_provider.providers.reviews.try_load(dep) else {
                 continue;
             };
 
@@ -653,12 +626,11 @@ impl Card {
     }
 
     pub fn set_suspend(&mut self, suspend: bool) {
-        let event = MetaEvent::new(self.id, crate::ledger::MetaAction::Suspend(suspend));
-        self.card_provider
-            .providers
-            .metadata
-            .insert_ledger(event)
-            .unwrap();
+        let action = TheLedgerAction::Modify(crate::ledger::MetaAction::Suspend(suspend));
+        let event = MetaEvent::new(self.id, action);
+
+        self.card_provider.providers.metadata.modify(event).unwrap();
+
         self.metadata.suspended = suspend.into();
     }
 

@@ -1,7 +1,7 @@
 use super::*;
 use crate::{audio::AudioId, card_provider::CardProvider, CardProperty, RefType};
 use either::Either;
-use ledgerstore::{FixedLedger, LedgerItem, NewFixedLedger};
+use ledgerstore::{Ledger, LedgerItem, OverrideLedger};
 use omtrent::TimeStamp;
 use serde::{Deserialize, Serialize, Serializer};
 use std::{
@@ -360,9 +360,8 @@ impl CardType {
                     .providers
                     .cards
                     .get_prop_cache(CardProperty::Attr, attribute.to_string())
-                    .first()
-                    .unwrap()
-                    .parse()
+                    .into_iter()
+                    .next()
                     .unwrap();
 
                 let class = provider.load(class).unwrap();
@@ -386,16 +385,12 @@ impl CardType {
                 name, class, back, ..
             } => {
                 let (class_name, default_question) =
-                    match provider.providers.cards.load(*class).map(|x| x.data) {
-                        Some(CardType::Class {
+                    match provider.providers.cards.load(*class).data {
+                        CardType::Class {
                             default_question,
                             name,
                             ..
-                        }) => (name, default_question),
-                        None => {
-                            dbg!(class);
-                            panic!();
-                        }
+                        } => (name, default_question),
                         other => {
                             dbg!(class);
                             dbg!(other);
@@ -433,9 +428,8 @@ impl CardType {
                     .providers
                     .cards
                     .get_prop_cache(CardProperty::Attr, attribute.to_string())
-                    .first()
-                    .unwrap()
-                    .parse()
+                    .into_iter()
+                    .next()
                     .unwrap();
 
                 let class = provider.load(class).unwrap();
@@ -524,7 +518,7 @@ pub struct RawCard {
 }
 
 impl RawCard {
-    pub fn cache_front(&self, ledger: &FixedLedger<RawCard>) -> String {
+    pub fn cache_front(&self, ledger: &Ledger<RawCard>) -> String {
         match self.data.clone() {
             CardType::Instance { name, .. } => name.to_raw(),
             CardType::Normal { front, .. } => front.to_raw(),
@@ -536,7 +530,7 @@ impl RawCard {
             } => {
                 let attr = self.get_attr_rec(ledger.to_owned()).unwrap();
 
-                let instance = ledger.load(instance).unwrap().data.name_fixed_ledger();
+                let instance = ledger.load(instance).data.name_fixed_ledger();
                 let instance = instance.to_raw();
 
                 let new = attr.pattern.replace("{}", &instance);
@@ -593,7 +587,7 @@ impl RawCard {
         }
     }
 
-    pub fn get_attr_rec(&self, ledger: FixedLedger<RawCard>) -> Option<Attrv2> {
+    pub fn get_attr_rec(&self, ledger: Ledger<RawCard>) -> Option<Attrv2> {
         let CardType::Attribute {
             attribute,
             instance,
@@ -603,10 +597,10 @@ impl RawCard {
             return None;
         };
 
-        let mut card: Self = ledger.load(*instance).unwrap();
+        let mut card: Self = ledger.load(*instance);
 
         while let Some(parent) = card.parent_class() {
-            card = ledger.load(parent).unwrap();
+            card = ledger.load(parent);
             if let Some(attr) = card.get_attr(*attribute) {
                 return Some(attr);
             }
@@ -684,7 +678,7 @@ pub fn normalize_string(str: &str) -> String {
 }
 
 use fancy_regex::Regex;
-fn resolve_text(txt: String, ledger: &FixedLedger<RawCard>, re: &Regex) -> String {
+fn resolve_text(txt: String, ledger: &Ledger<RawCard>, re: &Regex) -> String {
     let uuids: Vec<CardId> = re
         .find_iter(&txt)
         .filter_map(Result::ok)
@@ -693,11 +687,7 @@ fn resolve_text(txt: String, ledger: &FixedLedger<RawCard>, re: &Regex) -> Strin
 
     let mut s: String = re.replace_all(&txt, "").to_string();
     for id in uuids {
-        let Some(card) = ledger.load(id) else {
-            dbg!(&txt);
-            dbg!(id);
-            panic!();
-        };
+        let card = ledger.load(id);
         let txt = card.cache_front(ledger);
         s.push_str(&resolve_text(txt, ledger, re));
     }
@@ -707,7 +697,7 @@ fn resolve_text(txt: String, ledger: &FixedLedger<RawCard>, re: &Regex) -> Strin
 
 /// replaces all uuids on frontside of card with the frontside of the card referenced by uuid.
 /// just appends it, doesn't preserve order, this is just to collect bigrams.
-fn resolve_card(card: &RawCard, ledger: &FixedLedger<RawCard>) -> String {
+fn resolve_card(card: &RawCard, ledger: &Ledger<RawCard>) -> String {
     let uuid_regex = Regex::new(
         r"\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\b",
     )
@@ -728,8 +718,8 @@ pub enum CardError {
     BackTypeMustBeClass,
 }
 
-fn instance_is_of_type(instance: CardId, ty: CardId, ledger: &NewFixedLedger<RawCard>) -> bool {
-    let instance = ledger.load(instance).unwrap();
+fn instance_is_of_type(instance: CardId, ty: CardId, ledger: &OverrideLedger<RawCard>) -> bool {
+    let instance = ledger.load(instance);
     assert!(instance.data.is_instance());
 
     get_parent_classes(ty, ledger)
@@ -738,14 +728,14 @@ fn instance_is_of_type(instance: CardId, ty: CardId, ledger: &NewFixedLedger<Raw
         .is_some()
 }
 
-fn get_parent_classes(class: CardId, ledger: &NewFixedLedger<RawCard>) -> Vec<RawCard> {
-    let class = ledger.load(class).unwrap();
+fn get_parent_classes(class: CardId, ledger: &OverrideLedger<RawCard>) -> Vec<RawCard> {
+    let class = ledger.load(class);
     let mut classes: Vec<RawCard> = vec![class.clone()];
     assert!(class.data.is_class());
     let mut parent_class = class.parent_class();
 
     while let Some(parent) = parent_class {
-        let class = ledger.load(parent).unwrap();
+        let class = ledger.load(parent);
         assert!(class.data.is_class());
         parent_class = class.parent_class();
         classes.push(class);
@@ -754,7 +744,7 @@ fn get_parent_classes(class: CardId, ledger: &NewFixedLedger<RawCard>) -> Vec<Ra
     classes
 }
 
-fn get_attributes(class: CardId, ledger: &NewFixedLedger<RawCard>) -> Vec<Attrv2> {
+fn get_attributes(class: CardId, ledger: &OverrideLedger<RawCard>) -> Vec<Attrv2> {
     let mut out: Vec<Attrv2> = vec![];
     for class in get_parent_classes(class, ledger) {
         if let CardType::Class { attrs, .. } = class.data {
@@ -773,14 +763,14 @@ impl LedgerItem for RawCard {
     type PropertyType = CardProperty;
     type Modifier = CardAction;
 
-    fn validate(&self, ledger: &NewFixedLedger<Self>) -> Result<(), Self::Error> {
+    fn validate(&self, ledger: &OverrideLedger<Self>) -> Result<(), Self::Error> {
         match &self.data {
             CardType::Instance {
                 name: _,
                 back: _,
                 class,
             } => {
-                if !ledger.load(*class).unwrap().data.is_class() {
+                if !ledger.load(*class).data.is_class() {
                     return Err(CardError::InstanceOfNonClass);
                 }
             }
@@ -796,9 +786,9 @@ impl LedgerItem for RawCard {
                     name: _,
                     back,
                     class,
-                } = ledger.load(*instance).unwrap().data
+                } = ledger.load(*instance).data
                 {
-                    let class = ledger.load(class).unwrap();
+                    let class = ledger.load(class);
                     if class.data.is_class() {
                         let attrs = get_attributes(class.id, &ledger);
                         match attrs.into_iter().find(|attr| attr.id == *attribute) {
@@ -811,7 +801,8 @@ impl LedgerItem for RawCard {
                                         return Err(CardError::WrongCardType);
                                     }
                                 } else {
-                                    return Err(CardError::AnswerMustBeCard);
+                                    dbg!(self);
+                                    dbg!(CardError::AnswerMustBeCard);
                                 }
                             }
                             Some(_) => {}
@@ -832,14 +823,14 @@ impl LedgerItem for RawCard {
                 attrs,
             } => {
                 if let Some(parent) = parent_class {
-                    if !ledger.load(*parent).unwrap().data.is_class() {
+                    if !ledger.load(*parent).data.is_class() {
                         return Err(CardError::SubClassOfNonClass);
                     }
                 }
 
                 for attr in attrs {
                     if let Some(back_type) = attr.back_type {
-                        if !ledger.load(back_type).unwrap().data.is_class() {
+                        if !ledger.load(back_type).data.is_class() {
                             return Err(CardError::BackTypeMustBeClass);
                         }
                     }
@@ -951,7 +942,7 @@ impl LedgerItem for RawCard {
         out
     }
 
-    fn properties_cache(&self, cache: &FixedLedger<Self>) -> HashSet<(Self::PropertyType, String)> {
+    fn properties_cache(&self, cache: &Ledger<Self>) -> HashSet<(Self::PropertyType, String)> {
         let mut out: HashSet<(Self::PropertyType, String)> = Default::default();
 
         let resolved_text = resolve_card(self, &cache);

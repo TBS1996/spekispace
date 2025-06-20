@@ -3,8 +3,8 @@ use card_provider::CardProvider;
 use cardfilter::CardFilter;
 use dioxus_logger::tracing::info;
 use ledger::{CardAction, CardEvent};
-use ledgerstore::CacheKey;
-use ledgerstore::{Ledger, TimeProvider};
+use ledgerstore::TimeProvider;
+use ledgerstore::{CacheKey, Ledger};
 use metadata::Metadata;
 use recall_rate::History;
 use set::Set;
@@ -67,11 +67,11 @@ impl RefType {
     }
 }
 
-impl From<DepCacheKey> for CacheKey {
+impl From<DepCacheKey> for CacheKey<RawCard> {
     fn from(value: DepCacheKey) -> Self {
         CacheKey::ItemRef {
-            reftype: value.ty.to_str().to_owned(),
-            id: value.id.to_string(),
+            reftype: value.ty,
+            id: value.id,
         }
     }
 }
@@ -225,8 +225,10 @@ impl App {
             class,
         };
         let id = CardId::new_v4();
-        let event = CardEvent::new(id, CardAction::UpsertCard(data));
-        self.provider.cards.insert_ledger(event).unwrap();
+        let event = CardAction::UpsertCard(data);
+        let event = CardEvent::new_modify(id, event);
+
+        self.provider.cards.modify(event).unwrap();
         id
     }
 
@@ -236,8 +238,8 @@ impl App {
             front: TextData::from_raw(&front),
             back,
         };
-        let event = CardEvent::new(id, CardAction::UpsertCard(data));
-        self.provider.cards.insert_ledger(event).unwrap();
+        let event = CardEvent::new_modify(id, CardAction::UpsertCard(data));
+        self.provider.cards.modify(event).unwrap();
     }
 
     pub fn add_card(&self, front: String, back: impl Into<BackSide>) -> CardId {
@@ -248,8 +250,8 @@ impl App {
         };
 
         let id = CardId::new_v4();
-        let event = CardEvent::new(id, CardAction::UpsertCard(data));
-        self.provider.cards.insert_ledger(event).unwrap();
+        let event = CardEvent::new_modify(id, CardAction::UpsertCard(data));
+        self.provider.cards.modify(event).unwrap();
         id
     }
 
@@ -258,8 +260,8 @@ impl App {
             front: TextData::from_raw(&front),
         };
         let id = CardId::new_v4();
-        let event = CardEvent::new(id, CardAction::UpsertCard(data));
-        self.provider.cards.insert_ledger(event).unwrap();
+        let event = CardEvent::new_modify(id, CardAction::UpsertCard(data));
+        self.provider.cards.modify(event).unwrap();
         id
     }
 
