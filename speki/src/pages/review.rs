@@ -27,9 +27,6 @@ use std::{
     cmp::Ordering,
     collections::{BTreeMap, BTreeSet, HashSet},
     fmt::Debug,
-    fs,
-    io::Write,
-    path::PathBuf,
     sync::Arc,
 };
 use strum::IntoEnumIterator;
@@ -365,6 +362,7 @@ fn RenderSet(
 
                         let event = SetEvent::new_modify(id, SetAction::SetExpr(expr));
                         ledger.modify(event).unwrap();
+                        set.name.write();
 
                     },
                     "save"
