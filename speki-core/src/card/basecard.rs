@@ -779,40 +779,45 @@ impl LedgerItem for RawCard {
             CardType::Unfinished { front: _ } => {}
             CardType::Attribute {
                 attribute,
-                back: _,
+                back: attr_back,
                 instance,
             } => {
-                if let CardType::Instance {
-                    name: _,
-                    back,
-                    class,
-                } = ledger.load(*instance).data
-                {
+                let CardType::Instance { name, back, class } = ledger.load(*instance).data else {
+                    return Err(CardError::InstanceOfNonClass);
+                };
+
+                let class = {
                     let class = ledger.load(class);
-                    if class.data.is_class() {
-                        let attrs = get_attributes(class.id, &ledger);
-                        match attrs.into_iter().find(|attr| attr.id == *attribute) {
-                            Some(Attrv2 {
-                                back_type: Some(back_type),
-                                ..
-                            }) => {
-                                if let Some(BackSide::Card(answer)) = back {
-                                    if !instance_is_of_type(answer, back_type, &ledger) {
-                                        return Err(CardError::WrongCardType);
-                                    }
-                                } else {
-                                    dbg!(self);
-                                    dbg!(CardError::AnswerMustBeCard);
-                                }
-                            }
-                            Some(_) => {}
-                            None => return Err(CardError::MissingAttribute),
-                        }
-                    } else {
+                    if !class.data.is_class() {
                         return Err(CardError::InstanceOfNonClass);
                     }
-                } else {
-                    return Err(CardError::AttributeOfNonInstance);
+                    class
+                };
+
+                let Some(Attrv2 { back_type, .. }) = get_attributes(class.id, &ledger)
+                    .into_iter()
+                    .find(|attr| attr.id == *attribute)
+                else {
+                    return Err(CardError::MissingAttribute);
+                };
+
+                match back_type {
+                    Some(back_class) => {
+                        if let BackSide::Card(answer) = attr_back {
+                            if !instance_is_of_type(*answer, back_class, &ledger) {
+                                return Err(CardError::WrongCardType);
+                            }
+                        } else {
+                            dbg!(name);
+                            dbg!(&back);
+                            dbg!(&attr_back);
+                            dbg!(ledger.load(*instance));
+                            dbg!(self);
+                            let err = dbg!(CardError::AnswerMustBeCard);
+                            return Err(err);
+                        }
+                    }
+                    None => {}
                 }
             }
             CardType::Class {

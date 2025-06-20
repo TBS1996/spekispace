@@ -1,3 +1,4 @@
+use either::Either;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use std::fmt::Display;
 use std::fs::{self, hard_link};
@@ -11,7 +12,7 @@ use std::{
     hash::{DefaultHasher, Hash, Hasher},
     sync::{Arc, RwLock},
 };
-use tracing::trace;
+use tracing::{info, trace};
 use uuid::Uuid;
 
 pub mod ledger_cache;
@@ -598,6 +599,7 @@ impl<T: LedgerItem> OverrideLedger<T> {
     }
 }
 
+#[derive(Clone)]
 struct ModifyResult<T: LedgerItem> {
     key: T::Key,
     item: Option<T>,
@@ -687,15 +689,25 @@ impl<T: LedgerItem> Ledger<T> {
         fs::create_dir(&*self.items).unwrap();
         fs::create_dir(&*self.properties).unwrap();
 
+        let mut items: HashMap<T::Key, T> = HashMap::default();
+
         for (idx, entry) in self.entries.chain().into_iter().enumerate() {
             if idx % 50 == 0 {
                 dbg!(idx);
             };
 
-            self.modify_it(entry.event, false, false, false).unwrap();
+            match self.modify_it(entry.event, false, false, false).unwrap() {
+                Either::Left(item) => {
+                    let key = item.item_id();
+                    items.insert(key, item);
+                }
+                Either::Right(id) => {
+                    items.remove(&id);
+                }
+            }
         }
 
-        self.apply_caches();
+        self.apply_caches(items);
 
         self.verify_all().unwrap();
 
@@ -704,15 +716,18 @@ impl<T: LedgerItem> Ledger<T> {
         }
     }
 
-    fn apply_caches(&self) {
+    fn apply_caches(&self, items: HashMap<T::Key, T>) {
+        info!("applying caches");
         let mut the_caches: HashMap<CacheKey<T>, HashSet<T::Key>> = Default::default();
 
-        for item in self.load_all() {
+        info!("fetching caches");
+        for item in items.values() {
             for cache in item.caches(self) {
                 the_caches.entry(cache.0).or_default().insert(cache.1);
             }
         }
 
+        info!("inserting caches");
         for (idx, (cache_key, item_keys)) in the_caches.into_iter().enumerate() {
             if idx % 1000 == 0 {
                 dbg!(idx);
@@ -924,7 +939,7 @@ impl<T: LedgerItem> Ledger<T> {
 
     fn remove_dependent(&self, key: T::Key, ty: T::RefType, dependent: T::Key) {
         let mut dependents = self.get_ref_cache(key, ty.clone());
-        assert!(dependents.remove(&dependent));
+        dependents.remove(&dependent);
         let path = self.dependents_dir(key).join(ty.to_string());
         Self::keys_to_file(&path, dependents);
     }
@@ -1084,18 +1099,22 @@ impl<T: LedgerItem> Ledger<T> {
         save: bool,
         verify: bool,
         cache: bool,
-    ) -> Result<(), EventError<T>> {
+    ) -> Result<Either<T, T::Key>, EventError<T>> {
         let res = self._modify(event.clone(), verify, cache)?;
-        self.run_result(res, cache).unwrap();
+        self.run_result(res.clone(), cache).unwrap();
         if save {
             let hash = self.entries.save(event);
             self.set_ledger_hash(hash);
         }
-        Ok(())
+        Ok(match res.item {
+            Some(item) => Either::Left(item),
+            None => Either::Right(res.key),
+        })
     }
 
     pub fn modify(&self, event: TheLedgerEvent<T>) -> Result<(), EventError<T>> {
-        self.modify_it(event, true, true, true)
+        self.modify_it(event, true, true, true)?;
+        Ok(())
     }
 
     pub fn remove(&self, key: T::Key) {

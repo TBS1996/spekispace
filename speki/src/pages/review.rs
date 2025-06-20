@@ -511,6 +511,7 @@ fn RenderSet(
                         class: "{crate::styles::BLACK_BUTTON}",
                         onclick: move |_|{
                             let expr = real_set.clone().unwrap();
+                            dbg!(&expr);
                             let title = set_name.clone();
                             let viewer = CardSelector::new(false, vec![]).with_set(expr).with_title(title).with_edit_collection(false);
                             append_overlay(OverlayEnum::CardSelector(viewer));
