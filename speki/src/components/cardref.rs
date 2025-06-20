@@ -12,7 +12,7 @@ use crate::{
         cardviewer::TempNode,
         OverlayEnum,
     },
-    APP,
+    pop_overlay, APP,
 };
 
 const PLACEHOLDER: &'static str = "pick card...";
@@ -76,6 +76,7 @@ pub fn CardRefRender(
 
                         let id = card.read().id();
                         selected_card.clone().set(Some(id));
+                        pop_overlay();
                     });
 
                     let dependents = dependent
@@ -84,7 +85,7 @@ pub fn CardRefRender(
                         .unwrap_or_default();
 
                     let allowed = allowed.clone();
-                    let  props = CardSelector::ref_picker(fun, dependents, filter.clone())
+                    let props = CardSelector::ref_picker(fun, dependents, filter.clone())
                         .with_allowed_cards(allowed);
 
                         append_overlay(OverlayEnum::CardSelector(props));
