@@ -1,7 +1,7 @@
 use super::*;
 use crate::{audio::AudioId, card_provider::CardProvider, CardProperty, RefType};
 use either::Either;
-use ledgerstore::{Ledger, LedgerItem, OverrideLedger};
+use ledgerstore::{Ledger, LedgerItem, LedgerType};
 use omtrent::TimeStamp;
 use serde::{Deserialize, Serialize, Serializer};
 use std::{
@@ -718,7 +718,7 @@ pub enum CardError {
     BackTypeMustBeClass,
 }
 
-fn instance_is_of_type(instance: CardId, ty: CardId, ledger: &OverrideLedger<RawCard>) -> bool {
+fn instance_is_of_type(instance: CardId, ty: CardId, ledger: &LedgerType<RawCard>) -> bool {
     let instance = ledger.load(instance);
     assert!(instance.data.is_instance());
 
@@ -728,7 +728,7 @@ fn instance_is_of_type(instance: CardId, ty: CardId, ledger: &OverrideLedger<Raw
         .is_some()
 }
 
-fn get_parent_classes(class: CardId, ledger: &OverrideLedger<RawCard>) -> Vec<RawCard> {
+fn get_parent_classes(class: CardId, ledger: &LedgerType<RawCard>) -> Vec<RawCard> {
     let class = ledger.load(class);
     let mut classes: Vec<RawCard> = vec![class.clone()];
     assert!(class.data.is_class());
@@ -744,7 +744,7 @@ fn get_parent_classes(class: CardId, ledger: &OverrideLedger<RawCard>) -> Vec<Ra
     classes
 }
 
-fn get_attributes(class: CardId, ledger: &OverrideLedger<RawCard>) -> Vec<Attrv2> {
+fn get_attributes(class: CardId, ledger: &LedgerType<RawCard>) -> Vec<Attrv2> {
     let mut out: Vec<Attrv2> = vec![];
     for class in get_parent_classes(class, ledger) {
         if let CardType::Class { attrs, .. } = class.data {
@@ -763,7 +763,7 @@ impl LedgerItem for RawCard {
     type PropertyType = CardProperty;
     type Modifier = CardAction;
 
-    fn validate(&self, ledger: &OverrideLedger<Self>) -> Result<(), Self::Error> {
+    fn validate(&self, ledger: &LedgerType<Self>) -> Result<(), Self::Error> {
         match &self.data {
             CardType::Instance {
                 name: _,

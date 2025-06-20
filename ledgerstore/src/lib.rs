@@ -78,7 +78,7 @@ pub trait LedgerItem:
     fn inner_run_event(self, event: Self::Modifier) -> Result<Self, Self::Error>;
 
     fn verify(self, ledger: &Ledger<Self>) -> Result<Self, EventError<Self>> {
-        let ledger = OverrideLedger::new(ledger, self.clone());
+        let ledger = LedgerType::OverRide(OverrideLedger::new(ledger, self.clone()));
 
         if let Some(cycle) = self.find_cycle(&ledger) {
             return Err(EventError::Cycle(cycle));
@@ -88,9 +88,7 @@ pub trait LedgerItem:
             return Err(EventError::Invariant(e));
         }
 
-        let generic_ledger = LedgerType::OverRide(ledger.clone());
-
-        for dep in self.recursive_dependents(&generic_ledger) {
+        for dep in self.recursive_dependents(&ledger) {
             if let Err(e) = dep.validate(&ledger) {
                 return Err(EventError::Invariant(e));
             }
@@ -122,10 +120,10 @@ pub trait LedgerItem:
 
     fn item_id(&self) -> Self::Key;
 
-    fn find_cycle(&self, ledger: &OverrideLedger<Self>) -> Option<Vec<Self::Key>> {
+    fn find_cycle(&self, ledger: &LedgerType<Self>) -> Option<Vec<Self::Key>> {
         fn dfs<T: LedgerItem>(
             current: T::Key,
-            ledger: &OverrideLedger<T>,
+            ledger: &LedgerType<T>,
             visiting: &mut HashSet<T::Key>,
             visited: &mut HashSet<T::Key>,
             parent: &mut HashMap<T::Key, T::Key>,
@@ -183,7 +181,7 @@ pub trait LedgerItem:
 
     /// Assertions that should hold true. Like invariants with other cards that it references.
     /// called by run_event, if it returns error after an event is run, the event is not applied.
-    fn validate(&self, ledger: &OverrideLedger<Self>) -> Result<(), Self::Error> {
+    fn validate(&self, ledger: &LedgerType<Self>) -> Result<(), Self::Error> {
         let _ = ledger;
         Ok(())
     }
@@ -445,10 +443,6 @@ mod block_chain {
             self.cached.read().unwrap().clone()
         }
 
-        pub fn hash_from_index(&self, index: usize) -> Hashed {
-            self.cached.read().unwrap().get(index).unwrap().data_hash()
-        }
-
         pub fn current_hash(&self) -> Option<Hashed> {
             self.current_head().map(|entry| entry.data_hash())
         }
@@ -526,20 +520,20 @@ struct TheStateHash {
     state_hash: Hashed,
 }
 
-enum LedgerType<T: LedgerItem> {
+pub enum LedgerType<T: LedgerItem> {
     OverRide(OverrideLedger<T>),
     Normal(Ledger<T>),
 }
 
 impl<T: LedgerItem> LedgerType<T> {
-    fn load(&self, key: T::Key) -> T {
+    pub fn load(&self, key: T::Key) -> T {
         match self {
             LedgerType::OverRide(ledger) => ledger.load(key),
             LedgerType::Normal(ledger) => ledger.load(key),
         }
     }
 
-    fn dependents(&self, key: T::Key) -> HashSet<T::Key> {
+    pub fn dependents(&self, key: T::Key) -> HashSet<T::Key> {
         match self {
             LedgerType::OverRide(ledger) => ledger.dependents(key),
             LedgerType::Normal(ledger) => ledger.dependents(key),
@@ -614,7 +608,6 @@ struct ModifyResult<T: LedgerItem> {
 #[derive(Clone)]
 pub struct Ledger<T: LedgerItem> {
     entries: BlockChain<T>,
-    root: Arc<PathBuf>,
     properties: Arc<PathBuf>,
     items: Arc<PathBuf>,
     ledger_hash: Arc<PathBuf>,
@@ -634,7 +627,6 @@ impl<T: LedgerItem> Ledger<T> {
         std::fs::create_dir_all(&items).unwrap();
 
         let selv = Self {
-            root: Arc::new(root),
             properties: Arc::new(properties),
             items: Arc::new(items),
             ledger_hash: Arc::new(ledger_hash),
@@ -675,6 +667,16 @@ impl<T: LedgerItem> Ledger<T> {
     }
 
     fn verify_all(&self) -> Result<(), EventError<T>> {
+        let all = self.load_all();
+
+        let ledger = LedgerType::Normal(self.clone());
+
+        for item in all {
+            if let Err(e) = item.validate(&ledger) {
+                return Err(EventError::Invariant(e));
+            }
+        }
+
         Ok(())
     }
 
@@ -690,7 +692,39 @@ impl<T: LedgerItem> Ledger<T> {
                 dbg!(idx);
             };
 
-            self.modify_it(entry.event, false, false).unwrap();
+            self.modify_it(entry.event, false, false, false).unwrap();
+        }
+
+        self.apply_caches();
+
+        self.verify_all().unwrap();
+
+        if let Some(hash) = self.entries.current_hash() {
+            self.set_ledger_hash(hash);
+        }
+    }
+
+    fn apply_caches(&self) {
+        let mut the_caches: HashMap<CacheKey<T>, HashSet<T::Key>> = Default::default();
+
+        for item in self.load_all() {
+            for cache in item.caches(self) {
+                the_caches.entry(cache.0).or_default().insert(cache.1);
+            }
+        }
+
+        for (idx, (cache_key, item_keys)) in the_caches.into_iter().enumerate() {
+            if idx % 1000 == 0 {
+                dbg!(idx);
+            }
+            match cache_key {
+                CacheKey::ItemRef { reftype, id } => {
+                    self.insert_dependents(id, reftype, item_keys);
+                }
+                CacheKey::Property { property, value } => {
+                    self.insert_property(property, value, item_keys);
+                }
+            }
         }
     }
 
@@ -888,17 +922,6 @@ impl<T: LedgerItem> Ledger<T> {
         fs::read_to_string(&*self.ledger_hash).ok()
     }
 
-    fn deleted_file(&self) -> std::fs::File {
-        std::fs::File::create(self.root.join("deleted")).unwrap()
-    }
-
-    fn get_caches(&self, key: CacheKey<T>) {
-        match key {
-            CacheKey::Property { property, value } => {}
-            CacheKey::ItemRef { reftype, id } => todo!(),
-        }
-    }
-
     fn remove_dependent(&self, key: T::Key, ty: T::RefType, dependent: T::Key) {
         let mut dependents = self.get_ref_cache(key, ty.clone());
         assert!(dependents.remove(&dependent));
@@ -915,21 +938,28 @@ impl<T: LedgerItem> Ledger<T> {
         std::fs::remove_file(&path).unwrap();
     }
 
-    fn insert_property(&self, key: T::Key, property: T::PropertyType, value: String) {
+    fn insert_property(
+        &self,
+        property: T::PropertyType,
+        value: String,
+        keys: impl IntoIterator<Item = T::Key>,
+    ) {
         let path = self.properties.join(property.to_string()).join(&value);
         std::fs::create_dir_all(&path).unwrap();
-        let link = path.join(key.to_string());
-        if link.exists() {
-            return;
-        }
-        let original = self.item_file(key);
+        for key in keys {
+            let link = path.join(key.to_string());
+            if link.exists() {
+                return;
+            }
+            let original = self.item_file(key);
 
-        if !original.is_file() {
-            dbg!(&link, original, key, property.to_string(), value);
-            panic!();
-        }
+            if !original.is_file() {
+                dbg!(&link, original, key, property.to_string(), value);
+                panic!();
+            }
 
-        hard_link(original, link).unwrap();
+            hard_link(original, link).unwrap();
+        }
     }
 
     fn keys_to_file(path: &Path, keys: HashSet<T::Key>) {
@@ -942,23 +972,30 @@ impl<T: LedgerItem> Ledger<T> {
         f.write(&s.as_bytes()).unwrap();
     }
 
-    fn insert_dependent(&self, key: T::Key, ty: T::RefType, dependent: T::Key) {
+    fn insert_dependents(
+        &self,
+        key: T::Key,
+        ty: T::RefType,
+        new_dependents: impl IntoIterator<Item = T::Key>,
+    ) {
         let mut dependents = self.get_ref_cache(key, ty.clone());
-        dependents.insert(dependent);
+        dependents.extend(new_dependents);
         let path = self.dependents_dir(key).join(ty.to_string());
         Self::keys_to_file(&path, dependents);
     }
 
-    pub fn _modify(
+    fn _modify(
         &self,
         event: TheLedgerEvent<T>,
         verify: bool,
+        cache: bool,
     ) -> Result<ModifyResult<T>, EventError<T>> {
         let key = event.id;
         let (old_caches, new_caches, item) = match event.action.clone() {
             TheLedgerAction::Modify(action) => {
                 let (old_caches, old_item) = match self.try_load(key) {
-                    Some(item) => (item.caches(self), item),
+                    Some(item) if cache => (item.caches(self), item),
+                    Some(item) => (Default::default(), item),
                     None => (Default::default(), T::new_default(key)),
                 };
                 let modified_item = old_item.run_event(action, self, verify)?;
@@ -969,7 +1006,11 @@ impl<T: LedgerItem> Ledger<T> {
                 if verify {
                     item = item.verify(self)?;
                 }
-                let caches = item.caches(self);
+                let caches = if cache {
+                    item.caches(self)
+                } else {
+                    Default::default()
+                };
                 (HashSet::default(), caches, Some(item))
             }
             TheLedgerAction::Delete => {
@@ -990,7 +1031,7 @@ impl<T: LedgerItem> Ledger<T> {
         })
     }
 
-    pub fn run_result(&self, res: ModifyResult<T>) -> Result<(), EventError<T>> {
+    fn run_result(&self, res: ModifyResult<T>, cache: bool) -> Result<(), EventError<T>> {
         let ModifyResult {
             key,
             item,
@@ -1006,14 +1047,18 @@ impl<T: LedgerItem> Ledger<T> {
             }
         }
 
+        if !cache {
+            return Ok(());
+        }
+
         for cache in added_caches {
             let key: T::Key = cache.1;
             match cache.0 {
                 CacheKey::ItemRef { reftype, id } => {
-                    self.insert_dependent(id, reftype, key);
+                    self.insert_dependents(id, reftype, vec![key]);
                 }
                 CacheKey::Property { property, value } => {
-                    self.insert_property(key, property, value);
+                    self.insert_property(property, value, vec![key]);
                 }
             }
         }
@@ -1038,9 +1083,10 @@ impl<T: LedgerItem> Ledger<T> {
         event: TheLedgerEvent<T>,
         save: bool,
         verify: bool,
+        cache: bool,
     ) -> Result<(), EventError<T>> {
-        let res = self._modify(event.clone(), verify)?;
-        self.run_result(res).unwrap();
+        let res = self._modify(event.clone(), verify, cache)?;
+        self.run_result(res, cache).unwrap();
         if save {
             let hash = self.entries.save(event);
             self.set_ledger_hash(hash);
@@ -1049,7 +1095,7 @@ impl<T: LedgerItem> Ledger<T> {
     }
 
     pub fn modify(&self, event: TheLedgerEvent<T>) -> Result<(), EventError<T>> {
-        self.modify_it(event, true, true)
+        self.modify_it(event, true, true, true)
     }
 
     pub fn remove(&self, key: T::Key) {
@@ -1130,17 +1176,4 @@ fn get_hash<T: Hash>(item: &T) -> Hashed {
     let mut hasher = DefaultHasher::new();
     item.hash(&mut hasher);
     format!("{:x}", hasher.finish())
-}
-
-fn append_line_to_file(path: &std::path::Path, lines: Vec<&str>) -> std::io::Result<()> {
-    use std::fs::OpenOptions;
-    use std::io::Write;
-
-    let mut file = OpenOptions::new().create(true).append(true).open(path)?;
-
-    for line in lines {
-        writeln!(file, "{line}")?;
-    }
-
-    Ok(())
 }
