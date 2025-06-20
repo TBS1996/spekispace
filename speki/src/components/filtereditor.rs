@@ -19,10 +19,7 @@ pub struct FilterEditor {
     pub stability: FloatEntry,
     pub rec_stability: FloatEntry,
     pub lapses: FloatEntry,
-    pub finished: BoolEntry,
     pub suspended: BoolEntry,
-    pub pending: BoolEntry,
-    pub isolated: BoolEntry,
 }
 
 impl FilterEditor {
@@ -50,14 +47,11 @@ fn default_filter() -> CardFilter {
             num: 10.,
             ord: MyNumOrd::Greater,
         }),
-        finished: Some(true),
         suspended: Some(false),
-        pending: None,
         lapses: Some(NumOp {
             num: 4.,
             ord: MyNumOrd::Less,
         }),
-        isolated: None,
     }
 }
 
@@ -169,10 +163,7 @@ impl FilterEditor {
         let stability = FloatEntry::from_numop("stability", filter.stability);
         let lapses = FloatEntry::from_numop("lapses", filter.lapses);
 
-        let finished = BoolEntry::from_bool("finished", filter.finished);
         let suspended = BoolEntry::from_bool("suspended", filter.suspended);
-        let pending = BoolEntry::from_bool("pending", filter.pending);
-        let isolated = BoolEntry::from_bool("isolated", filter.pending);
 
         Self {
             filter_name,
@@ -181,10 +172,7 @@ impl FilterEditor {
             rec_stability,
             stability,
             lapses,
-            finished,
             suspended,
-            pending,
-            isolated,
         }
     }
 
@@ -198,11 +186,8 @@ impl FilterEditor {
                 rec_recall: selv.rec_recall.get_value(),
                 stability: selv.stability.get_value(),
                 rec_stability: selv.rec_stability.get_value(),
-                finished: selv.finished.get_value(),
                 suspended: selv.suspended.get_value(),
-                pending: selv.pending.get_value(),
                 lapses: selv.lapses.get_value(),
-                isolated: selv.isolated.get_value(),
             }
         })
     }
@@ -213,11 +198,8 @@ impl FilterEditor {
             rec_recall: self.rec_recall.get_value(),
             stability: self.stability.get_value(),
             rec_stability: self.rec_stability.get_value(),
-            finished: self.finished.get_value(),
             suspended: self.suspended.get_value(),
-            pending: self.pending.get_value(),
             lapses: self.lapses.get_value(),
-            isolated: self.isolated.get_value(),
         }
     }
 }
@@ -231,10 +213,7 @@ pub fn FilterComp(editor: FilterEditor) -> Element {
         stability,
         rec_stability,
         lapses,
-        finished,
         suspended,
-        pending,
-        isolated,
     } = editor;
     rsx! {
         div {
@@ -246,10 +225,7 @@ pub fn FilterComp(editor: FilterEditor) -> Element {
             FloatEntryRender { input: stability.input.clone(), ord: stability.ord.clone(), name: stability.name.clone() },
             FloatEntryRender { input: rec_stability.input.clone(), ord: rec_stability.ord.clone(), name: rec_stability.name.clone() },
             FloatEntryRender { input: lapses.input.clone(), ord: lapses.ord.clone(), name: lapses.name.clone() },
-            BoolEntryRender { name: finished.name.clone(), opt: finished.opt.clone() },
             BoolEntryRender { name: suspended.name.clone(), opt: suspended.opt.clone() },
-            BoolEntryRender { name: pending.name.clone(), opt: pending.opt.clone() },
-            BoolEntryRender { name: isolated.name.clone(), opt: isolated.opt.clone() },
         }
     }
 }

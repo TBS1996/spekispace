@@ -68,11 +68,8 @@ pub struct CardFilter {
     pub rec_recall: Option<NumOp>,
     pub stability: Option<NumOp>,
     pub rec_stability: Option<NumOp>,
-    pub finished: Option<bool>,
     pub suspended: Option<bool>,
-    pub pending: Option<bool>,
     pub lapses: Option<NumOp>,
-    pub isolated: Option<bool>,
 }
 
 impl CardFilter {
@@ -82,11 +79,8 @@ impl CardFilter {
             rec_recall,
             stability,
             rec_stability: _,
-            finished,
             suspended,
-            pending,
             lapses,
-            isolated,
         } = self.clone();
 
         if let Some(NumOp { ord, num }) = recall {
@@ -177,27 +171,8 @@ impl CardFilter {
             }
         }
 
-        if let Some(flag) = finished {
-            if flag != card.is_finished() {
-                return false;
-            }
-        }
-
         if let Some(flag) = suspended {
             if flag != card.is_suspended() {
-                return false;
-            }
-        }
-
-        if let Some(flag) = pending {
-            if flag != card.is_pending() {
-                return false;
-            }
-        }
-
-        if let Some(flag) = isolated {
-            let no_edges = card.dependencies().is_empty() && card.dependents().is_empty();
-            if flag != no_edges {
                 return false;
             }
         }

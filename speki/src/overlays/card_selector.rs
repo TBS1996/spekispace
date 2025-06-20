@@ -112,11 +112,8 @@ impl CardSelector {
                         rec_recall: editor.rec_recall.get_value(),
                         stability: editor.stability.get_value(),
                         rec_stability: editor.rec_stability.get_value(),
-                        finished: editor.finished.get_value(),
                         suspended: editor.suspended.get_value(),
-                        pending: editor.pending.get_value(),
                         lapses: editor.lapses.get_value(),
-                        isolated: editor.isolated.get_value(),
                     })
                 })
             }
