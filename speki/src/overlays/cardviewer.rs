@@ -652,12 +652,8 @@ impl CardViewer {
                 ScopeId(3),
             );
 
-            let f = Self::deselect_closure(dependencies.clone());
-
-            let af = Self::select_closure(front.clone(), dependencies, Some(meta.clone()));
-
-            let bck = back.on_select(f.clone()).on_deselect(af.clone());
-            let concept = concept.on_select(f.clone()).on_deselect(af.clone());
+            let bck = back;
+            let concept = concept;
 
             let default_question = if let CardType::Class {
                 default_question, ..
@@ -705,19 +701,11 @@ impl CardViewer {
         };
 
         let editor = {
-            let af = Self::select_closure(front.clone(), dependencies, None);
-            let f = Self::deselect_closure(dependencies);
-
-            let back = BackPut::new(None)
-                .with_dependents(tempnode.clone())
-                .on_select(f.clone())
-                .on_deselect(af.clone());
+            let back = BackPut::new(None).with_dependents(tempnode.clone());
 
             let concept = CardRef::new()
                 .with_dependents(tempnode.clone())
-                .with_allowed(vec![CardTy::Class])
-                .on_select(f.clone())
-                .on_deselect(af.clone());
+                .with_allowed(vec![CardTy::Class]);
 
             let attr_answers = Signal::new_in_scope(Default::default(), ScopeId::APP);
 

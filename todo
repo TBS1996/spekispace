@@ -11,41 +11,6 @@ can we make the AI tell us if it's not sure though?
 also, might be tricky to make it answer with link cards? 
 
 
-# Cycle detecting
-
-we gotta detect cycles maaan
-
-
-# Wikidata integration
-
-most basic way, a way to link a card to the identifier in wikidata
-
-then maybe suggest properties and stuff based on the info in wikidata?
-
-
-
-# Traits?
-
-for the same reason i like traits in rust, should I have them in speki instead of inheritance?
-
-havent thought of what that means in pratice though but yeah
-
-i guess just, i can implement for example the 'king' trait on someone and it'll generate questions like who he uscceeded when he took the throne etc..
-
-should there be trait constraints? i mean, for a guy i'd have him as a subclass of person. yeah i guess. 
-
-like king should have constraint male. and then in the questions for king, it can be dependent on certain questions answered for male/person
-
-and yeah, the way it works in properties, i guess a question can simply reference another property, and then uatomatically this property will be like hidden until youve answered that other one. like in the UI it can be greyed out and if you hover over it it'll say which question you need to answer first.
-
-oh and another one is for it to be disabled, due to a "wrong" property. like don't ask for cause of death if is_alive == true
-
-
-hm should properties be more free-flowing in a way, like, a property could be the same in diff types of classes, like 'creation date' property can refer to things like humans (birhtdate), or companies.
-
-so then what, i implement the same property on various classes? like should there be a separate property definition? or just inheritance?
-
-
 # OWL logic
 
 more strict properties between classes and stuff maybe?
@@ -85,23 +50,6 @@ like mary's spouse is john, means that john's spouse is mary
 So atm in speki, attributes are only formed when explicitly declared in a parent class of an instance. Should I support labeling certain cards as a property of something like a custom question to something? the idea is that, there's sorta two kind of dependencies.
 
 one kind of dependency is that you're just referring to an entity, while another one you are learning more about the entity. So when resolving which cards to learn first, it makes sense to learn many properties before learning the cards where you just refer to them. For example, 'when did john meet mary', here mary is just being referred to, if i have a bunch of cards about the properties of mary like when she was born and where and such, it makes more sense to learn those before learning cards that just refer to her.
-
-
-# DAG snapstore?
-
-should snapstore ensure no cycles by default? or is that too limiting?
-maybe an internal option?
-
-# updating caches correctly..
-
-well, now the cache just checks the item that is modified, not the items that depend on it.
-
-thoughts: that dependents thing, it doesn't need to be  specific thing for speki
-it can be hardcoded into the snapstore library since essentially it represents any item htat links to the current item. so we can just derive it automatically from all the other links yaknow?
-
-so then, when we do things like update cache, we can then simply just get all the dependnets too when updating it in case they use that card for something.
-
-
 
 # class generics
 
@@ -159,23 +107,6 @@ user can edit that ofc it's just plaintext but yeah
 anyway, an important constraint, if a card is tagged like this that it doesnt contain new knowledge, it can then not be used by other cards as a dependency, *unless* that card also is tagged as reversed. 
 
 
-
-# collections
-
-a collection is a set of card references. cards may be chosen dynamically (e.g. dependencies of a card), and cards added manually.
-for dynamically added cards, they may only use properties of cards that are not specific to a user when cards later can be shared. So nothing about the recall/review state of the card, or if it's suspended or not.
-
-multiple collections may reference the same card.
-
-a collection may reference another collection as long as there's no cycles. 
-
-should use like set operations
-
-Union, Difference, Intersection, Complementary
-
-so a collection has like a top-level set operation, union by default, within it you can add dyncards, or another set operation which has another list of dyncards inside it
-can also reference other collections, like, when you put a set operation theree it can either be defined "inline" or it's a reference to another collection (which is basically just an alias for a set operation).
-
 # review sort
 
 like the algorithm use to determine the review priority. so for example recall rate, min recall etc..
@@ -194,49 +125,10 @@ for simplicity sake there should be a collection which contains all cards.
 
 hmm maybe we should allow metadata stuff like suspended since we can tie it to the user, i guess we'll have both user-level metadata and global one for cards?
 
-
-# shared cards
-
-users should be able to share cards so that others can download it and use it and share references
-
-would make sense they submit an entire collection at a time. it'll also push all the dependencies of the collection.
-
-maybe have a github repo that has all the shared cards, and when user press share it creates a PR there that me or others will approve or make suggestions for?
-at least for the "global map". 
-
-or maybe no global map and instea deverybody just share collections and can search for each other's collections and reference each other and hopefully organically 
-people will converge to one big map since they can reference each other
-
-a challenge here though is how to deal with referencing other collections if the original card is updated or something?
-hmm.. i think easiest just let people handle these dependencies themselves, so if you're not happy with how the original guy remade it then you just gotta change your reference
-
-maybe i'll also have a global map that's like more static or smth ? like when people converge on certain collections and they have a high standard i can move them into a global map that's more static
-and then i'll have the responsibility for them and the original creator cannot change it so it's more "safe" to use it by others?
-
-
 # recall rate calculation
 
 should move into using ML for determining recall rate, can just feed a lot of the reviews into a model lol
 
-# expected gain 
-
-lets say current stability is 50
-
-if at a given point you succeed in recall it'll become 130
-if at that point you fail, the new stability is 20
-
-let's say the recall rate at that point is 0.8
-
-expected gain = (0.8 * 120) + ((1 - 0.8) * 20) - 50 = 58
-
-we can sort cards based on their expected gain so you know which reviews give you most benefit
-maybe also multiply with the priority of the card
-
-limitations:
-- it's greedy, so, maybe the optimum long term strategy is not to just take the one with highest expected gain 
-- maybe it'll be biased to long or short term ? could be fixed by having a time horizon variable where you can bias certain information to near or long term stability
-
-for example if you're learning two languages, maybe one you need to use 6 months from now and another you have no specific plans it'll bias more to near-term stability for first one and long term for 2nd one
 
 # priority
 
@@ -378,17 +270,6 @@ i should write out a list of invariants basically
 it's too expensive to run proper healthcheck all the time
 maybe i should write a separate script to run the healthcheck? or maybe not
 not sure how i can reasonably integrate more with type system. for example i could re-introduce the types of instances vs classes as diff types but i think it's more annoying than not. 
-
-
-# log based state
-
-log based meaning each change in the state of the program is based on a log of actions, like, create new card, suspend, do review, etc...
-
-advantages is, would make it easier to debug when an incorrect state happened, can easily roll back stuff, if i wanna make a schema change to something i can simply change how the events create the items, then remove the state and re-run the actions to re-create it.
-
-also fits well with syncing i guess? easy to just pick up logs from a given timestamp
-
-disadvantage, well, it's more cumbersome, potentially slower but i dont think that's a big problem. 
 
 
 # relational properties

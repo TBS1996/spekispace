@@ -59,17 +59,13 @@ pub struct FrontPut {
     pub audio: Signal<Option<Audio>>,
 }
 
-#[cfg(feature = "desktop")]
 #[component]
-#[cfg(feature = "desktop")]
 pub fn FrontPutRender(
     dropdown: DropDownMenu<CardTy>,
     mut text: Signal<String>,
     audio: Signal<Option<Audio>>,
 ) -> Element {
     use crate::components::set_card_link;
-
-    let placeholder = "Front side";
 
     rsx! {
         div {
@@ -87,7 +83,6 @@ pub fn FrontPutRender(
 
                 input {
                     class: "bg-white w-full border border-gray-300 rounded-md p-2 mb-4 text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent",
-                    placeholder: "{placeholder}",
                     value: "{text}",
                     oninput: move |evt| text.set(evt.value()),
                     onmouseup: move |e| {
