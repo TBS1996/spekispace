@@ -692,7 +692,11 @@ impl Content {
         match self {
             Self::File(original) => match hard_link(original, &link) {
                 Ok(()) => {}
-                Err(_) => {}
+                Err(e) => {
+                    dbg!(e);
+                    dbg!(original, link);
+                    panic!("idk man");
+                }
             },
             Self::Symlink(original) => {
                 dbg!(original, link);
@@ -779,6 +783,7 @@ impl Dir {
         for (name, original) in self.contents.iter() {
             let link = path.join(name);
             if !link.exists() {
+                dbg!(&link);
                 original.create_file_reference(link.clone());
                 assert!(link.exists());
                 new_content.push(Content::new(link));

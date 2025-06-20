@@ -89,7 +89,6 @@ use fs::Content;
 pub enum CacheKey<PK: Display + Clone = String, RK: Display + Clone = String> {
     Property { property: PK, value: String },
     ItemRef { reftype: RK, id: String },
-    Dependents { id: String },
 }
 
 impl<PK: Clone + Display, RK: Clone + Display> Display for CacheKey<PK, RK> {
@@ -97,7 +96,6 @@ impl<PK: Clone + Display, RK: Clone + Display> Display for CacheKey<PK, RK> {
         let s = match self {
             Self::Property { property, value } => format!("{property}:{value}"),
             Self::ItemRef { reftype, id } => format!("{reftype}:{id}"),
-            Self::Dependents { id } => format!("dependents:{id}"),
         };
 
         write!(f, "{}", s)
