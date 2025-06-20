@@ -463,6 +463,7 @@ fn RenderSet(
                     "review"
                 }
 
+                /*
                 button {
                     class: "{crate::styles::BLACK_BUTTON}",
                     onclick: move |_| {
@@ -505,6 +506,7 @@ fn RenderSet(
                     },
                     "export DOT"
                 }
+                */
 
                 if show_view_button {
                     button {
