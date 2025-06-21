@@ -445,29 +445,6 @@ impl CardViewer {
         self
     }
 
-    fn select_closure(
-        front: FrontPut,
-        dependencies: Signal<Vec<Signal<Card>>>,
-        meta: Option<NodeMetadata>,
-    ) -> MyClosure {
-        MyClosure::new(move |card: Signal<Card>| {
-            let _front = front.clone();
-            let _meta = meta.clone();
-
-            let deps = dependencies.clone();
-            deps.clone()
-                .write()
-                .retain(|dep| dep.read().id() != card.read().id());
-        })
-    }
-
-    fn deselect_closure(dependencies: Signal<Vec<Signal<Card>>>) -> MyClosure {
-        MyClosure::new(move |card: Signal<Card>| {
-            info!("ref card set ?");
-            dependencies.clone().write().push(card);
-        })
-    }
-
     pub fn new_from_card(mut card: Signal<Card>) -> Self {
         if card.read().is_attribute() {
             let instance = card.read().attribute_instance();

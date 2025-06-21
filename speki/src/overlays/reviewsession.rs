@@ -179,6 +179,7 @@ pub fn ReviewRender(
                             card: card.clone(),
                             tot,
                             queue: queue.clone(),
+                            show_backside,
 
                         }
                     }
@@ -279,7 +280,12 @@ impl ReviewState {
 }
 
 #[component]
-fn Infobar(card: Arc<Card>, tot: Memo<usize>, queue: Signal<Queue>) -> Element {
+fn Infobar(
+    card: Arc<Card>,
+    tot: Memo<usize>,
+    queue: Signal<Queue>,
+    show_backside: Signal<bool>,
+) -> Element {
     let card = Signal::new_in_scope(Arc::unwrap_or_clone(card), ScopeId::APP);
     let tot = queue.read().tot_len();
     let pos = queue.read().passed_len();
@@ -346,13 +352,14 @@ fn Infobar(card: Arc<Card>, tot: Memo<usize>, queue: Signal<Queue>) -> Element {
             Suspend {
                 card,
                 queue,
+                show_backside,
             }
         }
     }
 }
 
 #[component]
-fn Suspend(card: Signal<Card>, mut queue: Signal<Queue>) -> Element {
+fn Suspend(card: Signal<Card>, mut queue: Signal<Queue>, show_backside: Signal<bool>) -> Element {
     let is_suspended = card.read().is_suspended();
     let txt = if is_suspended { "unsuspend" } else { "suspend" };
 
@@ -364,6 +371,7 @@ fn Suspend(card: Signal<Card>, mut queue: Signal<Queue>) -> Element {
                 let mut card = card;
                 card.write().set_suspend(!is_suspended);
                 queue.write().next();
+                show_backside.set(false);
             },
             "{txt}"
         }
