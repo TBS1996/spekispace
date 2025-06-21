@@ -32,23 +32,16 @@ fn RecallButton(
     mut queue: Signal<Queue>,
     mut show_backside: Signal<bool>,
 ) -> Element {
-    let _label = match recall {
+    let label = match recall {
         Recall::None => "😞",
         Recall::Late => "😐",
         Recall::Some => "🙂",
         Recall::Perfect => "😃",
     };
 
-    let label = match recall {
-        Recall::None => "1",
-        Recall::Late => "2",
-        Recall::Some => "3",
-        Recall::Perfect => "4",
-    };
-
     rsx! {
         button {
-            class: "bg-blue-500 mt-6 inline-flex items-center justify-center text-white border-0 py-4 px-6 focus:outline-none hover:bg-blue-700 rounded text-4xl leading-none",
+            class: "bg-blue-500 mt-6 inline-flex items-center justify-center text-white border-0 py-4 px-6 focus:outline-none hover:bg-blue-700 rounded text-4xl leading-none font-emoji",
             onclick: move |_| {
                 let mut card = card.clone();
                 info!("do review");
@@ -523,9 +516,6 @@ fn CardSides(
                 class: "mb-10",
                 RenderEvalText { eval: front}
             }
-
-
-
 
             div {
                 class: "flex flex-col w-full items-center {backside_visibility_class}",
