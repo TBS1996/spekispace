@@ -30,7 +30,8 @@ use crate::{
 use super::OverlayEnum;
 
 pub fn overlay_card_viewer() -> MyClosure {
-    MyClosure::new(move |card: Signal<Card>| {
+    MyClosure::new(move |card: CardId| {
+        let card = APP.read().load_card(card);
         let viewer = CardViewer::new_from_card(card);
         append_overlay(OverlayEnum::CardViewer(viewer));
     })
@@ -339,17 +340,17 @@ impl PartialEq for CardSelector {
 }
 
 #[derive(Clone)]
-pub struct MyClosure(pub Arc<Box<dyn Fn(Signal<Card>)>>);
+pub struct MyClosure(pub Arc<Box<dyn Fn(CardId)>>);
 
 impl MyClosure {
     pub fn new<F>(func: F) -> Self
     where
-        F: Fn(Signal<Card>) + 'static,
+        F: Fn(CardId) + 'static,
     {
         MyClosure(Arc::new(Box::new(func)))
     }
 
-    pub fn call(&self, card: Signal<Card>) {
+    pub fn call(&self, card: CardId) {
         (self.0)(card)
     }
 }
@@ -433,7 +434,7 @@ fn NewcardButton(
             onclick: move |_| {
 
                 let closure = closure.clone();
-                let hook = MyClosure::new(move |card: Signal<Card>| {
+                let hook = MyClosure::new(move |card: CardId| {
                 let closure = closure.clone();
                 closure.call(card);
                 });
@@ -485,7 +486,7 @@ fn TableRender(cards: Memo<Vec<Signal<Card>>>, on_card_selected: MyClosure) -> E
                                 info!("clicky");
                                 let card = card.clone();
                                 let closure = _closure.clone();
-                                closure.call(card);
+                                closure.call(card.read().id());
                             },
 
                             td { class: "border border-gray-300 px-4 py-2 w-2/3", "{card}" }

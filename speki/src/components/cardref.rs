@@ -1,7 +1,7 @@
 use std::fmt::Debug;
 
 use dioxus::prelude::*;
-use speki_core::{card::CardId, set::SetExpr, Card};
+use speki_core::{card::CardId, set::SetExpr};
 use tracing::info;
 
 use super::CardTy;
@@ -48,7 +48,7 @@ pub fn CardRefRender(
 
     let card_display: Memo<String> = ScopeId::APP.in_runtime(|| {
         use_memo(move || match selected_card.read().as_ref() {
-            Some(card_id) => APP.read().load_card(*card_id).read().name().to_string(),
+            Some(card_id) => APP.read().load_card(*card_id).name().to_string(),
             None => String::new(),
         })
     });
@@ -63,7 +63,7 @@ pub fn CardRefRender(
                 readonly: "true",
                 onclick: move |_| {
                     let f = on_select.clone();
-                    let fun = MyClosure::new(move |card: Signal<Card>| {
+                    let fun = MyClosure::new(move |card: CardId| {
                         info!("x1");
                         let f = f.clone();
                         if let Some(fun) = f.clone() {
@@ -71,8 +71,7 @@ pub fn CardRefRender(
                             fun.0(card.clone());
                         }
 
-                        let id = card.read().id();
-                        selected_card.clone().set(Some(id));
+                        selected_card.clone().set(Some(card));
                         pop_overlay();
                     });
 
@@ -90,7 +89,6 @@ pub fn CardRefRender(
                         info!("clicked a button");
                         let on_deselect = on_deselect.clone();
                         if let Some(card) = selected_card.cloned(){
-                            let card = APP.cloned().load_card(card);
                             if let Some(f) = on_deselect.clone(){
                                 f.call(card);
                             }
@@ -145,8 +143,7 @@ impl CardRef {
         self.card.clone().set(Some(card));
     }
 
-    pub fn set_ref(&self, card: Signal<Card>) {
-        let id = card.read().id();
-        self.card.clone().set(Some(id));
+    pub fn set_ref(&self, card: CardId) {
+        self.card.clone().set(Some(card));
     }
 }

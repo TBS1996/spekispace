@@ -117,8 +117,8 @@ pub fn ReviewRender(
         }
     };
 
-    let explicit_dependencies: Vec<Signal<Card>> = {
-        let mut deps: Vec<Signal<Card>> = vec![];
+    let explicit_dependencies: Vec<Arc<Card>> = {
+        let mut deps: Vec<Arc<Card>> = vec![];
 
         for dep in &card.explicit_dependencies() {
             let dep = APP.read().load_card(*dep);
@@ -273,7 +273,6 @@ fn Infobar(
     queue: Signal<Queue>,
     show_backside: Signal<bool>,
 ) -> Element {
-    let card = Signal::new_in_scope(Arc::unwrap_or_clone(card), ScopeId::APP);
     let tot = queue.read().tot_len();
     let pos = queue.read().passed_len();
     let card2 = card.clone();
@@ -337,7 +336,7 @@ fn Infobar(
                 "edit"
             }
             Suspend {
-                card,
+                card: card.id(),
                 queue,
                 show_backside,
             }
@@ -346,8 +345,9 @@ fn Infobar(
 }
 
 #[component]
-fn Suspend(card: Signal<Card>, mut queue: Signal<Queue>, show_backside: Signal<bool>) -> Element {
-    let is_suspended = card.read().is_suspended();
+fn Suspend(card: CardId, mut queue: Signal<Queue>, show_backside: Signal<bool>) -> Element {
+    let card = Arc::unwrap_or_clone(APP.read().load_card(card));
+    let is_suspended = card.is_suspended();
     let txt = if is_suspended { "unsuspend" } else { "suspend" };
 
     rsx! {
@@ -356,7 +356,7 @@ fn Suspend(card: Signal<Card>, mut queue: Signal<Queue>, show_backside: Signal<b
             onclick: move |_| {
                 let card = card.clone();
                 let mut card = card;
-                card.write().set_suspend(!is_suspended);
+                card.set_suspend(!is_suspended);
                 queue.write().next();
                 show_backside.set(false);
             },
@@ -368,7 +368,7 @@ fn Suspend(card: Signal<Card>, mut queue: Signal<Queue>, show_backside: Signal<b
 #[component]
 fn RenderDependencies(
     mut card: Arc<Card>,
-    explicit_dependencies: Vec<Signal<Card>>,
+    explicit_dependencies: Vec<Arc<Card>>,
     show_backside: bool,
     queue: Signal<Queue>,
 ) -> Element {
@@ -382,6 +382,7 @@ fn RenderDependencies(
 
     let wtf = vec![deps.clone(); deps.len()];
     let my_iter = deps.clone().into_iter().zip(wtf).enumerate();
+    let card2 = card.id();
 
     rsx! {
         div {
@@ -401,10 +402,10 @@ fn RenderDependencies(
                         onclick: move |_| {
                             let currcard = card.clone();
 
-                            let fun = MyClosure::new(move |card: Signal<Card>| {
+                            let fun = MyClosure::new(move |card: CardId| {
                                 let  old_card = currcard.clone();
                                 let mut old_card = Arc::unwrap_or_clone(old_card);
-                                old_card.add_dependency(card.read().id()).unwrap();
+                                old_card.add_dependency(card).unwrap();
                                 let _ = queue.clone().write();
                             });
 
@@ -433,14 +434,11 @@ fn RenderDependencies(
                         class: "p-1 hover:bg-gray-200 hover:border-gray-400 border border-transparent rounded-md transition-colors",
                         onclick: move |_|{
                             let wtf = deps.clone();
-                            let mut thecard = card.clone();
                             let removed =  wtf.clone().get(idx).cloned().unwrap();
-                            let id = card.read().id();
-                            let event = TheLedgerEvent::new_modify(id, CardAction::RemoveDependency(removed.read().id()));
+                            let id = card2;
+                            let event = TheLedgerEvent::new_modify(id, CardAction::RemoveDependency(removed.id()));
                             APP.read().inner().provider.cards.modify(event).unwrap();
-
-                            let new_card = Arc::unwrap_or_clone(APP.read().inner().card_provider.load(id).unwrap());
-                            thecard.set(new_card);
+                            ScopeId::APP.needs_update();
                         },
                         "X"
                     }

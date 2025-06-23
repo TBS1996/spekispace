@@ -170,8 +170,8 @@ pub fn RenderExpr(
         let leaf_card = {
             let f: Arc<Box<dyn Fn() -> Option<OverlayEnum>>> = {
                 let f = move || {
-                    let f = move |card: Signal<Card>| {
-                        let leaf = DynCard::Card(card.read().id());
+                    let f = move |card: CardId| {
+                        let leaf = DynCard::Card(card);
                         let input = InputEditor::Leaf(leaf);
                         inputs.clone().write().push(input);
                     };
@@ -198,8 +198,8 @@ pub fn RenderExpr(
         let instances = {
             let f: Arc<Box<dyn Fn() -> Option<OverlayEnum>>> = {
                 let f = move || {
-                    let f = move |card: Signal<Card>| {
-                        let leaf = DynCard::Instances(card.read().id());
+                    let f = move |card: CardId| {
+                        let leaf = DynCard::Instances(card);
                         let input = InputEditor::Leaf(leaf);
                         inputs.clone().write().push(input);
                     };
@@ -219,8 +219,8 @@ pub fn RenderExpr(
         let dependents = {
             let f: Arc<Box<dyn Fn() -> Option<OverlayEnum>>> = {
                 let f = move || {
-                    let f = move |card: Signal<Card>| {
-                        let leaf = DynCard::RecDependents(card.read().id());
+                    let f = move |card: CardId| {
+                        let leaf = DynCard::RecDependents(card);
                         let input = InputEditor::Leaf(leaf);
                         inputs.clone().write().push(input);
                     };

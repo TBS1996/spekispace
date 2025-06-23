@@ -30,12 +30,11 @@ impl App {
             .map(|c| Signal::new_in_scope(c, ScopeId::APP))
     }
 
-    pub fn load_card(&self, id: CardId) -> Signal<Card> {
-        Signal::new_in_scope(
+    pub fn load_card(&self, id: CardId) -> Arc<Card> {
+        Arc::new(
             self.0
                 .load_card(id)
                 .expect(&format!("unable to load card with id: {id}")),
-            ScopeId::APP,
         )
     }
 

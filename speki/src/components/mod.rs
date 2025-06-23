@@ -9,7 +9,7 @@ pub use cardref::CardRef;
 pub use dropdown::DropDownMenu;
 pub use filtereditor::*;
 pub use frontside::{CardTy, FrontPut};
-use speki_core::{card::CardId, collection::DynCard, Card};
+use speki_core::{card::CardId, collection::DynCard};
 
 use dioxus::prelude::*;
 
@@ -119,11 +119,11 @@ pub fn set_card_link(text: Signal<String>, alias: bool) {
             }
 
             let theval = val.clone();
-            let f = MyClosure::new(move |card: Signal<Card>| {
+            let f = MyClosure::new(move |card: CardId| {
                 let s = if alias {
-                    format!("[[{}|{}]]", card.read().id(), val)
+                    format!("[[{}|{}]]", card, val)
                 } else {
-                    format!("[[{}]]", card.read().id())
+                    format!("[[{}]]", card)
                 };
                 text.clone().set(text.cloned().replace(&val, &s));
             });

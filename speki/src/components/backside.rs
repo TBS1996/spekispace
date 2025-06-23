@@ -12,7 +12,6 @@ use tracing::info;
 use crate::{
     components::{cardref::CardRefRender, dropdown::DropComponent, CardRef, DropDownMenu},
     overlays::card_selector::MyClosure,
-    APP,
 };
 
 /// Component to create the backside of a card
@@ -130,7 +129,6 @@ impl BackPut {
         let default = default.unwrap_or_default();
         let ref_card = CardRef::new();
         if let Some(card) = default.as_card() {
-            let card = APP.read().load_card(card);
             ref_card.set_ref(card);
         }
 
