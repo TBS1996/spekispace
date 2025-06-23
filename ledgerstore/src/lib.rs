@@ -682,6 +682,15 @@ impl<T: LedgerItem> Ledger<T> {
         Ok(())
     }
 
+    fn cache_dir(&self, cache: CacheKey<T>) -> PathBuf {
+        match cache {
+            CacheKey::Property { property, value } => {
+                self.properties.join(property.to_string()).join(&value)
+            }
+            CacheKey::ItemRef { reftype, id } => self.dependents_dir(id).join(reftype.to_string()),
+        }
+    }
+
     fn apply(&self) {
         fs::remove_dir_all(&*self.items).unwrap();
         fs::remove_dir_all(&*self.properties).unwrap();
@@ -728,17 +737,13 @@ impl<T: LedgerItem> Ledger<T> {
         }
 
         info!("inserting caches");
-        for (idx, (cache_key, item_keys)) in the_caches.into_iter().enumerate() {
+        for (idx, (cache, item_keys)) in the_caches.into_iter().enumerate() {
             if idx % 1000 == 0 {
                 dbg!(idx);
             }
-            match cache_key {
-                CacheKey::ItemRef { reftype, id } => {
-                    self.insert_dependents(id, reftype, item_keys);
-                }
-                CacheKey::Property { property, value } => {
-                    self.insert_property(property, value, item_keys);
-                }
+
+            for key in item_keys {
+                self.insert_cache(cache.clone(), key);
             }
         }
     }
@@ -781,8 +786,7 @@ impl<T: LedgerItem> Ledger<T> {
         keys
     }
 
-    pub fn get_prop_cache(&self, property: T::PropertyType, value: String) -> HashSet<T::Key> {
-        let path = self.properties.join(property.to_string()).join(&value);
+    pub fn item_keys_from_dir(path: PathBuf) -> HashSet<T::Key> {
         if !path.exists() {
             Default::default()
         } else {
@@ -797,13 +801,23 @@ impl<T: LedgerItem> Ledger<T> {
                 {
                     Ok(key) => out.insert(key),
                     Err(_e) => {
-                        dbg!(property.to_string(), value);
+                        dbg!(path);
                         panic!();
                     }
                 };
             }
             out
         }
+    }
+
+    fn get_cache(&self, key: CacheKey<T>) -> HashSet<T::Key> {
+        let path = self.cache_dir(key);
+        Self::item_keys_from_dir(path)
+    }
+
+    pub fn get_prop_cache(&self, property: T::PropertyType, value: String) -> HashSet<T::Key> {
+        let key = CacheKey::Property { property, value };
+        self.get_cache(key)
     }
 
     fn item_keys_from_file(path: &Path) -> HashSet<T::Key> {
@@ -851,8 +865,11 @@ impl<T: LedgerItem> Ledger<T> {
     }
 
     pub fn get_ref_cache(&self, key: T::Key, ty: T::RefType) -> HashSet<T::Key> {
-        let path = self.dependents_dir(key).join(ty.to_string());
-        Self::item_keys_from_file(&path)
+        let key = CacheKey::ItemRef {
+            reftype: ty,
+            id: key,
+        };
+        self.get_cache(key)
     }
 
     pub fn dependencies(&self, key: T::Key) -> HashSet<T::Key> {
@@ -945,36 +962,22 @@ impl<T: LedgerItem> Ledger<T> {
     }
 
     fn remove_property(&self, key: T::Key, property: T::PropertyType, value: String) {
-        let path = self
-            .properties
-            .join(property.to_string())
-            .join(value)
-            .join(key.to_string());
-        std::fs::remove_file(&path).unwrap();
+        let cache = CacheKey::Property { property, value };
+        self.remove_cache(cache, key);
     }
 
-    fn insert_property(
-        &self,
-        property: T::PropertyType,
-        value: String,
-        keys: impl IntoIterator<Item = T::Key>,
-    ) {
-        let path = self.properties.join(property.to_string()).join(&value);
-        std::fs::create_dir_all(&path).unwrap();
-        for key in keys {
-            let link = path.join(key.to_string());
-            if link.exists() {
-                return;
-            }
-            let original = self.item_file(key);
+    fn insert_cache(&self, cache: CacheKey<T>, id: T::Key) {
+        let path = self.cache_dir(cache);
+        fs::create_dir_all(&path).unwrap();
+        let original = self.item_file(id);
+        let link = path.join(id.to_string());
+        hard_link(original, link).unwrap();
+    }
 
-            if !original.is_file() {
-                dbg!(&link, original, key, property.to_string(), value);
-                panic!();
-            }
-
-            hard_link(original, link).unwrap();
-        }
+    fn remove_cache(&self, cache: CacheKey<T>, id: T::Key) {
+        let path = self.cache_dir(cache).join(id.to_string());
+        let _res = fs::remove_file(&path);
+        debug_assert!(_res.is_ok());
     }
 
     fn keys_to_file(path: &Path, keys: HashSet<T::Key>) {
@@ -985,18 +988,6 @@ impl<T: LedgerItem> Ledger<T> {
 
         let mut f = fs::File::create(&path).unwrap();
         f.write(&s.as_bytes()).unwrap();
-    }
-
-    fn insert_dependents(
-        &self,
-        key: T::Key,
-        ty: T::RefType,
-        new_dependents: impl IntoIterator<Item = T::Key>,
-    ) {
-        let mut dependents = self.get_ref_cache(key, ty.clone());
-        dependents.extend(new_dependents);
-        let path = self.dependents_dir(key).join(ty.to_string());
-        Self::keys_to_file(&path, dependents);
     }
 
     fn _modify(
@@ -1066,16 +1057,8 @@ impl<T: LedgerItem> Ledger<T> {
             return Ok(());
         }
 
-        for cache in added_caches {
-            let key: T::Key = cache.1;
-            match cache.0 {
-                CacheKey::ItemRef { reftype, id } => {
-                    self.insert_dependents(id, reftype, vec![key]);
-                }
-                CacheKey::Property { property, value } => {
-                    self.insert_property(property, value, vec![key]);
-                }
-            }
+        for (cache, key) in added_caches {
+            self.insert_cache(cache, key);
         }
 
         for cache in removed_caches {
