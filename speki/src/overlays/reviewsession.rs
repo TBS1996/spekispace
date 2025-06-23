@@ -105,16 +105,10 @@ pub struct ReviewSession {
 #[component]
 pub fn ReviewRender(
     queue: Signal<Queue>,
+    card_id: CardId,
     show_backside: Signal<bool>,
     tot: Memo<usize>,
 ) -> Element {
-    let card_id = match queue.read().current() {
-        Some(id) => id,
-        None => {
-            return rsx! {"if you can read this, i messed up"};
-        }
-    };
-
     let card = match APP.read().inner().card_provider.load(card_id) {
         Some(card) => card,
         None => {
@@ -232,7 +226,7 @@ impl Queue {
         }
     }
 
-    fn current(&self) -> Option<CardId> {
+    pub fn current(&self) -> Option<CardId> {
         self.upcoming.first().cloned()
     }
 

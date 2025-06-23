@@ -111,6 +111,14 @@ pub fn Overender(overlay: Signal<Option<Arc<OverlayEnum>>>, root: Element) -> El
                             OverlayEnum::Review(elm) => rsx!{
                                 ReviewRender {
                                     queue: elm.queue.clone(),
+                                    card_id: match elm.queue.read().current() {
+                                        Some(id) => id,
+                                        None => {
+                                            overlay.set(None);
+                                            return root;
+                                        },
+
+                                    },
                                     show_backside: elm.show_backside.clone(),
                                     tot: elm.tot_len,
                                 }
