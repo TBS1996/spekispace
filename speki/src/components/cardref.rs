@@ -9,7 +9,6 @@ use crate::{
     append_overlay,
     overlays::{
         card_selector::{CardSelector, MyClosure},
-        cardviewer::TempNode,
         OverlayEnum,
     },
     pop_overlay, APP,
@@ -21,7 +20,6 @@ const PLACEHOLDER: &'static str = "pick card...";
 pub struct CardRef {
     pub card: Signal<Option<CardId>>,
     pub filter: SetExpr,
-    pub dependent: Option<TempNode>,
     pub allowed: Vec<CardTy>,
     pub on_select: Option<MyClosure>,
     pub on_deselect: Option<MyClosure>,
@@ -44,7 +42,6 @@ pub fn CardRefRender(
     allowed: Vec<CardTy>,
     on_select: Option<MyClosure>,
     on_deselect: Option<MyClosure>,
-    dependent: Option<TempNode>,
     #[props(default = SetExpr::All)] filter: SetExpr,
 ) -> Element {
     let is_selected = selected_card.read().is_some();
@@ -79,13 +76,8 @@ pub fn CardRefRender(
                         pop_overlay();
                     });
 
-                    let dependents = dependent
-                        .clone()
-                        .map(|node| vec![node.into()])
-                        .unwrap_or_default();
-
                     let allowed = allowed.clone();
-                    let props = CardSelector::ref_picker(fun, dependents, filter.clone())
+                    let props = CardSelector::ref_picker(fun, filter.clone())
                         .with_allowed_cards(allowed);
 
                         append_overlay(OverlayEnum::CardSelector(props));
@@ -119,7 +111,6 @@ impl CardRef {
         Self {
             card: Signal::new_in_scope(Default::default(), ScopeId(3)),
             filter: SetExpr::All,
-            dependent: None,
             allowed: vec![],
             on_select: None,
             on_deselect: None,
@@ -139,11 +130,6 @@ impl CardRef {
 
     pub fn with_allowed(mut self, deps: Vec<CardTy>) -> Self {
         self.allowed = deps;
-        self
-    }
-
-    pub fn with_dependents(mut self, deps: TempNode) -> Self {
-        self.dependent = Some(deps);
         self
     }
 

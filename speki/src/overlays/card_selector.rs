@@ -5,7 +5,6 @@ use std::{
 };
 
 use dioxus::prelude::*;
-use speki::Node;
 use speki_core::{
     card::{bigrams, normalize_string, CardId},
     cardfilter::CardFilter,
@@ -74,7 +73,6 @@ pub struct CardSelector {
     pub search: Signal<String>,
     pub on_card_selected: MyClosure,
     pub allow_new: bool,
-    pub dependents: Signal<Vec<Node>>,
     pub allowed_cards: Signal<Vec<CardTy>>,
     pub filtereditor: FilterEditor,
     pub filtermemo: Memo<Option<CardFilter>>,
@@ -237,7 +235,6 @@ impl CardSelector {
             on_card_selected: overlay_card_viewer(),
             cards,
             allow_new: false,
-            dependents: Signal::new_in_scope(Default::default(), ScopeId::APP),
             allowed_cards,
             filtereditor,
             filtermemo,
@@ -273,12 +270,11 @@ impl CardSelector {
         }
     }
 
-    pub fn ref_picker(fun: MyClosure, dependents: Vec<Node>, filter: SetExpr) -> Self {
+    pub fn ref_picker(fun: MyClosure, filter: SetExpr) -> Self {
         Self {
             title: Some("choose reference".to_string()),
             on_card_selected: fun,
             allow_new: true,
-            dependents: Signal::new_in_scope(dependents, ScopeId(3)),
             ..Self::new_with_filter(false, vec![], filter)
         }
     }
@@ -310,11 +306,6 @@ impl CardSelector {
 
     pub fn with_default_search(mut self, search: String) -> Self {
         self.default_search.set(Some(search));
-        self
-    }
-
-    pub fn with_dependents(self, deps: Vec<Node>) -> Self {
-        self.dependents.clone().write().extend(deps);
         self
     }
 
@@ -376,7 +367,6 @@ pub fn CardSelectorRender(
     on_card_selected: MyClosure,
     cards: Memo<Vec<Signal<Card>>>,
     allow_new: bool,
-    dependents: Signal<Vec<Node>>,
     allowed_cards: Signal<Vec<CardTy>>,
     filtereditor: FilterEditor,
     filtermemo: Memo<Option<CardFilter>>,
@@ -412,7 +402,7 @@ pub fn CardSelectorRender(
 
             div {
                 if allow_new {
-                    NewcardButton { on_card_selected: on_card_selected.clone(), dependents: dependents(), allowed_cards: allowed_cards.cloned(), search }
+                    NewcardButton { on_card_selected: on_card_selected.clone(), allowed_cards: allowed_cards.cloned(), search }
                 }
 
                 input {
@@ -433,7 +423,6 @@ pub fn CardSelectorRender(
 #[component]
 fn NewcardButton(
     on_card_selected: MyClosure,
-    dependents: Vec<Node>,
     allowed_cards: Vec<CardTy>,
     search: String,
 ) -> Element {
@@ -451,7 +440,6 @@ fn NewcardButton(
 
                 let viewer = CardViewer::new()
                     .with_hook(hook)
-                    .with_dependents(dependents.clone())
                     .with_allowed_cards(allowed_cards.clone())
                     .with_front_text(search.clone());
 

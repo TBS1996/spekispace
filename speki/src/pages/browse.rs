@@ -44,7 +44,6 @@ pub fn Browse() -> Element {
                     on_card_selected: browse_state.browse_page.on_card_selected.clone(),
                     cards: browse_state.browse_page.cards.clone(),
                     allow_new: browse_state.browse_page.allow_new.clone(),
-                    dependents: browse_state.browse_page.dependents.clone(),
                     allowed_cards: browse_state.browse_page.allowed_cards.clone(),
                     filtereditor: browse_state.browse_page.filtereditor.clone(),
                     filtermemo: browse_state.browse_page.filtermemo.clone(),

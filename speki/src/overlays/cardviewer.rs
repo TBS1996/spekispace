@@ -17,7 +17,6 @@ use speki_core::{
 };
 
 use ledgerstore::TimeProvider;
-use speki::{Node, NodeId, NodeMetadata};
 use tracing::info;
 
 use crate::{
@@ -55,65 +54,13 @@ pub fn CardViewerRender(props: CardViewer) -> Element {
 
             RenderInputs {
                 editor:props.editor.clone(),
-                dependents:props.dependents.clone(),
                 save_hook:props.save_hook.clone(),
                 old_card:props.old_card.clone(),
-                old_meta:props.old_meta.clone(),
-                tempnode:props.tempnode.clone(),
             }
 
             RenderDependencies { card_text: props.editor.front.text.clone(), card_id: old_card, dependencies: props.editor.dependencies.clone()}
             if let Some(card_id) = old_card {
                 RenderDependents { card_id, hidden: false}
-            }
-        }
-    }
-}
-
-/// Abstraction over a card that might exist or not yet.
-/// like when you add a new dependency and before you save it you add a dependency to that again
-/// then we need a way to represent on the graph the prev card even tho it's not saved
-#[derive(Clone, PartialEq)]
-pub enum TempNode {
-    Old(CardId),
-    New {
-        id: NodeId,
-        front: FrontPut,
-        dependencies: Signal<Vec<Signal<Card>>>,
-        dependents: Signal<Vec<Node>>,
-    },
-}
-
-impl From<TempNode> for Node {
-    fn from(value: TempNode) -> Self {
-        match value {
-            TempNode::Old(card) => Self::Card(card),
-            TempNode::New {
-                id,
-                front,
-                dependencies,
-                dependents,
-            } => {
-                let node = NodeMetadata {
-                    id,
-                    label: front.text.cloned(),
-                    color: "#858585".to_string(),
-                    ty: front.dropdown.selected.cloned().to_ctype(),
-                    border: false,
-                };
-
-                let dependents = dependents.cloned();
-                let dependencies: Vec<_> = dependencies
-                    .cloned()
-                    .into_iter()
-                    .map(|c| Node::Card(c.read().id()))
-                    .collect();
-
-                Self::Nope {
-                    node,
-                    dependencies,
-                    dependents,
-                }
             }
         }
     }
@@ -403,20 +350,13 @@ then when you add a new person instance it'll have those textfields for those qu
 #[derive(Props, Clone)]
 pub struct CardViewer {
     pub editor: CardEditor,
-    pub dependents: Signal<Vec<Node>>,
     pub save_hook: Option<MyClosure>,
     pub old_card: Signal<Option<Card>>,
-    pub old_meta: Signal<Option<NodeMetadata>>,
-    pub tempnode: TempNode,
 }
 
 impl PartialEq for CardViewer {
     fn eq(&self, other: &Self) -> bool {
-        self.editor == other.editor
-            && self.dependents == other.dependents
-            && self.old_card == other.old_card
-            && self.old_meta == other.old_meta
-            && self.tempnode == other.tempnode
+        self.editor == other.editor && self.old_card == other.old_card
     }
 }
 
@@ -440,18 +380,11 @@ impl CardViewer {
         self
     }
 
-    pub fn with_dependents(mut self, deps: Vec<Node>) -> Self {
-        self.dependents.extend(deps);
-        self
-    }
-
     pub fn new_from_card(mut card: Signal<Card>) -> Self {
         if card.read().is_attribute() {
             let instance = card.read().attribute_instance();
             card = APP.read().load_card(instance);
         }
-
-        let tempnode = TempNode::Old(card.read().id());
 
         let raw_ty = card.read().clone_base();
 
@@ -462,8 +395,7 @@ impl CardViewer {
         };
 
         let back = {
-            let bck =
-                BackPut::new(raw_ty.data.backside().cloned()).with_dependents(tempnode.clone());
+            let bck = BackPut::new(raw_ty.data.backside().cloned());
 
             let back = match raw_ty.data.backside() {
                 Some(BackSide::Time(ts)) => ts.to_string(),
@@ -475,14 +407,9 @@ impl CardViewer {
             bck
         };
 
-        let dependents: Signal<Vec<Node>> = Signal::new_in_scope(Default::default(), ScopeId(3));
-        let meta = NodeMetadata::from_card(card.clone(), true);
-
         let editor = {
             let concept = {
-                let concept = CardRef::new()
-                    .with_dependents(tempnode.clone())
-                    .with_allowed(vec![CardTy::Class]);
+                let concept = CardRef::new().with_allowed(vec![CardTy::Class]);
                 if let Some(class) = raw_ty.data.class() {
                     let class = APP.read().load_card(class);
                     concept.set_ref(class);
@@ -656,11 +583,8 @@ impl CardViewer {
 
         Self {
             editor,
-            dependents,
             old_card: Signal::new_in_scope(Some(card.cloned()), ScopeId(3)),
             save_hook: None,
-            tempnode,
-            old_meta: Signal::new_in_scope(Some(meta), ScopeId::APP),
         }
     }
 
@@ -668,21 +592,11 @@ impl CardViewer {
         let front = FrontPut::new(CardTy::Normal);
         let dependencies: Signal<Vec<Signal<Card>>> =
             Signal::new_in_scope(Default::default(), ScopeId::APP);
-        let dependents = Signal::new_in_scope(Default::default(), ScopeId(3));
-
-        let tempnode = TempNode::New {
-            id: NodeId::new_temp(),
-            front: front.clone(),
-            dependencies: dependencies.clone(),
-            dependents: dependents.clone(),
-        };
 
         let editor = {
-            let back = BackPut::new(None).with_dependents(tempnode.clone());
+            let back = BackPut::new(None);
 
-            let concept = CardRef::new()
-                .with_dependents(tempnode.clone())
-                .with_allowed(vec![CardTy::Class]);
+            let concept = CardRef::new().with_allowed(vec![CardTy::Class]);
 
             let attr_answers = Signal::new_in_scope(Default::default(), ScopeId::APP);
 
@@ -703,9 +617,6 @@ impl CardViewer {
             editor,
             old_card: Signal::new_in_scope(None, ScopeId(3)),
             save_hook: None,
-            dependents,
-            tempnode,
-            old_meta: Signal::new_in_scope(None, ScopeId::APP),
         }
     }
 
@@ -792,7 +703,6 @@ fn InputElements(
                 placeholder: "choose namespace",
                 on_select: namespace.on_select.clone(),
                 on_deselect: namespace.on_deselect.clone(),
-                dependent: namespace.dependent.clone(),
                 allowed: namespace.allowed.clone(),
                 filter: namespace.filter.clone(),
             },
@@ -828,7 +738,6 @@ fn InputElements(
                         placeholder: "pick parent class",
                         on_select: concept.on_select.clone(),
                         on_deselect: concept.on_deselect.clone(),
-                        dependent: concept.dependent.clone(),
                         allowed: concept.allowed.clone(),
                         filter: concept.filter.clone(),
                     },
@@ -853,7 +762,6 @@ fn InputElements(
                         placeholder: "pick class of instance",
                         on_select: concept.on_select.clone(),
                         on_deselect: concept.on_deselect.clone(),
-                        dependent: concept.dependent.clone(),
                         allowed: concept.allowed.clone(),
                         filter: concept.filter.clone(),
                     },
@@ -1213,7 +1121,6 @@ fn add_dep(selv: CardViewer) -> Element {
             class: "mt-2 inline-flex items-center text-white bg-gray-800 border-0 py-1 px-3 focus:outline-none hover:bg-gray-700 rounded text-base md:mt-0",
             onclick: move |_| {
                 let selv = selv.clone();
-                let selv2 = selv.clone();
 
                 let fun = MyClosure::new(
                     move |card: Signal<Card>| {
@@ -1231,8 +1138,7 @@ fn add_dep(selv: CardViewer) -> Element {
 
                 info!("1 scope is ! {:?}", current_scope_id().unwrap());
                 let thefront = front.clone();
-                let dependent: Node = selv2.tempnode.clone().into();
-                let props = CardSelector::dependency_picker(fun).with_dependents(vec![dependent]).with_default_search(thefront.clone());
+                let props = CardSelector::dependency_picker(fun).with_default_search(thefront.clone());
                 append_overlay(OverlayEnum::CardSelector(props));
                 info!("2 scope is ! {:?}", current_scope_id().unwrap());
             },

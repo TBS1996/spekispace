@@ -11,7 +11,7 @@ use tracing::info;
 
 use crate::{
     components::{cardref::CardRefRender, dropdown::DropComponent, CardRef, DropDownMenu},
-    overlays::{card_selector::MyClosure, cardviewer::TempNode},
+    overlays::card_selector::MyClosure,
     APP,
 };
 
@@ -112,7 +112,6 @@ pub fn BackPutRender(
                                     placeholder: ref_card.placeholder.cloned(),
                                     on_select: ref_card.on_select.clone(),
                                     on_deselect: ref_card.on_deselect.clone(),
-                                    dependent: ref_card.dependent.clone(),
                                     allowed: ref_card.allowed.clone(),
                                     filter: ref_card.filter.clone(),
                                 }
@@ -163,11 +162,6 @@ impl BackPut {
         self.text.clone().set(Default::default());
         self.dropdown.reset();
         self.ref_card.reset();
-    }
-
-    pub fn with_dependents(mut self, deps: TempNode) -> Self {
-        self.ref_card = self.ref_card.with_dependents(deps);
-        self
     }
 
     pub fn to_backside(&self) -> Option<BackSide> {

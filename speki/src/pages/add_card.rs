@@ -35,11 +35,8 @@ pub fn Add() -> Element {
                 rsx! {
                     CardViewerRender {
                         editor: selv.viewer.editor.clone(),
-                        dependents: selv.viewer.dependents.clone(),
                         save_hook: selv.viewer.save_hook.clone(),
                         old_card: selv.viewer.old_card.clone(),
-                        old_meta: selv.viewer.old_meta.clone(),
-                        tempnode: selv.viewer.tempnode.clone(),
                 }
             }
         }

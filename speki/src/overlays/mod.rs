@@ -126,11 +126,8 @@ pub fn Overender(overlay: Signal<Option<Arc<OverlayEnum>>>, root: Element) -> El
                             OverlayEnum::CardViewer(elm) => rsx!{
                                 CardViewerRender {
                                     editor: elm.editor.clone(),
-                                    dependents: elm.dependents.clone(),
                                     save_hook: elm.save_hook.clone(),
                                     old_card: elm.old_card.clone(),
-                                    old_meta: elm.old_meta.clone(),
-                                    tempnode: elm.tempnode.clone(),
                                 }
                             },
                             OverlayEnum::OverlaySelector(elm) => rsx! {
@@ -150,7 +147,6 @@ pub fn Overender(overlay: Signal<Option<Arc<OverlayEnum>>>, root: Element) -> El
                                     on_card_selected: elm.on_card_selected.clone(),
                                     cards: elm.cards.clone(),
                                     allow_new: elm.allow_new.clone(),
-                                    dependents: elm.dependents.clone(),
                                     allowed_cards: elm.allowed_cards.clone(),
                                     filtereditor: elm.filtereditor.clone(),
                                     filtermemo: elm.filtermemo.clone(),

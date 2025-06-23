@@ -177,7 +177,6 @@ pub fn UploadRender(props: Uploader) -> Element {
                             placeholder: "pick class of instance",
                             on_select: concept.on_select.clone(),
                             on_deselect: concept.on_deselect.clone(),
-                            dependent: concept.dependent.clone(),
                             allowed: concept.allowed.clone(),
                         },
                     }
