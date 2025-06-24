@@ -39,8 +39,6 @@ fn main() {
 
 #[component]
 pub fn TheApp() -> Element {
-    let id = current_scope_id();
-    info!("omg?? scope id: {id:?}");
     use_context_provider(ImportState::new);
     use_context_provider(ReviewPage::new);
 

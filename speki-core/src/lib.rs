@@ -3,8 +3,8 @@ use card_provider::CardProvider;
 use cardfilter::CardFilter;
 use dioxus_logger::tracing::info;
 use ledger::{CardAction, CardEvent};
+use ledgerstore::Ledger;
 use ledgerstore::TimeProvider;
-use ledgerstore::{CacheKey, Ledger};
 use metadata::Metadata;
 use recall_rate::History;
 use set::Set;
@@ -27,12 +27,6 @@ pub use card::{Card, CardType};
 pub use common::current_time;
 pub use omtrent::TimeStamp;
 pub use recall_rate::SimpleRecall;
-
-#[derive(Clone, PartialEq, PartialOrd, Hash, Eq, Debug)]
-pub struct DepCacheKey {
-    id: CardId,
-    ty: RefType,
-}
 
 #[derive(Clone, PartialEq, PartialOrd, Hash, Eq, Debug)]
 pub enum RefType {
@@ -64,15 +58,6 @@ impl AsRef<str> for RefType {
 impl RefType {
     pub fn to_str(&self) -> &str {
         self.as_ref()
-    }
-}
-
-impl From<DepCacheKey> for CacheKey<RawCard> {
-    fn from(value: DepCacheKey) -> Self {
-        CacheKey::ItemRef {
-            reftype: value.ty,
-            id: value.id,
-        }
     }
 }
 

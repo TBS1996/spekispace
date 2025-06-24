@@ -18,27 +18,18 @@ use uuid::Uuid;
 pub mod ledger_cache;
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, Ord, PartialOrd)]
-pub enum CacheKey<T: LedgerItem> {
-    Property {
-        property: T::PropertyType,
-        value: String,
-    },
-    ItemRef {
-        reftype: T::RefType,
-        id: T::Key,
-    },
+pub struct PropertyCache<T: LedgerItem> {
+    pub property: T::PropertyType,
+    pub value: String,
 }
 
-impl<T: LedgerItem> Display for CacheKey<T> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let s = match self {
-            Self::Property { property, value } => format!("{property}:{value}"),
-            Self::ItemRef { reftype, id } => format!("{reftype}:{id:?}"),
-        };
-
-        write!(f, "{}", s)
-    }
+#[derive(Debug, Clone, Hash, Eq, PartialEq, Ord, PartialOrd)]
+pub struct ItemRefCache<T: LedgerItem> {
+    pub reftype: T::RefType,
+    pub id: T::Key,
 }
+
+pub type CacheKey<T> = Either<PropertyCache<T>, ItemRefCache<T>>;
 
 use crate::block_chain::BlockChain;
 
@@ -278,7 +269,7 @@ pub trait LedgerItem:
     /// The property keys are predefined, hence theyre static str
     /// the String is the Value which could be anything.
     /// For example ("suspended", true).
-    fn properties_cache(&self, ledger: &Ledger<Self>) -> HashSet<(Self::PropertyType, String)>
+    fn properties_cache(&self, ledger: &Ledger<Self>) -> HashSet<PropertyCache<Self>>
     where
         Self: LedgerItem,
     {
@@ -305,17 +296,17 @@ pub trait LedgerItem:
         let mut out: HashSet<(CacheKey<Self>, Self::Key)> = Default::default();
         let id = self.item_id();
 
-        for (property, value) in self.properties_cache(ledger) {
-            out.insert((CacheKey::Property { property, value }, id.clone()));
+        for property_cache in self.properties_cache(ledger) {
+            out.insert((CacheKey::Left(property_cache), id.clone()));
         }
 
         for (reftype, ids) in self.ref_cache() {
             for ref_id in ids {
                 out.insert((
-                    CacheKey::ItemRef {
+                    CacheKey::Right(ItemRefCache {
                         reftype: reftype.clone(),
                         id: ref_id,
-                    },
+                    }),
                     id,
                 ));
             }
@@ -684,10 +675,12 @@ impl<T: LedgerItem> Ledger<T> {
 
     fn cache_dir(&self, cache: CacheKey<T>) -> PathBuf {
         match cache {
-            CacheKey::Property { property, value } => {
+            CacheKey::Left(PropertyCache { property, value }) => {
                 self.properties.join(property.to_string()).join(&value)
             }
-            CacheKey::ItemRef { reftype, id } => self.dependents_dir(id).join(reftype.to_string()),
+            CacheKey::Right(ItemRefCache { reftype, id }) => {
+                self.dependents_dir(id).join(reftype.to_string())
+            }
         }
     }
 
@@ -816,7 +809,7 @@ impl<T: LedgerItem> Ledger<T> {
     }
 
     pub fn get_prop_cache(&self, property: T::PropertyType, value: String) -> HashSet<T::Key> {
-        let key = CacheKey::Property { property, value };
+        let key = CacheKey::Left(PropertyCache { property, value });
         self.get_cache(key)
     }
 
@@ -865,10 +858,10 @@ impl<T: LedgerItem> Ledger<T> {
     }
 
     pub fn get_ref_cache(&self, key: T::Key, ty: T::RefType) -> HashSet<T::Key> {
-        let key = CacheKey::ItemRef {
+        let key = CacheKey::Right(ItemRefCache {
             reftype: ty,
             id: key,
-        };
+        });
         self.get_cache(key)
     }
 
@@ -962,7 +955,7 @@ impl<T: LedgerItem> Ledger<T> {
     }
 
     fn remove_property(&self, key: T::Key, property: T::PropertyType, value: String) {
-        let cache = CacheKey::Property { property, value };
+        let cache = CacheKey::Left(PropertyCache { property, value });
         self.remove_cache(cache, key);
     }
 
@@ -1064,10 +1057,10 @@ impl<T: LedgerItem> Ledger<T> {
         for cache in removed_caches {
             let key: T::Key = cache.1;
             match cache.0 {
-                CacheKey::ItemRef { reftype, id } => {
+                CacheKey::Right(ItemRefCache { reftype, id }) => {
                     self.remove_dependent(key, reftype, id);
                 }
-                CacheKey::Property { property, value } => {
+                CacheKey::Left(PropertyCache { property, value }) => {
                     self.remove_property(key, property, value);
                 }
             }

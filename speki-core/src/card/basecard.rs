@@ -1,7 +1,7 @@
 use super::*;
 use crate::{audio::AudioId, card_provider::CardProvider, CardProperty, RefType};
 use either::Either;
-use ledgerstore::{Ledger, LedgerItem, LedgerType};
+use ledgerstore::{Ledger, LedgerItem, LedgerType, PropertyCache};
 use omtrent::TimeStamp;
 use serde::{Deserialize, Serialize, Serializer};
 use std::{
@@ -947,14 +947,18 @@ impl LedgerItem for RawCard {
         out
     }
 
-    fn properties_cache(&self, cache: &Ledger<Self>) -> HashSet<(Self::PropertyType, String)> {
-        let mut out: HashSet<(Self::PropertyType, String)> = Default::default();
+    fn properties_cache(&self, cache: &Ledger<Self>) -> HashSet<PropertyCache<Self>> {
+        let mut out: HashSet<PropertyCache<Self>> = Default::default();
 
         let resolved_text = resolve_card(self, &cache);
 
         for bigram in bigrams(&resolved_text) {
             let value = format!("{}{}", bigram[0], bigram[1]);
-            out.insert((CardProperty::Bigram, value));
+            let prop = PropertyCache {
+                property: CardProperty::Bigram,
+                value,
+            };
+            out.insert(prop);
         }
 
         match &self.data {
@@ -962,11 +966,19 @@ impl LedgerItem for RawCard {
             CardType::Unfinished { .. } => {}
             CardType::Instance { .. } => {}
             CardType::Attribute { attribute, .. } => {
-                out.insert((CardProperty::AttrId, attribute.to_string()));
+                let prop = PropertyCache {
+                    property: CardProperty::AttrId,
+                    value: attribute.to_string(),
+                };
+                out.insert(prop);
             }
             CardType::Class { attrs, .. } => {
                 for attr in attrs {
-                    out.insert((CardProperty::Attr, attr.id.to_string()));
+                    let prop = PropertyCache {
+                        property: CardProperty::Attr,
+                        value: attr.id.to_string(),
+                    };
+                    out.insert(prop);
                 }
             }
             CardType::Statement { .. } => {}
@@ -974,7 +986,12 @@ impl LedgerItem for RawCard {
         };
 
         let val = format!("{:?}", self.data.fieldless());
-        out.insert((CardProperty::CardType, val));
+        let prop = PropertyCache {
+            property: CardProperty::CardType,
+            value: val,
+        };
+
+        out.insert(prop);
 
         out
     }
