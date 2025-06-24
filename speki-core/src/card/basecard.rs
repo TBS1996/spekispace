@@ -359,7 +359,10 @@ impl CardType {
                 let class: CardId = provider
                     .providers
                     .cards
-                    .get_prop_cache(CardProperty::Attr, attribute.to_string())
+                    .get_prop_cache(PropertyCache::new(
+                        CardProperty::Attr,
+                        attribute.to_string(),
+                    ))
                     .into_iter()
                     .next()
                     .unwrap();
@@ -427,7 +430,10 @@ impl CardType {
                 let class: CardId = provider
                     .providers
                     .cards
-                    .get_prop_cache(CardProperty::Attr, attribute.to_string())
+                    .get_prop_cache(PropertyCache::new(
+                        CardProperty::Attr,
+                        attribute.to_string(),
+                    ))
                     .into_iter()
                     .next()
                     .unwrap();

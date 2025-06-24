@@ -1,5 +1,6 @@
 use std::{cmp::Ordering, sync::Arc};
 
+use ledgerstore::{ItemRefCache, PropertyCache};
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -68,7 +69,7 @@ impl DynCard {
                 for instance in provider
                     .providers
                     .cards
-                    .get_ref_cache(*id, RefType::Instance)
+                    .get_ref_cache(ItemRefCache::new(RefType::Instance, *id))
                 {
                     output.push(MaybeCard::Id(instance));
                 }
@@ -78,7 +79,7 @@ impl DynCard {
             DynCard::CardType(ty) => provider
                 .providers
                 .cards
-                .get_prop_cache(CardProperty::CardType, ty.to_string())
+                .get_prop_cache(PropertyCache::new(CardProperty::CardType, ty.to_string()))
                 .into_iter()
                 .map(|id| MaybeCard::Id(id))
                 .collect(),

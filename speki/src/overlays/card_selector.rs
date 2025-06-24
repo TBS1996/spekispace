@@ -5,6 +5,7 @@ use std::{
 };
 
 use dioxus::prelude::*;
+use ledgerstore::PropertyCache;
 use speki_core::{
     card::{bigrams, normalize_string, CardId},
     cardfilter::CardFilter,
@@ -161,10 +162,10 @@ impl CardSelector {
                             .card_provider
                             .providers
                             .cards
-                            .get_prop_cache(
+                            .get_prop_cache(PropertyCache::new(
                                 CardProperty::Bigram,
                                 format!("{}{}", bigram[0], bigram[1]),
-                            );
+                            ));
 
                         for id in indices {
                             if cards.contains_key(&id) {

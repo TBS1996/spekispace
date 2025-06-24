@@ -6,7 +6,7 @@ use std::{
 
 use dioxus::prelude::*;
 use either::Either;
-use ledgerstore::TheLedgerEvent;
+use ledgerstore::{ItemRefCache, TheLedgerEvent};
 use speki_core::{
     audio::AudioId,
     card::{AttributeId, Attrv2, BackSide, CardId, TextData},
@@ -432,7 +432,7 @@ impl CardViewer {
                 // all cards that are an attribute card based on a given instance.
                 // wait, isnt this all we need? damn..
                 let attr_cards_based_on_instance: BTreeSet<Arc<Card>> = card_ledger
-                    .get_ref_cache(curr_card.id(), RefType::AttrClass)
+                    .get_ref_cache(ItemRefCache::new(RefType::AttrClass, curr_card.id()))
                     .into_iter()
                     .map(|id| provider.load(id).unwrap())
                     .collect();

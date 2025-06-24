@@ -23,13 +23,33 @@ pub struct PropertyCache<T: LedgerItem> {
     pub value: String,
 }
 
+impl<T: LedgerItem> PropertyCache<T> {
+    pub fn new(property: T::PropertyType, value: String) -> Self {
+        Self { property, value }
+    }
+}
+
 #[derive(Debug, Clone, Hash, Eq, PartialEq, Ord, PartialOrd)]
 pub struct ItemRefCache<T: LedgerItem> {
     pub reftype: T::RefType,
     pub id: T::Key,
 }
 
+impl<T: LedgerItem> ItemRefCache<T> {
+    pub fn new(reftype: T::RefType, id: T::Key) -> Self {
+        Self { reftype, id }
+    }
+}
+
 pub type CacheKey<T> = Either<PropertyCache<T>, ItemRefCache<T>>;
+
+pub enum CacheGetter<T: LedgerItem> {
+    Property(PropertyCache<T>),
+    ItemRef {
+        itemref: ItemRefCache<T>,
+        recursive: bool,
+    },
+}
 
 use crate::block_chain::BlockChain;
 
@@ -808,8 +828,8 @@ impl<T: LedgerItem> Ledger<T> {
         Self::item_keys_from_dir(path)
     }
 
-    pub fn get_prop_cache(&self, property: T::PropertyType, value: String) -> HashSet<T::Key> {
-        let key = CacheKey::Left(PropertyCache { property, value });
+    pub fn get_prop_cache(&self, key: PropertyCache<T>) -> HashSet<T::Key> {
+        let key = CacheKey::Left(key);
         self.get_cache(key)
     }
 
@@ -857,11 +877,8 @@ impl<T: LedgerItem> Ledger<T> {
         p
     }
 
-    pub fn get_ref_cache(&self, key: T::Key, ty: T::RefType) -> HashSet<T::Key> {
-        let key = CacheKey::Right(ItemRefCache {
-            reftype: ty,
-            id: key,
-        });
+    pub fn get_ref_cache(&self, key: ItemRefCache<T>) -> HashSet<T::Key> {
+        let key = CacheKey::Right(key);
         self.get_cache(key)
     }
 
@@ -948,7 +965,7 @@ impl<T: LedgerItem> Ledger<T> {
     }
 
     fn remove_dependent(&self, key: T::Key, ty: T::RefType, dependent: T::Key) {
-        let mut dependents = self.get_ref_cache(key, ty.clone());
+        let mut dependents = self.get_ref_cache(ItemRefCache::new(ty.clone(), key));
         dependents.remove(&dependent);
         let path = self.dependents_dir(key).join(ty.to_string());
         Self::keys_to_file(&path, dependents);
