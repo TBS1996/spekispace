@@ -91,13 +91,13 @@ impl DynCard {
 
             DynCard::RecDependents(id) => {
                 dbg!("rec dependents");
-                let ids = match provider.load(*id) {
+                let ids = match dbg!(provider.load(*id)) {
                     Some(x) => x.recursive_dependents(),
                     None => return vec![],
                 };
+
                 let mut out = vec![];
 
-                dbg!(ids.len());
                 for (idx, id) in ids.into_iter().enumerate() {
                     if idx % 50 == 0 {
                         dbg!(idx);

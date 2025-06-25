@@ -833,23 +833,6 @@ impl<T: LedgerItem> Ledger<T> {
         self.get_cache(key)
     }
 
-    fn item_keys_from_file(path: &Path) -> HashSet<T::Key> {
-        if !path.is_file() {
-            return Default::default();
-        }
-
-        let mut out: HashSet<T::Key> = Default::default();
-        for line in fs::read_to_string(path).unwrap().lines() {
-            let key: T::Key = match line.parse() {
-                Ok(key) => key,
-                Err(_) => panic!(),
-            };
-
-            out.insert(key);
-        }
-        out
-    }
-
     fn collect_item_keys_in_dir(dir: &Path) -> HashSet<T::Key> {
         let mut out: HashSet<T::Key> = Default::default();
 
@@ -859,7 +842,18 @@ impl<T: LedgerItem> Ledger<T> {
 
         for entry in fs::read_dir(dir).unwrap() {
             let entry = entry.unwrap().path();
-            out.extend(Self::item_keys_from_file(&entry));
+            for entry in fs::read_dir(&entry).unwrap() {
+                let entry = entry.unwrap().path();
+                let key: T::Key = match entry.file_name().unwrap().to_str().unwrap().parse() {
+                    Ok(k) => k,
+                    Err(_) => {
+                        dbg!(entry);
+                        dbg!(&dir);
+                        panic!();
+                    }
+                };
+                out.insert(key);
+            }
         }
 
         out
