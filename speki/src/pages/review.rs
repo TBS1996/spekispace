@@ -101,6 +101,17 @@ fn RenderInput(
     let ledger = APP.read().inner().provider.sets.clone();
 
     let leaf = match input {
+        InputEditor::Card(card) => {
+            let name = APP
+                .read()
+                .inner()
+                .card_provider
+                .load(card)
+                .unwrap()
+                .name()
+                .to_string();
+            Some(name)
+        }
         InputEditor::Leaf(card) => {
             let provider = APP.read().inner().card_provider.clone();
             Some(card.display(provider))
@@ -115,6 +126,10 @@ fn RenderInput(
         class: "{class}",
 
         match input {
+            InputEditor::Card(_) => {
+                rsx!{
+                    p { "{leaf}" }}
+            },
             InputEditor::Leaf(_) => {
                 rsx!{
                     p { "{leaf}" }}
@@ -171,8 +186,7 @@ pub fn RenderExpr(
             let f: Arc<Box<dyn Fn() -> Option<OverlayEnum>>> = {
                 let f = move || {
                     let f = move |card: CardId| {
-                        let leaf = DynCard::Card(card);
-                        let input = InputEditor::Leaf(leaf);
+                        let input = InputEditor::Card(card);
                         inputs.clone().write().push(input);
                     };
                     let overlay =
@@ -554,6 +568,7 @@ struct SetEditor {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum InputEditor {
     Leaf(DynCard),
+    Card(CardId),
     Reference(SetId),
     Expr(ExprEditor),
 }
@@ -562,12 +577,15 @@ impl Ord for InputEditor {
     fn cmp(&self, other: &Self) -> Ordering {
         use InputEditor::*;
         match (self, other) {
+            (Card(a), Card(b)) => a.cmp(b),
             (Leaf(a), Leaf(b)) => a.cmp(b),
             (Reference(a), Reference(b)) => a.cmp(b),
             (Expr(a), Expr(b)) => a.cmp(&b),
             (Leaf(_), _) => Ordering::Less,
-            (Reference(_), Leaf(_)) => Ordering::Greater,
+            (Card(_), Leaf(_)) => Ordering::Greater,
+            (Card(_), _) => Ordering::Less,
             (Reference(_), Expr(_)) => Ordering::Less,
+            (Reference(_), _) => Ordering::Greater,
             (Expr(_), _) => Ordering::Greater,
         }
     }
@@ -721,6 +739,7 @@ impl TryFrom<InputEditor> for Input {
             InputEditor::Leaf(dyn_card) => Input::Leaf(dyn_card),
             InputEditor::Reference(uuid) => Input::Reference(uuid),
             InputEditor::Expr(set_expr) => Input::Expr(Box::new(SetExpr::try_from(set_expr)?)),
+            InputEditor::Card(id) => Input::Card(id),
         })
     }
 }
@@ -731,6 +750,7 @@ impl From<Input> for InputEditor {
             Input::Leaf(dyn_card) => InputEditor::Leaf(dyn_card),
             Input::Reference(uuid) => InputEditor::Reference(uuid),
             Input::Expr(set_expr) => InputEditor::Expr((*set_expr).into()),
+            Input::Card(id) => InputEditor::Card(id),
         }
     }
 }

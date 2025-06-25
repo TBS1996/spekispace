@@ -9,7 +9,7 @@ pub use cardref::CardRef;
 pub use dropdown::DropDownMenu;
 pub use filtereditor::*;
 pub use frontside::{CardTy, FrontPut};
-use speki_core::{card::CardId, collection::DynCard};
+use speki_core::{card::CardId, collection::DynCard, set::SetExpr};
 
 use dioxus::prelude::*;
 
@@ -82,7 +82,8 @@ pub fn RenderDependents(card_id: CardId, hidden: bool) -> Element {
                 button {
                     class: "mb-1 p-1 bg-gray-100 rounded-md text-left",
                     onclick: move|_|{
-                        let props = CardSelector::new(false, Default::default()).with_dyncards(vec![DynCard::Dependents(card_id)]);
+                        let set = SetExpr::union_with(vec![DynCard::Dependents(card_id)]);
+                        let props = CardSelector::new(false, Default::default()).with_set(set);
                         append_overlay(OverlayEnum::CardSelector(props));
                     },
                     "view {qty} dependents"

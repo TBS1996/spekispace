@@ -38,7 +38,6 @@ impl PartialOrd for MaybeCard {
 
 #[derive(Serialize, Deserialize, Debug, Clone, Eq, PartialEq, Copy, Hash, PartialOrd, Ord)]
 pub enum DynCard {
-    Card(CardId),
     Instances(CardId),
     Dependents(CardId),
     RecDependents(CardId),
@@ -50,7 +49,6 @@ impl DynCard {
         let name = |id: &CardId| provider.load(*id).unwrap().name().to_string();
 
         match self {
-            DynCard::Card(id) => name(id),
             DynCard::Instances(id) => format!("instances: {}", name(id)),
             DynCard::Dependents(id) => format!("dependents: {}", name(id)),
             DynCard::RecDependents(id) => format!("dependents: {}", name(id)),
@@ -62,7 +60,6 @@ impl DynCard {
 
     pub fn evaluate(&self, provider: CardProvider) -> Vec<MaybeCard> {
         match self {
-            DynCard::Card(id) => vec![MaybeCard::Id(*id)],
             DynCard::Instances(id) => {
                 let mut output = vec![];
 

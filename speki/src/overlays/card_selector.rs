@@ -9,8 +9,7 @@ use ledgerstore::PropertyCache;
 use speki_core::{
     card::{bigrams, normalize_string, CardId},
     cardfilter::CardFilter,
-    collection::DynCard,
-    set::{SetExpr, SetExprDiscriminants},
+    set::SetExpr,
     Card, CardProperty,
 };
 use tracing::info;
@@ -18,7 +17,7 @@ use uuid::Uuid;
 
 use crate::{
     append_overlay,
-    pages::{ExprEditor, InputEditor, RenderExpr},
+    pages::{ExprEditor, RenderExpr},
     set_overlay,
 };
 
@@ -256,13 +255,6 @@ impl CardSelector {
             collection: ExprEditor::from(set),
             ..self
         }
-    }
-
-    pub fn with_dyncards(mut self, dyns: Vec<DynCard>) -> Self {
-        let leafs: Vec<InputEditor> = dyns.into_iter().map(|x| InputEditor::Leaf(x)).collect();
-        self.collection.inputs.write().extend(leafs);
-        self.collection.ty.set(SetExprDiscriminants::Union);
-        self
     }
 
     pub fn with_edit_collection(self, edit_collection: bool) -> Self {

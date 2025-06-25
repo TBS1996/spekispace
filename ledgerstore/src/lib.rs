@@ -1051,69 +1051,22 @@ impl<T: LedgerItem> Ledger<T> {
         Self::collect_item_keys_in_dir(&self.dependents_dir(key))
     }
 
-    pub fn recursive_dependencies(&self, key: T::Key) -> HashSet<T::Key>
-    where
-        Self: Sized,
-    {
-        let mut out: HashSet<T::Key> = HashSet::new();
-        let mut visited: HashSet<T::Key> = HashSet::new();
-
-        fn visit<T: LedgerItem>(
-            key: T::Key,
-            ledger: &Ledger<T>,
-            out: &mut HashSet<T::Key>,
-            visited: &mut HashSet<T::Key>,
-        ) where
-            T: Sized,
-        {
-            if !visited.insert(key) {
-                return;
-            }
-
-            out.insert(key);
-
-            for dep_key in ledger.dependencies(key) {
-                visit(dep_key, ledger, out, visited);
-            }
-        }
-
-        for dep_key in self.dependencies(key) {
-            visit(dep_key, self, &mut out, &mut visited);
-        }
-
-        out
+    pub fn recursive_dependencies(&self, key: T::Key) -> HashSet<T::Key> {
+        self.load_getter(TheCacheGetter::ItemRef {
+            reversed: false,
+            key,
+            ty: None,
+            recursive: true,
+        })
     }
-    pub fn recursive_dependents(&self, key: T::Key) -> HashSet<T::Key>
-    where
-        Self: Sized,
-    {
-        let mut out: HashSet<T::Key> = HashSet::new();
-        let mut visited: HashSet<T::Key> = HashSet::new();
 
-        fn visit<T: LedgerItem>(
-            key: T::Key,
-            ledger: &Ledger<T>,
-            out: &mut HashSet<T::Key>,
-            visited: &mut HashSet<T::Key>,
-        ) where
-            T: Sized,
-        {
-            if !visited.insert(key) {
-                return;
-            }
-
-            out.insert(key);
-
-            for dep_key in ledger.dependents(key) {
-                visit(dep_key, ledger, out, visited);
-            }
-        }
-
-        for dep_key in self.dependents(key) {
-            visit(dep_key, self, &mut out, &mut visited);
-        }
-
-        out
+    pub fn recursive_dependents(&self, key: T::Key) -> HashSet<T::Key> {
+        self.load_getter(TheCacheGetter::ItemRef {
+            reversed: true,
+            key,
+            ty: None,
+            recursive: true,
+        })
     }
 
     fn set_ledger_hash(&self, hash: LedgerHash) {

@@ -9,6 +9,7 @@ use speki_core::{
     collection::DynCard,
     ledger::CardAction,
     recall_rate::Recall,
+    set::{Input, SetExpr},
     Card,
 };
 use tracing::info;
@@ -290,11 +291,12 @@ fn Infobar(
             button {
                 class: "text-2xl text-gray-700",
                 onclick: move |_| {
-                    let passed: Vec<DynCard> = queue.read().passed.clone()
+                    let passed: BTreeSet<Input> = queue.read().passed.clone()
                         .into_iter()
-                        .map(DynCard::Card)
+                        .map(Input::Card)
                         .collect();
-                    let props = CardSelector::new(false, Default::default()).with_dyncards(passed).with_edit_collection(false);
+                    let set = SetExpr::Union(passed);
+                    let props = CardSelector::new(false, Default::default()).with_set(set).with_edit_collection(false);
                     append_overlay(OverlayEnum::CardSelector(props));
                 },
                 "{pos}"
@@ -306,18 +308,19 @@ fn Infobar(
                 class: "text-2xl text-gray-700",
                 onclick: move |_| {
                     let total = {
-                        let mut passed: Vec<DynCard> = queue.read().passed.clone()
+                        let mut passed: BTreeSet<Input> = queue.read().passed.clone()
                             .into_iter()
-                            .map(DynCard::Card)
+                            .map(Input::Card)
                             .collect();
-                        let upcoming: Vec<DynCard> = queue.read().upcoming.clone()
+                        let upcoming: BTreeSet<Input> = queue.read().upcoming.clone()
                             .into_iter()
-                            .map(DynCard::Card)
+                            .map(Input::Card)
                             .collect();
                         passed.extend(upcoming);
                         passed
                     };
-                    let props = CardSelector::new(false, Default::default()).with_dyncards(total).with_edit_collection(false);
+                    let set = SetExpr::Union(total);
+                    let props = CardSelector::new(false, Default::default()).with_set(set).with_edit_collection(false);
                     append_overlay(OverlayEnum::CardSelector(props));
                 },
                 "{tot}"

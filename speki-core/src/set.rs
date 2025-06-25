@@ -6,6 +6,7 @@ use strum::{Display, EnumDiscriminants, EnumIter, EnumString};
 use uuid::Uuid;
 
 use crate::{
+    card::CardId,
     card_provider::CardProvider,
     collection::{DynCard, MaybeCard},
 };
@@ -66,6 +67,7 @@ pub struct Set {
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Hash, Ord, PartialOrd, Eq)]
 pub enum Input {
+    Card(CardId),
     Leaf(DynCard),
     Reference(SetId),
     Expr(Box<SetExpr>),
@@ -103,6 +105,11 @@ impl Input {
             Input::Leaf(dc) => dc.evaluate(provider.clone()).into_iter().collect(),
             Input::Reference(id) => provider.providers.sets.load(*id).expr.eval(provider),
             Input::Expr(expr) => expr.eval(provider),
+            Input::Card(id) => {
+                let mut set = BTreeSet::default();
+                set.insert(MaybeCard::Id(*id));
+                set
+            }
         };
         dbg!("evaluated: {:?}", self);
         res
