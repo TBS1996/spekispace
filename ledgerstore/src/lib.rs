@@ -14,6 +14,7 @@ use std::{
 };
 use tracing::{info, trace};
 use uuid::Uuid;
+use walkdir::WalkDir;
 
 pub mod ledger_cache;
 
@@ -27,6 +28,40 @@ impl<T: LedgerItem> PropertyCache<T> {
     pub fn new(property: T::PropertyType, value: String) -> Self {
         Self { property, value }
     }
+}
+
+pub enum CardRelation<T: LedgerItem> {
+    Reference(ItemReference<T>),
+    Property {
+        ty: T::PropertyType,
+        value: String,
+        key: T::Key,
+    },
+}
+
+/// The way one item references another item
+#[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
+pub struct ItemReference<T: LedgerItem> {
+    pub from: T::Key,
+    pub to: T::Key,
+    pub ty: T::RefType,
+}
+
+impl<T: LedgerItem> ItemReference<T> {
+    pub fn new(from: T::Key, to: T::Key, ty: T::RefType) -> Self {
+        Self { from, to, ty }
+    }
+}
+
+/// Represents a way to fetch an item based on either its properites
+pub enum TheCacheGetter<T: LedgerItem> {
+    ItemRef {
+        reversed: bool, // whether it fetches links from the item to other items or the way this item being referenced
+        key: T::Key,    // item in question
+        ty: Option<T::RefType>, // the way of linking. None means all.
+        recursive: bool, // recursively get all cards that link
+    },
+    Property(PropertyCache<T>),
 }
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, Ord, PartialOrd)]
@@ -202,12 +237,15 @@ pub trait LedgerItem:
     ///
     /// Used to create a index, like if item A references item B, we cache that item B is referenced by item A,
     /// so that we don't need to search through all the items to find out or store it double in the item itself.
-    fn ref_cache(&self) -> HashMap<Self::RefType, HashSet<Self::Key>> {
+    fn ref_cache(&self) -> HashSet<ItemReference<Self>> {
         Default::default()
     }
 
     fn dependencies(&self) -> HashSet<Self::Key> {
-        self.ref_cache().into_values().flatten().collect()
+        self.ref_cache()
+            .into_iter()
+            .map(|itemref| itemref.to)
+            .collect()
     }
 
     fn recursive_dependent_ids(&self, ledger: &LedgerType<Self>) -> HashSet<Self::Key>
@@ -320,16 +358,14 @@ pub trait LedgerItem:
             out.insert((CacheKey::Left(property_cache), id.clone()));
         }
 
-        for (reftype, ids) in self.ref_cache() {
-            for ref_id in ids {
-                out.insert((
-                    CacheKey::Right(ItemRefCache {
-                        reftype: reftype.clone(),
-                        id: ref_id,
-                    }),
-                    id,
-                ));
-            }
+        for ItemReference { from, to, ty } in self.ref_cache() {
+            out.insert((
+                CacheKey::Right(ItemRefCache {
+                    reftype: ty.clone(),
+                    id: to,
+                }),
+                from,
+            ));
         }
 
         out
@@ -653,6 +689,95 @@ impl<T: LedgerItem> Ledger<T> {
         selv
     }
 
+    fn collect_all_dependents_recursive(
+        &self,
+        key: T::Key,
+        ty: Option<T::RefType>,
+        out: &mut HashSet<T::Key>,
+        reversed: bool,
+    ) {
+        let dep_dir = match reversed {
+            true => self.dependents_dir(key),
+            false => self.dependencies_dir(key),
+        };
+
+        let dirs = match ty.clone() {
+            Some(ty) => vec![dep_dir.join(ty.to_string())],
+            None => fs::read_dir(&dep_dir)
+                .unwrap()
+                .filter_map(|entry| {
+                    let path = entry.unwrap().path();
+                    if path.is_dir() {
+                        Some(path)
+                    } else {
+                        None
+                    }
+                })
+                .collect(),
+        };
+
+        for dir in dirs {
+            for dep_key in Self::item_keys_from_dir(dir) {
+                if out.insert(dep_key.clone()) {
+                    self.collect_all_dependents_recursive(dep_key, ty.clone(), out, reversed);
+                }
+            }
+        }
+    }
+
+    fn load_getter(&self, getter: TheCacheGetter<T>) -> HashSet<T::Key> {
+        match getter {
+            TheCacheGetter::ItemRef {
+                recursive: true,
+                reversed,
+                key,
+                ty,
+            } => {
+                let mut out = HashSet::new();
+                self.collect_all_dependents_recursive(key, ty, &mut out, reversed);
+                out
+            }
+            TheCacheGetter::ItemRef {
+                recursive: false,
+                reversed: true,
+                key,
+                ty: Some(ty),
+            } => {
+                let dep_dir = self.dependents_dir(key);
+                let dir = dep_dir.join(ty.to_string());
+                Self::item_keys_from_dir(dir)
+            }
+            TheCacheGetter::ItemRef {
+                recursive: false,
+                reversed: true,
+                key,
+                ty: None,
+            } => {
+                let dep_dir = self.dependents_dir(key);
+                Self::item_keys_from_dir_recursive(dep_dir)
+            }
+            TheCacheGetter::ItemRef {
+                recursive: false,
+                reversed: false,
+                key,
+                ty: Some(ty),
+            } => {
+                let dir = self.dependencies_dir(key).join(ty.to_string());
+                Self::item_keys_from_dir(dir)
+            }
+            TheCacheGetter::ItemRef {
+                recursive: false,
+                reversed: false,
+                key,
+                ty: None,
+            } => {
+                let dir = self.dependencies_dir(key);
+                Self::item_keys_from_dir_recursive(dir)
+            }
+            TheCacheGetter::Property(prop) => self.get_prop_cache(prop),
+        }
+    }
+
     fn item_name() -> &'static str {
         use std::any;
         use std::sync::OnceLock;
@@ -738,6 +863,21 @@ impl<T: LedgerItem> Ledger<T> {
         }
     }
 
+    fn set_dependencies(&self, item: &T) {
+        let id = item.item_id();
+        let depencies_dir = self.dependencies_dir(id);
+        fs::remove_dir_all(&depencies_dir).unwrap();
+        let depencies_dir = self.dependencies_dir(id); //recreate it
+
+        for ItemReference { from: _, to, ty } in item.ref_cache() {
+            let dir = depencies_dir.join(ty.to_string());
+            fs::create_dir_all(&dir).unwrap();
+            let original = self.item_file(to);
+            let link = dir.join(to.to_string());
+            hard_link(original, link).unwrap();
+        }
+    }
+
     fn apply_caches(&self, items: HashMap<T::Key, T>) {
         info!("applying caches");
         let mut the_caches: HashMap<CacheKey<T>, HashSet<T::Key>> = Default::default();
@@ -797,6 +937,33 @@ impl<T: LedgerItem> Ledger<T> {
         }
 
         keys
+    }
+
+    pub fn item_keys_from_dir_recursive(path: PathBuf) -> HashSet<T::Key> {
+        if !path.exists() {
+            return Default::default();
+        }
+
+        let mut out = HashSet::new();
+
+        for entry in WalkDir::new(&path)
+            .follow_links(false)
+            .into_iter()
+            .filter_map(Result::ok)
+            .filter(|e| e.file_type().is_file())
+        {
+            match entry.file_name().to_str().unwrap().parse::<T::Key>() {
+                Ok(key) => {
+                    out.insert(key);
+                }
+                Err(_) => {
+                    dbg!(entry.path());
+                    panic!("Failed to parse key from file name");
+                }
+            }
+        }
+
+        out
     }
 
     pub fn item_keys_from_dir(path: PathBuf) -> HashSet<T::Key> {
@@ -1118,6 +1285,7 @@ impl<T: LedgerItem> Ledger<T> {
         use std::io::Write;
 
         f.write_all(serialized.as_bytes()).unwrap();
+        self.set_dependencies(&item);
     }
 
     fn item_dir_from_key(&self, key: T::Key) -> PathBuf {
