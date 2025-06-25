@@ -66,7 +66,7 @@ impl DynCard {
                 for instance in provider
                     .providers
                     .cards
-                    .get_ref_cache(ItemRefCache::new(RefType::Instance, *id))
+                    .get_ref_cache(ItemRefCache::new(RefType::ClassOfInstance, *id))
                 {
                     output.push(MaybeCard::Id(instance));
                 }

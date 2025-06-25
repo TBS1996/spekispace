@@ -28,12 +28,13 @@ pub use common::current_time;
 pub use omtrent::TimeStamp;
 pub use recall_rate::SimpleRecall;
 
+/// {from} is a(n) {ty} of {to}
 #[derive(Clone, PartialEq, PartialOrd, Hash, Eq, Debug)]
 pub enum RefType {
-    ExplicitDependent,
-    Instance,
+    ExplicitDependency,
+    ClassOfInstance,
     LinkRef,
-    SubClass,
+    ParentClass,
     AttrClass,
 }
 
@@ -46,11 +47,11 @@ impl Display for RefType {
 impl AsRef<str> for RefType {
     fn as_ref(&self) -> &str {
         match self {
-            Self::ExplicitDependent => "explicit_dependent",
-            Self::Instance => "instances",
+            Self::ExplicitDependency => "explicit_dependency",
+            Self::ClassOfInstance => "class_of_instance",
             Self::LinkRef => "linkref",
-            Self::SubClass => "subclasses",
-            Self::AttrClass => "attrclass",
+            Self::ParentClass => "parent_class",
+            Self::AttrClass => "attr_class",
         }
     }
 }

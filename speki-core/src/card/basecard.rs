@@ -865,7 +865,7 @@ impl LedgerItem for RawCard {
         }
 
         for dep in &self.explicit_dependencies {
-            out.insert(ItemReference::new(from, *dep, RefType::ExplicitDependent));
+            out.insert(ItemReference::new(from, *dep, RefType::ExplicitDependency));
         }
 
         match &self.data {
@@ -884,7 +884,7 @@ impl LedgerItem for RawCard {
                     out.insert(ItemReference::new(from, id, RefType::LinkRef));
                 }
 
-                out.insert(ItemReference::new(from, *class, RefType::Instance));
+                out.insert(ItemReference::new(from, *class, RefType::ClassOfInstance));
             }
             CardType::Attribute { instance, .. } => {
                 out.insert(ItemReference::new(from, *instance, RefType::AttrClass));
@@ -906,7 +906,7 @@ impl LedgerItem for RawCard {
                 }
 
                 if let Some(class) = parent_class {
-                    out.insert(ItemReference::new(from, *class, RefType::SubClass));
+                    out.insert(ItemReference::new(from, *class, RefType::ParentClass));
                 }
             }
             CardType::Statement { front, .. } => {
@@ -1063,7 +1063,7 @@ impl LedgerItem for RawCard {
         let implicit_deps: BTreeSet<Uuid> = {
             let mut all = self.ref_cache();
             all.retain(|ItemReference { ty, .. }| match ty {
-                RefType::ExplicitDependent => false,
+                RefType::ExplicitDependency => false,
                 _ => true,
             });
 

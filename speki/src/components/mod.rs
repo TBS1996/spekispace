@@ -57,7 +57,6 @@ pub fn RenderDependents(card_id: CardId, hidden: bool) -> Element {
         div {
             class: "flex flex-col {show_graph} w-full h-auto bg-white p-2 shadow-md rounded-md overflow-y-auto",
 
-
             div {
                 class: "flex items-center justify-between mb-2",
 
