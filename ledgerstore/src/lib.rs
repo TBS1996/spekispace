@@ -1,10 +1,8 @@
 use either::Either;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
-use std::fmt::Display;
 use std::fs::{self, hard_link};
 use std::io::Write;
 use std::path::{Path, PathBuf};
-use std::str::FromStr;
 use std::vec::Vec;
 use std::{
     collections::{HashMap, HashSet},
@@ -12,11 +10,17 @@ use std::{
     hash::{DefaultHasher, Hash, Hasher},
     sync::{Arc, RwLock},
 };
-use tracing::{info, trace};
+use tracing::info;
 use uuid::Uuid;
 use walkdir::WalkDir;
 
+mod blockchain;
 pub mod ledger_cache;
+mod ledger_item;
+pub type CacheKey<T> = Either<PropertyCache<T>, ItemRefCache<T>>;
+use blockchain::BlockChain;
+
+pub use ledger_item::LedgerItem;
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, Ord, PartialOrd)]
 pub struct PropertyCache<T: LedgerItem> {
@@ -67,292 +71,12 @@ impl<T: LedgerItem> ItemRefCache<T> {
     }
 }
 
-pub type CacheKey<T> = Either<PropertyCache<T>, ItemRefCache<T>>;
-
-use crate::block_chain::BlockChain;
-
 #[derive(Debug, Clone)]
 pub enum EventError<T: LedgerItem> {
     Cycle(Vec<T::Key>),
     Invariant(T::Error),
     ItemNotFound,
     DeletingWithDependencies,
-}
-
-/// Represents how a ledger mutates or creates an item.
-pub trait LedgerItem:
-    Serialize + DeserializeOwned + Hash + Clone + Debug + Send + Sync + Eq + PartialEq + 'static
-{
-    type Key: Copy
-        + Eq
-        + Hash
-        + ToString
-        + Debug
-        + Serialize
-        + DeserializeOwned
-        + FromStr
-        + Send
-        + Sync;
-    type Error: Debug;
-
-    /// The different ways an item can reference another item
-    type RefType: AsRef<str> + Display + Clone + Hash + PartialEq + Eq + Send + Sync;
-
-    /// Cache regarding property of a card so you get like all the cards that have a certain value or whatever
-    type PropertyType: AsRef<str> + Display + Clone + Hash + PartialEq + Eq + Send + Sync;
-
-    /// The type that is responsible for mutating the item and thus create a new genreation
-    type Modifier: Clone + Debug + Hash + Serialize + DeserializeOwned + Send + Sync;
-
-    /// Modifies `Self`.
-    fn inner_run_event(self, event: Self::Modifier) -> Result<Self, Self::Error>;
-
-    fn verify(self, ledger: &Ledger<Self>) -> Result<Self, EventError<Self>> {
-        let ledger = LedgerType::OverRide(OverrideLedger::new(ledger, self.clone()));
-
-        if let Some(cycle) = self.find_cycle(&ledger) {
-            return Err(EventError::Cycle(cycle));
-        }
-
-        if let Err(e) = self.validate(&ledger) {
-            return Err(EventError::Invariant(e));
-        }
-
-        for dep in self.recursive_dependents(&ledger) {
-            if let Err(e) = dep.validate(&ledger) {
-                return Err(EventError::Invariant(e));
-            }
-        }
-
-        Ok(self)
-    }
-
-    /// Modifies `Self` and checks for cycles and invariants.
-    fn run_event(
-        self,
-        event: Self::Modifier,
-        ledger: &Ledger<Self>,
-        verify: bool,
-    ) -> Result<Self, EventError<Self>> {
-        let new = match self.inner_run_event(event) {
-            Ok(item) => item,
-            Err(e) => return Err(EventError::Invariant(e)),
-        };
-
-        if verify {
-            new.verify(ledger)
-        } else {
-            Ok(new)
-        }
-    }
-
-    fn new_default(id: Self::Key) -> Self;
-
-    fn item_id(&self) -> Self::Key;
-
-    fn find_cycle(&self, ledger: &LedgerType<Self>) -> Option<Vec<Self::Key>> {
-        fn dfs<T: LedgerItem>(
-            current: T::Key,
-            ledger: &LedgerType<T>,
-            visiting: &mut HashSet<T::Key>,
-            visited: &mut HashSet<T::Key>,
-            parent: &mut HashMap<T::Key, T::Key>,
-            selv: (T::Key, &T),
-        ) -> Option<Vec<T::Key>> {
-            if !visiting.insert(current.clone()) {
-                // cycle start
-                let mut path = vec![current.clone()];
-                let mut cur = current;
-                while let Some(p) = parent.get(&cur) {
-                    path.push(p.clone());
-                    if *p == current {
-                        break;
-                    }
-                    cur = *p;
-                }
-                path.reverse();
-                return Some(path);
-            }
-
-            let dependencies = if selv.0 == current {
-                selv.1.dependencies()
-            } else {
-                ledger.load(current).dependencies()
-            };
-
-            for dep in dependencies {
-                if visited.contains(&dep) {
-                    continue;
-                }
-                parent.insert(dep.clone(), current.clone());
-                if let Some(cycle) = dfs(dep, ledger, visiting, visited, parent, selv) {
-                    return Some(cycle);
-                }
-            }
-
-            visiting.remove(&current);
-            visited.insert(current.clone());
-            None
-        }
-
-        let mut visited = HashSet::new();
-        let mut visiting = HashSet::new();
-        let mut parent = HashMap::new();
-
-        dfs(
-            self.item_id(),
-            &ledger,
-            &mut visiting,
-            &mut visited,
-            &mut parent,
-            (self.item_id(), self),
-        )
-    }
-
-    /// Assertions that should hold true. Like invariants with other cards that it references.
-    /// called by run_event, if it returns error after an event is run, the event is not applied.
-    fn validate(&self, ledger: &LedgerType<Self>) -> Result<(), Self::Error> {
-        let _ = ledger;
-        Ok(())
-    }
-
-    /// List of references to other items, along with the name of the type of reference.
-    ///
-    /// Used to create a index, like if item A references item B, we cache that item B is referenced by item A,
-    /// so that we don't need to search through all the items to find out or store it double in the item itself.
-    fn ref_cache(&self) -> HashSet<ItemReference<Self>> {
-        Default::default()
-    }
-
-    fn dependencies(&self) -> HashSet<Self::Key> {
-        self.ref_cache()
-            .into_iter()
-            .map(|itemref| itemref.to)
-            .collect()
-    }
-
-    fn recursive_dependent_ids(&self, ledger: &LedgerType<Self>) -> HashSet<Self::Key>
-    where
-        Self: Sized,
-    {
-        let mut out: HashSet<Self::Key> = HashSet::new();
-        let mut visited: HashSet<Self::Key> = HashSet::new();
-
-        fn visit<T: LedgerItem>(
-            key: T::Key,
-            ledger: &LedgerType<T>,
-            out: &mut HashSet<T::Key>,
-            visited: &mut HashSet<T::Key>,
-        ) where
-            T: Sized,
-        {
-            if !visited.insert(key) {
-                return;
-            }
-
-            out.insert(key);
-
-            for dep_key in ledger.dependents(key) {
-                visit(dep_key, ledger, out, visited);
-            }
-        }
-
-        for dep_key in self.dependents(&ledger) {
-            visit(dep_key, &ledger, &mut out, &mut visited);
-        }
-
-        out
-    }
-
-    fn recursive_dependents(&self, ledger: &LedgerType<Self>) -> HashSet<Self>
-    where
-        Self: Sized,
-    {
-        let mut out: HashSet<Self> = HashSet::new();
-        let mut visited: HashSet<Self::Key> = HashSet::new();
-
-        fn visit<T: LedgerItem>(
-            key: T::Key,
-            ledger: &LedgerType<T>,
-            out: &mut HashSet<T>,
-            visited: &mut HashSet<T::Key>,
-        ) where
-            T: Sized,
-        {
-            if !visited.insert(key) {
-                return;
-            }
-            let item = ledger.load(key);
-
-            out.insert(item.clone());
-
-            for dep_key in item.dependents(ledger) {
-                visit(dep_key, ledger, out, visited);
-            }
-        }
-
-        for dep_key in self.dependents(&ledger) {
-            visit(dep_key, &ledger, &mut out, &mut visited);
-        }
-
-        out
-    }
-
-    fn dependents(&self, ledger: &LedgerType<Self>) -> HashSet<Self::Key> {
-        match ledger {
-            LedgerType::OverRide(ledger) => ledger.dependents(self.item_id()),
-            LedgerType::Normal(ledger) => ledger.all_dependents(self.item_id()),
-        }
-    }
-
-    /// List of defined properties that this item has.
-    ///
-    /// The property keys are predefined, hence theyre static str
-    /// the String is the Value which could be anything.
-    /// For example ("suspended", true).
-    fn properties_cache(&self, ledger: &Ledger<Self>) -> HashSet<PropertyCache<Self>>
-    where
-        Self: LedgerItem,
-    {
-        let _ = ledger;
-        Default::default()
-    }
-
-    fn listed_cache(&self, ledger: &Ledger<Self>) -> HashMap<CacheKey<Self>, HashSet<Self::Key>> {
-        let mut out: HashMap<CacheKey<Self>, HashSet<Self::Key>> = HashMap::default();
-
-        for (key, id) in self.caches(ledger) {
-            out.entry(key).or_default().insert(id);
-        }
-
-        out
-    }
-
-    fn caches(&self, ledger: &Ledger<Self>) -> HashSet<(CacheKey<Self>, Self::Key)>
-    where
-        Self: LedgerItem,
-    {
-        trace!("fetching caches for item: {:?}", self.item_id());
-
-        let mut out: HashSet<(CacheKey<Self>, Self::Key)> = Default::default();
-        let id = self.item_id();
-
-        for property_cache in self.properties_cache(ledger) {
-            out.insert((CacheKey::Left(property_cache), id.clone()));
-        }
-
-        for ItemReference { from, to, ty } in self.ref_cache() {
-            out.insert((
-                CacheKey::Right(ItemRefCache {
-                    reftype: ty.clone(),
-                    id: to,
-                }),
-                from,
-            ));
-        }
-
-        out
-    }
 }
 
 pub trait TimeProvider {
@@ -435,120 +159,6 @@ pub enum TheLedgerAction<T: LedgerItem> {
     Create(T),
     Modify(T::Modifier),
     Delete,
-}
-
-mod block_chain {
-    use std::{
-        collections::HashMap,
-        path::{Path, PathBuf},
-        sync::{Arc, RwLock},
-    };
-
-    use crate::{load_file_contents, Hashed, LedgerEntry, LedgerHash, LedgerItem, TheLedgerEvent};
-
-    #[derive(Clone)]
-    pub struct BlockChain<T: LedgerItem> {
-        cached: Arc<RwLock<Vec<LedgerEntry<T>>>>,
-        index_to_hash: Arc<RwLock<HashMap<LedgerHash, usize>>>,
-        entries_path: Arc<PathBuf>,
-    }
-
-    impl<T: LedgerItem> BlockChain<T> {
-        pub fn new(path: PathBuf) -> Self {
-            std::fs::create_dir_all(&path).unwrap();
-            let cached = Self::load_ledger(&path);
-            let mut index_to_hash: HashMap<LedgerHash, usize> = Default::default();
-
-            for entry in &cached {
-                index_to_hash.insert(entry.data_hash(), entry.index);
-            }
-
-            Self {
-                cached: Arc::new(RwLock::new(cached)),
-                index_to_hash: Arc::new(RwLock::new(index_to_hash)),
-                entries_path: Arc::new(path),
-            }
-        }
-
-        pub fn chain(&self) -> Vec<LedgerEntry<T>> {
-            self.cached.read().unwrap().clone()
-        }
-
-        pub fn current_hash(&self) -> Option<Hashed> {
-            self.current_head().map(|entry| entry.data_hash())
-        }
-
-        fn current_index(&self) -> usize {
-            self.cached.read().unwrap().len()
-        }
-
-        fn current_head(&self) -> Option<LedgerEntry<T>> {
-            self.cached.read().unwrap().last().cloned()
-        }
-
-        pub fn save(&self, event: TheLedgerEvent<T>) -> Hashed {
-            use std::io::Write;
-
-            let previous = self.current_head();
-            let entry = LedgerEntry::new(previous.as_ref(), event);
-            let index = self.current_index();
-            let ledger_hash = entry.data_hash();
-
-            let name = format!("{:06}", self.current_index());
-            let path = &self.entries_path.join(name);
-            assert!(!path.exists());
-            let mut file = std::fs::File::create_new(path).unwrap();
-
-            let serialized = serde_json::to_string_pretty(&entry).unwrap();
-            file.write_all(serialized.as_bytes()).unwrap();
-            self.cached.write().unwrap().push(entry);
-            self.index_to_hash
-                .write()
-                .unwrap()
-                .insert(ledger_hash.clone(), index);
-
-            self.current_hash().unwrap()
-        }
-
-        fn load_ledger(space: &Path) -> Vec<LedgerEntry<T>> {
-            dbg!(space);
-            let mut foo: Vec<(usize, LedgerEntry<T>)> = {
-                let map: HashMap<String, Vec<u8>> = load_file_contents(space);
-                let mut foo: Vec<(usize, LedgerEntry<T>)> = Default::default();
-
-                if map.is_empty() {
-                    return vec![];
-                }
-
-                for (_hash, value) in map.into_iter() {
-                    let action: LedgerEntry<T> = serde_json::from_slice(&value).unwrap();
-                    let idx = action.index;
-                    foo.push((idx, action));
-                }
-
-                foo
-            };
-
-            foo.sort_by_key(|k| k.0);
-
-            let mut output: Vec<LedgerEntry<T>> = vec![];
-            let mut _prev_hash: Option<String> = None;
-
-            for (_, entry) in foo {
-                //assert_eq!(entry.previous.clone(), prev_hash);
-                //_prev_hash = Some(entry.data_hash());
-                output.push(entry);
-            }
-
-            output
-        }
-    }
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-struct TheStateHash {
-    ledger_hash: Hashed,
-    state_hash: Hashed,
 }
 
 pub enum LedgerType<T: LedgerItem> {
