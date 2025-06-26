@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use crate::{
     card::{CType, CardId},
     card_provider::CardProvider,
-    Card, CardProperty, RefType,
+    Card, CardProperty, CardRefType,
 };
 
 #[derive(Debug, Clone, Eq, PartialEq)]
@@ -65,7 +65,7 @@ impl DynCard {
                 let getter = ledgerstore::TheCacheGetter::ItemRef {
                     reversed: false,
                     key: *id,
-                    ty: Some(RefType::ParentClass),
+                    ty: Some(CardRefType::ParentClass),
                     recursive: true,
                 };
                 let mut all_classes = dbg!(provider.providers.cards.load_getter(getter));
@@ -75,7 +75,7 @@ impl DynCard {
                     let getter = TheCacheGetter::ItemRef {
                         reversed: true,
                         key: class,
-                        ty: Some(RefType::ClassOfInstance),
+                        ty: Some(CardRefType::ClassOfInstance),
                         recursive: false,
                     };
                     for instance in provider.providers.cards.load_getter(getter) {

@@ -9,6 +9,7 @@ use metadata::Metadata;
 use recall_rate::History;
 use set::Set;
 use std::fmt::Display;
+use std::path::PathBuf;
 use std::{fmt::Debug, sync::Arc, time::Duration};
 use tracing::trace;
 
@@ -30,7 +31,7 @@ pub use recall_rate::SimpleRecall;
 
 /// {from} is a(n) {ty} of {to}
 #[derive(Clone, PartialEq, PartialOrd, Hash, Eq, Debug)]
-pub enum RefType {
+pub enum CardRefType {
     ExplicitDependency,
     ClassOfInstance,
     LinkRef,
@@ -38,25 +39,25 @@ pub enum RefType {
     InstanceOfAttribute,
 }
 
-impl Display for RefType {
+impl Display for CardRefType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.as_ref())
     }
 }
 
-impl AsRef<str> for RefType {
+impl AsRef<str> for CardRefType {
     fn as_ref(&self) -> &str {
         match self {
             Self::ExplicitDependency => "explicit_dependency",
             Self::ClassOfInstance => "class_of_instance",
             Self::LinkRef => "linkref",
             Self::ParentClass => "parent_class",
-            Self::InstanceOfAttribute => "attr_class",
+            Self::InstanceOfAttribute => "instance_of_attribute",
         }
     }
 }
 
-impl RefType {
+impl CardRefType {
     pub fn to_str(&self) -> &str {
         self.as_ref()
     }
@@ -127,20 +128,15 @@ impl Debug for App {
 }
 
 impl App {
-    pub fn new(
-        card_provider: Ledger<RawCard>,
-        history_provider: Ledger<History>,
-        meta_provider: Ledger<Metadata>,
-        set_provider: Ledger<Set>,
-    ) -> Self {
+    pub fn new(root: PathBuf) -> Self {
         info!("initialtize app");
 
         let provider = Provider {
-            cards: card_provider,
-            reviews: history_provider,
-            metadata: meta_provider,
+            cards: Ledger::new(root.clone()),
+            reviews: Ledger::new(root.clone()),
+            metadata: Ledger::new(root.clone()),
             time: FsTime,
-            sets: set_provider,
+            sets: Ledger::new(root),
         };
 
         let card_provider = CardProvider::new(provider.clone(), FsTime, SimpleRecall);

@@ -1,7 +1,6 @@
 use std::{fmt::Debug, sync::Arc};
 
 use dioxus::prelude::*;
-use ledgerstore::Ledger;
 use speki_core::{card::CardId, Card};
 use tracing::info;
 
@@ -12,12 +11,7 @@ impl App {
     pub fn new() -> Self {
         let root = dirs::data_local_dir().unwrap().join("speki");
 
-        Self(Arc::new(speki_core::App::new(
-            Ledger::new(root.clone()),
-            Ledger::new(root.clone()),
-            Ledger::new(root.clone()),
-            Ledger::new(root.clone()),
-        )))
+        Self(Arc::new(speki_core::App::new(root)))
     }
 
     pub fn inner(&self) -> Arc<speki_core::App> {

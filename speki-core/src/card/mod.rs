@@ -24,7 +24,7 @@ use crate::{
     ledger::{CardAction, CardEvent, MetaEvent},
     metadata::Metadata,
     recall_rate::{History, Recall, Review, ReviewAction, ReviewEvent, SimpleRecall},
-    FsTime, RefType,
+    FsTime, CardRefType,
 };
 
 pub type RecallRate = f32;
@@ -207,7 +207,7 @@ impl Card {
     pub fn parent_classes(&self) -> HashSet<CardId> {
         let getter = TheCacheGetter::ItemRef {
             reversed: false,
-            ty: Some(RefType::ParentClass),
+            ty: Some(CardRefType::ParentClass),
             key: self.id,
             recursive: true,
         };
@@ -413,7 +413,7 @@ impl Card {
         let getter = TheCacheGetter::ItemRef {
             reversed: true,
             key: self.id,
-            ty: Some(RefType::InstanceOfAttribute),
+            ty: Some(CardRefType::InstanceOfAttribute),
             recursive: false,
         };
 
