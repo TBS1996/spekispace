@@ -30,15 +30,6 @@ impl<T: LedgerItem> PropertyCache<T> {
     }
 }
 
-pub enum CardRelation<T: LedgerItem> {
-    Reference(ItemReference<T>),
-    Property {
-        ty: T::PropertyType,
-        value: String,
-        key: T::Key,
-    },
-}
-
 /// The way one item references another item
 #[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
 pub struct ItemReference<T: LedgerItem> {
@@ -77,14 +68,6 @@ impl<T: LedgerItem> ItemRefCache<T> {
 }
 
 pub type CacheKey<T> = Either<PropertyCache<T>, ItemRefCache<T>>;
-
-pub enum CacheGetter<T: LedgerItem> {
-    Property(PropertyCache<T>),
-    ItemRef {
-        itemref: ItemRefCache<T>,
-        recursive: bool,
-    },
-}
 
 use crate::block_chain::BlockChain;
 
@@ -318,7 +301,7 @@ pub trait LedgerItem:
     fn dependents(&self, ledger: &LedgerType<Self>) -> HashSet<Self::Key> {
         match ledger {
             LedgerType::OverRide(ledger) => ledger.dependents(self.item_id()),
-            LedgerType::Normal(ledger) => ledger.dependents(self.item_id()),
+            LedgerType::Normal(ledger) => ledger.all_dependents(self.item_id()),
         }
     }
 
@@ -584,7 +567,7 @@ impl<T: LedgerItem> LedgerType<T> {
     pub fn dependents(&self, key: T::Key) -> HashSet<T::Key> {
         match self {
             LedgerType::OverRide(ledger) => ledger.dependents(key),
-            LedgerType::Normal(ledger) => ledger.dependents(key),
+            LedgerType::Normal(ledger) => ledger.all_dependents(key),
         }
     }
 }
@@ -636,7 +619,7 @@ impl<T: LedgerItem> OverrideLedger<T> {
     }
 
     pub fn dependents(&self, key: T::Key) -> HashSet<T::Key> {
-        let mut dependents = self.inner.dependents(key);
+        let mut dependents = self.inner.all_dependents(key);
 
         if self.new.dependencies().contains(&key) {
             dependents.insert(self.new_id);
@@ -697,7 +680,7 @@ impl<T: LedgerItem> Ledger<T> {
         reversed: bool,
     ) {
         let dep_dir = match reversed {
-            true => self.dependents_dir(key),
+            true => self.root_dependents_dir(key),
             false => self.dependencies_dir(key),
         };
 
@@ -725,7 +708,7 @@ impl<T: LedgerItem> Ledger<T> {
         }
     }
 
-    fn load_getter(&self, getter: TheCacheGetter<T>) -> HashSet<T::Key> {
+    pub fn load_getter(&self, getter: TheCacheGetter<T>) -> HashSet<T::Key> {
         match getter {
             TheCacheGetter::ItemRef {
                 recursive: true,
@@ -743,7 +726,7 @@ impl<T: LedgerItem> Ledger<T> {
                 key,
                 ty: Some(ty),
             } => {
-                let dep_dir = self.dependents_dir(key);
+                let dep_dir = self.root_dependents_dir(key);
                 let dir = dep_dir.join(ty.to_string());
                 Self::item_keys_from_dir(dir)
             }
@@ -753,7 +736,7 @@ impl<T: LedgerItem> Ledger<T> {
                 key,
                 ty: None,
             } => {
-                let dep_dir = self.dependents_dir(key);
+                let dep_dir = self.root_dependents_dir(key);
                 Self::item_keys_from_dir_recursive(dep_dir)
             }
             TheCacheGetter::ItemRef {
@@ -824,7 +807,7 @@ impl<T: LedgerItem> Ledger<T> {
                 self.properties.join(property.to_string()).join(&value)
             }
             CacheKey::Right(ItemRefCache { reftype, id }) => {
-                self.dependents_dir(id).join(reftype.to_string())
+                self.root_dependents_dir(id).join(reftype.to_string())
             }
         }
     }
@@ -990,40 +973,12 @@ impl<T: LedgerItem> Ledger<T> {
         }
     }
 
-    fn get_cache(&self, key: CacheKey<T>) -> HashSet<T::Key> {
-        let path = self.cache_dir(key);
-        Self::item_keys_from_dir(path)
-    }
-
     pub fn get_prop_cache(&self, key: PropertyCache<T>) -> HashSet<T::Key> {
-        let key = CacheKey::Left(key);
-        self.get_cache(key)
-    }
-
-    fn collect_item_keys_in_dir(dir: &Path) -> HashSet<T::Key> {
-        let mut out: HashSet<T::Key> = Default::default();
-
-        if !dir.is_dir() {
-            return Default::default();
-        }
-
-        for entry in fs::read_dir(dir).unwrap() {
-            let entry = entry.unwrap().path();
-            for entry in fs::read_dir(&entry).unwrap() {
-                let entry = entry.unwrap().path();
-                let key: T::Key = match entry.file_name().unwrap().to_str().unwrap().parse() {
-                    Ok(k) => k,
-                    Err(_) => {
-                        dbg!(entry);
-                        dbg!(&dir);
-                        panic!();
-                    }
-                };
-                out.insert(key);
-            }
-        }
-
-        out
+        let path = self
+            .properties
+            .join(key.property.to_string())
+            .join(&key.value);
+        Self::item_keys_from_dir(path)
     }
 
     fn dependencies_dir(&self, key: T::Key) -> PathBuf {
@@ -1032,23 +987,36 @@ impl<T: LedgerItem> Ledger<T> {
         p
     }
 
-    fn dependents_dir(&self, key: T::Key) -> PathBuf {
+    fn root_dependents_dir(&self, key: T::Key) -> PathBuf {
         let p = self.item_dir_from_key(key).join("dependents");
         std::fs::create_dir_all(&p).unwrap();
         p
     }
 
-    pub fn get_ref_cache(&self, key: ItemRefCache<T>) -> HashSet<T::Key> {
-        let key = CacheKey::Right(key);
-        self.get_cache(key)
+    fn dependents_dir(&self, key: T::Key, ty: T::RefType) -> PathBuf {
+        let p = self.root_dependents_dir(key).join(ty.to_string());
+        std::fs::create_dir_all(&p).unwrap();
+        p
     }
 
-    pub fn dependencies(&self, key: T::Key) -> HashSet<T::Key> {
-        Self::collect_item_keys_in_dir(&self.dependencies_dir(key))
+    pub fn all_dependencies(&self, key: T::Key) -> HashSet<T::Key> {
+        let getter = TheCacheGetter::ItemRef {
+            reversed: false,
+            key,
+            ty: None,
+            recursive: false,
+        };
+        self.load_getter(getter)
     }
 
-    pub fn dependents(&self, key: T::Key) -> HashSet<T::Key> {
-        Self::collect_item_keys_in_dir(&self.dependents_dir(key))
+    pub fn all_dependents(&self, key: T::Key) -> HashSet<T::Key> {
+        let getter = TheCacheGetter::ItemRef {
+            reversed: true,
+            key,
+            ty: None,
+            recursive: false,
+        };
+        self.load_getter(getter)
     }
 
     pub fn recursive_dependencies(&self, key: T::Key) -> HashSet<T::Key> {
@@ -1079,10 +1047,8 @@ impl<T: LedgerItem> Ledger<T> {
     }
 
     fn remove_dependent(&self, key: T::Key, ty: T::RefType, dependent: T::Key) {
-        let mut dependents = self.get_ref_cache(ItemRefCache::new(ty.clone(), key));
-        dependents.remove(&dependent);
-        let path = self.dependents_dir(key).join(ty.to_string());
-        Self::keys_to_file(&path, dependents);
+        let path = self.dependents_dir(key, ty).join(dependent.to_string());
+        let _ = fs::remove_file(&path).is_ok();
     }
 
     fn remove_property(&self, key: T::Key, property: T::PropertyType, value: String) {
@@ -1102,16 +1068,6 @@ impl<T: LedgerItem> Ledger<T> {
         let path = self.cache_dir(cache).join(id.to_string());
         let _res = fs::remove_file(&path);
         debug_assert!(_res.is_ok());
-    }
-
-    fn keys_to_file(path: &Path, keys: HashSet<T::Key>) {
-        let mut s = String::new();
-        for key in keys {
-            s.push_str(&format!("{}\n", key.to_string()));
-        }
-
-        let mut f = fs::File::create(&path).unwrap();
-        f.write(&s.as_bytes()).unwrap();
     }
 
     fn _modify(

@@ -887,7 +887,11 @@ impl LedgerItem for RawCard {
                 out.insert(ItemReference::new(from, *class, RefType::ClassOfInstance));
             }
             CardType::Attribute { instance, .. } => {
-                out.insert(ItemReference::new(from, *instance, RefType::AttrClass));
+                out.insert(ItemReference::new(
+                    from,
+                    *instance,
+                    RefType::InstanceOfAttribute,
+                ));
             }
             CardType::Class {
                 name,

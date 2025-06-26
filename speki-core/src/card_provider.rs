@@ -41,7 +41,11 @@ impl CardProvider {
     pub fn dependents(&self, id: CardId) -> BTreeSet<CardId> {
         trace!("dependents of: {}", id);
 
-        self.providers.cards.dependents(id).into_iter().collect()
+        self.providers
+            .cards
+            .all_dependents(id)
+            .into_iter()
+            .collect()
     }
 
     pub fn load(&self, id: CardId) -> Option<Arc<Card>> {

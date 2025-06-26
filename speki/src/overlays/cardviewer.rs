@@ -6,14 +6,14 @@ use std::{
 
 use dioxus::prelude::*;
 use either::Either;
-use ledgerstore::{ItemRefCache, TheLedgerEvent};
+use ledgerstore::TheLedgerEvent;
 use speki_core::{
     audio::AudioId,
     card::{AttributeId, Attrv2, BackSide, CardId, TextData},
     collection::DynCard,
     ledger::{CardAction, CardEvent},
     set::SetExpr,
-    Card, CardType, RefType,
+    Card, CardType,
 };
 
 use ledgerstore::TimeProvider;
@@ -427,12 +427,11 @@ impl CardViewer {
                 let mut attrs: Vec<Attrv2> = curr_card.attributes().unwrap_or_default();
 
                 let provider = APP.read().inner().card_provider.clone();
-                let card_ledger = APP.read().inner().provider.cards.clone();
 
                 // all cards that are an attribute card based on a given instance.
                 // wait, isnt this all we need? damn..
-                let attr_cards_based_on_instance: BTreeSet<Arc<Card>> = card_ledger
-                    .get_ref_cache(ItemRefCache::new(RefType::AttrClass, curr_card.id()))
+                let attr_cards_based_on_instance: BTreeSet<Arc<Card>> = card
+                    .attribute_cards()
                     .into_iter()
                     .map(|id| provider.load(id).unwrap())
                     .collect();

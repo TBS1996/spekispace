@@ -36,7 +36,7 @@ pub fn RenderDependents(card_id: CardId, hidden: bool) -> Element {
     let (deps, qty) = {
         let mut inner = vec![];
 
-        let dep_ids = APP.read().inner().provider.cards.dependents(card_id);
+        let dep_ids = APP.read().inner().provider.cards.all_dependents(card_id);
 
         let qty = dep_ids.len();
 

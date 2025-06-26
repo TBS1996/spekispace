@@ -12,7 +12,7 @@ pub mod basecard;
 pub use basecard::*;
 
 use either::Either;
-use ledgerstore::{EventError, TheLedgerAction, TimeProvider};
+use ledgerstore::{EventError, TheCacheGetter, TheLedgerAction, TimeProvider};
 use nonempty::NonEmpty;
 use serde::Deserializer;
 use serde_json::Value;
@@ -24,7 +24,7 @@ use crate::{
     ledger::{CardAction, CardEvent, MetaEvent},
     metadata::Metadata,
     recall_rate::{History, Recall, Review, ReviewAction, ReviewEvent, SimpleRecall},
-    FsTime,
+    FsTime, RefType,
 };
 
 pub type RecallRate = f32;
@@ -204,32 +204,14 @@ impl Card {
         Some(output)
     }
 
-    pub fn parent_class(&self) -> Option<CardId> {
-        match &self.base.data {
-            CardType::Instance { class, .. } => Some(*class),
-            CardType::Normal { .. } => None,
-            CardType::Unfinished { .. } => None,
-            CardType::Attribute { .. } => None,
-            CardType::Class { parent_class, .. } => *parent_class,
-            CardType::Statement { .. } => None,
-            CardType::Event { .. } => None,
-        }
-    }
-
-    pub fn parent_classes(&self) -> Vec<CardId> {
-        let mut classes = vec![];
-
-        fn inner(selv: &Card, classes: &mut Vec<CardId>) {
-            if let Some(id) = selv.parent_class() {
-                classes.push(id);
-                let card = selv.card_provider.load(id).unwrap();
-                inner(&card, classes);
-            }
-        }
-
-        inner(self, &mut classes);
-
-        classes
+    pub fn parent_classes(&self) -> HashSet<CardId> {
+        let getter = TheCacheGetter::ItemRef {
+            reversed: false,
+            ty: Some(RefType::ParentClass),
+            key: self.id,
+            recursive: true,
+        };
+        self.card_provider.providers.cards.load_getter(getter)
     }
 
     pub fn get_attr(&self, id: AttributeId) -> Option<Attrv2> {
@@ -279,12 +261,12 @@ impl Card {
     }
 
     pub fn dependents_ids(&self) -> BTreeSet<CardId> {
-        let id = self.id;
-        let mut stack = BTreeSet::new();
-        for dep in self.card_provider.providers.cards.dependents(id) {
-            stack.insert(dep);
-        }
-        stack
+        self.card_provider
+            .providers
+            .cards
+            .all_dependents(self.id)
+            .into_iter()
+            .collect()
     }
 
     pub fn dependents(&self) -> BTreeSet<Arc<Self>> {
@@ -419,6 +401,23 @@ impl Card {
 
     pub fn is_finished(&self) -> bool {
         !matches!(&self.base.data, CardType::Unfinished { .. })
+    }
+
+    /// which attribute cards describe this instance?
+    pub fn attribute_cards(&self) -> HashSet<CardId> {
+        if !self.is_instance() {
+            dbg!(self);
+            debug_assert!(false);
+        }
+
+        let getter = TheCacheGetter::ItemRef {
+            reversed: true,
+            key: self.id,
+            ty: Some(RefType::InstanceOfAttribute),
+            recursive: false,
+        };
+
+        self.card_provider.providers.cards.load_getter(getter)
     }
 
     pub fn is_attribute(&self) -> bool {

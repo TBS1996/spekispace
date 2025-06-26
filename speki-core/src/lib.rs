@@ -35,7 +35,7 @@ pub enum RefType {
     ClassOfInstance,
     LinkRef,
     ParentClass,
-    AttrClass,
+    InstanceOfAttribute,
 }
 
 impl Display for RefType {
@@ -51,7 +51,7 @@ impl AsRef<str> for RefType {
             Self::ClassOfInstance => "class_of_instance",
             Self::LinkRef => "linkref",
             Self::ParentClass => "parent_class",
-            Self::AttrClass => "attr_class",
+            Self::InstanceOfAttribute => "attr_class",
         }
     }
 }

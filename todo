@@ -598,6 +598,11 @@ but would be neat if i can just create my own functions like "instance" and anno
 
 wait no lol that don't work cause the dependencies can be inside other things like textlinks, would only work with dependenceis that are in normal container
 
+# for all cachegetter logic
+
+for example to get all instances of a class you gotta check the self classes instance but also the instances of its subclasses
+so maybe in thecachegetter thing, a way to say like for each item that matches on thecachegetter also apply another thecachegetter (can be recursive more times)
+
 
 # main graph
 
