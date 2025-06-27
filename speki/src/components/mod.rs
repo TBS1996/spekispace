@@ -129,7 +129,7 @@ pub fn set_card_link(text: Signal<String>, alias: bool) {
             });
 
             let props = CardSelector::new(false, vec![])
-                .new_on_card_selected(f)
+                .new_on_card_selected(f, true)
                 .with_default_search(theval)
                 .with_allow_new(true);
             append_overlay(OverlayEnum::CardSelector(props));

@@ -18,7 +18,7 @@ use uuid::Uuid;
 use crate::{
     append_overlay,
     pages::{ExprEditor, RenderExpr},
-    set_overlay,
+    pop_overlay, set_overlay,
 };
 
 use crate::{
@@ -68,11 +68,13 @@ this will mean a lot of times you dont have to even search
 
 */
 
+type OnCardSelected = (MyClosure, bool); // if true, close the overlay
+
 #[derive(Props, Clone)]
 pub struct CardSelector {
     pub title: Option<String>,
     pub search: Signal<String>,
-    pub on_card_selected: MyClosure,
+    pub on_card_selected: OnCardSelected,
     pub allow_new: bool,
     pub allowed_cards: Signal<Vec<CardTy>>,
     pub filtereditor: FilterEditor,
@@ -233,7 +235,7 @@ impl CardSelector {
             title: Some("select card".to_string()),
             edit_collection: true,
             search,
-            on_card_selected: overlay_card_viewer(),
+            on_card_selected: (overlay_card_viewer(), false),
             cards,
             allow_new: false,
             allowed_cards,
@@ -267,7 +269,7 @@ impl CardSelector {
     pub fn ref_picker(fun: MyClosure, filter: SetExpr) -> Self {
         Self {
             title: Some("choose reference".to_string()),
-            on_card_selected: fun,
+            on_card_selected: (fun, true),
             allow_new: true,
             ..Self::new_with_filter(false, vec![], filter)
         }
@@ -276,20 +278,20 @@ impl CardSelector {
     pub fn class_picker(f: MyClosure) -> Self {
         Self::new(false, vec![CardTy::Class])
             .with_title("pick class".into())
-            .new_on_card_selected(f)
+            .new_on_card_selected(f, true)
     }
 
     pub fn dependency_picker(f: MyClosure) -> Self {
         Self {
             title: Some("set dependency".to_string()),
-            on_card_selected: f,
+            on_card_selected: (f, true),
             allow_new: true,
             ..Self::new(false, vec![])
         }
     }
 
-    pub fn new_on_card_selected(mut self, f: MyClosure) -> Self {
-        self.on_card_selected = f;
+    pub fn new_on_card_selected(mut self, f: MyClosure, close_popup: bool) -> Self {
+        self.on_card_selected = (f, close_popup);
         self
     }
 
@@ -358,7 +360,7 @@ impl PartialEq for MyClosure {
 pub fn CardSelectorRender(
     title: Option<String>,
     search: Signal<String>,
-    on_card_selected: MyClosure,
+    on_card_selected: OnCardSelected,
     cards: Memo<Vec<Signal<Card>>>,
     allow_new: bool,
     allowed_cards: Signal<Vec<CardTy>>,
@@ -416,7 +418,7 @@ pub fn CardSelectorRender(
 
 #[component]
 fn NewcardButton(
-    on_card_selected: MyClosure,
+    on_card_selected: OnCardSelected,
     allowed_cards: Vec<CardTy>,
     search: String,
 ) -> Element {
@@ -429,7 +431,10 @@ fn NewcardButton(
                 let closure = closure.clone();
                 let hook = MyClosure::new(move |card: CardId| {
                 let closure = closure.clone();
-                closure.call(card);
+                closure.0.call(card);
+                if closure.1 {
+                    pop_overlay();
+                }
                 });
 
                 let viewer = CardViewer::new()
@@ -446,7 +451,7 @@ fn NewcardButton(
 }
 
 #[component]
-fn TableRender(cards: Memo<Vec<Signal<Card>>>, on_card_selected: MyClosure) -> Element {
+fn TableRender(cards: Memo<Vec<Signal<Card>>>, on_card_selected: OnCardSelected) -> Element {
     let closure = Arc::new(on_card_selected.clone());
 
     let filtered_cards: Vec<_> = cards
@@ -479,7 +484,10 @@ fn TableRender(cards: Memo<Vec<Signal<Card>>>, on_card_selected: MyClosure) -> E
                                 info!("clicky");
                                 let card = card.clone();
                                 let closure = _closure.clone();
-                                closure.call(card.read().id());
+                                closure.0.call(card.read().id());
+                                if closure.1 {
+                                    pop_overlay();
+                                }
                             },
 
                             td { class: "border border-gray-300 px-4 py-2 w-2/3", "{card}" }

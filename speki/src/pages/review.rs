@@ -189,8 +189,8 @@ pub fn RenderExpr(
                         let input = InputEditor::Card(card);
                         inputs.clone().write().push(input);
                     };
-                    let overlay =
-                        CardSelector::new(false, vec![]).new_on_card_selected(MyClosure::new(f));
+                    let overlay = CardSelector::new(false, vec![])
+                        .new_on_card_selected(MyClosure::new(f), true);
                     Some(OverlayEnum::CardSelector(overlay))
                 };
 
@@ -238,8 +238,8 @@ pub fn RenderExpr(
                         let input = InputEditor::Leaf(leaf);
                         inputs.clone().write().push(input);
                     };
-                    let overlay =
-                        CardSelector::new(false, vec![]).new_on_card_selected(MyClosure::new(f));
+                    let overlay = CardSelector::new(false, vec![])
+                        .new_on_card_selected(MyClosure::new(f), true);
                     Some(OverlayEnum::CardSelector(overlay))
                 };
 

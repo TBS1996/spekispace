@@ -11,7 +11,7 @@ use crate::{
         card_selector::{CardSelector, MyClosure},
         OverlayEnum,
     },
-    pop_overlay, APP,
+    APP,
 };
 
 const PLACEHOLDER: &'static str = "pick card...";
@@ -72,7 +72,6 @@ pub fn CardRefRender(
                         }
 
                         selected_card.clone().set(Some(card));
-                        pop_overlay();
                     });
 
                     let allowed = allowed.clone();
