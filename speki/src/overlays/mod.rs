@@ -136,7 +136,7 @@ pub fn Overender(overlay: Signal<Option<Arc<OverlayEnum>>>, root: Element) -> El
 
                             OverlayEnum::Notice(elm) => {
                                 rsx! {
-                                    NoticeRender { text: elm.text.clone() }
+                                    NoticeRender {notice: elm.clone()}
                                 }
                             }
 

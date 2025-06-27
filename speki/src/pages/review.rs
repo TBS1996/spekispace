@@ -458,9 +458,7 @@ fn RenderSet(
                                 append_overlay(revses);
                             },
                             None => {
-                                let notice = Notice {
-                                    text: "no cards to review!".to_string()
-                                };
+                                let notice = Notice::new ("no cards to review!");
 
                                 let notice = OverlayEnum::Notice(notice);
                                 append_overlay(notice);
