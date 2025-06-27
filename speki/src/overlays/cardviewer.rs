@@ -27,10 +27,11 @@ use crate::{
     },
     overlays::{
         card_selector::{CardSelector, MyClosure},
-        notice::Notice,
         OverlayEnum,
     },
-    pop_overlay, APP,
+    pop_overlay,
+    utils::handle_card_event_error,
+    APP,
 };
 
 #[component]
@@ -320,7 +321,9 @@ fn RenderDependencies(
                         let removed =  dependencies.write().remove(idx);
                         if let Some(id) = card_id {
                             let event = TheLedgerEvent::new_modify(id, CardAction::RemoveDependency(removed.id()));
-                            APP.read().inner().provider.cards.modify(event).unwrap();
+                            if let Err(e) = APP.read().inner().provider.cards.modify(event) {
+                                handle_card_event_error(e);
+                            }
                         }
                     },
                     "X"
@@ -946,8 +949,11 @@ fn DeleteButton(card: CardId) -> Element {
         button {
             class: "mt-2 inline-flex items-center text-white bg-gray-800 border-0 py-1 px-3 focus:outline-none hover:bg-gray-700 rounded text-base md:mt-0",
             onclick: move |_| {
-                APP.read().inner().provider.cards.modify(TheLedgerEvent::new_delete(card)).unwrap();
-                pop_overlay();
+                if let Err(e) = APP.read().inner().provider.cards.modify(TheLedgerEvent::new_delete(card)) {
+                    handle_card_event_error(e);
+                } else {
+                    pop_overlay();
+                }
             },
             "delete"
         }
@@ -1015,7 +1021,7 @@ fn save_button(CardViewer: CardViewer) -> Element {
 
                 for event in events {
                     if let Err(e) = APP.read().inner().provider.cards.modify(event) {
-                        append_overlay(OverlayEnum::Notice(Notice::new_from_debug(e)));
+                        handle_card_event_error(e);
                         return;
                     }
                 }
@@ -1032,7 +1038,7 @@ fn save_button(CardViewer: CardViewer) -> Element {
                                         let action = CardAction::UpsertCard(data);
                                         let event = CardEvent::new_modify(CardId::new_v4(), action);
                                         if let Err(e) = APP.read().inner().provider.cards.modify(event) {
-                                            append_overlay(OverlayEnum::Notice(Notice::new_from_debug(e)));
+                                            handle_card_event_error(e);
                                             return;
                                         }
                                     }
@@ -1044,7 +1050,7 @@ fn save_button(CardViewer: CardViewer) -> Element {
                                     let action = CardAction::UpsertCard(data);
                                     let event = CardEvent::new_modify(CardId::new_v4(), action);
                                     if let Err(e) = APP.read().inner().provider.cards.modify(event) {
-                                        append_overlay(OverlayEnum::Notice(Notice::new_from_debug(e)));
+                                        handle_card_event_error(e);
                                         return;
                                     }
                                 },
@@ -1061,7 +1067,7 @@ fn save_button(CardViewer: CardViewer) -> Element {
                                             let action = CardAction::UpsertCard(data);
                                             let event = CardEvent::new_modify(attr_card_id, action);
                                             if let Err(e) = APP.read().inner().provider.cards.modify(event) {
-                                                append_overlay(OverlayEnum::Notice(Notice::new_from_debug(e)));
+                                                handle_card_event_error(e);
                                                 return;
                                             }
                                         }
@@ -1074,7 +1080,7 @@ fn save_button(CardViewer: CardViewer) -> Element {
                                     let action = CardAction::UpsertCard(data);
                                     let event = CardEvent::new_modify(attr_card_id, action);
                                     if let Err(e) = APP.read().inner().provider.cards.modify(event) {
-                                        append_overlay(OverlayEnum::Notice(Notice::new_from_debug(e)));
+                                        handle_card_event_error(e);
                                         return;
                                     }
                                 },
@@ -1122,9 +1128,7 @@ fn add_dep(selv: CardViewer) -> Element {
                     let old_card = selv.old_card.clone();
                     if let Some(mut old_card) = old_card.map(|c|Arc::unwrap_or_clone(c)) {
                         if let Err(e) = old_card.add_dependency(card.id()) {
-                            append_overlay(
-                                OverlayEnum::Notice(Notice::new_from_debug(e))
-                            );
+                            handle_card_event_error(e);
                         }
                         }
                     }

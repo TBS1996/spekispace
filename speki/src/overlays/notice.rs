@@ -33,8 +33,13 @@ pub fn NoticeRender(notice: Notice) -> Element {
                 class: "bg-white text-black rounded-2xl shadow-xl p-6 max-w-md text-center",
                 h2 {
                     class: "text-xl font-semibold mb-4",
-                    "{text}"
+                    for line in text.lines() {
+                        span { "{line}" }
+                        br {}
+
+                    }
                 }
+
                 button {
                     class: "bg-blue-500 hover:bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg",
                     onclick: move |_| {

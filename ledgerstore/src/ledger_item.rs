@@ -31,7 +31,7 @@ pub trait LedgerItem:
     type Error: Debug;
 
     /// The different ways an item can reference another item
-    type RefType: AsRef<str> + Display + Clone + Hash + PartialEq + Eq + Send + Sync;
+    type RefType: AsRef<str> + Display + Clone + Hash + PartialEq + Eq + Send + Sync + Debug;
 
     /// Cache regarding property of a card so you get like all the cards that have a certain value or whatever
     type PropertyType: AsRef<str> + Display + Clone + Hash + PartialEq + Eq + Send + Sync;
@@ -85,48 +85,56 @@ pub trait LedgerItem:
 
     fn item_id(&self) -> Self::Key;
 
-    fn find_cycle(&self, ledger: &LedgerType<Self>) -> Option<Vec<Self::Key>> {
+    fn find_cycle(&self, ledger: &LedgerType<Self>) -> Option<Vec<(Self::Key, Self::RefType)>> {
         fn dfs<T: LedgerItem>(
             current: T::Key,
             ledger: &LedgerType<T>,
             visiting: &mut HashSet<T::Key>,
             visited: &mut HashSet<T::Key>,
-            parent: &mut HashMap<T::Key, T::Key>,
+            parent: &mut HashMap<T::Key, (T::Key, T::RefType)>,
             selv: (T::Key, &T),
-        ) -> Option<Vec<T::Key>> {
+        ) -> Option<Vec<(T::Key, T::RefType)>> {
             if !visiting.insert(current.clone()) {
-                // cycle start
-                let mut path = vec![current.clone()];
-                let mut cur = current;
-                while let Some(p) = parent.get(&cur) {
-                    path.push(p.clone());
-                    if *p == current {
+                // Cycle detected
+                let mut path = Vec::new();
+                let mut cur = current.clone();
+
+                // Backtrack the path
+                while let Some((p_key, p_ref)) = parent.get(&cur) {
+                    path.push((cur.clone(), p_ref.clone()));
+                    if *p_key == current {
                         break;
                     }
-                    cur = *p;
+                    cur = p_key.clone();
                 }
+
                 path.reverse();
                 return Some(path);
             }
 
             let dependencies = if selv.0 == current {
-                selv.1.dependencies()
+                selv.1.ref_cache()
             } else {
-                ledger.load(current).dependencies()
+                ledger.load(current).ref_cache()
             };
 
-            for dep in dependencies {
-                if visited.contains(&dep) {
+            for ItemReference {
+                from: _,
+                to: dep_key,
+                ty: dep_type,
+            } in dependencies
+            {
+                if visited.contains(&dep_key) {
                     continue;
                 }
-                parent.insert(dep.clone(), current.clone());
-                if let Some(cycle) = dfs(dep, ledger, visiting, visited, parent, selv) {
+                parent.insert(dep_key.clone(), (current.clone(), dep_type.clone()));
+                if let Some(cycle) = dfs(dep_key, ledger, visiting, visited, parent, selv) {
                     return Some(cycle);
                 }
             }
 
             visiting.remove(&current);
-            visited.insert(current.clone());
+            visited.insert(current);
             None
         }
 
@@ -136,7 +144,7 @@ pub trait LedgerItem:
 
         dfs(
             self.item_id(),
-            &ledger,
+            ledger,
             &mut visiting,
             &mut visited,
             &mut parent,

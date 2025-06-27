@@ -1,8 +1,18 @@
 use std::{fmt::Debug, sync::Arc};
 
 use dioxus::prelude::*;
-use speki_core::{card::CardId, Card};
+use ledgerstore::EventError;
+use speki_core::{
+    card::{CardId, RawCard},
+    Card, CardRefType,
+};
 use tracing::info;
+
+use crate::{
+    append_overlay,
+    overlays::{notice::Notice, OverlayEnum},
+    APP,
+};
 
 #[derive(Clone)]
 pub struct App(Arc<speki_core::App>);
@@ -61,3 +71,56 @@ impl Debug for App {
         f.debug_tuple("App").field(&self.0).finish()
     }
 }
+
+pub fn handle_card_event_error(err: EventError<RawCard>) {
+    let provider = APP.read().inner().card_provider.clone();
+
+    let text = match err {
+        EventError::Cycle(items) => {
+            dbg!(&items);
+            let mut foobar: Vec<(CardId, CardId, CardRefType)> = vec![];
+
+            for i in 0..items.len() {
+                let (to, ref_type) = &items[i];
+                let from = if i == 0 {
+                    items.last().unwrap().0.clone() // wraparound
+                } else {
+                    items[i - 1].0.clone()
+                };
+                foobar.push((from, to.clone(), ref_type.clone()));
+            }
+
+            let mut s = format!("cycle detected!\n");
+            for (from, to, ty) in foobar {
+                let from = provider.load(from).unwrap().name().to_string();
+                let to = provider.load(to).unwrap().name().to_string();
+                use speki_core::CardRefType as TY;
+
+                let line = match ty {
+                    TY::ExplicitDependency => format!("{from} depends on {to}"),
+                    TY::ClassOfInstance => format!("{from} is an instance of {to} "),
+                    TY::LinkRef => format!("{from} links to {to}"),
+                    TY::ParentClass => format!("{from} is a parent class of {to}"),
+                    TY::InstanceOfAttribute => format!("{from} is an instance of attribute {to}"),
+                };
+                s.push_str(&line);
+                s.push_str("\n");
+            }
+            s
+        }
+        EventError::Invariant(inv) => format!("invariant broken: {inv:?}"),
+        EventError::ItemNotFound => format!("card not found"),
+        EventError::DeletingWithDependencies => format!("cannot delete card with dependencies"),
+    };
+
+    let notice = Notice::new(text);
+    let overlay = OverlayEnum::Notice(notice);
+    append_overlay(overlay);
+}
+
+/*
+
+johnsmith -> person -> johnsmith
+
+
+*/
