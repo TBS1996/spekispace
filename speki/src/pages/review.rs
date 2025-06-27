@@ -6,6 +6,7 @@ use crate::{
     },
     overlays::{
         card_selector::{CardSelector, MaybeEntry, MyClosure},
+        notice::Notice,
         reviewsession::ReviewState,
         Overender, OverlayChoice, OverlayEnum, OverlaySelector,
     },
@@ -14,6 +15,7 @@ use crate::{
 use crate::{styles, OVERLAY};
 use dioxus::prelude::*;
 use ledgerstore::{LedgerItem, TheLedgerEvent};
+use nonempty::NonEmpty;
 use speki_core::card::CType;
 use speki_core::cardfilter::MyNumOrd;
 use speki_core::{
@@ -388,7 +390,6 @@ fn RenderSet(
                 button {
                     class: "{crate::styles::BLACK_BUTTON}",
                     onclick: move |_| {
-                            dbg!();
                         let expr: SetExpr = match SetExpr::try_from(set.expr.cloned()) {
                             Ok(t) => t,
                             Err(s) => {
@@ -398,16 +399,11 @@ fn RenderSet(
                         };
 
                         let filter = filter2.clone();
-                        dbg!();
                         let provider = APP.read().inner().card_provider.clone();
-                        dbg!();
                         let cards = expr.eval(&provider);
-                        dbg!();
 
                         let card_ids: HashSet<CardId> = cards.iter().map(|card|card.id()).collect();
-                        dbg!();
                         let all_recursive_dependencies: HashSet<CardId> = card_ids.iter().map(|id|APP.read().inner().provider.cards.recursive_dependencies(*id)).flatten().collect();
-                        dbg!(cards.len());
 
                         let mut cards_with_deps: BTreeSet<Arc<Card>> = Default::default();
 
@@ -426,16 +422,10 @@ fn RenderSet(
                             cards_with_deps.insert(card);
                         }
 
-                        dbg!();
-
                         for card in all_recursive_dependencies {
                             let card = provider.load(card).unwrap();
                             cards_with_deps.insert(card);
                         }
-
-
-
-                        dbg!();
 
 
                         use rayon::prelude::*;
@@ -449,8 +439,6 @@ fn RenderSet(
                             .filter(|card| filter.filter(card.clone()))
                             .collect();
 
-                        dbg!();
-
 
                         if let Some(recall) = filter.recall {
                             if recall.ord == MyNumOrd::Less {
@@ -459,18 +447,26 @@ fn RenderSet(
                         }
 
                         let mut filtered_cards: Vec<CardId> = filtered_cards.into_iter().map(|card|card.id()).collect();
-                        dbg!();
 
 
                         use rand::seq::SliceRandom;
                         filtered_cards.shuffle(&mut rand::thread_rng());
 
-                        dbg!();
+                        match NonEmpty::from_vec(filtered_cards) {
+                            Some(cards) => {
+                                let revses = OverlayEnum::Review(ReviewState::new(cards));
+                                append_overlay(revses);
+                            },
+                            None => {
+                                let notice = Notice {
+                                    text: "no cards to review!".to_string()
+                                };
 
+                                let notice = OverlayEnum::Notice(notice);
+                                append_overlay(notice);
+                            },
+                        }
 
-
-                        let revses = OverlayEnum::Review(ReviewState::new(filtered_cards));
-                        append_overlay(revses);
                     },
                     "review"
                 }

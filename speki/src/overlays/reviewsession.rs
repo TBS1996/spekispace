@@ -1,6 +1,7 @@
 use dioxus::prelude::*;
 use either::Either;
 use ledgerstore::TheLedgerEvent;
+use nonempty::NonEmpty;
 use std::{collections::BTreeSet, rc::Rc, sync::Arc};
 
 use speki_core::{
@@ -209,10 +210,10 @@ pub struct Queue {
 }
 
 impl Queue {
-    fn new(cards: Vec<CardId>) -> Self {
+    fn new(cards: NonEmpty<CardId>) -> Self {
         Self {
             passed: vec![],
-            upcoming: cards,
+            upcoming: cards.into(),
         }
     }
 
@@ -249,7 +250,7 @@ pub struct ReviewState {
 }
 
 impl ReviewState {
-    pub fn new(thecards: Vec<CardId>) -> Self {
+    pub fn new(thecards: NonEmpty<CardId>) -> Self {
         info!("start review for {} cards", thecards.len());
 
         let queue: Signal<Queue> = Signal::new_in_scope(Queue::new(thecards), ScopeId::APP);
