@@ -9,7 +9,16 @@ pub struct App(Arc<speki_core::App>);
 
 impl App {
     pub fn new() -> Self {
-        let root = dirs::data_local_dir().unwrap().join("speki");
+        let args: Vec<String> = std::env::args().collect();
+
+        let root = if args.get(1).is_some_and(|arg| arg == "debug") {
+            let path = dirs::data_local_dir().unwrap().join("speki_debug");
+            // creating a fresh root for debugging
+            let _ = std::fs::remove_dir_all(&path);
+            path
+        } else {
+            dirs::data_local_dir().unwrap().join("speki")
+        };
 
         Self(Arc::new(speki_core::App::new(root)))
     }
