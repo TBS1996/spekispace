@@ -899,6 +899,79 @@ fn AttrAnswers(attr_answers: Signal<Vec<AttrQandA>>) -> Element {
 }
 
 #[component]
+fn RenderAttrs(attrs: Signal<Vec<AttrEditor>>) -> Element {
+    rsx! {
+        div {
+            class: "flex flex-row items-center",
+
+            h4 {
+                class: "font-bold",
+                "Attributes"
+            }
+
+            button {
+                class: "ml-4 p-1 hover:bg-gray-200 hover:border-gray-400 border border-transparent rounded-md transition-colors",
+                onclick: move |_| {
+                    attrs.write().push(AttrEditor::new());
+                },
+                "➕"
+            }
+        }
+
+        div {
+            class: "max-h-64 overflow-y-auto",
+            for AttrEditor {id: _,mut pattern,mut ty } in attrs() {
+                div {
+                    class: "flex flex-row gap-2 mb-4",
+                    div {
+                        class: "w-1/2",
+                        input {
+                            class: "bg-white w-full border border-gray-300 rounded-md p-2 text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent",
+                            value: "{pattern}",
+                            placeholder: "default question",
+                            oninput: move |evt| pattern.set(evt.value()),
+                        }
+                    }
+                    div {
+                            class: "flex flex-row w-1/2 gap-2",
+                        match ty.cloned() {
+                            Some(AttrBackTypeEditor::InstanceOfClass(selected)) => rsx! {
+                                button {
+                                    title: "remove answer constraint",
+                                    class: "{crate::styles::BLACK_BUTTON}",
+                                    onclick: move |_| {
+                                        ty.set(None);
+                                    },
+                                    "X"
+                                }
+                                ForcedCardRefRender { selected_card: selected, allowed: vec![CardTy::Class], filter: speki_core::set::SetExpr::union_with([DynCard::CardType(speki_core::card::CType::Class)]) }
+                            },
+                            None => rsx! {
+                                button {
+                                    class: "{crate::styles::BLACK_BUTTON}",
+                                    onclick: move |_| {
+                                        let fun = MyClosure::new(move |card: CardId| {
+                                            ty.clone().set(Some(AttrBackTypeEditor::InstanceOfClass(Signal::new_in_scope(card, ScopeId::APP))));
+                                        });
+
+                                        let filter = SetExpr::union_with([DynCard::CardType(CType::Class)]);
+                                        let allowed = vec![CardTy::Class];
+
+                                        let props = CardSelector::ref_picker(fun, filter).with_allowed_cards(allowed);
+                                        append_overlay(OverlayEnum::CardSelector(props));
+                                    },
+                                    "add instance constraint"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[component]
 fn InputElements(
     front: FrontPut,
     back: BackPut,
@@ -910,10 +983,7 @@ fn InputElements(
     attrs: Signal<Vec<AttrEditor>>,
     attr_answers: Signal<Vec<AttrQandA>>,
 ) -> Element {
-    let has_attrs = !attrs.is_empty();
     let has_attr_answers = !attr_answers.read().is_empty();
-
-    let inner_attrs = attrs.cloned();
 
     rsx! {
         FrontPutRender { dropdown: front.dropdown.clone(), text: front.text.clone(), audio: front.audio.clone() }
@@ -967,67 +1037,8 @@ fn InputElements(
                     },
                 }
 
-                if has_attrs {
-                    p {"attributes"}
-                    div {
-                        class: "max-h-64 overflow-y-auto",
-                        for AttrEditor {id: _,mut pattern,mut ty } in inner_attrs {
-                            div {
-                                class: "flex flex-row gap-2 mb-4",
-                                div {
-                                    class: "w-1/2",
-                                    input {
-                                        class: "bg-white w-full border border-gray-300 rounded-md p-2 text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent",
-                                        value: "{pattern}",
-                                        placeholder: "default question",
-                                        oninput: move |evt| pattern.set(evt.value()),
-                                    }
-                                }
-                                div {
-                                        class: "flex flex-row w-1/2 gap-2",
-                                    match ty.cloned() {
-                                        Some(AttrBackTypeEditor::InstanceOfClass(selected)) => rsx! {
-                                            button {
-                                                title: "remove answer constraint",
-                                                class: "{crate::styles::BLACK_BUTTON}",
-                                                onclick: move |_| {
-                                                    ty.set(None);
-                                                },
-                                                "X"
-                                            }
-                                            ForcedCardRefRender { selected_card: selected, allowed: vec![CardTy::Class], filter: speki_core::set::SetExpr::union_with([DynCard::CardType(speki_core::card::CType::Class)]) }
-                                        },
-                                        None => rsx! {
-                                            button {
-                                                class: "{crate::styles::BLACK_BUTTON}",
-                                                onclick: move |_| {
-                                                    let fun = MyClosure::new(move |card: CardId| {
-                                                        ty.clone().set(Some(AttrBackTypeEditor::InstanceOfClass(Signal::new_in_scope(card, ScopeId::APP))));
-                                                    });
+                RenderAttrs { attrs }
 
-                                                    let filter = SetExpr::union_with([DynCard::CardType(CType::Class)]);
-                                                    let allowed = vec![CardTy::Class];
-
-                                                    let props = CardSelector::ref_picker(fun, filter).with_allowed_cards(allowed);
-                                                    append_overlay(OverlayEnum::CardSelector(props));
-                                                },
-                                                "add instance constraint"
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-
-                button {
-                    class: "mt-2 inline-flex items-center text-white bg-gray-800 border-0 py-1 px-3 focus:outline-none hover:bg-gray-700 rounded text-base md:mt-0",
-                    onclick: move |_| {
-                        attrs.write().push(AttrEditor::new());
-                    },
-                    "add attribute"
-                }
             },
             CardTy::Instance => rsx! {
                 BackPutRender {
