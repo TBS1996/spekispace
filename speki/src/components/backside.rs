@@ -162,6 +162,39 @@ impl BackPut {
         self.ref_card.reset();
     }
 
+    pub fn try_to_backside(&self) -> Result<Option<BackSide>, ()> {
+        let chosen = self.dropdown.selected.cloned();
+        info!("chosen is: {:?}", chosen);
+
+        match chosen {
+            BackOpts::Card => match self.ref_card.selected_card().cloned() {
+                Some(card) => Ok(Some(BackSide::Card(card))),
+                None => Ok(None),
+            },
+            BackOpts::Text => {
+                let s = self.text.cloned();
+                info!("text is: {s}");
+                if s.is_empty() {
+                    Ok(None)
+                } else {
+                    Ok(Some(BackSide::Text(s.into())))
+                }
+            }
+            BackOpts::Time => {
+                let text = self.text.cloned();
+
+                if text.is_empty() {
+                    Ok(None)
+                } else {
+                    match omtrent::TimeStamp::from_str(&*self.text.read()) {
+                        Ok(ts) => Ok(Some(BackSide::Time(ts))),
+                        Err(_) => Err(()),
+                    }
+                }
+            }
+        }
+    }
+
     pub fn to_backside(&self) -> Option<BackSide> {
         let chosen = self.dropdown.selected.cloned();
         info!("chosen is: {:?}", chosen);

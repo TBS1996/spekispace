@@ -224,11 +224,7 @@ impl CardEditor {
 
         let ty = match self.front.dropdown.selected.cloned() {
             CardTy::Normal => {
-                let back = backside.to_backside()?;
-
-                if back.is_empty_text() {
-                    return None;
-                }
+                let back = backside.try_to_backside().ok()??;
 
                 CardType::Normal {
                     front: TextData::from_raw(&front),
@@ -237,7 +233,7 @@ impl CardEditor {
             }
             CardTy::Class => {
                 let parent_class = self.concept.selected_card().cloned();
-                let back = backside.to_backside().filter(|x| !x.is_empty_text());
+                let back = backside.try_to_backside().ok()?;
                 let attrs: Vec<Attrv2> = attrs
                     .into_iter()
                     .map(|(id, (pattern, back_type))| Attrv2 {
@@ -264,7 +260,7 @@ impl CardEditor {
             }
             CardTy::Instance => {
                 let class = self.concept.selected_card().cloned()?;
-                let back = backside.to_backside();
+                let back = backside.try_to_backside().ok()?;
 
                 CardType::Instance {
                     name: TextData::from_raw(&front),
