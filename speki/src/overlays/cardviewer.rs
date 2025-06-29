@@ -8,7 +8,7 @@ use either::Either;
 use ledgerstore::TheLedgerEvent;
 use speki_core::{
     audio::AudioId,
-    card::{AttributeId, Attrv2, BackSide, CardId, TextData},
+    card::{AttrBackType, AttributeId, Attrv2, BackSide, CardId, TextData},
     collection::DynCard,
     ledger::{CardAction, CardEvent},
     set::SetExpr,
@@ -207,13 +207,16 @@ impl CardEditor {
             return None;
         }
 
-        let attrs: HashMap<AttributeId, (String, Option<CardId>)> = self
+        let attrs: HashMap<AttributeId, (String, Option<AttrBackType>)> = self
             .attrs
             .cloned()
             .into_iter()
             .filter_map(|(id, (pattern, answerty))| {
                 let pattern = pattern.cloned();
-                let answerty = answerty.selected_card().cloned();
+                let answerty = answerty
+                    .selected_card()
+                    .cloned()
+                    .map(AttrBackType::InstanceOfClass);
                 if pattern.contains("{}") {
                     Some((id, (pattern, answerty)))
                 } else {
@@ -493,7 +496,7 @@ impl CardViewer {
                     let attr = instance.get_attr(attr_id).unwrap();
 
                     let answer = match attr.back_type {
-                        Some(card_id) => {
+                        Some(AttrBackType::InstanceOfClass(card_id)) => {
                             let filter = DynCard::Instances(card_id);
                             let mut cref = CardRef::new();
                             cref.filter = SetExpr::union_with([filter]);
@@ -563,7 +566,7 @@ impl CardViewer {
                 for attr in attrs {
                     let cref = CardRef::new();
 
-                    if let Some(ty) = attr.back_type {
+                    if let Some(AttrBackType::InstanceOfClass(ty)) = attr.back_type {
                         let card = APP.read().load_card(ty);
                         cref.set_ref(card.id());
                     }
@@ -788,10 +791,10 @@ fn AttrAnswers(attr_answers: Signal<Vec<AttrAnswer>>) -> Element {
                                                 class: "mt-2 inline-flex items-center text-white bg-gray-800 border-0 py-1 px-3 focus:outline-none hover:bg-gray-700 rounded text-base md:mt-0",
                                                 onclick: move |_| {
                                                     match attr_id.back_type {
-                                                        Some(id) => {
-                                                        let mut cref = CardRef::new();
-                                                        cref.filter = SetExpr::union_with([DynCard::Instances(id)]);
-                                                        answer.set(Some(Either::Right(cref)))
+                                                        Some(AttrBackType::InstanceOfClass(id)) => {
+                                                            let mut cref = CardRef::new();
+                                                            cref.filter = SetExpr::union_with([DynCard::Instances(id)]);
+                                                            answer.set(Some(Either::Right(cref)))
                                                         },
                                                         None => {
                                                         answer.set(Some(Either::Left(BackPut::new(None))));

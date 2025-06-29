@@ -172,6 +172,34 @@ impl<'de> Deserialize<'de> for TextData {
 
 pub type AttributeId = Uuid;
 
+#[derive(PartialEq, Debug, Clone, Serialize, Hash, Eq)]
+pub enum AttrBackType {
+    InstanceOfClass(CardId),
+}
+
+impl<'de> Deserialize<'de> for AttrBackType {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        // Try to deserialize as the enum normally
+        #[derive(Deserialize)]
+        #[serde(field_identifier, rename_all = "camelCase")]
+        enum Field {
+            InstanceOfClass,
+        }
+
+        // Try normal enum deserialization first
+        let value = serde_json::Value::deserialize(deserializer)?;
+        if let Ok(uuid) = Uuid::deserialize(&value) {
+            return Ok(AttrBackType::InstanceOfClass(uuid));
+        }
+
+        // Fallback to normal enum deserialization
+        AttrBackType::deserialize(value).map_err(serde::de::Error::custom)
+    }
+}
+
 /// An attribute of a class is pre-made questions that can be asked about any of the classes' instances.
 /// For example, all instances of `Person` can have the quesiton "when was {} born?"
 ///
@@ -181,7 +209,7 @@ pub struct Attrv2 {
     pub id: AttributeId,
     pub pattern: String,
     //
-    pub back_type: Option<CardId>,
+    pub back_type: Option<AttrBackType>,
 }
 
 pub enum BackSideConstraint {
@@ -804,7 +832,7 @@ impl LedgerItem for RawCard {
                 };
 
                 match back_type {
-                    Some(back_class) => {
+                    Some(AttrBackType::InstanceOfClass(back_class)) => {
                         if let BackSide::Card(answer) = attr_back {
                             if !instance_is_of_type(*answer, back_class, &ledger) {
                                 return Err(CardError::WrongCardType);
@@ -836,7 +864,7 @@ impl LedgerItem for RawCard {
                 }
 
                 for attr in attrs {
-                    if let Some(back_type) = attr.back_type {
+                    if let Some(AttrBackType::InstanceOfClass(back_type)) = attr.back_type {
                         if !ledger.load(back_type).data.is_class() {
                             return Err(CardError::BackTypeMustBeClass);
                         }
