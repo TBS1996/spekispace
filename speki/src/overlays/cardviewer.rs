@@ -718,6 +718,107 @@ fn RenderInputs(props: CardViewer) -> Element {
 }
 
 #[component]
+fn AttrAnswers(attr_answers: Signal<Vec<AttrAnswer>>) -> Element {
+    rsx! {
+        p {"attributes"}
+        div {
+            class: "max-h-64 overflow-y-auto",
+
+                for answer in attr_answers.iter() {
+                    match answer.clone() {
+                        AttrAnswer::Old {question, answer,..} => {
+                            match answer {
+                                Either::Left(answer) => {
+                                    rsx! {
+                                        p {"{question}"}
+                                        BackPutRender {
+                                            text: answer.text.clone(),
+                                            dropdown: answer.dropdown.clone(),
+                                            ref_card: answer.ref_card.clone(),
+                                            audio: answer.audio.clone(),
+                                        }
+                                    }
+
+                                },
+                                Either::Right(answer) => {
+                                    rsx! {
+                                        p {"{question}"}
+                                        CardRefRender {
+                                            selected_card: answer.selected_card(),
+                                            placeholder: "pick ittt",
+                                            allowed: vec![CardTy::Instance],
+                                            filter: answer.filter.clone(),
+                                        }
+                                    }
+                                },
+                            }
+                        },
+                        AttrAnswer::New {question, mut answer, attr_id} => {
+                            rsx! {
+                                match answer.clone().as_ref() {
+                                    Some(answer) => {
+                                        match answer.clone() {
+                                            Either::Left(answer) => {
+                                                rsx! {
+                                                    p {"{question}"}
+                                                    BackPutRender {
+                                                        text: answer.text.clone(),
+                                                        dropdown: answer.dropdown.clone(),
+                                                        ref_card: answer.ref_card.clone(),
+                                                        audio: answer.audio.clone(),
+                                                    }
+                                                }
+
+                                            },
+                                            Either::Right(answer) => {
+                                                rsx! {
+                                                    p {"{question}"}
+                                                    CardRefRender {
+                                                        selected_card: answer.selected_card(),
+                                                        placeholder: "pick ittt",
+                                                        allowed: vec![CardTy::Instance],
+                                                        filter: answer.filter.clone(),
+                                                    }
+                                                }
+                                            },
+                                        }
+                                    }
+                                    None => {
+                                        rsx! {
+                                            div {
+                                                class: "flex flex-row",
+                                                p{"{question}"}
+                                                button {
+                                                class: "mt-2 inline-flex items-center text-white bg-gray-800 border-0 py-1 px-3 focus:outline-none hover:bg-gray-700 rounded text-base md:mt-0",
+                                                onclick: move |_| {
+                                                    match attr_id.back_type {
+                                                        Some(id) => {
+                                                        let mut cref = CardRef::new();
+                                                        cref.filter = SetExpr::union_with([DynCard::Instances(id)]);
+                                                        answer.set(Some(Either::Right(cref)))
+                                                        },
+                                                        None => {
+                                                        answer.set(Some(Either::Left(BackPut::new(None))));
+
+                                                        },
+                                                    }
+                                                },
+                                                "add answer"
+                                            }
+                                            }
+                                        }
+                                    },
+                                }
+                            }
+                        },
+                    }
+                }
+        }
+
+    }
+}
+
+#[component]
 fn InputElements(
     front: FrontPut,
     back: BackPut,
@@ -732,7 +833,6 @@ fn InputElements(
     let has_attrs = !attrs.is_empty();
     let has_attr_answers = !attr_answers.read().is_empty();
 
-    let is_class = matches!(ty, CardTy::Class);
     let inner_attrs = attrs.cloned();
 
     rsx! {
@@ -785,9 +885,35 @@ fn InputElements(
                         allowed: concept.allowed.clone(),
                         filter: concept.filter.clone(),
                     },
+                }
 
+                if has_attrs {
+                    p {"attributes"}
+                    div {
+                        class: "max-h-64 overflow-y-auto",
+                        for (_id, (mut pattern, backty)) in inner_attrs {
+                            div {
+                            class: "flex flex-row",
+                            input {
+                                class: "bg-white w-full border border-gray-300 rounded-md p-2 mb-4 text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent",
+                                value: "{pattern}",
+                                placeholder: "default question",
+                                oninput: move |evt| pattern.set(evt.value()),
+                            }
 
+                                CardRefRender { selected_card: backty.selected_card(), placeholder: "answer type", allowed: vec![CardTy::Class] , filter: speki_core::set::SetExpr::union_with([DynCard::CardType(speki_core::card::CType::Class)])}
+                            }
+                        }
                     }
+                }
+
+                button {
+                    class: "mt-2 inline-flex items-center text-white bg-gray-800 border-0 py-1 px-3 focus:outline-none hover:bg-gray-700 rounded text-base md:mt-0",
+                    onclick: move |_| {
+                        attrs.write().push((AttributeId::new_v4(), (Signal::new_in_scope("{}".to_string(), ScopeId::APP), CardRef::new())));
+                    },
+                    "add attribute"
+                }
             },
             CardTy::Instance => rsx! {
                 BackPutRender {
@@ -812,140 +938,9 @@ fn InputElements(
                 }
 
                 if has_attr_answers {
-
-            p {"attributes"}
-            div {
-                class: "max-h-64 overflow-y-auto",
-
-                    for answer in attr_answers.iter() {
-                        match answer.clone() {
-                            AttrAnswer::Old {question, answer,..} => {
-                                match answer {
-                                    Either::Left(answer) => {
-                                        rsx! {
-                                            p {"{question}"}
-                                            BackPutRender {
-                                                text: answer.text.clone(),
-                                                dropdown: answer.dropdown.clone(),
-                                                ref_card: answer.ref_card.clone(),
-                                                audio: answer.audio.clone(),
-                                            }
-                                        }
-
-                                    },
-                                    Either::Right(answer) => {
-                                        rsx! {
-                                            p {"{question}"}
-                                            CardRefRender {
-                                                selected_card: answer.selected_card(),
-                                                placeholder: "pick ittt",
-                                                allowed: vec![CardTy::Instance],
-                                                filter: answer.filter.clone(),
-                                             }
-                                        }
-                                    },
-                                }
-                            },
-                            AttrAnswer::New {question, mut answer, attr_id} => {
-                                rsx! {
-                                    match answer.clone().as_ref() {
-                                        Some(answer) => {
-                                            match answer.clone() {
-                                                Either::Left(answer) => {
-                                                    rsx! {
-                                                        p {"{question}"}
-                                                        BackPutRender {
-                                                            text: answer.text.clone(),
-                                                            dropdown: answer.dropdown.clone(),
-                                                            ref_card: answer.ref_card.clone(),
-                                                            audio: answer.audio.clone(),
-                                                        }
-                                                    }
-
-                                                },
-                                                Either::Right(answer) => {
-                                                    rsx! {
-                                                        p {"{question}"}
-                                                        CardRefRender {
-                                                            selected_card: answer.selected_card(),
-                                                            placeholder: "pick ittt",
-                                                            allowed: vec![CardTy::Instance],
-                                                            filter: answer.filter.clone(),
-                                                        }
-                                                    }
-                                                },
-                                            }
-                                        }
-                                        None => {
-                                            rsx! {
-                                                div {
-                                                    class: "flex flex-row",
-                                                    p{"{question}"}
-                                                    button {
-                                                    class: "mt-2 inline-flex items-center text-white bg-gray-800 border-0 py-1 px-3 focus:outline-none hover:bg-gray-700 rounded text-base md:mt-0",
-                                                    onclick: move |_| {
-                                                        match attr_id.back_type {
-                                                            Some(id) => {
-                                                               let mut cref = CardRef::new();
-                                                               cref.filter = SetExpr::union_with([DynCard::Instances(id)]);
-                                                               answer.set(Some(Either::Right(cref)))
-                                                            },
-                                                            None => {
-                                                               answer.set(Some(Either::Left(BackPut::new(None))));
-
-                                                            },
-                                                        }
-                                                    },
-                                                    "add answer"
-                                                }
-                                                }
-
-                                            }
-                                        },
-                                    }
-                                }
-                            },
-                        }
-                    }
-
-
-            }
-
+                    AttrAnswers { attr_answers }
                 }
-
             },
-        }
-
-        if has_attrs {
-            p {"attributes"}
-            div {
-                class: "max-h-64 overflow-y-auto",
-                for (_id, (mut pattern, backty)) in inner_attrs {
-                    div {
-                    class: "flex flex-row",
-                    input {
-                        class: "bg-white w-full border border-gray-300 rounded-md p-2 mb-4 text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent",
-                        value: "{pattern}",
-                        placeholder: "default question",
-                        oninput: move |evt| pattern.set(evt.value()),
-                    }
-
-                    CardRefRender { selected_card: backty.selected_card(), placeholder: "answer type", allowed: vec![CardTy::Class] , filter: speki_core::set::SetExpr::union_with([DynCard::CardType(speki_core::card::CType::Class)])}
-
-                    }
-                }
-            }
-        }
-
-        if is_class {
-            button {
-                class: "mt-2 inline-flex items-center text-white bg-gray-800 border-0 py-1 px-3 focus:outline-none hover:bg-gray-700 rounded text-base md:mt-0",
-                onclick: move |_| {
-                    attrs.write().push((AttributeId::new_v4(), (Signal::new_in_scope("{}".to_string(), ScopeId::APP), CardRef::new())));
-                },
-                "add attribute"
-
-             }
         }
     }
 }
