@@ -22,7 +22,9 @@ use crate::{
         card_selector::{CardSelector, MyClosure},
         cardviewer::CardViewer,
     },
-    pop_overlay, APP,
+    pop_overlay,
+    utils::recall_to_emoji,
+    APP,
 };
 
 use super::OverlayEnum;
@@ -34,12 +36,7 @@ fn RecallButton(
     mut queue: Signal<Queue>,
     mut show_backside: Signal<bool>,
 ) -> Element {
-    let label = match recall {
-        Recall::None => "😞",
-        Recall::Late => "😐",
-        Recall::Some => "🙂",
-        Recall::Perfect => "😃",
-    };
+    let label = recall_to_emoji(recall);
 
     rsx! {
         button {

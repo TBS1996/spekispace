@@ -4,6 +4,7 @@ use dioxus::prelude::*;
 use ledgerstore::EventError;
 use speki_core::{
     card::{CardId, RawCard},
+    recall_rate::Recall,
     Card, CardRefType,
 };
 use tracing::info;
@@ -118,9 +119,11 @@ pub fn handle_card_event_error(err: EventError<RawCard>) {
     append_overlay(overlay);
 }
 
-/*
-
-johnsmith -> person -> johnsmith
-
-
-*/
+pub fn recall_to_emoji(recall: Recall) -> &'static str {
+    match recall {
+        Recall::None => "😞",
+        Recall::Late => "😐",
+        Recall::Some => "🙂",
+        Recall::Perfect => "😃",
+    }
+}

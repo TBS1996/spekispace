@@ -29,6 +29,8 @@ omtrent.workspace = true
 dirs.workspace = true
 dioxus-desktop = "0.6.1"
 rayon.workspace = true
+chrono.workspace = true
+tokio.workspace = true
 
 [features]
 default = ["desktop"]

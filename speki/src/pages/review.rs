@@ -436,7 +436,7 @@ fn RenderSet(
                             .cloned()
                             .collect::<Vec<Arc<Card>>>()
                             .into_par_iter()
-                            .filter(|card| filter.filter(card.clone()))
+                            .filter(|card| card.is_finished() && filter.filter(card.clone()))
                             .collect();
 
 
