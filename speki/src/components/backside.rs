@@ -30,6 +30,7 @@ pub fn BackPutRender(
     dropdown: DropDownMenu<BackOpts>,
     ref_card: CardRef,
     audio: Signal<Option<Audio>>,
+    show_title: Option<()>,
 ) -> Element {
     use std::str::FromStr;
 
@@ -39,11 +40,12 @@ pub fn BackPutRender(
         div {
             class: "block text-gray-700 text-sm font-medium max-w-full",
 
-            "Back:"
+            if let Some(()) = show_title {
+                "Back:"
+            }
 
             div {
                 class: "backside-editor flex items-center space-x-4",
-
 
                 div {
                     class: "flex-shrink-0",
