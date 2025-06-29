@@ -67,7 +67,7 @@ pub fn CardViewerRender(props: CardViewer) -> Element {
                 if *width.read() != new_width {
                     width.set(new_width);
                 }
-                tokio::time::sleep(std::time::Duration::from_millis(10000)).await;
+                tokio::time::sleep(std::time::Duration::from_millis(100)).await;
             }
         }
     });
@@ -237,7 +237,7 @@ impl From<AttrBackType> for AttrBackTypeEditor {
 #[derive(Props, Clone)]
 pub struct CardEditor {
     pub front: FrontPut,
-    namespace: CardRef,
+    namespace: Signal<Option<CardRef>>,
     back: BackPut,
     default_question: Signal<String>,
     concept: CardRef,
@@ -332,7 +332,11 @@ impl CardEditor {
         Some(CardRep {
             ty,
             answered_attrs: self.attr_answers.cloned(),
-            namespace: self.namespace.selected_card().cloned(),
+            namespace: self
+                .namespace
+                .cloned()
+                .map(|x| x.selected_card().cloned())
+                .flatten(),
             front_audio: self.front.audio.cloned().map(|audio| audio.id),
             back_audio: self.back.audio.cloned().map(|audio| audio.id),
             deps: self
@@ -630,14 +634,14 @@ impl CardViewer {
             };
 
             let namespace = {
-                let namespace = CardRef::new();
-
                 if let Some(card) = card.namespace() {
+                    let namespace = CardRef::new();
                     let card = APP.read().load_card(card);
                     namespace.set_ref(card.id());
+                    Signal::new_in_scope(Some(namespace), ScopeId::APP)
+                } else {
+                    Signal::new_in_scope(None, ScopeId::APP)
                 }
-
-                namespace
             };
 
             let dependencies: Signal<Vec<Arc<Card>>> = Signal::new_in_scope(
@@ -695,7 +699,7 @@ impl CardViewer {
             CardEditor {
                 attr_answers,
                 front,
-                namespace: CardRef::new(),
+                namespace: Signal::new_in_scope(None, ScopeId::APP),
                 back,
                 concept,
                 dependencies,
@@ -756,8 +760,6 @@ fn RenderInputs(props: CardViewer) -> Element {
                 }
                 Suspend { card: card.id() }
             }
-
-            add_dep { selv: props.clone() }
 
             save_button { CardViewer: props.clone() }
         }
@@ -979,7 +981,7 @@ fn InputElements(
     concept: CardRef,
     ty: CardTy,
     card_id: Option<CardId>,
-    namespace: CardRef,
+    mut namespace: Signal<Option<CardRef>>,
     attrs: Signal<Vec<AttrEditor>>,
     attr_answers: Signal<Vec<AttrQandA>>,
 ) -> Element {
@@ -987,20 +989,6 @@ fn InputElements(
 
     rsx! {
         FrontPutRender { dropdown: front.dropdown.clone(), text: front.text.clone(), audio: front.audio.clone() }
-
-        div {
-            class: "block text-gray-700 text-sm font-medium mb-2",
-            style: "margin-right: 82px;",
-
-            CardRefRender{
-                selected_card: namespace.card.clone(),
-                placeholder: "choose namespace",
-                on_select: namespace.on_select.clone(),
-                on_deselect: namespace.on_deselect.clone(),
-                allowed: namespace.allowed.clone(),
-                filter: namespace.filter.clone(),
-            },
-        }
 
         match ty {
             CardTy::Unfinished => rsx! {},
@@ -1067,6 +1055,38 @@ fn InputElements(
                 }
             },
         }
+
+        match namespace.cloned() {
+            Some(ns) => {
+                    rsx! {
+                        div {
+                            class: "block text-gray-700 text-sm font-medium mb-2",
+                            style: "margin-right: 82px;",
+                        CardRefRender{
+                            selected_card: ns.card.clone(),
+                            placeholder: "choose namespace",
+                            on_select: ns.on_select.clone(),
+                            on_deselect: ns.on_deselect.clone(),
+                            allowed: ns.allowed.clone(),
+                            filter: ns.filter.clone(),
+                        },
+                    }
+                }
+            },
+            None => {
+                rsx! {
+                    button {
+                        class: "{crate::styles::BLACK_BUTTON} mb-2",
+                        onclick: move |_| {
+                            namespace.set(Some(CardRef::new()));
+                        },
+                        "set namespace"
+                    }
+                }
+            },
+        }
+
+
     }
 }
 
@@ -1236,40 +1256,6 @@ fn save_button(CardViewer: CardViewer) -> Element {
             } else {
                 "save"
             }
-        }
-    }
-}
-
-#[component]
-fn add_dep(selv: CardViewer) -> Element {
-    let selv = selv.clone();
-    let front = selv.editor.front.text.cloned();
-    rsx! {
-        button {
-            class: "mt-2 inline-flex items-center text-white bg-gray-800 border-0 py-1 px-3 focus:outline-none hover:bg-gray-700 rounded text-base md:mt-0",
-            onclick: move |_| {
-                let selv = selv.clone();
-
-                let fun = MyClosure::new(
-                    move |card: CardId| {
-                    let card = APP.read().load_card(card);
-                    selv.editor.dependencies.clone().write().push(card.clone());
-                    let old_card = selv.old_card.clone();
-                    if let Some(mut old_card) = old_card.map(|c|Arc::unwrap_or_clone(c)) {
-                        if let Err(e) = old_card.add_dependency(card.id()) {
-                            handle_card_event_error(e);
-                        }
-                        }
-                    }
-                );
-
-                info!("1 scope is ! {:?}", current_scope_id().unwrap());
-                let thefront = front.clone();
-                let props = CardSelector::dependency_picker(fun).with_default_search(thefront.clone());
-                append_overlay(OverlayEnum::CardSelector(props));
-                info!("2 scope is ! {:?}", current_scope_id().unwrap());
-            },
-            "add dependency"
         }
     }
 }
