@@ -17,7 +17,7 @@ use tracing::info;
 
 use crate::{
     append_overlay,
-    components::RenderDependents,
+    components::{card_mastery::MasterySection, RenderDependents},
     overlays::{
         card_selector::{CardSelector, MyClosure},
         cardviewer::CardViewer,
@@ -126,6 +126,8 @@ pub fn ReviewRender(
         deps
     };
 
+    let history = card.history().to_owned();
+
     let front = card.front_side().to_owned();
     let back = card.backside().to_owned();
 
@@ -171,11 +173,23 @@ pub fn ReviewRender(
                     }
 
                     div {
-                        class: "flex flex-row md:flex-row w-full h-full overflow-hidden",
+                        class: "flex flex-row w-full h-full overflow-hidden justify-start",
+                        style: "max-width: 1200px;",
 
                         div {
-                            class: "flex-1 w-full md:w-1/2 box-border order-1 md:order-2 relative",
-                            style: "min-height: 0; flex-grow: 1;",
+                            class: "w-[600px] p-4 box-border overflow-y-auto overflow-x-hidden",
+                            style: "min-height: 0; max-height: 100%;",
+                             CardSides {
+                                front, back, queue, card: card.clone(), show_backside,
+                             }
+                        }
+
+                        div {
+                            class: "flex-1 box-border relative overflow-y-auto",
+                            style: "min-height: 0;",
+                            if show_backside.cloned() {
+                                MasterySection { history }
+                            }
                             RenderDependencies{
                                 card: card.clone(),
                                 explicit_dependencies,
@@ -187,15 +201,7 @@ pub fn ReviewRender(
                                 hidden: !(*show_backside.read()),
                             }
                         }
-
-                        div {
-                            class: "flex-none w-full md:w-1/2 p-4 box-border overflow-y-auto overflow-x-hidden order-2 md:order-1",
-                            style: "min-height: 0; max-height: 100%;",
-                             CardSides {
-                                front, back, queue, card, show_backside,
-                             }
-                        }
-                    }
+            }
         }
     }
 }

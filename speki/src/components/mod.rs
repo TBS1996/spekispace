@@ -1,4 +1,5 @@
 pub mod backside;
+pub mod card_mastery;
 pub mod cardref;
 pub mod dropdown;
 mod filtereditor;

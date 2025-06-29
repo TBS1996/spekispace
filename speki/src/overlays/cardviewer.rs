@@ -1,10 +1,8 @@
 use std::{
     collections::{BTreeSet, HashMap},
     sync::Arc,
-    time::Duration,
 };
 
-use chrono::{DateTime, Local, TimeZone};
 use dioxus::prelude::*;
 use either::Either;
 use ledgerstore::TheLedgerEvent;
@@ -13,38 +11,26 @@ use speki_core::{
     card::{AttributeId, Attrv2, BackSide, CardId, TextData},
     collection::DynCard,
     ledger::{CardAction, CardEvent},
-    recall_rate::Recall,
     set::SetExpr,
     Card, CardType,
 };
-
-use ledgerstore::TimeProvider;
 use tracing::info;
 
 use crate::{
     append_overlay,
     components::{
-        backside::BackPutRender, cardref::CardRefRender, frontside::FrontPutRender, BackPut,
-        CardRef, CardTy, DropDownMenu, FrontPut, RenderDependents,
+        backside::BackPutRender, card_mastery::MasterySection, cardref::CardRefRender,
+        frontside::FrontPutRender, BackPut, CardRef, CardTy, DropDownMenu, FrontPut,
+        RenderDependents,
     },
     overlays::{
         card_selector::{CardSelector, MyClosure},
         OverlayEnum,
     },
     pop_overlay,
-    utils::{handle_card_event_error, recall_to_emoji},
+    utils::handle_card_event_error,
     APP,
 };
-
-/// Info about the review history/recall/stability of the card
-#[component]
-pub fn MasterySection(history: MyHistory) -> Element {
-    let now = APP.read().inner().time_provider.current_time();
-
-    rsx! {
-        DisplayHistory { history, now }
-    }
-}
 
 /// The properties of the card itself
 #[component]
@@ -339,56 +325,54 @@ fn RenderDependencies(
                     "Explicit dependencies"
                 }
 
-                    button {
-                        class: "p-1 hover:bg-gray-200 hover:border-gray-400 border border-transparent rounded-md transition-colors",
-                        onclick: move |_| {
-                            let currcard = card_text.cloned();
-                            let depsig = dependencies.clone();
+                button {
+                    class: "p-1 hover:bg-gray-200 hover:border-gray-400 border border-transparent rounded-md transition-colors",
+                    onclick: move |_| {
+                        let currcard = card_text.cloned();
+                        let depsig = dependencies.clone();
 
-                            let fun = MyClosure::new(move |card: CardId| {
-                                let card = APP.read().load_card(card);
-                                depsig.clone().write().push(card);
-                            });
+                        let fun = MyClosure::new(move |card: CardId| {
+                            let card = APP.read().load_card(card);
+                            depsig.clone().write().push(card);
+                        });
 
-                            let front = currcard.clone();
-                            let mut props = CardSelector::dependency_picker(fun).with_default_search(front);
-                            if let Some(id)  = card_id {
-                                props = props.with_forbidden_cards(vec![id]);
-                            }
-                            append_overlay(OverlayEnum::CardSelector(props));
-                        },
-                        "➕"
-                    }
+                        let front = currcard.clone();
+                        let mut props = CardSelector::dependency_picker(fun).with_default_search(front);
+                        if let Some(id)  = card_id {
+                            props = props.with_forbidden_cards(vec![id]);
+                        }
+                        append_overlay(OverlayEnum::CardSelector(props));
+                    },
+                    "➕"
                 }
+            }
 
             for (idx, card) in deps.into_iter().enumerate() {
                 div {
                     class: "flex flex-row",
-                button {
-                    class: "mb-1 p-1 bg-gray-100 rounded-md text-left",
-                    onclick: move|_|{
-                        let card = card.clone();
-                        let viewer = CardViewer::new_from_card(card);
-                        append_overlay(OverlayEnum::CardViewer(viewer));
-                    },
-                    "{card}"
-                }
+                    button {
+                        class: "mb-1 p-1 bg-gray-100 rounded-md text-left",
+                        onclick: move|_|{
+                            let card = card.clone();
+                            let viewer = CardViewer::new_from_card(card);
+                            append_overlay(OverlayEnum::CardViewer(viewer));
+                        },
+                        "{card}"
+                    }
 
-                button {
-                    class: "p-1 hover:bg-gray-200 hover:border-gray-400 border border-transparent rounded-md transition-colors",
-                    onclick: move |_|{
-                        let removed =  dependencies.write().remove(idx);
-                        if let Some(id) = card_id {
-                            let event = TheLedgerEvent::new_modify(id, CardAction::RemoveDependency(removed.id()));
-                            if let Err(e) = APP.read().inner().provider.cards.modify(event) {
-                                handle_card_event_error(e);
+                    button {
+                        class: "p-1 hover:bg-gray-200 hover:border-gray-400 border border-transparent rounded-md transition-colors",
+                        onclick: move |_|{
+                            let removed =  dependencies.write().remove(idx);
+                            if let Some(id) = card_id {
+                                let event = TheLedgerEvent::new_modify(id, CardAction::RemoveDependency(removed.id()));
+                                if let Err(e) = APP.read().inner().provider.cards.modify(event) {
+                                    handle_card_event_error(e);
+                                }
                             }
-                        }
-                    },
-                    "X"
-                }
-
-
+                        },
+                        "X"
+                    }
                 }
            }
         }
@@ -962,81 +946,6 @@ fn InputElements(
                 "add attribute"
 
              }
-        }
-    }
-}
-
-fn recall_to_bg_class(recall: Recall) -> &'static str {
-    match recall {
-        Recall::None => "bg-red-300",
-        Recall::Late => "bg-red-200",
-        Recall::Some => "bg-green-200",
-        Recall::Perfect => "bg-green-300",
-    }
-}
-
-use speki_core::recall_rate::History as MyHistory;
-
-fn hr_dur(dur: Duration) -> String {
-    let secs = dur.as_secs_f32();
-    if secs >= 86_400.0 {
-        format!("{:.1}d ago", secs / 86_400.0)
-    } else if secs >= 3_600.0 {
-        format!("{:.1}h ago", secs / 3_600.0)
-    } else if secs >= 60.0 {
-        format!("{:.1}m ago", secs / 60.0)
-    } else {
-        format!("{:.0}s ago", secs)
-    }
-}
-
-#[component]
-fn DisplayHistory(history: MyHistory, now: Duration, #[props(default = 5)] rows: usize) -> Element {
-    let height_px = rows * 32;
-
-    let reviews = history.reviews.clone();
-    let is_empty = history.reviews.is_empty();
-
-    let bg_emoji_ago_exact: Vec<(&str, &str, String, String)> = reviews
-        .iter()
-        .rev()
-        .map(|review| {
-            let bg = recall_to_bg_class(review.grade);
-            let emoji = recall_to_emoji(review.grade);
-            let ago = hr_dur(now - review.timestamp);
-
-            let secs = review.timestamp.as_secs() as i64;
-            let dt: DateTime<Local> = Local.timestamp_opt(secs, 0).unwrap();
-            let exact = dt.format("%Y-%m-%d %H:%M:%S %Z").to_string();
-            (bg, emoji, ago, exact)
-        })
-        .collect();
-
-    rsx! {
-        div {
-            class: "space-y-2",
-            h3 {
-                class: "text-sm font-semibold text-gray-600 uppercase tracking-wide",
-                "Past reviews"
-            }
-            div {
-                class: "overflow-y-auto",
-                style: "height: {height_px}px;",
-                if is_empty {
-                    p { "No review history." }
-                } else {
-                    for (bg, emoji, ago, exact) in bg_emoji_ago_exact {
-                            div {
-                                class: "rounded px-3 py-1 flex items-center justify-between text-base {bg}",
-                                span {
-                                    class: "text-2xl font-emoji leading-none",
-                                    "{emoji}"
-                                }
-                                span { title: "{exact}", "{ago}" }
-                            }
-                    }
-                }
-            }
         }
     }
 }
