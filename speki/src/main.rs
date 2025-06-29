@@ -31,7 +31,16 @@ const TAILWIND_CSS: &str = include_str!("../public/tailwind.css");
 
 fn main() {
     std::env::set_var("GDK_BACKEND", "x11");
-    dioxus_logger::init(Level::INFO).expect("failed to init logger");
+
+    let trace_enabled = std::env::args().any(|arg| arg == "--trace");
+    let log_level = if trace_enabled {
+        Level::TRACE
+    } else {
+        Level::INFO
+    };
+
+    dioxus_logger::init(log_level).expect("failed to init logger");
+
     info!("starting speki");
 
     dioxus::launch(TheApp);

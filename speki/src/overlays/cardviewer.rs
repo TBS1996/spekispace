@@ -8,7 +8,7 @@ use either::Either;
 use ledgerstore::TheLedgerEvent;
 use speki_core::{
     audio::AudioId,
-    card::{AttrBackType, AttributeId, Attrv2, BackSide, CardId, TextData},
+    card::{AttrBackType, AttributeId, Attrv2, BackSide, CType, CardId, TextData},
     collection::DynCard,
     ledger::{CardAction, CardEvent},
     set::SetExpr,
@@ -19,9 +19,11 @@ use tracing::info;
 use crate::{
     append_overlay,
     components::{
-        backside::BackPutRender, card_mastery::MasterySection, cardref::CardRefRender,
-        frontside::FrontPutRender, BackPut, CardRef, CardTy, DropDownMenu, FrontPut,
-        RenderDependents,
+        backside::BackPutRender,
+        card_mastery::MasterySection,
+        cardref::{CardRefRender, ForcedCardRefRender},
+        frontside::FrontPutRender,
+        BackPut, CardRef, CardTy, DropDownMenu, FrontPut, RenderDependents,
     },
     overlays::{
         card_selector::{CardSelector, MyClosure},
@@ -66,7 +68,7 @@ pub fn CardViewerRender(props: CardViewer) -> Element {
                 if *width.read() != new_width {
                     width.set(new_width);
                 }
-                tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+                tokio::time::sleep(std::time::Duration::from_millis(10000)).await;
             }
         }
     });
@@ -182,6 +184,38 @@ impl PartialEq for AttrAnswer {
     }
 }
 
+#[derive(Clone, Debug)]
+struct AttrEditor {
+    id: AttributeId,
+    pattern: Signal<String>,
+    ty: Signal<Option<AttrBackTypeEditor>>,
+}
+
+impl AttrEditor {
+    fn new() -> Self {
+        Self {
+            id: AttributeId::new_v4(),
+            pattern: Signal::new_in_scope("{}".to_string(), ScopeId::APP),
+            ty: Signal::new_in_scope(None, ScopeId::APP),
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+enum AttrBackTypeEditor {
+    InstanceOfClass(Signal<CardId>),
+}
+
+impl From<AttrBackType> for AttrBackTypeEditor {
+    fn from(value: AttrBackType) -> Self {
+        match value {
+            AttrBackType::InstanceOfClass(id) => {
+                AttrBackTypeEditor::InstanceOfClass(Signal::new_in_scope(id, ScopeId::APP))
+            }
+        }
+    }
+}
+
 /// container for all the structs you edit while creating/modifying a card
 #[derive(Props, Clone)]
 pub struct CardEditor {
@@ -192,7 +226,7 @@ pub struct CardEditor {
     concept: CardRef,
     dependencies: Signal<Vec<Arc<Card>>>,
     allowed_cards: Vec<CardTy>,
-    attrs: Signal<Vec<(AttributeId, (Signal<String>, CardRef))>>,
+    attrs: Signal<Vec<AttrEditor>>,
     attr_answers: Signal<Vec<AttrAnswer>>,
 }
 
@@ -211,14 +245,16 @@ impl CardEditor {
             .attrs
             .cloned()
             .into_iter()
-            .filter_map(|(id, (pattern, answerty))| {
+            .filter_map(|AttrEditor { id, pattern, ty }| {
                 let pattern = pattern.cloned();
-                let answerty = answerty
-                    .selected_card()
-                    .cloned()
-                    .map(AttrBackType::InstanceOfClass);
+                let ty = match ty.cloned() {
+                    Some(AttrBackTypeEditor::InstanceOfClass(id)) => {
+                        Some(AttrBackType::InstanceOfClass(id.cloned()))
+                    }
+                    None => None,
+                };
                 if pattern.contains("{}") {
-                    Some((id, (pattern, answerty)))
+                    Some((id, (pattern, ty)))
                 } else {
                     None
                 }
@@ -558,23 +594,21 @@ impl CardViewer {
             let attr_answers = Signal::new_in_scope(attrs, ScopeId::APP);
 
             // The attributes for a given class
-            let attrs: Vec<(AttributeId, (Signal<String>, CardRef))> = if card.is_class() {
+            let attrs: Vec<AttrEditor> = if card.is_class() {
                 let attrs = card.attributes().unwrap();
 
-                let mut map: Vec<(AttributeId, (Signal<String>, CardRef))> = Default::default();
+                let mut map: Vec<AttrEditor> = Default::default();
 
                 for attr in attrs {
-                    let cref = CardRef::new();
+                    let ty: Option<AttrBackTypeEditor> = attr.back_type.map(From::from);
 
-                    if let Some(AttrBackType::InstanceOfClass(ty)) = attr.back_type {
-                        let card = APP.read().load_card(ty);
-                        cref.set_ref(card.id());
-                    }
+                    let editor = AttrEditor {
+                        id: attr.id,
+                        pattern: Signal::new_in_scope(attr.pattern, ScopeId::APP),
+                        ty: Signal::new_in_scope(ty, ScopeId::APP),
+                    };
 
-                    map.push((
-                        attr.id,
-                        (Signal::new_in_scope(attr.pattern, ScopeId::APP), cref),
-                    ));
+                    map.push(editor);
                 }
                 map
             } else {
@@ -826,7 +860,7 @@ fn InputElements(
     ty: CardTy,
     card_id: Option<CardId>,
     namespace: CardRef,
-    attrs: Signal<Vec<(AttributeId, (Signal<String>, CardRef))>>,
+    attrs: Signal<Vec<AttrEditor>>,
     attr_answers: Signal<Vec<AttrAnswer>>,
 ) -> Element {
     let has_attrs = !attrs.is_empty();
@@ -890,17 +924,51 @@ fn InputElements(
                     p {"attributes"}
                     div {
                         class: "max-h-64 overflow-y-auto",
-                        for (_id, (mut pattern, backty)) in inner_attrs {
+                        for AttrEditor {id: _,mut pattern,mut ty } in inner_attrs {
                             div {
-                            class: "flex flex-row",
-                            input {
-                                class: "bg-white w-full border border-gray-300 rounded-md p-2 mb-4 text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent",
-                                value: "{pattern}",
-                                placeholder: "default question",
-                                oninput: move |evt| pattern.set(evt.value()),
-                            }
+                                class: "flex flex-row gap-2 mb-4",
+                                div {
+                                    class: "w-1/2",
+                                    input {
+                                        class: "bg-white w-full border border-gray-300 rounded-md p-2 text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent",
+                                        value: "{pattern}",
+                                        placeholder: "default question",
+                                        oninput: move |evt| pattern.set(evt.value()),
+                                    }
+                                }
+                                div {
+                                        class: "flex flex-row w-1/2 gap-2",
+                                    match ty.cloned() {
+                                        Some(AttrBackTypeEditor::InstanceOfClass(selected)) => rsx! {
+                                            button {
+                                                title: "remove answer constraint",
+                                                class: "{crate::styles::BLACK_BUTTON}",
+                                                onclick: move |_| {
+                                                    ty.set(None);
+                                                },
+                                                "X"
+                                            }
+                                            ForcedCardRefRender { selected_card: selected, allowed: vec![CardTy::Class], filter: speki_core::set::SetExpr::union_with([DynCard::CardType(speki_core::card::CType::Class)]) }
+                                        },
+                                        None => rsx! {
+                                            button {
+                                                class: "{crate::styles::BLACK_BUTTON}",
+                                                onclick: move |_| {
+                                                    let fun = MyClosure::new(move |card: CardId| {
+                                                        ty.clone().set(Some(AttrBackTypeEditor::InstanceOfClass(Signal::new_in_scope(card, ScopeId::APP))));
+                                                    });
 
-                                CardRefRender { selected_card: backty.selected_card(), placeholder: "answer type", allowed: vec![CardTy::Class] , filter: speki_core::set::SetExpr::union_with([DynCard::CardType(speki_core::card::CType::Class)])}
+                                                    let filter = SetExpr::union_with([DynCard::CardType(CType::Class)]);
+                                                    let allowed = vec![CardTy::Class];
+
+                                                    let props = CardSelector::ref_picker(fun, filter).with_allowed_cards(allowed);
+                                                    append_overlay(OverlayEnum::CardSelector(props));
+                                                },
+                                                "add instance constraint"
+                                            }
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
@@ -909,7 +977,7 @@ fn InputElements(
                 button {
                     class: "mt-2 inline-flex items-center text-white bg-gray-800 border-0 py-1 px-3 focus:outline-none hover:bg-gray-700 rounded text-base md:mt-0",
                     onclick: move |_| {
-                        attrs.write().push((AttributeId::new_v4(), (Signal::new_in_scope("{}".to_string(), ScopeId::APP), CardRef::new())));
+                        attrs.write().push(AttrEditor::new());
                     },
                     "add attribute"
                 }

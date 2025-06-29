@@ -1,2 +1,2 @@
 #!/bin/sh
-GDK_BACKEND=x11 RUST_BACKTRACE=1 cargo run #dx serve
+GDK_BACKEND=x11 RUST_BACKTRACE=1 dx serve

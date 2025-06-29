@@ -182,21 +182,23 @@ impl<'de> Deserialize<'de> for AttrBackType {
     where
         D: Deserializer<'de>,
     {
-        // Try to deserialize as the enum normally
-        #[derive(Deserialize)]
-        #[serde(field_identifier, rename_all = "camelCase")]
-        enum Field {
-            InstanceOfClass,
-        }
+        let value = Value::deserialize(deserializer)?;
 
-        // Try normal enum deserialization first
-        let value = serde_json::Value::deserialize(deserializer)?;
+        // Try to deserialize directly as Uuid
         if let Ok(uuid) = Uuid::deserialize(&value) {
             return Ok(AttrBackType::InstanceOfClass(uuid));
         }
 
-        // Fallback to normal enum deserialization
-        AttrBackType::deserialize(value).map_err(serde::de::Error::custom)
+        // Try deserializing as the new enum using a helper
+        #[derive(Deserialize)]
+        enum Helper {
+            InstanceOfClass(CardId),
+        }
+
+        let helper: Helper = serde_json::from_value(value).map_err(serde::de::Error::custom)?;
+        match helper {
+            Helper::InstanceOfClass(id) => Ok(AttrBackType::InstanceOfClass(id)),
+        }
     }
 }
 

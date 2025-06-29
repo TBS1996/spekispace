@@ -190,10 +190,6 @@ impl Card {
 
         let mut output = vec![];
 
-        if let CardType::Class { attrs, .. } = &self.base.data {
-            output.extend(attrs.clone());
-        }
-
         for class in self.parent_classes() {
             let card = self.card_provider.providers.cards.load(class);
             if let CardType::Class { attrs, .. } = card.data {
@@ -218,7 +214,9 @@ impl Card {
             recursive: true,
         };
 
-        self.card_provider.providers.cards.load_getter(getter)
+        let mut classes = self.card_provider.providers.cards.load_getter(getter);
+        classes.insert(key);
+        classes
     }
 
     pub fn get_attr(&self, id: AttributeId) -> Option<Attrv2> {

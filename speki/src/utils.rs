@@ -27,6 +27,8 @@ impl App {
             // creating a fresh root for debugging
             let _ = std::fs::remove_dir_all(&path);
             path
+        } else if args.get(1).is_some_and(|arg| arg == "debug_persist") {
+            dirs::data_local_dir().unwrap().join("speki_debug")
         } else {
             dirs::data_local_dir().unwrap().join("speki")
         };

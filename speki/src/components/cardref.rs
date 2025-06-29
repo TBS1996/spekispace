@@ -36,6 +36,50 @@ impl Debug for CardRef {
 }
 
 #[component]
+pub fn ForcedCardRefRender(
+    selected_card: Signal<CardId>,
+    allowed: Vec<CardTy>,
+    on_select: Option<MyClosure>,
+    #[props(default = SetExpr::All)] filter: SetExpr,
+) -> Element {
+    let display = APP
+        .read()
+        .load_card(selected_card.cloned())
+        .name()
+        .to_string();
+
+    rsx! {
+        div {
+            class: "relative w-full",
+            input {
+                class: "bg-white w-full border border-gray-300 rounded-md p-2 mb-2 text-gray-950 cursor-pointer focus:outline-none",
+                value: "{display}",
+                readonly: "true",
+                onclick: move |_| {
+                    let f = on_select.clone();
+                    let fun = MyClosure::new(move |card: CardId| {
+                        info!("x1");
+                        let f = f.clone();
+                        if let Some(fun) = f.clone() {
+                            info!("x2");
+                            fun.0(card.clone());
+                        }
+
+                        selected_card.clone().set(card);
+                    });
+
+                    let allowed = allowed.clone();
+                    let props = CardSelector::ref_picker(fun, filter.clone())
+                        .with_allowed_cards(allowed);
+
+                        append_overlay(OverlayEnum::CardSelector(props));
+                },
+            }
+        }
+    }
+}
+
+#[component]
 pub fn CardRefRender(
     selected_card: Signal<Option<CardId>>,
     placeholder: &'static str,
