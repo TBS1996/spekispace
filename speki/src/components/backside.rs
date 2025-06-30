@@ -126,6 +126,13 @@ pub fn BackPutRender(
     }
 }
 
+#[derive(Debug, Clone, Copy)]
+pub enum BacksideError {
+    InvalidTimestamp,
+    MissingCard,
+    MissingText,
+}
+
 impl BackPut {
     pub fn new(default: Option<BackSide>) -> Self {
         let default = default.unwrap_or_default();
@@ -164,33 +171,33 @@ impl BackPut {
         self.ref_card.reset();
     }
 
-    pub fn try_to_backside(&self) -> Result<Option<BackSide>, ()> {
+    pub fn try_to_backside(&self) -> Result<BackSide, BacksideError> {
         let chosen = self.dropdown.selected.cloned();
         info!("chosen is: {:?}", chosen);
 
         match chosen {
             BackOpts::Card => match self.ref_card.selected_card().cloned() {
-                Some(card) => Ok(Some(BackSide::Card(card))),
-                None => Ok(None),
+                Some(card) => Ok(BackSide::Card(card)),
+                None => Err(BacksideError::MissingCard),
             },
             BackOpts::Text => {
                 let s = self.text.cloned();
                 info!("text is: {s}");
                 if s.is_empty() {
-                    Ok(None)
+                    Err(BacksideError::MissingText)
                 } else {
-                    Ok(Some(BackSide::Text(s.into())))
+                    Ok(BackSide::Text(s.into()))
                 }
             }
             BackOpts::Time => {
                 let text = self.text.cloned();
 
                 if text.is_empty() {
-                    Ok(None)
+                    Err(BacksideError::InvalidTimestamp)
                 } else {
                     match omtrent::TimeStamp::from_str(&*self.text.read()) {
-                        Ok(ts) => Ok(Some(BackSide::Time(ts))),
-                        Err(_) => Err(()),
+                        Ok(ts) => Ok(BackSide::Time(ts)),
+                        Err(_) => Err(BacksideError::InvalidTimestamp),
                     }
                 }
             }

@@ -18,7 +18,7 @@ use tracing::info;
 use crate::{
     append_overlay,
     components::{
-        backside::BackPutRender,
+        backside::{BackPutRender, BacksideError},
         card_mastery::MasterySection,
         cardref::{CardRefRender, ForcedCardRefRender},
         frontside::FrontPutRender,
@@ -143,7 +143,7 @@ enum AttrAnswerEditor {
     },
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 enum AttrQandA {
     /// There's already a card created for this attribute
     /// answer can be modified but not changed
@@ -160,45 +160,6 @@ enum AttrQandA {
         question: String,
         answer: Signal<Option<AttrAnswerEditor>>,
     },
-}
-
-impl PartialEq for AttrQandA {
-    fn eq(&self, other: &Self) -> bool {
-        match (self, other) {
-            (
-                Self::Old {
-                    id: l_id,
-                    question: l_question,
-                    answer: l_answer,
-                    attr_id: l_attr_id,
-                },
-                Self::Old {
-                    id: r_id,
-                    question: r_question,
-                    answer: r_answer,
-                    attr_id: r_attr_id,
-                },
-            ) => {
-                l_id == r_id
-                    && l_question == r_question
-                    && l_answer == r_answer
-                    && l_attr_id == r_attr_id
-            }
-            (
-                Self::New {
-                    attr_id: l_attr_id,
-                    question: l_question,
-                    answer: l_answer,
-                },
-                Self::New {
-                    attr_id: r_attr_id,
-                    question: r_question,
-                    answer: r_answer,
-                },
-            ) => l_attr_id == r_attr_id && l_question == r_question && l_answer == r_answer,
-            _ => false,
-        }
-    }
 }
 
 #[derive(Clone, Debug)]
@@ -248,14 +209,14 @@ pub struct CardEditor {
 }
 
 impl CardEditor {
-    fn into_cardrep(self) -> Option<CardRep> {
+    fn into_cardrep(self) -> Result<CardRep, String> {
         let backside = self.back.clone();
         let frontside = self.front.clone();
 
         let front = format!("{}", frontside.text.cloned());
 
         if front.is_empty() {
-            return None;
+            return Err("front side can't be empty".to_string());
         }
 
         let attrs: HashMap<AttributeId, (String, Option<AttrBackType>)> = self
@@ -280,7 +241,18 @@ impl CardEditor {
 
         let ty = match self.front.dropdown.selected.cloned() {
             CardTy::Normal => {
-                let back = backside.try_to_backside().ok()??;
+                let back = match backside.try_to_backside() {
+                    Ok(back) => back,
+                    Err(BacksideError::MissingCard) => {
+                        return Err("no card selected".to_string());
+                    }
+                    Err(BacksideError::MissingText) => {
+                        return Err("backside can't be empty".to_string());
+                    }
+                    Err(BacksideError::InvalidTimestamp) => {
+                        return Err("invalid timestamp".to_string())
+                    }
+                };
 
                 CardType::Normal {
                     front: TextData::from_raw(&front),
@@ -289,7 +261,15 @@ impl CardEditor {
             }
             CardTy::Class => {
                 let parent_class = self.concept.selected_card().cloned();
-                let back = backside.try_to_backside().ok()?;
+                let back = match backside.try_to_backside() {
+                    Ok(back) => Some(back),
+                    Err(BacksideError::MissingCard) => None,
+                    Err(BacksideError::MissingText) => None,
+                    Err(BacksideError::InvalidTimestamp) => {
+                        return Err("invalid timestamp".to_string())
+                    }
+                };
+
                 let attrs: Vec<Attrv2> = attrs
                     .into_iter()
                     .map(|(id, (pattern, back_type))| Attrv2 {
@@ -315,8 +295,19 @@ impl CardEditor {
                 }
             }
             CardTy::Instance => {
-                let class = self.concept.selected_card().cloned()?;
-                let back = backside.try_to_backside().ok()?;
+                let class = match self.concept.selected_card().cloned() {
+                    Some(class) => class,
+                    None => return Err("must pick class of instance".to_string()),
+                };
+
+                let back = match backside.try_to_backside() {
+                    Ok(back) => Some(back),
+                    Err(BacksideError::MissingCard) => None,
+                    Err(BacksideError::MissingText) => None,
+                    Err(BacksideError::InvalidTimestamp) => {
+                        return Err("invalid timestamp".to_string())
+                    }
+                };
 
                 CardType::Instance {
                     name: TextData::from_raw(&front),
@@ -329,7 +320,7 @@ impl CardEditor {
             },
         };
 
-        Some(CardRep {
+        Ok(CardRep {
             ty,
             answered_attrs: self.attr_answers.cloned(),
             namespace: self
@@ -1130,13 +1121,23 @@ fn save_button(CardViewer: CardViewer) -> Element {
 
     let is_new = CardViewer.old_card.as_ref().is_none();
 
-    let enabled = selv.editor.clone().into_cardrep().is_some_and(|card| {
-        CardViewer
-            .editor
-            .allowed_cards
-            .contains(&CardTy::from_ctype(card.ty.fieldless()))
-            || CardViewer.editor.allowed_cards.is_empty()
-    });
+    let (enabled, title) = match selv.editor.clone().into_cardrep() {
+        Ok(card) => {
+            if CardViewer
+                .editor
+                .allowed_cards
+                .contains(&CardTy::from_ctype(card.ty.fieldless()))
+                || CardViewer.editor.allowed_cards.is_empty()
+            {
+                (true, None)
+            } else {
+                (false, Some("not valid card type".to_string()))
+            }
+        }
+        Err(title) => (false, Some(title)),
+    };
+
+    let title = title.unwrap_or_default();
 
     let class = if !enabled {
         "mt-2 inline-flex items-center text-white bg-gray-400 border-0 py-1 px-3 focus:outline-none cursor-not-allowed opacity-50 rounded text-base md:mt-0"
@@ -1147,9 +1148,10 @@ fn save_button(CardViewer: CardViewer) -> Element {
     rsx! {
         button {
             class: "{class}",
+            title:"{title}",
             disabled: !enabled,
             onclick: move |_| {
-                let Some(card) = selv.editor.clone().into_cardrep() else {
+                let Ok(card) = selv.editor.clone().into_cardrep() else {
                     return;
                 };
 
