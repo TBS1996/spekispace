@@ -34,7 +34,7 @@ pub trait LedgerItem:
     type RefType: AsRef<str> + Display + Clone + Hash + PartialEq + Eq + Send + Sync + Debug;
 
     /// Cache regarding property of a card so you get like all the cards that have a certain value or whatever
-    type PropertyType: AsRef<str> + Display + Clone + Hash + PartialEq + Eq + Send + Sync;
+    type PropertyType: AsRef<str> + Display + Clone + Hash + PartialEq + Eq + Send + Sync + Debug;
 
     /// The type that is responsible for mutating the item and thus create a new genreation
     type Modifier: Clone + Debug + Hash + Serialize + DeserializeOwned + Send + Sync;

@@ -34,7 +34,7 @@ fn main() {
 
     let trace_enabled = std::env::args().any(|arg| arg == "--trace");
     let log_level = if trace_enabled {
-        Level::TRACE
+        Level::DEBUG
     } else {
         Level::INFO
     };

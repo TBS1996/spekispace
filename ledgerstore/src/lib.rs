@@ -239,7 +239,7 @@ impl<T: LedgerItem> OverrideLedger<T> {
     }
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 struct ModifyResult<T: LedgerItem> {
     key: T::Key,
     item: Option<T>,
@@ -657,8 +657,18 @@ impl<T: LedgerItem> Ledger<T> {
     }
 
     fn remove_dependent(&self, key: T::Key, ty: T::RefType, dependent: T::Key) {
-        let path = self.dependents_dir(key, ty).join(dependent.to_string());
-        let _ = fs::remove_file(&path).is_ok();
+        let path = self
+            .dependents_dir(key, ty.clone())
+            .join(dependent.to_string());
+        match fs::remove_file(&path) {
+            Ok(_) => {}
+            Err(e) => {
+                dbg!(&path);
+                dbg!(key, ty, dependent);
+                dbg!(e);
+                debug_assert!(false);
+            }
+        }
     }
 
     fn remove_property(&self, key: T::Key, property: T::PropertyType, value: String) {
@@ -755,7 +765,7 @@ impl<T: LedgerItem> Ledger<T> {
             let key: T::Key = cache.1;
             match cache.0 {
                 CacheKey::Right(ItemRefCache { reftype, id }) => {
-                    self.remove_dependent(key, reftype, id);
+                    self.remove_dependent(id, reftype, key);
                 }
                 CacheKey::Left(PropertyCache { property, value }) => {
                     self.remove_property(key, property, value);
@@ -774,6 +784,7 @@ impl<T: LedgerItem> Ledger<T> {
         cache: bool,
     ) -> Result<Either<T, T::Key>, EventError<T>> {
         let res = self._modify(event.clone(), verify, cache)?;
+        tracing::debug!("res: {:?}", &res);
         self.run_result(res.clone(), cache).unwrap();
         if save {
             let hash = self.entries.save(event);

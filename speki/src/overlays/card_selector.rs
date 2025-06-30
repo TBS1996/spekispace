@@ -50,7 +50,7 @@ impl MaybeEntry {
             Self::No(id) => id,
         };
 
-        let card = APP.read().try_load_card(*id)?;
+        let card = APP.read().try_load_card_signal(*id)?;
 
         *self = Self::Yes(card.clone());
         Some(card)

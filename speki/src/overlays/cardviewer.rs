@@ -441,6 +441,85 @@ then when you add a new person instance it'll have those textfields for those qu
 
 */
 
+fn load_attr_qa(card: CardId) -> Vec<AttrQandA> {
+    let Some(card) = APP.read().try_load_card(card) else {
+        debug_assert!(false);
+        return vec![];
+    };
+
+    if !card.is_instance() {
+        return vec![];
+    }
+
+    let curr_card = card.clone();
+
+    let mut attrs: Vec<Attrv2> = curr_card.attributes().unwrap_or_default();
+
+    let provider = APP.read().inner().card_provider.clone();
+
+    // all cards that are an attribute card based on a given instance.
+    // wait, isnt this all we need? damn..
+    let attr_cards_based_on_instance: BTreeSet<Arc<Card>> = card
+        .attribute_cards()
+        .into_iter()
+        .map(|id| provider.load(id).unwrap())
+        .collect();
+
+    attrs.retain(|attr_id| {
+        !attr_cards_based_on_instance
+            .iter()
+            .any(|card| card.uses_attr_id(attr_id.id))
+    });
+
+    let mut output: Vec<AttrQandA> = vec![];
+
+    for card in attr_cards_based_on_instance {
+        let attr_id = card.attr_id().unwrap();
+        let instance = card.attribute_instance();
+        let instance = APP.read().inner().card_provider.load(instance).unwrap();
+        let attr = instance.get_attr(attr_id).unwrap();
+
+        let answer = match attr.back_type {
+            Some(AttrBackType::InstanceOfClass(card_id)) => {
+                let filter = SetExpr::union_with([DynCard::Instances(card_id)]);
+                let selected = card.back_side().and_then(|bs| bs.as_card()).unwrap();
+                OldAttrAnswerEditor::Card {
+                    filter,
+                    selected: Signal::new_in_scope(selected, ScopeId::APP),
+                }
+            }
+            None => {
+                let b = BackPut::new(card.clone_base().data.backside().cloned());
+                OldAttrAnswerEditor::Any(b)
+            }
+        };
+
+        let question = card.front_side().to_string();
+        let val = AttrQandA::Old {
+            attr_id: card.attr_id().unwrap(),
+            id: card.id(),
+            question,
+            answer,
+        };
+        output.push(val);
+    }
+
+    for attr in attrs {
+        let instance = card.name_textdata().to_raw();
+
+        let question = attr.pattern.replace("{}", &instance);
+
+        let val = AttrQandA::New {
+            attr_id: attr,
+            question,
+            answer: Signal::new_in_scope(None, ScopeId::APP),
+        };
+        output.push(val);
+    }
+
+    output
+}
+
 #[derive(Props, Clone)]
 pub struct CardViewer {
     pub editor: CardEditor,
@@ -514,92 +593,7 @@ impl CardViewer {
 
             // for instance cards, how you answer certain attributes.
 
-            let attrs = if card.is_instance() {
-                let curr_card = card.clone();
-
-                let mut attrs: Vec<Attrv2> = curr_card.attributes().unwrap_or_default();
-
-                let provider = APP.read().inner().card_provider.clone();
-
-                // all cards that are an attribute card based on a given instance.
-                // wait, isnt this all we need? damn..
-                let attr_cards_based_on_instance: BTreeSet<Arc<Card>> = card
-                    .attribute_cards()
-                    .into_iter()
-                    .map(|id| provider.load(id).unwrap())
-                    .collect();
-
-                attrs.retain(|attr_id| {
-                    !attr_cards_based_on_instance
-                        .iter()
-                        .any(|card| card.uses_attr_id(attr_id.id))
-                });
-
-                let mut output: Vec<AttrQandA> = vec![];
-
-                for card in attr_cards_based_on_instance {
-                    let attr_id = card.attr_id().unwrap();
-                    let instance = card.attribute_instance();
-                    let instance = APP.read().inner().card_provider.load(instance).unwrap();
-                    let attr = instance.get_attr(attr_id).unwrap();
-
-                    let answer = match attr.back_type {
-                        Some(AttrBackType::InstanceOfClass(card_id)) => {
-                            let filter = SetExpr::union_with([DynCard::Instances(card_id)]);
-                            let selected = card.back_side().and_then(|bs| bs.as_card()).unwrap();
-                            OldAttrAnswerEditor::Card {
-                                filter,
-                                selected: Signal::new_in_scope(selected, ScopeId::APP),
-                            }
-                        }
-                        None => {
-                            let b = BackPut::new(card.clone_base().data.backside().cloned());
-                            OldAttrAnswerEditor::Any(b)
-                        }
-                    };
-
-                    let question = card.front_side().to_string();
-                    let val = AttrQandA::Old {
-                        attr_id: card.attr_id().unwrap(),
-                        id: card.id(),
-                        question,
-                        answer,
-                    };
-                    output.push(val);
-                }
-
-                for attr in attrs {
-                    let instance = card.name_textdata().to_raw();
-
-                    let question = attr.pattern.replace("{}", &instance);
-
-                    let val = AttrQandA::New {
-                        attr_id: attr,
-                        question,
-                        answer: Signal::new_in_scope(None, ScopeId::APP),
-                    };
-                    output.push(val);
-                }
-
-                /*
-
-                1. create a set of all the attributes valid for this instance
-                2. create a set of all the attribute cards that reference an attribute in previous set
-                3. remove all the attributes from the first set that have a matching card in second set
-                -> now we'll two sets that together form all the valid attributes, but ones meaning is all the ones created, the other is the ones not (yet) created.
-                4. list the inputs of the created ones so the user can easily change the provided answer.
-                5. for the ones not created, no input box but a button where if you press it one will be created. user can write answer there. should be possible to X it out.
-
-                i think to find the right attr card, i need to get all the cards whose attribute belong to a class, and all the attrcards belonging to an instance, and then find the one
-                card that is in both sets?
-
-                 */
-
-                output
-            } else {
-                vec![]
-            };
-
+            let attrs = load_attr_qa(card.id());
             let attr_answers = Signal::new_in_scope(attrs, ScopeId::APP);
 
             // The attributes for a given class
@@ -725,10 +719,7 @@ fn RenderInputs(props: CardViewer) -> Element {
     info!("render inputs");
     let ty = props.editor.front.dropdown.selected.clone();
     let card_id = props.old_card.as_ref().map(|c| c.id());
-    let (card_exists, has_deps) = match props.old_card.clone() {
-        Some(card) => (true, !card.dependents().is_empty()),
-        None => (false, false),
-    };
+    let card_exists = props.old_card.is_some();
 
     rsx! {
         div {
@@ -747,7 +738,7 @@ fn RenderInputs(props: CardViewer) -> Element {
         div {
             if let Some(card) = props.old_card.clone() {
                 if card_exists {
-                    DeleteButton{card: card.id(), has_deps}
+                    DeleteButton{card_id: card.id()}
                 }
                 Suspend { card: card.id() }
             }
@@ -809,7 +800,7 @@ fn AttrAnswerEditorRender(answer: AttrAnswerEditor) -> Element {
 }
 
 #[component]
-fn AttrAnswers(attr_answers: Signal<Vec<AttrQandA>>) -> Element {
+fn AttrAnswers(card: CardId, attr_answers: Signal<Vec<AttrQandA>>) -> Element {
     rsx! {
         h4 {
             class: "font-bold",
@@ -821,12 +812,18 @@ fn AttrAnswers(attr_answers: Signal<Vec<AttrQandA>>) -> Element {
 
             for answer in attr_answers.iter() {
                 match answer.clone() {
-                    AttrQandA::Old {question, answer,..} => {
+                    AttrQandA::Old {question, answer, id, ..} => {
                         rsx! {
                             div {
                                 class: "border border-black p-3 rounded flex flex-col gap-2",
                                 p { class: "font-semibold", "{question}" }
                                 OldAttrAnswerEditorRender { answer }
+                                DeleteButton { card_id: id, pop_ol: false, f: {
+                                    Some(MyClosure::new(move |_card: CardId|  {
+                                        let new_loaded = load_attr_qa(card);
+                                        attr_answers.clone().set(new_loaded);
+                                    }))
+                                } }
                             }
                         }
                     },
@@ -993,7 +990,6 @@ fn InputElements(
                 }
             },
             CardTy::Class => rsx! {
-
                 BackPutRender {
                     text: back.text.clone(),
                     dropdown: back.dropdown.clone(),
@@ -1041,8 +1037,8 @@ fn InputElements(
                     },
                 }
 
-                if has_attr_answers {
-                    AttrAnswers { attr_answers }
+                if let (true, Some(card)) = (has_attr_answers, card_id) {
+                    AttrAnswers { card, attr_answers }
                 }
             },
         }
@@ -1082,22 +1078,40 @@ fn InputElements(
 }
 
 #[component]
-fn DeleteButton(card: CardId, has_deps: bool) -> Element {
-    let title = if has_deps {
-        "cannot delete card with dependents."
-    } else {
-        ""
+fn DeleteButton(card_id: CardId, pop_ol: Option<bool>, f: Option<MyClosure>) -> Element {
+    let card = APP.read().inner().card_provider.load(card_id);
+    debug_assert!(card.is_some());
+
+    let title: Option<&'static str> = match card {
+        Some(card) => {
+            if card.dependents_ids().is_empty() {
+                None
+            } else {
+                Some("cannot delete card with dependents")
+            }
+        }
+        None => Some("missing card"),
     };
+
+    let disabled = title.is_some();
+    let title = title.unwrap_or_default();
+    let pop_ol = pop_ol.unwrap_or(true);
 
     rsx! {
         button {
             class: "{crate::styles::BLACK_BUTTON}",
             title: "{title}",
-            disabled: has_deps,
+            disabled: disabled,
             onclick: move |_| {
-                if let Err(e) = APP.read().inner().provider.cards.modify(TheLedgerEvent::new_delete(card)) {
+                if let Err(e) = APP.read().inner().provider.cards.modify(TheLedgerEvent::new_delete(card_id)) {
                     handle_card_event_error(e);
-                } else {
+                    return;
+                }
+                if let Some(f) = &f {
+                    f.call(card_id);
+                }
+
+                if pop_ol {
                     pop_overlay();
                 }
             },
