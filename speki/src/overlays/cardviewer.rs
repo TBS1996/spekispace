@@ -6,7 +6,6 @@ use std::{
 use dioxus::prelude::*;
 use ledgerstore::TheLedgerEvent;
 use speki_core::{
-    audio::AudioId,
     card::{AttrBackType, AttributeId, Attrv2, BackSide, CType, CardId, TextData},
     collection::DynCard,
     ledger::{CardAction, CardEvent},
@@ -119,8 +118,6 @@ pub fn CardViewerRender(props: CardViewer) -> Element {
 pub struct CardRep {
     ty: CardType,
     namespace: Option<CardId>,
-    front_audio: Option<AudioId>,
-    back_audio: Option<AudioId>,
     deps: Vec<CardId>,
     answered_attrs: Vec<AttrQandA>,
 }
@@ -328,8 +325,6 @@ impl CardEditor {
                 .cloned()
                 .map(|x| x.selected_card().cloned())
                 .flatten(),
-            front_audio: self.front.audio.cloned().map(|audio| audio.id),
-            back_audio: self.back.audio.cloned().map(|audio| audio.id),
             deps: self
                 .dependencies
                 .cloned()
@@ -637,9 +632,6 @@ impl CardViewer {
                 ScopeId(3),
             );
 
-            let bck = back;
-            let concept = concept;
-
             let default_question = if let CardType::Class {
                 default_question, ..
             } = card.clone_base().data
@@ -654,7 +646,7 @@ impl CardViewer {
                 attrs: Signal::new_in_scope(attrs, ScopeId::APP),
                 attr_answers,
                 namespace,
-                back: bck,
+                back,
                 concept,
                 dependencies,
                 allowed_cards: vec![],
@@ -739,8 +731,8 @@ fn RenderInputs(props: CardViewer) -> Element {
             if let Some(card) = props.old_card.clone() {
                 if card_exists {
                     DeleteButton{card_id: card.id()}
+                    Suspend { card: card.id() }
                 }
-                Suspend { card: card.id() }
             }
 
             save_button { CardViewer: props.clone() }
@@ -757,7 +749,6 @@ fn OldAttrAnswerEditorRender(answer: OldAttrAnswerEditor) -> Element {
                     text: answer.text.clone(),
                     dropdown: answer.dropdown.clone(),
                     ref_card: answer.ref_card.clone(),
-                    audio: answer.audio.clone(),
                 }
             }
         }
@@ -782,7 +773,6 @@ fn AttrAnswerEditorRender(answer: AttrAnswerEditor) -> Element {
                     text: answer.text.clone(),
                     dropdown: answer.dropdown.clone(),
                     ref_card: answer.ref_card.clone(),
-                    audio: answer.audio.clone(),
                 }
             }
         }
@@ -923,7 +913,8 @@ fn RenderAttrs(attrs: Signal<Vec<AttrEditor>>) -> Element {
                         }
                     }
                     div {
-                            class: "flex flex-row w-1/2 gap-2",
+                        class: "flex flex-row w-1/2 gap-2",
+
                         match ty.cloned() {
                             Some(AttrBackTypeEditor::InstanceOfClass(selected)) => rsx! {
                                 button {
@@ -976,7 +967,7 @@ fn InputElements(
     let has_attr_answers = !attr_answers.read().is_empty();
 
     rsx! {
-        FrontPutRender { dropdown: front.dropdown.clone(), text: front.text.clone(), audio: front.audio.clone() }
+        FrontPutRender { dropdown: front.dropdown.clone(), text: front.text.clone()}
 
         match ty {
             CardTy::Unfinished => rsx! {},
@@ -986,7 +977,6 @@ fn InputElements(
                     text: back.text.clone(),
                     dropdown: back.dropdown.clone(),
                     ref_card: back.ref_card.clone(),
-                    audio: back.audio.clone(),
                 }
             },
             CardTy::Class => rsx! {
@@ -994,7 +984,6 @@ fn InputElements(
                     text: back.text.clone(),
                     dropdown: back.dropdown.clone(),
                     ref_card: back.ref_card.clone(),
-                    audio: back.audio.clone(),
                 }
 
                 div {
@@ -1020,7 +1009,6 @@ fn InputElements(
                     text: back.text.clone(),
                     dropdown: back.dropdown.clone(),
                     ref_card: back.ref_card.clone(),
-                    audio: back.audio.clone(),
                 }
 
                 div {
@@ -1049,6 +1037,7 @@ fn InputElements(
                         div {
                             class: "block text-gray-700 text-sm font-medium mb-2",
                             style: "margin-right: 82px;",
+
                         CardRefRender{
                             selected_card: ns.card.clone(),
                             placeholder: "choose namespace",
@@ -1176,8 +1165,6 @@ fn save_button(CardViewer: CardViewer) -> Element {
 
                 let id = selveste.old_card.clone().map(|card|card.id()).unwrap_or_else(CardId::new_v4);
                 events.push(CardEvent::new_modify(id, CardAction::UpsertCard(card.ty)));
-                events.push(CardEvent::new_modify(id, CardAction::SetFrontAudio (card.front_audio)));
-                events.push(CardEvent::new_modify(id, CardAction::SetBackAudio ( card.back_audio)));
                 events.push(CardEvent::new_modify(id, CardAction::SetNamespace ( card.namespace)));
 
                 for dep in card.deps {

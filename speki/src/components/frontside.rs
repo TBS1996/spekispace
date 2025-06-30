@@ -2,7 +2,7 @@ use std::fmt::Display;
 
 use dioxus::prelude::*;
 use serde::{Deserialize, Serialize};
-use speki_core::{audio::Audio, card::CType};
+use speki_core::card::CType;
 use strum::{EnumIter, IntoEnumIterator};
 use tracing::info;
 
@@ -56,15 +56,10 @@ impl Display for CardTy {
 pub struct FrontPut {
     pub dropdown: DropDownMenu<CardTy>,
     pub text: Signal<String>,
-    pub audio: Signal<Option<Audio>>,
 }
 
 #[component]
-pub fn FrontPutRender(
-    dropdown: DropDownMenu<CardTy>,
-    mut text: Signal<String>,
-    audio: Signal<Option<Audio>>,
-) -> Element {
+pub fn FrontPutRender(dropdown: DropDownMenu<CardTy>, mut text: Signal<String>) -> Element {
     use crate::components::set_card_link;
 
     rsx! {
@@ -102,7 +97,6 @@ impl FrontPut {
         Self {
             dropdown: DropDownMenu::new(CardTy::iter(), Some(default)),
             text: Signal::new_in_scope(Default::default(), ScopeId(3)),
-            audio: Signal::new_in_scope(Default::default(), ScopeId(3)),
         }
     }
 
