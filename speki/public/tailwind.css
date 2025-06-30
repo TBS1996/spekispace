@@ -1441,6 +1441,19 @@ video {
   --tw-ring-color: rgb(252 165 165 / var(--tw-ring-opacity, 1));
 }
 
+.disabled\:cursor-not-allowed:disabled {
+  cursor: not-allowed;
+}
+
+.disabled\:bg-gray-400:disabled {
+  --tw-bg-opacity: 1;
+  background-color: rgb(156 163 175 / var(--tw-bg-opacity, 1));
+}
+
+.disabled\:opacity-50:disabled {
+  opacity: 0.5;
+}
+
 @media (min-width: 768px) {
   .md\:mt-0 {
     margin-top: 0px;

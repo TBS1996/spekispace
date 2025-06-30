@@ -725,9 +725,9 @@ fn RenderInputs(props: CardViewer) -> Element {
     info!("render inputs");
     let ty = props.editor.front.dropdown.selected.clone();
     let card_id = props.old_card.as_ref().map(|c| c.id());
-    let deletable = match props.old_card.clone() {
-        Some(card) => card.dependents().is_empty(),
-        None => false,
+    let (card_exists, has_deps) = match props.old_card.clone() {
+        Some(card) => (true, !card.dependents().is_empty()),
+        None => (false, false),
     };
 
     rsx! {
@@ -746,8 +746,8 @@ fn RenderInputs(props: CardViewer) -> Element {
         }
         div {
             if let Some(card) = props.old_card.clone() {
-                if deletable {
-                    DeleteButton{card: card.id()}
+                if card_exists {
+                    DeleteButton{card: card.id(), has_deps}
                 }
                 Suspend { card: card.id() }
             }
@@ -1082,10 +1082,18 @@ fn InputElements(
 }
 
 #[component]
-fn DeleteButton(card: CardId) -> Element {
+fn DeleteButton(card: CardId, has_deps: bool) -> Element {
+    let title = if has_deps {
+        "cannot delete card with dependents."
+    } else {
+        ""
+    };
+
     rsx! {
         button {
-            class: "mt-2 inline-flex items-center text-white bg-gray-800 border-0 py-1 px-3 focus:outline-none hover:bg-gray-700 rounded text-base md:mt-0",
+            class: "{crate::styles::BLACK_BUTTON}",
+            title: "{title}",
+            disabled: has_deps,
             onclick: move |_| {
                 if let Err(e) = APP.read().inner().provider.cards.modify(TheLedgerEvent::new_delete(card)) {
                     handle_card_event_error(e);
@@ -1106,7 +1114,7 @@ fn Suspend(card: CardId) -> Element {
 
     rsx! {
         button {
-            class: "mt-2 inline-flex items-center text-white bg-gray-800 border-0 py-1 px-3 focus:outline-none hover:bg-gray-700 rounded text-base md:mt-0",
+            class: "{crate::styles::BLACK_BUTTON}",
             onclick: move |_| {
                 card.set_suspend(!is_suspended);
             },
@@ -1139,15 +1147,9 @@ fn save_button(CardViewer: CardViewer) -> Element {
 
     let title = title.unwrap_or_default();
 
-    let class = if !enabled {
-        "mt-2 inline-flex items-center text-white bg-gray-400 border-0 py-1 px-3 focus:outline-none cursor-not-allowed opacity-50 rounded text-base md:mt-0"
-    } else {
-        "mt-2 inline-flex items-center text-white bg-gray-800 border-0 py-1 px-3 focus:outline-none hover:bg-gray-700 rounded text-base md:mt-0"
-    };
-
     rsx! {
         button {
-            class: "{class}",
+            class: "{crate::styles::BLACK_BUTTON}",
             title:"{title}",
             disabled: !enabled,
             onclick: move |_| {
