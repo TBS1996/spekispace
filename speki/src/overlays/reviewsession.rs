@@ -332,7 +332,7 @@ fn Infobar(
         }
     }
             button {
-                class: "{crate::styles::BLACK_BUTTON}",
+                class: "{crate::styles::READ_BUTTON}",
                 onclick: move |_| {
                     let card = card2.clone();
                     let card = card.clone();

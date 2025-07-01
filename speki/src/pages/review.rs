@@ -330,13 +330,23 @@ fn RenderSet(
 
     let real_set = SetExpr::try_from(set.expr.cloned());
 
-    let save_button: bool = match real_set.clone() {
+    let (save_button, is_new): (bool, bool) = match real_set.clone() {
         Ok(set_expr) => match APP.read().inner().provider.sets.try_load(set.id) {
-            Some(old_set) => old_set.expr != set_expr || old_set.name != set.name.cloned(),
-            None => true,
+            Some(old_set) => (
+                old_set.expr != set_expr || old_set.name != set.name.cloned(),
+                false,
+            ),
+            None => (true, false),
         },
-        Err(_) => false,
-    } && editable;
+        Err(_) => (false, true),
+    };
+
+    let save_button = save_button && editable;
+    let save_class = if is_new {
+        crate::styles::CREATE_BUTTON
+    } else {
+        crate::styles::UPDATE_BUTTON
+    };
 
     let show_view_button = real_set.is_ok();
     let set_name = set.name.cloned();
@@ -358,7 +368,7 @@ fn RenderSet(
                 }
                 if save_button {
                     button {
-                    class: "{crate::styles::BLACK_BUTTON}",
+                    class: "{save_class}",
 
                     onclick: move |_| {
                         let expr: SetExpr = match SetExpr::try_from(set.expr.cloned()) {
@@ -388,7 +398,7 @@ fn RenderSet(
                 }
 
                 button {
-                    class: "{crate::styles::BLACK_BUTTON}",
+                    class: "{crate::styles::READ_BUTTON}",
                     onclick: move |_| {
                         let expr: SetExpr = match SetExpr::try_from(set.expr.cloned()) {
                             Ok(t) => t,
@@ -516,7 +526,7 @@ fn RenderSet(
 
                 if show_view_button {
                     button {
-                        class: "{crate::styles::BLACK_BUTTON}",
+                        class: "{crate::styles::READ_BUTTON}",
                         onclick: move |_|{
                             let expr = real_set.clone().unwrap();
                             dbg!(&expr);
@@ -530,7 +540,7 @@ fn RenderSet(
 
                 if editable {
                     button {
-                        class: "{crate::styles::BLACK_BUTTON}",
+                        class: "{crate::styles::DELETE_BUTTON}",
                         onclick: move |_|{
                             delete_atomic.set(true);
 
@@ -784,7 +794,7 @@ fn RenderSets(filter: CardFilter, sets: Signal<Vec<SetEditor>>) -> Element {
             }
 
             button {
-                class: "{styles::BLUE_BUTTON}",
+                class: "{styles::CREATE_BUTTON}",
                 onclick: move |_|{
                     let set = Set::new_default(SetId::new_v4());
                     let set = SetEditor::new(&set);

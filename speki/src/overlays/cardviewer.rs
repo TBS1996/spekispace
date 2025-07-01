@@ -828,7 +828,7 @@ fn AttrAnswers(card: CardId, attr_answers: Signal<Vec<AttrQandA>>) -> Element {
                                             div {
                                                 class: "flex flex-row items-start gap-2",
                                                 button {
-                                                    class: "{crate::styles::BLACK_BUTTON} mt-1",
+                                                    class: "{crate::styles::DELETE_BUTTON} mt-1",
                                                     onclick: move |_| {
                                                         answer.set(None);
                                                     },
@@ -846,7 +846,7 @@ fn AttrAnswers(card: CardId, attr_answers: Signal<Vec<AttrQandA>>) -> Element {
                                             class: "flex flex-row",
                                             p{"{question}"}
                                             button {
-                                                class: "{crate::styles::BLACK_BUTTON} ml-4",
+                                                class: "{crate::styles::CREATE_BUTTON} ml-4",
                                                 onclick: move |_| {
                                                     match attr_id.back_type {
                                                         Some(AttrBackType::InstanceOfClass(id)) => {
@@ -934,7 +934,7 @@ fn RenderAttrs(card: Option<CardId>, attrs: Signal<Vec<AttrEditor>>) -> Element 
                 div {
                     class: "flex flex-row gap-2 mb-4",
                     button {
-                        class: "{crate::styles::BLACK_BUTTON}",
+                        class: "{crate::styles::DELETE_BUTTON}",
                         disabled: "{disabled}",
                         title: "{title}",
                         onclick: move |_| {
@@ -972,7 +972,7 @@ fn RenderAttrs(card: Option<CardId>, attrs: Signal<Vec<AttrEditor>>) -> Element 
                             Some(AttrBackTypeEditor::InstanceOfClass(selected)) => rsx! {
                                 button {
                                     title: "remove answer constraint",
-                                    class: "{crate::styles::BLACK_BUTTON}",
+                                    class: "{crate::styles::UPDATE_BUTTON}",
                                     onclick: move |_| {
                                         ty.set(None);
                                     },
@@ -982,7 +982,7 @@ fn RenderAttrs(card: Option<CardId>, attrs: Signal<Vec<AttrEditor>>) -> Element 
                             },
                             None => rsx! {
                                 button {
-                                    class: "{crate::styles::BLACK_BUTTON}",
+                                    class: "{crate::styles::UPDATE_BUTTON}",
                                     onclick: move |_| {
                                         let fun = MyClosure::new(move |card: CardId| {
                                             ty.clone().set(Some(AttrBackTypeEditor::InstanceOfClass(Signal::new_in_scope(card, ScopeId::APP))));
@@ -1105,7 +1105,7 @@ fn InputElements(
             None => {
                 rsx! {
                     button {
-                        class: "{crate::styles::BLACK_BUTTON} mb-2",
+                        class: "{crate::styles::UPDATE_BUTTON} mb-2",
                         onclick: move |_| {
                             namespace.set(Some(CardRef::new()));
                         },
@@ -1141,7 +1141,7 @@ fn DeleteButton(card_id: CardId, pop_ol: Option<bool>, f: Option<MyClosure>) -> 
 
     rsx! {
         button {
-            class: "{crate::styles::BLACK_BUTTON}",
+            class: "{crate::styles::DELETE_BUTTON}",
             title: "{title}",
             disabled: disabled,
             onclick: move |_| {
@@ -1170,7 +1170,7 @@ fn Suspend(card: CardId) -> Element {
 
     rsx! {
         button {
-            class: "{crate::styles::BLACK_BUTTON}",
+            class: "{crate::styles::UPDATE_BUTTON}",
             onclick: move |_| {
                 card.set_suspend(!is_suspended);
             },
@@ -1203,9 +1203,15 @@ fn save_button(CardViewer: CardViewer) -> Element {
 
     let title = title.unwrap_or_default();
 
+    let button_class = if is_new {
+        crate::styles::CREATE_BUTTON
+    } else {
+        crate::styles::UPDATE_BUTTON
+    };
+
     rsx! {
         button {
-            class: "{crate::styles::BLACK_BUTTON}",
+            class: "{button_class}",
             title:"{title}",
             disabled: !enabled,
             onclick: move |_| {

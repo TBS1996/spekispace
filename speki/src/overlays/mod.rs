@@ -46,7 +46,7 @@ pub fn OverlaySelectorRender(title: String, choices: Vec<OverlayChoice>) -> Elem
 
             for choice in choices {
                 button {
-                    class: "w-48 my-2 {crate::styles::BLACK_BUTTON}",
+                    class: "w-48 my-2 {crate::styles::READ_BUTTON}",
                     onclick: move |_| {
                         let new = (choice.overlay)();
                         set_overlay(new);

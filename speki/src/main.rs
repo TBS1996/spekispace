@@ -216,5 +216,27 @@ bg-gray-800 border-0 py-1 px-3 focus:outline-none hover:bg-gray-700 \
 disabled:bg-gray-400 disabled:cursor-not-allowed disabled:opacity-50 \
 rounded text-base md:mt-0";
 
-    pub const BLUE_BUTTON: &'static str = "text-center py-4 px-6 bg-blue-500 text-white font-bold rounded-lg shadow hover:bg-blue-600 transition";
+    pub const CREATE_BUTTON: &str = "\
+mt-2 inline-flex items-center text-white \
+bg-green-600 border-0 py-1 px-3 focus:outline-none hover:bg-green-700 \
+disabled:bg-green-400 disabled:cursor-not-allowed disabled:opacity-50 \
+rounded text-base md:mt-0";
+
+    pub const READ_BUTTON: &str = "\
+mt-2 inline-flex items-center text-white \
+bg-blue-600 border-0 py-1 px-3 focus:outline-none hover:bg-blue-700 \
+disabled:bg-blue-400 disabled:cursor-not-allowed disabled:opacity-50 \
+rounded text-base md:mt-0";
+
+    pub const UPDATE_BUTTON: &str = "\
+mt-2 inline-flex items-center text-white \
+bg-amber-600 border-0 py-1 px-3 focus:outline-none hover:bg-amber-700 \
+disabled:bg-amber-400 disabled:cursor-not-allowed disabled:opacity-50 \
+rounded text-base md:mt-0";
+
+    pub const DELETE_BUTTON: &str = "\
+mt-2 inline-flex items-center text-white \
+bg-red-600 border-0 py-1 px-3 focus:outline-none hover:bg-red-700 \
+disabled:bg-red-400 disabled:cursor-not-allowed disabled:opacity-50 \
+rounded text-base md:mt-0";
 }
