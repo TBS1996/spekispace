@@ -210,7 +210,6 @@ impl<'de> Deserialize<'de> for AttrBackType {
 pub struct Attrv2 {
     pub id: AttributeId,
     pub pattern: String,
-    //
     pub back_type: Option<AttrBackType>,
 }
 
@@ -1187,21 +1186,6 @@ impl BackSide {
             s.is_empty()
         } else {
             false
-        }
-    }
-
-    pub fn invalidate_if_has_ref(&mut self, dep: CardId) {
-        let has_ref = match self {
-            BackSide::Card(card_id) => card_id == &dep,
-            BackSide::List(vec) => vec.contains(&dep),
-            BackSide::Text(_) => false,
-            BackSide::Time(_) => false,
-            BackSide::Trivial => false,
-            BackSide::Invalid => false,
-        };
-
-        if has_ref {
-            *self = Self::Invalid;
         }
     }
 

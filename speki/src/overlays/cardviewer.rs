@@ -4,13 +4,13 @@ use std::{
 };
 
 use dioxus::prelude::*;
-use ledgerstore::TheLedgerEvent;
+use ledgerstore::{PropertyCache, TheCacheGetter, TheLedgerEvent};
 use speki_core::{
-    card::{AttrBackType, AttributeId, Attrv2, BackSide, CType, CardId, TextData},
+    card::{AttrBackType, AttributeId, Attrv2, BackSide, CType, CardId, RawCard, TextData},
     collection::DynCard,
     ledger::{CardAction, CardEvent},
     set::SetExpr,
-    Card, CardType,
+    Card, CardProperty, CardType,
 };
 use tracing::info;
 
@@ -436,6 +436,33 @@ then when you add a new person instance it'll have those textfields for those qu
 
 */
 
+fn load_attr_editors(card_id: CardId) -> Vec<AttrEditor> {
+    let Some(card) = APP.read().try_load_card(card_id) else {
+        return vec![];
+    };
+
+    if !card.is_class() {
+        return vec![];
+    }
+
+    let attrs = card.attributes().unwrap();
+
+    let mut out: Vec<AttrEditor> = Default::default();
+
+    for attr in attrs {
+        let ty: Option<AttrBackTypeEditor> = attr.back_type.map(From::from);
+
+        let editor = AttrEditor {
+            id: attr.id,
+            pattern: Signal::new_in_scope(attr.pattern, ScopeId::APP),
+            ty: Signal::new_in_scope(ty, ScopeId::APP),
+        };
+
+        out.push(editor);
+    }
+    out
+}
+
 fn load_attr_qa(card: CardId) -> Vec<AttrQandA> {
     let Some(card) = APP.read().try_load_card(card) else {
         debug_assert!(false);
@@ -586,32 +613,10 @@ impl CardViewer {
                 concept
             };
 
-            // for instance cards, how you answer certain attributes.
-
             let attrs = load_attr_qa(card.id());
             let attr_answers = Signal::new_in_scope(attrs, ScopeId::APP);
 
-            // The attributes for a given class
-            let attrs: Vec<AttrEditor> = if card.is_class() {
-                let attrs = card.attributes().unwrap();
-
-                let mut map: Vec<AttrEditor> = Default::default();
-
-                for attr in attrs {
-                    let ty: Option<AttrBackTypeEditor> = attr.back_type.map(From::from);
-
-                    let editor = AttrEditor {
-                        id: attr.id,
-                        pattern: Signal::new_in_scope(attr.pattern, ScopeId::APP),
-                        ty: Signal::new_in_scope(ty, ScopeId::APP),
-                    };
-
-                    map.push(editor);
-                }
-                map
-            } else {
-                Default::default()
-            };
+            let attrs = load_attr_editors(card.id());
 
             let namespace = {
                 if let Some(card) = card.namespace() {
@@ -879,7 +884,26 @@ fn AttrAnswers(card: CardId, attr_answers: Signal<Vec<AttrQandA>>) -> Element {
 }
 
 #[component]
-fn RenderAttrs(attrs: Signal<Vec<AttrEditor>>) -> Element {
+fn RenderAttrs(card: Option<CardId>, attrs: Signal<Vec<AttrEditor>>) -> Element {
+    let foobar: Vec<(AttrEditor, bool, &'static str)> = attrs
+        .cloned()
+        .into_iter()
+        .map(|attr| {
+            let getter = TheCacheGetter::Property(PropertyCache::new(
+                CardProperty::AttrId,
+                attr.id.to_string(),
+            ));
+            let cached = APP.read().inner().provider.cards.load_getter(getter);
+            let disabled = !cached.is_empty();
+            let title = if disabled {
+                "can't delete used attributes"
+            } else {
+                ""
+            };
+            (attr, !cached.is_empty(), title)
+        })
+        .collect();
+
     rsx! {
         div {
             class: "flex flex-row items-center",
@@ -900,9 +924,32 @@ fn RenderAttrs(attrs: Signal<Vec<AttrEditor>>) -> Element {
 
         div {
             class: "max-h-64 overflow-y-auto",
-            for AttrEditor {id: _,mut pattern,mut ty } in attrs() {
+            for (AttrEditor {id, mut pattern,mut ty }, disabled, title) in foobar {
                 div {
                     class: "flex flex-row gap-2 mb-4",
+                    button {
+                        class: "{crate::styles::BLACK_BUTTON}",
+                        disabled: "{disabled}",
+                        title: "{title}",
+                        onclick: move |_| {
+                            match card {
+                                Some(card) => {
+                                    let event: TheLedgerEvent<RawCard> = TheLedgerEvent::new_modify(card, CardAction::RemoveAttr(id));
+                                    if let Err(e) = APP.read().inner().provider.cards.modify(event) {
+                                        handle_card_event_error(e);
+                                        return;
+                                    }
+                                    attrs.clone().set(load_attr_editors(card));
+                                },
+                                None => {
+                                    let mut _attrs = attrs.cloned();
+                                    _attrs.retain(|a|a.id != id);
+                                    attrs.clone().set(_attrs);
+                                },
+                            };
+                        },
+                        "delete"
+                    }
                     div {
                         class: "w-1/2",
                         input {
