@@ -18,7 +18,7 @@ use crate::{
     append_overlay,
     overlays::{
         card_selector::{CardSelector, MyClosure},
-        cardviewer::CardViewer,
+        cardviewer::{AdderHeader, CardViewer},
         OverlayEnum,
     },
     APP,
@@ -61,22 +61,16 @@ pub fn RenderDependents(card_id: CardId, hidden: bool) -> Element {
             div {
                 class: "flex items-center justify-between mb-2",
 
-                h4 {
-                    class: "font-bold",
-                    "Dependents"
-                }
+                AdderHeader {
+                    title: "Dependents",
+                    on_add: move |_| {
+                        let props = CardViewer::new().with_dependency(card_id);
+                        append_overlay(OverlayEnum::CardViewer(props));
 
-                    button {
-                        class: "p-1 hover:bg-gray-200 hover:border-gray-400 border border-transparent rounded-md transition-colors",
-                        onclick: move |_| {
-                            let props = CardViewer::new().with_dependency(card_id);
-                            append_overlay(OverlayEnum::CardViewer(props));
-                        },
+                    },
 
-
-                        "➕"
-                    }
-                }
+                 }
+            }
 
             if too_many {
                 button {

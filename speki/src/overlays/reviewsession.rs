@@ -20,7 +20,7 @@ use crate::{
     components::{card_mastery::MasterySection, RenderDependents},
     overlays::{
         card_selector::{CardSelector, MyClosure},
-        cardviewer::CardViewer,
+        cardviewer::{AdderHeader, CardViewer},
     },
     pop_overlay,
     utils::recall_to_emoji,
@@ -399,31 +399,26 @@ fn RenderDependencies(
             div {
                 class: "flex items-center justify-between mb-2",
 
-                h4 {
-                    class: "font-bold",
-                    "Explicit dependencies"
-                }
+                AdderHeader {
+                    title: "Explicit dependencies",
+                    on_add: move |_| {
+                        let currcard = card.clone();
 
-                    button {
-                        class: "p-1 hover:bg-gray-200 hover:border-gray-400 border border-transparent rounded-md transition-colors",
-                        onclick: move |_| {
-                            let currcard = card.clone();
+                        let fun = MyClosure::new(move |card: CardId| {
+                            let  old_card = currcard.clone();
+                            let mut old_card = Arc::unwrap_or_clone(old_card);
+                            old_card.add_dependency(card).unwrap();
+                            let _ = queue.clone().write();
+                        });
 
-                            let fun = MyClosure::new(move |card: CardId| {
-                                let  old_card = currcard.clone();
-                                let mut old_card = Arc::unwrap_or_clone(old_card);
-                                old_card.add_dependency(card).unwrap();
-                                let _ = queue.clone().write();
-                            });
+                        let card = card.clone();
+                        let front = format!("{}{}", card.print(), card.display_backside());
+                        let props = CardSelector::dependency_picker(fun).with_default_search(front).with_forbidden_cards(vec![card.id()]);
+                        append_overlay(OverlayEnum::CardSelector(props));
 
-                            let card = card.clone();
-                            let front = format!("{}{}", card.print(), card.display_backside());
-                            let props = CardSelector::dependency_picker(fun).with_default_search(front).with_forbidden_cards(vec![card.id()]);
-                            append_overlay(OverlayEnum::CardSelector(props));
-                        },
-                        "➕"
-                    }
-                }
+                    },
+                 }
+            }
 
             for (idx, (card, deps)) in my_iter{
                 div {

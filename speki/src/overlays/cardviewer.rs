@@ -362,14 +362,9 @@ fn RenderDependencies(
             div {
                 class: "flex items-center justify-between mb-2",
 
-                h4 {
-                    class: "font-bold",
-                    "Explicit dependencies"
-                }
-
-                button {
-                    class: "p-1 hover:bg-gray-200 hover:border-gray-400 border border-transparent rounded-md transition-colors",
-                    onclick: move |_| {
+                AdderHeader {
+                    title: "Eplicit dependencies",
+                    on_add: move |_|{
                         let currcard = card_text.cloned();
                         let depsig = dependencies.clone();
 
@@ -384,8 +379,7 @@ fn RenderDependencies(
                             props = props.with_forbidden_cards(vec![id]);
                         }
                         append_overlay(OverlayEnum::CardSelector(props));
-                    },
-                    "➕"
+                    }
                 }
             }
 
@@ -884,6 +878,24 @@ fn AttrAnswers(card: CardId, attr_answers: Signal<Vec<AttrQandA>>) -> Element {
 }
 
 #[component]
+pub fn AdderHeader(title: &'static str, on_add: EventHandler<()>) -> Element {
+    rsx! {
+        div {
+            class: "flex items-center mb-2",
+            h4 {
+                class: "font-bold",
+                "{title}"
+            }
+            button {
+                class: "ml-4 p-1 hover:bg-gray-200 hover:border-gray-400 border border-transparent rounded-md transition-colors",
+                onclick: move |_| on_add.call(()),
+                "➕"
+            }
+        }
+    }
+}
+
+#[component]
 fn RenderAttrs(card: Option<CardId>, attrs: Signal<Vec<AttrEditor>>) -> Element {
     let foobar: Vec<(AttrEditor, bool, &'static str)> = attrs
         .cloned()
@@ -908,17 +920,11 @@ fn RenderAttrs(card: Option<CardId>, attrs: Signal<Vec<AttrEditor>>) -> Element 
         div {
             class: "flex flex-row items-center",
 
-            h4 {
-                class: "font-bold",
-                "Attributes"
-            }
-
-            button {
-                class: "ml-4 p-1 hover:bg-gray-200 hover:border-gray-400 border border-transparent rounded-md transition-colors",
-                onclick: move |_| {
+            AdderHeader {
+                title: "Attributes",
+                on_add: move |_| {
                     attrs.write().push(AttrEditor::new());
                 },
-                "➕"
             }
         }
 
