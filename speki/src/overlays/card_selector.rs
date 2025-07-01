@@ -175,6 +175,14 @@ impl CardSelector {
                         }
                     }
 
+                    if matching_cards.len() < 100 {
+                        for card in cards.keys().take(100) {
+                            if !matching_cards.contains_key(card) {
+                                matching_cards.insert(card.to_owned(), 0);
+                            }
+                        }
+                    }
+
                     info!("sorting cards");
                     let mut sorted_cards: Vec<_> = matching_cards.into_iter().collect();
                     sorted_cards.sort_by(|a, b| b.1.cmp(&a.1));

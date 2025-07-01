@@ -363,7 +363,7 @@ fn RenderDependencies(
                 class: "flex items-center justify-between mb-2",
 
                 AdderHeader {
-                    title: "Eplicit dependencies",
+                    title: "Explicit dependencies",
                     on_add: move |_|{
                         let currcard = card_text.cloned();
                         let depsig = dependencies.clone();
