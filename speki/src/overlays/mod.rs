@@ -2,6 +2,7 @@ pub mod card_selector;
 pub mod cardviewer;
 pub mod notice;
 pub mod reviewsession;
+pub mod textinput;
 pub mod uploader;
 
 use crate::{
@@ -10,6 +11,7 @@ use crate::{
         cardviewer::CardViewer,
         notice::{Notice, NoticeRender},
         reviewsession::ReviewState,
+        textinput::{TextInput, TextInputRender},
     },
     pop_overlay, set_overlay,
 };
@@ -71,6 +73,7 @@ pub enum OverlayEnum {
     CardViewer(CardViewer),
     CardSelector(CardSelector),
     OverlaySelector(OverlaySelector),
+    Text(TextInput),
     Notice(Notice),
 }
 
@@ -82,6 +85,7 @@ impl Debug for OverlayEnum {
             Self::CardSelector(_) => f.debug_tuple("card selector").finish(),
             Self::OverlaySelector(_) => f.debug_tuple("overlay selector").finish(),
             Self::Notice(_) => f.debug_tuple("notice").finish(),
+            Self::Text(_) => f.debug_tuple("text").finish(),
         }
     }
 }
@@ -108,6 +112,15 @@ pub fn Overender(overlay: Signal<Option<Arc<OverlayEnum>>>, root: Element) -> El
                         }
 
                         match &*elm {
+                            OverlayEnum::Text(elm) => {
+                                rsx!{
+                                    TextInputRender {
+                                        question: elm.question.clone(),
+                                        input_value: elm.input_value,
+                                        on_submit: elm.on_submit.clone(),
+                                    }
+                                }
+                            },
                             OverlayEnum::Review(elm) => rsx!{
                                 ReviewRender {
                                     queue: elm.queue.clone(),

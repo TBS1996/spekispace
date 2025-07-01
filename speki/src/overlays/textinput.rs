@@ -2,27 +2,25 @@ use std::sync::Arc;
 
 use dioxus::prelude::*;
 
+use crate::pop_overlay;
+
 #[derive(Props, Clone)]
 pub struct TextInput {
     pub question: Arc<String>,
     pub input_value: Signal<String>,
-    pub done: Signal<bool>,
     pub on_submit: Arc<Box<dyn Fn(String)>>,
 }
 
 impl PartialEq for TextInput {
     fn eq(&self, other: &Self) -> bool {
-        self.question == other.question
-            && self.input_value == other.input_value
-            && self.done == other.done
+        self.question == other.question && self.input_value == other.input_value
     }
 }
 
 impl TextInput {
-    pub fn new(q: String, hook: Arc<Box<dyn Fn(String)>>, done: Signal<bool>) -> Self {
+    pub fn new(q: String, hook: Arc<Box<dyn Fn(String)>>) -> Self {
         Self {
             question: Arc::new(q),
-            done,
             input_value: Signal::new_in_scope(Default::default(), ScopeId::APP),
             on_submit: hook,
         }
@@ -54,6 +52,7 @@ pub fn TextInputRender(props: TextInput) -> Element {
                 onclick: move |_| {
                     let value = input_value.cloned();
                     on_submit(value);
+                    pop_overlay();
                 },
                 "Submit"
             }

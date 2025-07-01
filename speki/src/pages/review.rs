@@ -8,13 +8,14 @@ use crate::{
         card_selector::{CardSelector, MaybeEntry, MyClosure},
         notice::Notice,
         reviewsession::ReviewState,
+        textinput::TextInput,
         Overender, OverlayChoice, OverlayEnum, OverlaySelector,
     },
     APP,
 };
 use crate::{styles, OVERLAY};
 use dioxus::prelude::*;
-use ledgerstore::{LedgerItem, TheLedgerEvent};
+use ledgerstore::TheLedgerEvent;
 use nonempty::NonEmpty;
 use speki_core::card::CType;
 use speki_core::cardfilter::MyNumOrd;
@@ -42,26 +43,27 @@ pub struct ReviewPage {
     cardfilter: Memo<CardFilter>,
 }
 
+fn load_sets() -> Vec<SetEditor> {
+    let mut sets: Vec<SetEditor> = APP
+        .read()
+        .inner()
+        .provider
+        .sets
+        .load_all()
+        .into_iter()
+        .map(|set| SetEditor::new(&set))
+        .collect();
+
+    sets.sort_by_key(|set| set.name.cloned());
+    sets
+}
+
 impl ReviewPage {
     pub fn new() -> Self {
         let filter = FilterEditor::new_default();
         let cardfilter = filter.memo();
 
-        let sets: Signal<Vec<SetEditor>> = {
-            let mut sets: Vec<SetEditor> = APP
-                .read()
-                .inner()
-                .provider
-                .sets
-                .load_all()
-                .into_iter()
-                .map(|set| SetEditor::new(&set))
-                .collect();
-
-            sets.sort_by_key(|set| set.name.cloned());
-
-            Signal::new_in_scope(sets, ScopeId::APP)
-        };
+        let sets: Signal<Vec<SetEditor>> = Signal::new_in_scope(load_sets(), ScopeId::APP);
 
         Self {
             filter,
@@ -785,6 +787,8 @@ fn RenderSets(filter: CardFilter, sets: Signal<Vec<SetEditor>>) -> Element {
         ScopeId::APP.needs_update();
     }
 
+    let the_sets = sets.clone();
+
     rsx! {
         div {
             class: "overflow-y-auto max-h-[80vh] space-y-2 pr-2",
@@ -796,9 +800,13 @@ fn RenderSets(filter: CardFilter, sets: Signal<Vec<SetEditor>>) -> Element {
             button {
                 class: "{styles::CREATE_BUTTON}",
                 onclick: move |_|{
-                    let set = Set::new_default(SetId::new_v4());
-                    let set = SetEditor::new(&set);
-                    sets.clone().write().push(set);
+                    let f: Arc<Box<dyn Fn(String)>> = Arc::new(Box::new(move |s: String| {
+                        let event = SetEvent::new_modify(SetId::new_v4(), SetAction::SetName(s));
+                        APP.read().inner().provider.sets.modify(event).unwrap();
+                        the_sets.clone().set(load_sets());
+                    }));
+                    let x = TextInput::new("name of set".to_string(), f);
+                    append_overlay(OverlayEnum::Text(x));
                 },
                 "new set"
             }
