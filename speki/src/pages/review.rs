@@ -615,7 +615,7 @@ impl ExprEditor {
         let selv = self.clone();
         ScopeId::APP.in_runtime(|| {
             let selv = selv.clone();
-            use_memo(move || {
+            Memo::new(move || {
                 let selv = selv.clone();
 
                 let res = match dbg!(SetExpr::try_from(selv)) {

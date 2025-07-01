@@ -90,7 +90,7 @@ pub fn CardRefRender(
     let is_selected = selected_card.read().is_some();
 
     let card_display: Memo<String> = ScopeId::APP.in_runtime(|| {
-        use_memo(move || match selected_card.read().as_ref() {
+        Memo::new(move || match selected_card.read().as_ref() {
             Some(card_id) => APP.read().load_card(*card_id).name().to_string(),
             None => String::new(),
         })

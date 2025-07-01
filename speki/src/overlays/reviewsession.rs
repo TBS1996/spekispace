@@ -259,9 +259,9 @@ impl ReviewState {
         let queue: Signal<Queue> = Signal::new_in_scope(Queue::new(thecards), ScopeId::APP);
 
         let is_done: Memo<bool> =
-            ScopeId::APP.in_runtime(|| use_memo(move || queue.read().current().is_none()));
+            ScopeId::APP.in_runtime(|| Memo::new(move || queue.read().current().is_none()));
 
-        let tot_len = ScopeId::APP.in_runtime(|| use_memo(move || queue.read().tot_len()));
+        let tot_len = ScopeId::APP.in_runtime(|| Memo::new(move || queue.read().tot_len()));
         Self {
             tot_len,
             show_backside: Signal::new_in_scope(Default::default(), ScopeId::APP),

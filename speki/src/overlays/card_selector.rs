@@ -105,9 +105,9 @@ impl CardSelector {
         let filtermemo: Memo<Option<CardFilter>> = ScopeId::APP.in_runtime(|| {
             let editor = filtereditor.clone();
             if !with_memo {
-                use_memo(|| None)
+                Memo::new(|| None)
             } else {
-                use_memo(move || {
+                Memo::new(move || {
                     Some(CardFilter {
                         recall: editor.recall.get_value(),
                         rec_recall: editor.rec_recall.get_value(),
@@ -122,7 +122,7 @@ impl CardSelector {
 
         let search = Signal::new_in_scope(String::new(), ScopeId::APP);
         let normalized_search = ScopeId::APP.in_runtime(move || {
-            use_memo(move || {
+            Memo::new(move || {
                 let searched = search.read();
                 match (default_search.read().as_ref(), searched.is_empty()) {
                     (Some(s), true) => normalize_string(s.as_str()),
@@ -139,7 +139,7 @@ impl CardSelector {
             let allowed = allowed.clone();
             let cards = col_cards.clone();
             let search = normalized_search.clone();
-            use_memo(move || {
+            Memo::new(move || {
                 let allowed_cards = allowed.clone();
                 let search = search.cloned();
 
