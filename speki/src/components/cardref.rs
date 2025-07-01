@@ -71,8 +71,7 @@ pub fn ForcedCardRefRender(
                     let allowed = allowed.clone();
                     let props = CardSelector::ref_picker(fun, filter.clone())
                         .with_allowed_cards(allowed);
-
-                        append_overlay(OverlayEnum::CardSelector(props));
+                    append_overlay(OverlayEnum::CardSelector(props));
                 },
             }
         }
@@ -101,7 +100,7 @@ pub fn CardRefRender(
         div {
             class: "relative w-full",
             input {
-                class: "bg-white w-full border border-gray-300 rounded-md p-2 mb-2 text-gray-950 cursor-pointer focus:outline-none",
+                class: "bg-white w-full border border-gray-300 rounded-md p-2 text-gray-950 cursor-pointer focus:outline-none",
                 placeholder: "{placeholder}",
                 value: "{card_display}",
                 readonly: "true",
@@ -127,7 +126,7 @@ pub fn CardRefRender(
             }
             if is_selected {
                 button {
-                    class: "absolute top-0 right-0 mt-2 mr-3 ml-6 mb-2 text-gray-500 hover:text-gray-700 focus:outline-none",
+                    class: "absolute top-0 right-0 mt-2 mr-3 ml-6 text-gray-500 hover:text-gray-700 focus:outline-none",
                     onclick: move |_| {
                         info!("clicked a button");
                         let on_deselect = on_deselect.clone();

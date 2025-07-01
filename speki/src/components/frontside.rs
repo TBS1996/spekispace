@@ -65,28 +65,25 @@ pub fn FrontPutRender(dropdown: DropDownMenu<CardTy>, mut text: Signal<String>) 
     rsx! {
         div {
             class: "block text-gray-700 text-sm font-medium",
-            "Front:"
-
             div {
-                class: "backside-editor flex items-center space-x-4",
+                class: "backside-editor flex items-center space-x-4 mb-4",
 
                 div {
                     class: "flex-shrink-0",
-                    style: "width: 65px;",
+                    style: "width: 80px;",
                     DropComponent {options: dropdown.options.clone(), selected: dropdown.selected.clone()}
                 }
 
                 input {
-                    class: "bg-white w-full border border-gray-300 rounded-md p-2 mb-4 text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent",
+                    class: "bg-white w-full border border-gray-300 rounded-md p-2 text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent",
                     value: "{text}",
+                    placeholder: "front side",
                     oninput: move |evt| text.set(evt.value()),
                     onmouseup: move |e| {
                         let text = text.clone();
                         set_card_link(text, e.modifiers().shift());
                     },
                 }
-
-
             }
         }
     }

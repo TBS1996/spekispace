@@ -10,7 +10,9 @@ use strum::{EnumIter, IntoEnumIterator};
 use tracing::info;
 
 use crate::{
-    components::{cardref::CardRefRender, dropdown::DropComponent, CardRef, DropDownMenu},
+    components::{
+        cardref::CardRefRender, dropdown::DropComponent, set_card_link, CardRef, DropDownMenu,
+    },
     overlays::card_selector::MyClosure,
 };
 
@@ -23,104 +25,87 @@ pub struct BackPut {
     pub dropdown: DropDownMenu<BackOpts>,
     pub ref_card: CardRef,
 }
+
 #[component]
 pub fn BackPutRender(
     text: Signal<String>,
     dropdown: DropDownMenu<BackOpts>,
     ref_card: CardRef,
-    show_title: Option<()>,
 ) -> Element {
-    use std::str::FromStr;
-
-    use crate::components::set_card_link;
-
     rsx! {
         div {
-            class: "block text-gray-700 text-sm font-medium max-w-full",
+        class: "block text-gray-700 text-sm font-medium max-w-full",
 
-            if let Some(()) = show_title {
-                "Back:"
+
+        div {
+            class: "backside-editor flex items-center space-x-4 mb-4",
+
+            div {
+                class: "flex-shrink-0",
+                style: "width: 80px;",
+                DropComponent {
+                    options: dropdown.options.clone(),
+                    selected: dropdown.selected.clone(),
+                }
             }
 
             div {
-                class: "backside-editor flex items-center space-x-4",
+                class: "flex-grow overflow-hidden",
 
-                div {
-                    class: "flex-shrink-0",
-                    style: "width: 65px;",
-                    DropComponent {
-                        options: dropdown.options.clone(),
-                        selected: dropdown.selected.clone(),
-                    }
-                }
+                match *dropdown.selected.read() {
+                    BackOpts::Time => {
+                        let mut sig = text.clone();
+                        let interpreted = omtrent::TimeStamp::from_str(&*sig.read())
+                            .map(|x| x.to_string())
+                            .unwrap_or_default();
 
-                div {
-                    class: "flex-grow overflow-hidden",
-
-                    {
-                        match *dropdown.selected.read() {
-                            BackOpts::Time => {
-                                let placeholder = {
-                                    ""
-                                };
-                                let mut sig = text.clone();
-                                let interpreted = omtrent::TimeStamp::from_str(&*sig.read()).map(|x|x.to_string()).unwrap_or_default();
-
-
-                                    rsx! {
-                                        div {
-                                            class: "flex flex-row gap-2",
-                                            input {
-                                                class: "flex-1 bg-white border border-gray-300 rounded-md p-2 text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent",
-                                                value: "{sig}",
-                                                placeholder: "{placeholder}",
-                                                oninput: move |evt| sig.set(evt.value()),
-                                            }
-
-                                            span {
-                                                class: "flex-1 text-sm text-gray-500 p-2 bg-gray-50 border border-gray-300 rounded-md",
-                                                "{interpreted}"
-                                            }
-                                        }
-                                    }
-
-                            },
-                            BackOpts::Text => {
-                                let placeholder = {
-                                    ""
-                                };
-                                let mut sig = text.clone();
-
-                                rsx! {
-                                    input {
-                                        class: "bg-white w-full border border-gray-300 rounded-md p-2 mb-4 text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent",
-                                        value: "{sig}",
-                                        placeholder: "{placeholder}",
-                                        oninput: move |evt| sig.set(evt.value()),
-                                        onmouseup: move |e| {
-                                            let with_alias = e.modifiers().shift();
-                                            let text = text.clone();
-                                            set_card_link(text, with_alias);
-                                        },
-                                    }
+                        rsx! {
+                            div {
+                                class: "flex flex-row gap-2",
+                                input {
+                                    class: "flex-1 bg-white border border-gray-300 rounded-md p-2 text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent",
+                                    value: "{sig}",
+                                    placeholder: "timestamp",
+                                    oninput: move |evt| sig.set(evt.value()),
                                 }
-                            },
-                            BackOpts::Card => rsx! {
-                                CardRefRender {
-                                    selected_card: ref_card.card.clone(),
-                                    placeholder: ref_card.placeholder.cloned(),
-                                    on_select: ref_card.on_select.clone(),
-                                    on_deselect: ref_card.on_deselect.clone(),
-                                    allowed: ref_card.allowed.clone(),
-                                    filter: ref_card.filter.clone(),
+                                span {
+                                    class: "flex-1 text-sm text-gray-500 p-2 bg-gray-50 border border-gray-300 rounded-md",
+                                    "{interpreted}"
                                 }
-                            },
+                            }
                         }
-                    }
-                }
+                    },
+                    BackOpts::Text => {
+                        let mut sig = text.clone();
 
+                        rsx! {
+                            input {
+                                class: "bg-white w-full border border-gray-300 rounded-md p-2 text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent",
+                                value: "{sig}",
+                                placeholder: "back side",
+                                oninput: move |evt| sig.set(evt.value()),
+                                onmouseup: move |e| {
+                                    let with_alias = e.modifiers().shift();
+                                    let text = text.clone();
+                                    set_card_link(text, with_alias);
+                                },
+                            }
+                        }
+                    },
+                    BackOpts::Card => rsx! {
+                        CardRefRender {
+                            selected_card: ref_card.card.clone(),
+                            placeholder: ref_card.placeholder.cloned(),
+                            on_select: ref_card.on_select.clone(),
+                            on_deselect: ref_card.on_deselect.clone(),
+                            allowed: ref_card.allowed.clone(),
+                            filter: ref_card.filter.clone(),
+                        }
+                    },
+                }
             }
         }
+    }
     }
 }
 
