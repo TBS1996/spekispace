@@ -603,14 +603,31 @@ wait no lol that don't work cause the dependencies can be inside other things li
 for example to get all instances of a class you gotta check the self classes instance but also the instances of its subclasses
 so maybe in thecachegetter thing, a way to say like for each item that matches on thecachegetter also apply another thecachegetter (can be recursive more times)
 
+# cached itemref keys
 
-# main graph
+textfile with all known itemref types, like linkref, external_deendencies etc..
+then we can use this to search for all dependents/dependencies of an item
 
-maybe that main global graph thing can simply be a collection i make where i incorporate all the collections i think are good
+which allows us to store dependents like root/dependents/reftype/key
+and when fetching all deps of a key you can look them up all in parallel
 
 
-# release goals
+# integrate main graph
 
-- waiting window when state get rebuilt
-- nicer review history thing
-- fix unwraps and stuff
+so maybe a cardevent should be to update the remote to a certain hash, like, it'd contain the hash of the new upstream version, then we'll do git checkout {hash} on a git repo for the main graph, it'll then as usual try to do the various healthchecks to see if you can successfully upgrade, otherwise your own cards may conflict with the new upstream version. if it fails it'll tell you in the normal way what you need to do to succeed and it wont add that event to your ledger entry.  
+
+failing will mean we go back to previous hash that we know works with your cards
+
+but how to deal with having two diff states?
+so the upstream one can have my cards as dependents, i can have its cards as dependencies, but not vice versa. 
+
+i can still simply hardlink between them ofc.
+hmm should I save upstream as a bunch of entries or just the item store?
+i think maybe just the itemstore
+
+i should probably split up the dependencies/dependents locations like have them on the top level instead, would make it easier to just fetch the items
+
+hmm but how to deal with the maingraphs depedendents, as I update my cards the dependents there will be modified but like the git commit shouldn't be modified? 
+
+maybe separate directories for each commit where you put dependents/dependencies?
+i guess a textfile there that says the ledger hash it's valid for 

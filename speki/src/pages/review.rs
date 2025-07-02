@@ -310,7 +310,6 @@ pub fn RenderExpr(
                     }
                     RenderInput { filter: filter.clone(), input: input.clone(), depth: depth + 1 }
                 }
-
             }
         }
     }

@@ -251,6 +251,8 @@ struct ModifyResult<T: LedgerItem> {
 pub struct Ledger<T: LedgerItem> {
     entries: BlockChain<T>,
     properties: Arc<PathBuf>,
+    dependencies: Arc<PathBuf>,
+    dependents: Arc<PathBuf>,
     items: Arc<PathBuf>,
     ledger_hash: Arc<PathBuf>,
 }
@@ -262,14 +264,20 @@ impl<T: LedgerItem> Ledger<T> {
         let root = root.join("state");
 
         let properties = root.join("properties");
+        let dependencies = root.join("dependencies");
+        let dependents = root.join("dependents");
         let items = root.join("items");
         let ledger_hash = root.join("applied");
 
         std::fs::create_dir_all(&properties).unwrap();
+        std::fs::create_dir_all(&dependencies).unwrap();
+        std::fs::create_dir_all(&dependents).unwrap();
         std::fs::create_dir_all(&items).unwrap();
 
         let selv = Self {
             properties: Arc::new(properties),
+            dependencies: Arc::new(dependencies),
+            dependents: Arc::new(dependents),
             items: Arc::new(items),
             ledger_hash: Arc::new(ledger_hash),
             entries,
@@ -291,7 +299,7 @@ impl<T: LedgerItem> Ledger<T> {
     ) {
         let dep_dir = match reversed {
             true => self.root_dependents_dir(key),
-            false => self.dependencies_dir(key),
+            false => self.root_dependencies_dir(key),
         };
 
         let dirs = match ty.clone() {
@@ -336,8 +344,7 @@ impl<T: LedgerItem> Ledger<T> {
                 key,
                 ty: Some(ty),
             } => {
-                let dep_dir = self.root_dependents_dir(key);
-                let dir = dep_dir.join(ty.to_string());
+                let dir = self.dependents_dir(key, ty);
                 Self::item_keys_from_dir(dir)
             }
             TheCacheGetter::ItemRef {
@@ -355,7 +362,7 @@ impl<T: LedgerItem> Ledger<T> {
                 key,
                 ty: Some(ty),
             } => {
-                let dir = self.dependencies_dir(key).join(ty.to_string());
+                let dir = self.root_dependencies_dir(key).join(ty.to_string());
                 Self::item_keys_from_dir(dir)
             }
             TheCacheGetter::ItemRef {
@@ -364,7 +371,7 @@ impl<T: LedgerItem> Ledger<T> {
                 key,
                 ty: None,
             } => {
-                let dir = self.dependencies_dir(key);
+                let dir = self.root_dependencies_dir(key);
                 Self::item_keys_from_dir_recursive(dir)
             }
             TheCacheGetter::Property(prop) => self.get_prop_cache(prop),
@@ -425,9 +432,13 @@ impl<T: LedgerItem> Ledger<T> {
     fn apply(&self) {
         fs::remove_dir_all(&*self.items).unwrap();
         fs::remove_dir_all(&*self.properties).unwrap();
+        fs::remove_dir_all(&*self.dependencies).unwrap();
+        fs::remove_dir_all(&*self.dependents).unwrap();
 
         fs::create_dir(&*self.items).unwrap();
         fs::create_dir(&*self.properties).unwrap();
+        fs::create_dir(&*self.dependencies).unwrap();
+        fs::create_dir(&*self.dependents).unwrap();
 
         let mut items: HashMap<T::Key, T> = HashMap::default();
 
@@ -458,14 +469,14 @@ impl<T: LedgerItem> Ledger<T> {
 
     fn set_dependencies(&self, item: &T) {
         let id = item.item_id();
-        let depencies_dir = self.dependencies_dir(id);
+        let depencies_dir = self.root_dependencies_dir(id);
         fs::remove_dir_all(&depencies_dir).unwrap();
-        let depencies_dir = self.dependencies_dir(id); //recreate it
+        let depencies_dir = self.root_dependencies_dir(id); //recreate it
 
         for ItemReference { from: _, to, ty } in item.ref_cache() {
             let dir = depencies_dir.join(ty.to_string());
             fs::create_dir_all(&dir).unwrap();
-            let original = self.item_file(to);
+            let original = self.item_path(to);
             let link = dir.join(to.to_string());
             hard_link(original, link).unwrap();
         }
@@ -591,14 +602,14 @@ impl<T: LedgerItem> Ledger<T> {
         Self::item_keys_from_dir(path)
     }
 
-    fn dependencies_dir(&self, key: T::Key) -> PathBuf {
-        let p = self.item_dir_from_key(key).join("dependencies");
+    fn root_dependencies_dir(&self, key: T::Key) -> PathBuf {
+        let p = self.dependencies.join(key.to_string());
         std::fs::create_dir_all(&p).unwrap();
         p
     }
 
     fn root_dependents_dir(&self, key: T::Key) -> PathBuf {
-        let p = self.item_dir_from_key(key).join("dependents");
+        let p = self.dependents.join(key.to_string());
         std::fs::create_dir_all(&p).unwrap();
         p
     }
@@ -679,7 +690,7 @@ impl<T: LedgerItem> Ledger<T> {
     fn insert_cache(&self, cache: CacheKey<T>, id: T::Key) {
         let path = self.cache_dir(cache);
         fs::create_dir_all(&path).unwrap();
-        let original = self.item_file(id);
+        let original = self.item_path(id);
         let link = path.join(id.to_string());
         hard_link(original, link).unwrap();
     }
@@ -802,23 +813,23 @@ impl<T: LedgerItem> Ledger<T> {
     }
 
     pub fn remove(&self, key: T::Key) {
-        let path = self.item_dir_from_key(key);
-        std::fs::remove_dir_all(path).unwrap();
+        let path = self.item_path(key);
+        std::fs::remove_file(path).unwrap();
     }
 
     pub fn save(&self, item: T) {
         let key = item.item_id();
-        let item_path = self.item_dir_from_key(key);
-        std::fs::create_dir_all(&item_path).unwrap();
+        let item_path = self.item_path(key);
         let serialized = serde_json::to_string_pretty(&item).unwrap();
-        let mut f = std::fs::File::create(&item_path.join("item")).unwrap();
+        let mut f = std::fs::File::create(&item_path).unwrap();
         use std::io::Write;
 
         f.write_all(serialized.as_bytes()).unwrap();
         self.set_dependencies(&item);
     }
 
-    fn item_dir_from_key(&self, key: T::Key) -> PathBuf {
+    /// Returns the path a key corresponds to. Does not guarantee that the item is actually there.
+    fn item_path(&self, key: T::Key) -> PathBuf {
         let key = key.to_string();
         let mut chars = key.chars();
 
@@ -828,15 +839,14 @@ impl<T: LedgerItem> Ledger<T> {
             panic!();
         };
 
-        self.items.join(prefix).join(key)
-    }
+        let prefix = self.items.join(prefix);
+        fs::create_dir_all(&prefix).unwrap();
 
-    fn item_file(&self, key: T::Key) -> PathBuf {
-        self.item_dir_from_key(key).join("item")
+        prefix.join(key)
     }
 
     pub fn try_load(&self, key: T::Key) -> Option<T> {
-        if self.item_dir_from_key(key).join("item").exists() {
+        if self.item_path(key).is_file() {
             Some(self.load(key))
         } else {
             None
@@ -844,7 +854,7 @@ impl<T: LedgerItem> Ledger<T> {
     }
 
     pub fn load(&self, key: T::Key) -> T {
-        let path = self.item_file(key);
+        let path = self.item_path(key);
         let s = fs::read_to_string(&path);
         match s {
             Ok(s) => serde_json::from_str(&s).unwrap(),
