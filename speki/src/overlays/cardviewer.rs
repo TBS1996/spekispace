@@ -852,14 +852,18 @@ fn AttrAnswers(card: CardId, attr_answers: Signal<Vec<AttrQandA>>) -> Element {
                         rsx! {
                             div {
                                 class: "border border-black p-3 rounded flex flex-col gap-2",
-                                p { class: "font-semibold", "{question}" }
+                                div {
+                                    class: "flex flex-row items-center",
+                                    p { class: "font-semibold mr-4", "{question}" }
+                                    DeleteButton { card_id: id, pop_ol: false, f: {
+                                        Some(MyClosure::new(move |_card: CardId|  {
+                                            let new_loaded = load_attr_qa(card);
+                                            attr_answers.clone().set(new_loaded);
+                                        }))
+                                        }
+                                    }
+                                }
                                 OldAttrAnswerEditorRender { answer }
-                                DeleteButton { card_id: id, pop_ol: false, f: {
-                                    Some(MyClosure::new(move |_card: CardId|  {
-                                        let new_loaded = load_attr_qa(card);
-                                        attr_answers.clone().set(new_loaded);
-                                    }))
-                                } }
                             }
                         }
                     },
