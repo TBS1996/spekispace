@@ -118,6 +118,7 @@ pub fn Overender(overlay: Signal<Option<Arc<OverlayEnum>>>, root: Element) -> El
                                         question: elm.question.clone(),
                                         input_value: elm.input_value,
                                         on_submit: elm.on_submit.clone(),
+                                        crud: elm.crud,
                                     }
                                 }
                             },

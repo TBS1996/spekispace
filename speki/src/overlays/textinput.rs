@@ -2,13 +2,14 @@ use std::sync::Arc;
 
 use dioxus::prelude::*;
 
-use crate::pop_overlay;
+use crate::{pop_overlay, styles::CRUD};
 
 #[derive(Props, Clone)]
 pub struct TextInput {
     pub question: Arc<String>,
     pub input_value: Signal<String>,
     pub on_submit: Arc<Box<dyn Fn(String)>>,
+    pub crud: CRUD,
 }
 
 impl PartialEq for TextInput {
@@ -23,15 +24,23 @@ impl TextInput {
             question: Arc::new(q),
             input_value: Signal::new_in_scope(Default::default(), ScopeId::APP),
             on_submit: hook,
+            crud: CRUD::Create,
         }
+    }
+
+    pub fn with_crud(self, crud: CRUD) -> Self {
+        Self { crud, ..self }
     }
 }
 
 #[component]
 pub fn TextInputRender(props: TextInput) -> Element {
-    let question = props.question.clone();
-    let on_submit = props.on_submit.clone();
-    let input_value = props.input_value.clone();
+    let TextInput {
+        question,
+        input_value,
+        on_submit,
+        crud,
+    } = props;
 
     rsx! {
         div {
@@ -48,7 +57,7 @@ pub fn TextInputRender(props: TextInput) -> Element {
             }
 
             button {
-                class: "bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-300",
+                class: "{crud.style()}",
                 onclick: move |_| {
                     let value = input_value.cloned();
                     on_submit(value);

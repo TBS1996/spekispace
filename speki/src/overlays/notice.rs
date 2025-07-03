@@ -41,7 +41,7 @@ pub fn NoticeRender(notice: Notice) -> Element {
                 }
 
                 button {
-                    class: "bg-blue-500 hover:bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg",
+                    class: "{crate::styles::READ_BUTTON}",
                     onclick: move |_| {
                         pop_overlay();
                     },

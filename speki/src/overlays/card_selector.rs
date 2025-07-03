@@ -433,7 +433,7 @@ fn NewcardButton(
     let closure = Arc::new(on_card_selected.clone());
     rsx! {
         button {
-            class: "bg-blue-500 text-white font-medium px-4 py-2 rounded-md hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-300 mr-10",
+            class: "{crate::styles::CREATE_BUTTON}",
             onclick: move |_| {
 
                 let closure = closure.clone();

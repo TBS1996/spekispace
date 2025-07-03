@@ -210,6 +210,26 @@ impl Route {
 }
 
 pub mod styles {
+
+    #[derive(Clone, PartialEq, Eq, Copy)]
+    pub enum CRUD {
+        Create,
+        Read,
+        Update,
+        Delete,
+    }
+
+    impl CRUD {
+        pub fn style(&self) -> &'static str {
+            match self {
+                CRUD::Create => CREATE_BUTTON,
+                CRUD::Read => READ_BUTTON,
+                CRUD::Update => UPDATE_BUTTON,
+                CRUD::Delete => DELETE_BUTTON,
+            }
+        }
+    }
+
     pub const BLACK_BUTTON: &'static str = "\
 mt-2 inline-flex items-center text-white \
 bg-gray-800 border-0 py-1 px-3 focus:outline-none hover:bg-gray-700 \

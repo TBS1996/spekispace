@@ -69,7 +69,7 @@ fn ReviewButtons(
 
             if !show_backside() {
                 button {
-                    class: "inline-flex items-center text-white bg-gray-800 border-0 py-1 px-3 focus:outline-none hover:bg-gray-700 rounded text-base",
+                    class: "{crate::styles::READ_BUTTON}",
                     onclick: move |_| {
 
                         show_backside.set(true);
@@ -359,7 +359,7 @@ fn Suspend(card: CardId, mut queue: Signal<Queue>, show_backside: Signal<bool>) 
 
     rsx! {
         button {
-            class: "mt-2 inline-flex items-center text-white bg-gray-800 border-0 py-1 px-3 focus:outline-none hover:bg-gray-700 rounded text-base md:mt-0",
+            class: "{crate::styles::UPDATE_BUTTON}",
             onclick: move |_| {
                 let card = card.clone();
                 let mut card = card;
