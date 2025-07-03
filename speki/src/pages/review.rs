@@ -356,7 +356,7 @@ fn RenderSet(
         div {
             class: "border border-black p-4",
             div {
-                class: "flex flex-row",
+                class: "flex flex-row items-stretch",
 
                 input {
                     class: "text-xl font-semibold mb-4 p-2 w-full bg-gray-100 rounded",
@@ -369,7 +369,7 @@ fn RenderSet(
                 }
                 if save_button {
                     button {
-                    class: "{save_class}",
+                    class: "{save_class} h-[2.75rem]",
 
                     onclick: move |_| {
                         let expr: SetExpr = match SetExpr::try_from(set.expr.cloned()) {
@@ -399,7 +399,7 @@ fn RenderSet(
                 }
 
                 button {
-                    class: "{crate::styles::READ_BUTTON}",
+                    class: "{crate::styles::READ_BUTTON} h-[2.75rem]",
                     onclick: move |_| {
                         let expr: SetExpr = match SetExpr::try_from(set.expr.cloned()) {
                             Ok(t) => t,
@@ -480,54 +480,9 @@ fn RenderSet(
                     "review"
                 }
 
-                /*
-                button {
-                    class: "{crate::styles::BLACK_BUTTON}",
-                    onclick: move |_| {
-                        let name = set.name.cloned();
-                        let expr: SetExpr = match SetExpr::try_from(set.expr.cloned()) {
-                            Ok(t) => t,
-                            Err(s) => {
-                                dbg!(s);
-                                return;
-                            }
-                        };
-
-                        let provider = APP.read().inner().card_provider.clone();
-                        let mcards = expr.eval(&provider);
-
-                        let mut cards: BTreeSet<Arc<Card>> = BTreeSet::new();
-
-                        for card in mcards {
-                            let card = match card {
-                                MaybeCard::Card(card) => card,
-                                MaybeCard::Id(id) => {
-                                 provider.load(id).unwrap()
-                                },
-                            };
-
-                            for dep in card.recursive_dependencies() {
-                                let card = provider.load(dep).unwrap();
-                                cards.insert(card);
-                            }
-                            cards.insert(card);
-                        }
-
-                        let dot = speki_core::graphviz::export_cards(cards);
-                        let mut path = PathBuf::from(name);
-                        path.set_extension("dot");
-                        let mut f = fs::File::create(&path).unwrap();
-                        f.write_all(dot.as_bytes()).unwrap();
-                        info!("done exporting to {path:?}!");
-
-                    },
-                    "export DOT"
-                }
-                */
-
                 if show_view_button {
                     button {
-                        class: "{crate::styles::READ_BUTTON}",
+                        class: "{crate::styles::READ_BUTTON} h-[2.75rem]",
                         onclick: move |_|{
                             let expr = real_set.clone().unwrap();
                             dbg!(&expr);
@@ -541,7 +496,7 @@ fn RenderSet(
 
                 if editable {
                     button {
-                        class: "{crate::styles::DELETE_BUTTON}",
+                        class: "{crate::styles::DELETE_BUTTON} h-[2.75rem]",
                         onclick: move |_|{
                             delete_atomic.set(true);
 

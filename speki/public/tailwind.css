@@ -742,6 +742,10 @@ video {
   height: 100vh;
 }
 
+.h-\[2\.75rem\] {
+  height: 2.75rem;
+}
+
 .max-h-64 {
   max-height: 16rem;
 }
@@ -902,6 +906,10 @@ video {
 
 .items-center {
   align-items: center;
+}
+
+.items-stretch {
+  align-items: stretch;
 }
 
 .justify-start {
