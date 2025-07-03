@@ -6,6 +6,7 @@ use crate::{
     CardType,
 };
 use ledgerstore::TheLedgerEvent;
+use omtrent::TimeStamp;
 use serde::{Deserialize, Serialize};
 
 pub type CardEvent = TheLedgerEvent<RawCard>;
@@ -18,6 +19,7 @@ pub enum CardAction {
     AddDependency(CardId),
     UpsertCard(CardType),
     SetBackRef(CardId),
+    SetBackTime(TimeStamp),
     SetDefaultQuestion(Option<String>),
     SetNamespace(Option<CardId>),
     InsertAttr(Attrv2),

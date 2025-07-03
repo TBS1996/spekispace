@@ -27,6 +27,30 @@ pub struct BackPut {
 }
 
 #[component]
+pub fn TimestampRender(text: Signal<String>) -> Element {
+    let mut sig = text.clone();
+    let interpreted = omtrent::TimeStamp::from_str(&*sig.read())
+        .map(|x| x.to_string())
+        .unwrap_or_default();
+
+    rsx! {
+        div {
+            class: "flex flex-row gap-2",
+            input {
+                class: "flex-1 bg-white border border-gray-300 rounded-md p-2 text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent",
+                value: "{sig}",
+                placeholder: "timestamp",
+                oninput: move |evt| sig.set(evt.value()),
+            }
+            span {
+                class: "flex-1 text-sm text-gray-500 p-2 bg-gray-50 border border-gray-300 rounded-md",
+                "{interpreted}"
+            }
+        }
+    }
+}
+
+#[component]
 pub fn BackPutRender(
     text: Signal<String>,
     dropdown: DropDownMenu<BackOpts>,
@@ -54,26 +78,7 @@ pub fn BackPutRender(
 
                 match *dropdown.selected.read() {
                     BackOpts::Time => {
-                        let mut sig = text.clone();
-                        let interpreted = omtrent::TimeStamp::from_str(&*sig.read())
-                            .map(|x| x.to_string())
-                            .unwrap_or_default();
-
-                        rsx! {
-                            div {
-                                class: "flex flex-row gap-2",
-                                input {
-                                    class: "flex-1 bg-white border border-gray-300 rounded-md p-2 text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent",
-                                    value: "{sig}",
-                                    placeholder: "timestamp",
-                                    oninput: move |evt| sig.set(evt.value()),
-                                }
-                                span {
-                                    class: "flex-1 text-sm text-gray-500 p-2 bg-gray-50 border border-gray-300 rounded-md",
-                                    "{interpreted}"
-                                }
-                            }
-                        }
+                        rsx!{TimestampRender { text }}
                     },
                     BackOpts::Text => {
                         let mut sig = text.clone();
@@ -124,6 +129,8 @@ impl BackPut {
             ref_card.set_ref(card);
         }
 
+        let text = default.to_string();
+
         let backopt = if default.is_ref() {
             BackOpts::Card
         } else {
@@ -131,7 +138,7 @@ impl BackPut {
         };
 
         Self {
-            text: Signal::new_in_scope(Default::default(), ScopeId(3)),
+            text: Signal::new_in_scope(text, ScopeId(3)),
             dropdown: DropDownMenu::new(BackOpts::iter(), Some(backopt)),
             ref_card,
         }

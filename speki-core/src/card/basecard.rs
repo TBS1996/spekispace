@@ -175,6 +175,7 @@ pub type AttributeId = Uuid;
 #[derive(PartialEq, Debug, Clone, Serialize, Hash, Eq)]
 pub enum AttrBackType {
     InstanceOfClass(CardId),
+    TimeStamp,
 }
 
 impl<'de> Deserialize<'de> for AttrBackType {
@@ -193,11 +194,13 @@ impl<'de> Deserialize<'de> for AttrBackType {
         #[derive(Deserialize)]
         enum Helper {
             InstanceOfClass(CardId),
+            TimeStamp,
         }
 
         let helper: Helper = serde_json::from_value(value).map_err(serde::de::Error::custom)?;
         match helper {
             Helper::InstanceOfClass(id) => Ok(AttrBackType::InstanceOfClass(id)),
+            Helper::TimeStamp => Ok(AttrBackType::TimeStamp),
         }
     }
 }
@@ -746,6 +749,7 @@ pub enum CardError {
     DefaultQuestionNotClass,
     WrongCardType,
     AnswerMustBeCard,
+    AnswerMustBeTime,
     SubClassOfNonClass,
     BackTypeMustBeClass,
 }
@@ -834,6 +838,11 @@ impl LedgerItem for RawCard {
                 };
 
                 match back_type {
+                    Some(AttrBackType::TimeStamp) => {
+                        if !matches!(attr_back, BackSide::Time(_)) {
+                            return Err(CardError::AnswerMustBeTime);
+                        }
+                    }
                     Some(AttrBackType::InstanceOfClass(back_class)) => {
                         if let BackSide::Card(answer) = attr_back {
                             if !instance_is_of_type(*answer, back_class, &ledger) {
@@ -1060,6 +1069,9 @@ impl LedgerItem for RawCard {
                 } => *default_question = default.map(|s| TextData::from_raw(&s)),
                 _ => return Err(CardError::DefaultQuestionNotClass),
             },
+            CardAction::SetBackTime(ts) => {
+                self = self.set_backside(BackSide::Time(ts));
+            }
             CardAction::SetFrontAudio(audio) => {
                 self.front_audio = audio;
             }
@@ -1196,6 +1208,14 @@ impl BackSide {
 
     pub fn is_ref(&self) -> bool {
         matches!(self, Self::Card(_))
+    }
+
+    pub fn as_timestamp(&self) -> Option<TimeStamp> {
+        if let Self::Time(ts) = self {
+            Some(ts.to_owned())
+        } else {
+            None
+        }
     }
 
     pub fn as_card(&self) -> Option<CardId> {

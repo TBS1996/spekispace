@@ -1,10 +1,12 @@
 use std::{
     collections::{BTreeSet, HashMap},
+    str::FromStr,
     sync::Arc,
 };
 
 use dioxus::prelude::*;
 use ledgerstore::{PropertyCache, TheCacheGetter, TheLedgerEvent};
+use omtrent::TimeStamp;
 use speki_core::{
     card::{AttrBackType, AttributeId, Attrv2, BackSide, CType, CardId, RawCard, TextData},
     collection::DynCard,
@@ -17,7 +19,7 @@ use tracing::info;
 use crate::{
     append_overlay,
     components::{
-        backside::{BackPutRender, BacksideError},
+        backside::{BackPutRender, BacksideError, TimestampRender},
         card_mastery::MasterySection,
         cardref::{CardRefRender, ForcedCardRefRender},
         frontside::FrontPutRender,
@@ -129,6 +131,7 @@ enum OldAttrAnswerEditor {
         filter: SetExpr,
         selected: Signal<CardId>,
     },
+    TimeStamp(Signal<String>),
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -138,6 +141,7 @@ enum AttrAnswerEditor {
         filter: SetExpr,
         selected: Signal<Option<CardId>>,
     },
+    TimeStamp(Signal<String>),
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -179,6 +183,7 @@ impl AttrEditor {
 #[derive(Clone, Debug)]
 enum AttrBackTypeEditor {
     InstanceOfClass(Signal<CardId>),
+    Timestamp,
 }
 
 impl From<AttrBackType> for AttrBackTypeEditor {
@@ -187,6 +192,7 @@ impl From<AttrBackType> for AttrBackTypeEditor {
             AttrBackType::InstanceOfClass(id) => {
                 AttrBackTypeEditor::InstanceOfClass(Signal::new_in_scope(id, ScopeId::APP))
             }
+            AttrBackType::TimeStamp => AttrBackTypeEditor::Timestamp,
         }
     }
 }
@@ -216,6 +222,29 @@ impl CardEditor {
             return Err("front side can't be empty".to_string());
         }
 
+        for attr_qa in self.attr_answers.cloned() {
+            match attr_qa {
+                AttrQandA::Old {
+                    answer: OldAttrAnswerEditor::TimeStamp(ts),
+                    ..
+                } => {
+                    if let Err(_) = TimeStamp::from_str(&ts.cloned()) {
+                        return Err("invalid timestamp".to_string());
+                    }
+                }
+                AttrQandA::New { answer, .. } => {
+                    if let Some(ans) = answer.cloned() {
+                        if let AttrAnswerEditor::TimeStamp(ts) = ans {
+                            if let Err(_) = TimeStamp::from_str(&ts.cloned()) {
+                                return Err("invalid timestamp".to_string());
+                            }
+                        }
+                    }
+                }
+                _ => continue,
+            }
+        }
+
         let attrs: HashMap<AttributeId, (String, Option<AttrBackType>)> = self
             .attrs
             .cloned()
@@ -223,6 +252,7 @@ impl CardEditor {
             .filter_map(|AttrEditor { id, pattern, ty }| {
                 let pattern = pattern.cloned();
                 let ty = match ty.cloned() {
+                    Some(AttrBackTypeEditor::Timestamp) => Some(AttrBackType::TimeStamp),
                     Some(AttrBackTypeEditor::InstanceOfClass(id)) => {
                         Some(AttrBackType::InstanceOfClass(id.cloned()))
                     }
@@ -351,13 +381,11 @@ fn RenderDependencies(
     card_id: Option<CardId>,
     dependencies: Signal<Vec<Arc<Card>>>,
 ) -> Element {
-    let show_graph = "opacity-100 visible";
-
     let deps = dependencies.cloned();
 
     rsx! {
         div {
-            class: "flex flex-col {show_graph} w-full h-auto bg-white p-2 shadow-md rounded-md overflow-y-auto",
+            class: "flex flex-col opacity-100 visible w-full h-auto bg-white p-2 shadow-md rounded-md overflow-y-auto",
 
             div {
                 class: "flex items-center justify-between mb-2",
@@ -496,6 +524,15 @@ fn load_attr_qa(card: CardId) -> Vec<AttrQandA> {
         let attr = instance.get_attr(attr_id).unwrap();
 
         let answer = match attr.back_type {
+            Some(AttrBackType::TimeStamp) => {
+                let ts = card
+                    .back_side()
+                    .and_then(|ts| ts.as_timestamp())
+                    .map(|ts| ts.serialize())
+                    .unwrap_or_default();
+
+                OldAttrAnswerEditor::TimeStamp(Signal::new_in_scope(ts, ScopeId::APP))
+            }
             Some(AttrBackType::InstanceOfClass(card_id)) => {
                 let filter = SetExpr::union_with([DynCard::Instances(card_id)]);
                 let selected = card.back_side().and_then(|bs| bs.as_card()).unwrap();
@@ -760,12 +797,22 @@ fn OldAttrAnswerEditorRender(answer: OldAttrAnswerEditor) -> Element {
                 }
             }
         }
+        OldAttrAnswerEditor::TimeStamp(text) => {
+            rsx! {
+                TimestampRender { text }
+            }
+        }
     }
 }
 
 #[component]
 fn AttrAnswerEditorRender(answer: AttrAnswerEditor) -> Element {
     match answer {
+        AttrAnswerEditor::TimeStamp(text) => {
+            rsx! {
+                TimestampRender { text }
+            }
+        }
         AttrAnswerEditor::Any(answer) => {
             rsx! {
                 BackPutRender {
@@ -849,6 +896,10 @@ fn AttrAnswers(card: CardId, attr_answers: Signal<Vec<AttrQandA>>) -> Element {
                                                 class: "{crate::styles::CREATE_BUTTON} ml-4",
                                                 onclick: move |_| {
                                                     match attr_id.back_type {
+                                                        Some(AttrBackType::TimeStamp) => {
+                                                            answer.set(Some(AttrAnswerEditor::TimeStamp(Signal::new_in_scope(String::new(), ScopeId::APP))));
+
+                                                        },
                                                         Some(AttrBackType::InstanceOfClass(id)) => {
                                                             let filter = SetExpr::union_with([DynCard::Instances(id)]);
                                                             let ans = AttrAnswerEditor::Card {
@@ -969,9 +1020,23 @@ fn RenderAttrs(card: Option<CardId>, attrs: Signal<Vec<AttrEditor>>) -> Element 
                         class: "flex flex-row w-1/2 gap-2",
 
                         match ty.cloned() {
+                            Some(AttrBackTypeEditor::Timestamp) => rsx!{
+                                button {
+                                    title: "remove constraint",
+                                    class: "{crate::styles::UPDATE_BUTTON}",
+                                    onclick: move |_| {
+                                        ty.set(None);
+                                    },
+                                    "X"
+                                }
+                                span {
+                                    class: "font-semibold self-center",
+                                    "timestamp"
+                                }
+                            },
                             Some(AttrBackTypeEditor::InstanceOfClass(selected)) => rsx! {
                                 button {
-                                    title: "remove answer constraint",
+                                    title: "remove constraint",
                                     class: "{crate::styles::UPDATE_BUTTON}",
                                     onclick: move |_| {
                                         ty.set(None);
@@ -983,6 +1048,15 @@ fn RenderAttrs(card: Option<CardId>, attrs: Signal<Vec<AttrEditor>>) -> Element 
                             None => rsx! {
                                 button {
                                     class: "{crate::styles::UPDATE_BUTTON}",
+                                    title: "force answer to be a timestamp",
+                                    onclick: move |_| {
+                                        ty.clone().set(Some(AttrBackTypeEditor::Timestamp));
+                                    },
+                                    "set timestamp constraint"
+                                }
+                                button {
+                                    class: "{crate::styles::UPDATE_BUTTON}",
+                                    title: "force answer to be an instance of a given class",
                                     onclick: move |_| {
                                         let fun = MyClosure::new(move |card: CardId| {
                                             ty.clone().set(Some(AttrBackTypeEditor::InstanceOfClass(Signal::new_in_scope(card, ScopeId::APP))));
@@ -994,7 +1068,7 @@ fn RenderAttrs(card: Option<CardId>, attrs: Signal<Vec<AttrEditor>>) -> Element 
                                         let props = CardSelector::ref_picker(fun, filter).with_allowed_cards(allowed);
                                         append_overlay(OverlayEnum::CardSelector(props));
                                     },
-                                    "add instance constraint"
+                                    "set instance constraint"
                                 }
                             }
                         }
@@ -1243,6 +1317,18 @@ fn save_button(CardViewer: CardViewer) -> Element {
                             if let Some(answer) = answer.cloned() {
 
                                 match answer {
+                                    AttrAnswerEditor::TimeStamp(ts) => {
+                                        if let Ok(ts) = TimeStamp::from_str(&ts.cloned()) {
+                                            let back = BackSide::Time(ts.clone());
+                                            let data = CardType::Attribute { attribute: attr_id.id, back: back, instance: id };
+                                            let action = CardAction::UpsertCard(data);
+                                            let event = CardEvent::new_modify(CardId::new_v4(), action);
+                                            if let Err(e) = APP.read().inner().provider.cards.modify(event) {
+                                                handle_card_event_error(e);
+                                                return;
+                                            }
+                                        }
+                                    },
                                     AttrAnswerEditor::Any(back_put) => {
                                         if let Some(back) = back_put.to_backside() {
                                             let data = CardType::Attribute { attribute: attr_id.id, back: back, instance: id };
@@ -1271,8 +1357,23 @@ fn save_button(CardViewer: CardViewer) -> Element {
                         },
                         AttrQandA::Old { id: attr_card_id, question: _, answer, attr_id } => {
                             match answer {
+                                OldAttrAnswerEditor::TimeStamp(ts) => {
+                                    let prev_back = APP.read().inner().card_provider.providers.cards.load(attr_card_id).ref_backside().cloned().unwrap();
+                                    if let Ok(ts) = TimeStamp::from_str(&ts.cloned()) {
+                                        let back = BackSide::Time(ts.clone());
+                                        if prev_back != back {
+                                            let action = CardAction::SetBackTime(ts);
+                                            let event = CardEvent::new_modify(attr_card_id, action);
+                                            if let Err(e) = APP.read().inner().provider.cards.modify(event) {
+                                                handle_card_event_error(e);
+                                                return;
+                                            }
+                                        }
+                                    }
+                                },
+
                                 OldAttrAnswerEditor::Any(back_put) => {
-                                    let prev_back = APP.read().inner().card_provider.providers.cards.load(id).ref_backside().cloned().unwrap();
+                                    let prev_back = APP.read().inner().card_provider.providers.cards.load(attr_card_id).ref_backside().cloned().unwrap();
                                     if let Some(back) = back_put.to_backside() {
                                         if back != prev_back {
                                             let data = CardType::Attribute { attribute: attr_id, back: back, instance: id };
