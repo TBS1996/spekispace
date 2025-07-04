@@ -9,11 +9,27 @@ use tracing::trace;
 
 pub type DropdownClosure = Arc<Box<dyn Fn()>>;
 
-pub struct DropdownAction((String, DropdownClosure));
+#[derive(Clone)]
+pub struct DropdownAction {
+    label: String,
+    action: DropdownClosure,
+    title: Option<String>,
+}
 
 impl DropdownAction {
-    pub fn new(label: String, f: DropdownClosure) -> Self {
-        Self((label, f))
+    pub fn new(label: impl AsRef<str>, f: Box<dyn Fn()>) -> Self {
+        Self {
+            label: label.as_ref().to_string(),
+            action: Arc::new(f),
+            title: None,
+        }
+    }
+
+    pub fn with_title(self, title: impl AsRef<str>) -> Self {
+        Self {
+            title: Some(title.as_ref().to_string()),
+            ..self
+        }
     }
 }
 
@@ -23,45 +39,77 @@ impl PartialEq for DropdownAction {
     }
 }
 
-impl Clone for DropdownAction {
-    fn clone(&self) -> Self {
-        DropdownAction((self.0 .0.clone(), Arc::clone(&self.0 .1)))
-    }
-}
-
 #[component]
-pub fn ActionDropdown(label: String, options: Vec<DropdownAction>) -> Element {
+pub fn ActionDropdown(
+    label: String,
+    options: Vec<DropdownAction>,
+    #[props(default = false)] full_width: bool,
+    #[props(default = "")] title: &'static str,
+) -> Element {
     let mut current_value = use_signal(|| "".to_string());
+
+    let wrapper_class = if full_width {
+        "relative inline-block w-full"
+    } else {
+        "relative inline-block"
+    };
+
+    let select_class = "\
+        appearance-none bg-white border border-gray-300 \
+        text-gray-700 py-2 px-3 pr-8 rounded-md shadow-sm \
+        focus:outline-none focus:ring-2 focus:ring-blue-500 \
+        focus:border-blue-500 transition";
 
     rsx! {
         div {
+            class: wrapper_class,
+
             select {
-                class: "appearance-none bg-white w-full rounded-md p-2 text-gray-700",
+                class: if full_width {
+                    format!("w-full {select_class}")
+                } else {
+                    select_class.to_string()
+                },
                 value: "{current_value}",
+                title: title,
                 onchange: move |evt| {
                     let val = evt.value();
                     if let Ok(idx) = val.parse::<usize>() {
                         if let Some(action) = options.get(idx) {
-                            (action.0).1(); // call the callback
+                            (action.action)();
                         }
                     }
-
                     current_value.set("".to_string());
                 },
-
 
                 option {
                     value: "",
                     selected: true,
                     disabled: true,
+                    class: "text-gray-400",
                     "{label}"
                 }
-
 
                 for (i, action) in options.iter().enumerate() {
                     option {
                         value: i.to_string(),
-                        "{(action.0).0}"
+                        title: "{action.title.clone().unwrap_or_default()}",
+                        "{action.label}"
+                    }
+                }
+            }
+
+            div {
+                class: "pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-400",
+                svg {
+                    xmlns: "http://www.w3.org/2000/svg",
+                    class: "h-4 w-4",
+                    fill: "none",
+                    view_box: "0 0 24 24",
+                    stroke: "currentColor",
+                    stroke_width: "2",
+                    path {
+                        d: "M19 9l-7 7-7-7"
                     }
                 }
             }

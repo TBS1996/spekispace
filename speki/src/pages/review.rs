@@ -1,7 +1,7 @@
 use crate::{
     append_overlay,
     components::{
-        dropdown::{ActionDropdown, DropComponent, DropdownAction, DropdownClosure},
+        dropdown::{ActionDropdown, DropComponent, DropdownAction},
         FilterComp, FilterEditor,
     },
     overlays::{
@@ -178,13 +178,13 @@ pub fn RenderExpr(
 ) -> Element {
     let class = format!("pl-{}", depth * 4);
 
-    let expr_func: DropdownClosure = Arc::new(Box::new(move || {
+    let expr_func = Box::new(move || {
         let expr = SetExpr::default();
         let input: InputEditor = Input::Expr(expr.into()).into();
         inputs.clone().write().push(input);
-    }));
+    });
 
-    let leaf_func: DropdownClosure = Arc::new(Box::new(move || {
+    let leaf_func = Box::new(move || {
         // normal card
         let leaf_card = {
             let f: Arc<Box<dyn Fn() -> Option<OverlayEnum>>> = {
@@ -271,7 +271,7 @@ pub fn RenderExpr(
             chosen: None,
         };
         append_overlay(OverlayEnum::OverlaySelector(sel));
-    }));
+    });
 
     let expr_opt = DropdownAction::new("expr".to_string(), expr_func);
     let leaf_opt = DropdownAction::new("leaf".to_string(), leaf_func);

@@ -22,6 +22,7 @@ use crate::{
         backside::{BackPutRender, BacksideError, TimestampRender},
         card_mastery::MasterySection,
         cardref::{CardRefRender, ForcedCardRefRender},
+        dropdown::{ActionDropdown, DropdownAction},
         frontside::FrontPutRender,
         BackPut, CardRef, CardTy, DropDownMenu, FrontPut, RenderDependents,
     },
@@ -1049,19 +1050,14 @@ fn RenderAttrs(card: Option<CardId>, attrs: Signal<Vec<AttrEditor>>) -> Element 
                                 }
                                 ForcedCardRefRender { selected_card: selected, allowed: vec![CardTy::Class], filter: speki_core::set::SetExpr::union_with([DynCard::CardType(speki_core::card::CType::Class)]) }
                             },
-                            None => rsx! {
-                                button {
-                                    class: "{crate::styles::UPDATE_BUTTON}",
-                                    title: "force answer to be a timestamp",
-                                    onclick: move |_| {
-                                        ty.clone().set(Some(AttrBackTypeEditor::Timestamp));
-                                    },
-                                    "set timestamp constraint"
-                                }
-                                button {
-                                    class: "{crate::styles::UPDATE_BUTTON}",
-                                    title: "force answer to be an instance of a given class",
-                                    onclick: move |_| {
+                            None => {
+
+                                let timestamp = DropdownAction::new("timestamp".to_string(), Box::new(move || {
+                                                                    ty.clone().set(Some(AttrBackTypeEditor::Timestamp));
+                                })).with_title("answer must be timestamp");
+
+
+                                let instance = DropdownAction::new("instance".to_string(), Box::new(move || {
                                         let fun = MyClosure::new(move |card: CardId| {
                                             ty.clone().set(Some(AttrBackTypeEditor::InstanceOfClass(Signal::new_in_scope(card, ScopeId::APP))));
                                         });
@@ -1071,10 +1067,20 @@ fn RenderAttrs(card: Option<CardId>, attrs: Signal<Vec<AttrEditor>>) -> Element 
 
                                         let props = CardSelector::ref_picker(fun, filter).with_allowed_cards(allowed);
                                         append_overlay(OverlayEnum::CardSelector(props));
-                                    },
-                                    "set instance constraint"
+                                })).with_title("answer must be instance of a given class");
+
+
+                                rsx!{
+                                    ActionDropdown { label: "set answer constraint".to_string(), options: vec![timestamp, instance], title: "hey"  }
                                 }
-                            }
+
+
+
+
+
+
+
+                            },
                         }
                     }
                 }
