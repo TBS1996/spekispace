@@ -34,8 +34,9 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GH_RELEASE_TOKEN }}
   build-macos:
     runs-on: macos-latest
+
     steps:
-      - name: Checkout
+      - name: Checkout code
         uses: actions/checkout@v3
 
       - name: Install Rust
@@ -44,19 +45,31 @@ jobs:
           toolchain: stable
           override: true
 
-      - name: Build binary
-        run: cargo build -p speki --release
+      - name: Install cargo-bundle
+        run: cargo install cargo-bundle
 
-      - name: Archive binary
+      - name: Build .app bundle
+        run: cargo bundle --release
+
+      - name: Install create-dmg
+        run: brew install create-dmg
+
+      - name: Create .dmg
         run: |
-          mkdir -p dist
-          cp target/release/speki dist/
-          cd dist && tar -czf ../speki-macos.tar.gz speki
+          mkdir dist
+          create-dmg \
+            --volname "Speki" \
+            --window-pos 200 120 \
+            --window-size 800 400 \
+            --icon-size 100 \
+            --icon "Speki.app" 200 190 \
+            --app-drop-link 600 185 \
+            "dist/Speki.dmg" \
+            "target/release/bundle/osx"
 
-      - name: Upload macOS binary
+      - name: Upload .dmg to GitHub release
         uses: softprops/action-gh-release@v2
         with:
-          files: speki-macos.tar.gz
+          files: dist/Speki.dmg
         env:
           GITHUB_TOKEN: ${{ secrets.GH_RELEASE_TOKEN }}
-
