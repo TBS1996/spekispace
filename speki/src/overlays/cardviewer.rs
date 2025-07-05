@@ -1052,11 +1052,7 @@ fn RenderAttrs(card: Option<CardId>, attrs: Signal<Vec<AttrEditor>>) -> Element 
                             },
                             None => {
 
-                                let timestamp = DropdownAction::new("timestamp".to_string(), Box::new(move || {
-                                                                    ty.clone().set(Some(AttrBackTypeEditor::Timestamp));
-                                })).with_title("answer must be timestamp");
-
-
+                                let timestamp = DropdownAction::new("timestamp".to_string(), Box::new(move || {ty.clone().set(Some(AttrBackTypeEditor::Timestamp));})).with_title("answer must be timestamp");
                                 let instance = DropdownAction::new("instance".to_string(), Box::new(move || {
                                         let fun = MyClosure::new(move |card: CardId| {
                                             ty.clone().set(Some(AttrBackTypeEditor::InstanceOfClass(Signal::new_in_scope(card, ScopeId::APP))));
@@ -1073,13 +1069,6 @@ fn RenderAttrs(card: Option<CardId>, attrs: Signal<Vec<AttrEditor>>) -> Element 
                                 rsx!{
                                     ActionDropdown { label: "set answer constraint".to_string(), options: vec![timestamp, instance], title: "hey"  }
                                 }
-
-
-
-
-
-
-
                             },
                         }
                     }
