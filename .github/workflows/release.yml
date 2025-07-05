@@ -1,15 +1,16 @@
-name: Release Windows Binary
+name: Release
 
 on:
   push:
     tags:
-      - 'v*'
+      - "v*"
 
 jobs:
-  build-windows:
+  release-windows:
     runs-on: ubuntu-latest
+
     steps:
-      - name: Checkout code
+      - name: Checkout
         uses: actions/checkout@v3
 
       - name: Install Rust
@@ -19,15 +20,15 @@ jobs:
           target: x86_64-pc-windows-gnu
           override: true
 
-      - name: Install build tools
+      - name: Install mingw for Windows build
         run: sudo apt-get update && sudo apt-get install -y mingw-w64
 
       - name: Build Windows binary
         run: cargo build -p speki --release --target x86_64-pc-windows-gnu
 
-      - name: Upload artifact
-        uses: actions/upload-artifact@v3
+      - name: Upload release asset
+        uses: softprops/action-gh-release@v2
         with:
-          name: speki-windows
-          path: target/x86_64-pc-windows-gnu/release/speki.exe
-
+          files: target/x86_64-pc-windows-gnu/release/speki.exe
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
