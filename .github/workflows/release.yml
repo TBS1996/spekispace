@@ -49,7 +49,7 @@ jobs:
         run: cargo install cargo-bundle
 
       - name: Build .app bundle
-        run: cargo bundle -p speki --release
+        run: cargo bundle -p speki --profile release
 
       - name: Install create-dmg
         run: brew install create-dmg
