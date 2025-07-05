@@ -63,18 +63,18 @@ jobs:
         run: |
           mkdir dist
           create-dmg \
-            --volname "Speki" \
+            --volname "speki" \
             --window-pos 200 120 \
             --window-size 800 400 \
             --icon-size 100 \
-            --icon "Speki.app" 200 190 \
+            --icon "speki.app" 200 190 \
             --app-drop-link 600 185 \
-            "dist/Speki.dmg" \
+            "dist/speki.dmg" \
             "target/release/bundle/osx"
 
       - name: Upload .dmg to GitHub release
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/Speki.dmg
+          files: dist/speki.dmg
         env:
           GITHUB_TOKEN: ${{ secrets.GH_RELEASE_TOKEN }}
