@@ -73,7 +73,7 @@ jobs:
             --icon "Speki.app" 200 190 \
             --app-drop-link 600 185 \
             "dist/speki.dmg" \
-            "target/release/bundle/osx"
+            "target/release/bundle/osx" || true
 
       - name: Upload .dmg to GitHub release
         uses: softprops/action-gh-release@v2
