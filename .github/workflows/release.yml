@@ -31,4 +31,4 @@ jobs:
         with:
           files: target/x86_64-pc-windows-gnu/release/speki.exe
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GH_RELEASE_TOKEN }}
