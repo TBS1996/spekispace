@@ -55,6 +55,9 @@ jobs:
         run: |
           cd speki
           cargo bundle --release
+      - name: Remove broken signature (prevent macOS error)
+        run: |
+          codesign --remove-signature "target/release/bundle/osx/Speki.app"
 
       - name: Install create-dmg
         run: brew install create-dmg
