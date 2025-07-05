@@ -1187,8 +1187,6 @@ fn InputElements(
                 }
             },
         }
-
-
     }
 }
 
