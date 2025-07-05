@@ -48,8 +48,11 @@ jobs:
       - name: Install cargo-bundle
         run: cargo install cargo-bundle
 
-      - name: Build .app bundle
-        run: cargo bundle -p speki --profile release
+      - name: Build release binary
+        run: cargo build -p speki --release
+
+      - name: Bundle .app
+        run: cargo bundle -p speki
 
       - name: Install create-dmg
         run: brew install create-dmg
