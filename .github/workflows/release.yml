@@ -52,7 +52,9 @@ jobs:
         run: cargo build -p speki --release
 
       - name: Bundle .app
-        run: cargo bundle --manifest-path speki/Cargo.toml
+        run: |
+          cd speki
+          cargo bundle --release
 
       - name: Install create-dmg
         run: brew install create-dmg
