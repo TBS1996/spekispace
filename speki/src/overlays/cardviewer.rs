@@ -1408,10 +1408,11 @@ fn save_button(CardViewer: CardViewer) -> Element {
                 let inner_card = Arc::unwrap_or_clone(card);
                 if let Some(hook) = selveste.save_hook.clone() {
                     hook.call(inner_card.id());
+                } else {
+                    selveste.reset();
+                    pop_overlay();
                 }
 
-                selveste.reset();
-                pop_overlay();
             },
             if is_new {
                 "create"
