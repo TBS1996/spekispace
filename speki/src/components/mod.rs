@@ -33,14 +33,28 @@ pub fn RenderDependents(card_id: CardId, hidden: bool) -> Element {
 
     let max_limit = 10;
 
-    let (deps, qty) = {
+    let (deps, qty): (Vec<(String, CardId)>, usize) = {
         let dep_ids = APP.read().inner().provider.cards.all_dependents(card_id);
         let qty = dep_ids.len();
 
         if dep_ids.len() > max_limit {
             (vec![], qty)
         } else {
-            (dep_ids.into_iter().collect(), qty)
+            (
+                dep_ids
+                    .into_iter()
+                    .map(|dep| {
+                        (
+                            APP.read()
+                                .try_load_card(dep)
+                                .map(|card| card.name().to_string())
+                                .unwrap_or("<deleted card>".to_string()),
+                            dep,
+                        )
+                    })
+                    .collect(),
+                qty,
+            )
         }
     };
 
@@ -75,13 +89,13 @@ pub fn RenderDependents(card_id: CardId, hidden: bool) -> Element {
                     "view {qty} dependents"
                 }
             } else {
-                for card in deps {
+                for (name, id) in deps {
                     button {
                         class: "mb-1 p-1 bg-gray-100 rounded-md text-left",
                         onclick: move|_|{
-                            OverlayEnum::new_edit_card(card).append();
+                            OverlayEnum::new_edit_card(id).append();
                         },
-                        "{card}"
+                        "{name}"
                     }
                 }
             }
