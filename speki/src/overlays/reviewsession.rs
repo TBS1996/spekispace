@@ -16,7 +16,6 @@ use speki_core::{
 use tracing::info;
 
 use crate::{
-    append_overlay,
     components::{card_mastery::MasterySection, RenderDependents},
     overlays::{
         card_selector::{CardSelector, MyClosure},
@@ -301,7 +300,7 @@ fn Infobar(
                         .collect();
                     let set = SetExpr::Union(passed);
                     let props = CardSelector::new(false, Default::default()).with_set(set).with_edit_collection(false);
-                    append_overlay(OverlayEnum::CardSelector(props));
+                    OverlayEnum::CardSelector(props).append();
                 },
                 "{pos}"
             }
@@ -325,7 +324,7 @@ fn Infobar(
                     };
                     let set = SetExpr::Union(total);
                     let props = CardSelector::new(false, Default::default()).with_set(set).with_edit_collection(false);
-                    append_overlay(OverlayEnum::CardSelector(props));
+                    OverlayEnum::CardSelector(props).append();
                 },
                 "{tot}"
             }
@@ -335,10 +334,7 @@ fn Infobar(
                 class: "{crate::styles::READ_BUTTON}",
                 onclick: move |_| {
                     let card = card2.clone();
-                    let card = card.clone();
-                    let viewer = CardViewer::new_from_card(card);
-                    let viewer = OverlayEnum::CardViewer(viewer);
-                    append_overlay(viewer);
+                    OverlayEnum::new_edit_card(card.id()).append();
                 },
                 "edit"
             }
@@ -414,7 +410,7 @@ fn RenderDependencies(
                         let card = card.clone();
                         let front = format!("{}{}", card.print(), card.display_backside());
                         let props = CardSelector::dependency_picker(fun).with_default_search(front).with_forbidden_cards(vec![card.id()]);
-                        append_overlay(OverlayEnum::CardSelector(props));
+                        OverlayEnum::CardSelector(props).append();
 
                     },
                  }
@@ -428,7 +424,7 @@ fn RenderDependencies(
                         onclick: move|_|{
                             let card = card.clone();
                             let viewer = CardViewer::new_from_card(card);
-                            append_overlay(OverlayEnum::CardViewer(viewer));
+                            OverlayEnum::CardViewer(viewer).append();
                         },
                         "{card}"
                     }
@@ -472,7 +468,7 @@ fn RenderEvalText(eval: EvalText) -> Element {
                                     onclick: move |_| {
                                         let card = APP.read().load_card(id);
                                         let props = CardViewer::new_from_card(card);
-                                        append_overlay(OverlayEnum::CardViewer(props));
+                                        OverlayEnum::CardViewer(props).append();
                                     },
                                     " {s}"
                                 }

@@ -1,12 +1,10 @@
 use crate::{
-    append_overlay,
     components::{
         dropdown::{ActionDropdown, DropComponent, DropdownAction},
         FilterComp, FilterEditor,
     },
     overlays::{
         card_selector::{CardSelector, MaybeEntry, MyClosure},
-        reviewsession::ReviewState,
         Overender, OverlayChoice, OverlayEnum, OverlaySelector,
     },
     APP,
@@ -268,7 +266,7 @@ pub fn RenderExpr(
             ],
             chosen: None,
         };
-        append_overlay(OverlayEnum::OverlaySelector(sel));
+        OverlayEnum::OverlaySelector(sel).append();
     });
 
     let expr_opt = DropdownAction::new("expr".to_string(), expr_func);
@@ -462,12 +460,8 @@ fn RenderSet(
                         filtered_cards.shuffle(&mut rand::thread_rng());
 
                         match NonEmpty::from_vec(filtered_cards) {
-                            Some(cards) => {
-                                let revses = OverlayEnum::Review(ReviewState::new(cards));
-                                append_overlay(revses);
-                            },
-                            None =>
-                                OverlayEnum::new_notice("no cards to review!").append(),
+                            Some(cards) => OverlayEnum::new_review(cards).append(),
+                            None => OverlayEnum::new_notice("no cards to review!").append(),
                         }
 
                     },
@@ -482,7 +476,7 @@ fn RenderSet(
                             dbg!(&expr);
                             let title = set_name.clone();
                             let viewer = CardSelector::new_with_filter(false, vec![], expr).with_title(title).with_edit_collection(false);
-                            append_overlay(OverlayEnum::CardSelector(viewer));
+                            OverlayEnum::CardSelector(viewer).append();
                         },
                         "view"
                     }

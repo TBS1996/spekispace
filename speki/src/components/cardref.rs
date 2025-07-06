@@ -6,7 +6,6 @@ use tracing::info;
 
 use super::CardTy;
 use crate::{
-    append_overlay,
     overlays::{
         card_selector::{CardSelector, MyClosure},
         OverlayEnum,
@@ -71,7 +70,7 @@ pub fn ForcedCardRefRender(
                     let allowed = allowed.clone();
                     let props = CardSelector::ref_picker(fun, filter.clone())
                         .with_allowed_cards(allowed);
-                    append_overlay(OverlayEnum::CardSelector(props));
+                    OverlayEnum::CardSelector(props).append();
                 },
             }
         }
@@ -126,7 +125,7 @@ pub fn CardRefRender(
                     let props = CardSelector::ref_picker(fun, filter.clone())
                         .with_allowed_cards(allowed);
 
-                        append_overlay(OverlayEnum::CardSelector(props));
+                        OverlayEnum::CardSelector(props).append();
                 },
             }
             if is_selected {

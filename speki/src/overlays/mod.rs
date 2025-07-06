@@ -11,12 +11,14 @@ use crate::{
         card_selector::CardSelector, cardviewer::CardViewer, notice::NoticeRender,
         reviewsession::ReviewState, textinput::TextInputRender,
     },
-    pop_overlay, set_overlay,
+    pop_overlay, set_overlay, APP,
 };
 use card_selector::CardSelectorRender;
 use cardviewer::CardViewerRender;
 use dioxus::prelude::*;
+use nonempty::NonEmpty;
 use reviewsession::ReviewRender;
+use speki_core::card::CardId;
 use std::{fmt::Debug, sync::Arc};
 
 #[derive(Clone)]
@@ -85,6 +87,19 @@ pub enum OverlayEnum {
 impl OverlayEnum {
     pub fn append(self) {
         append_overlay(self);
+    }
+
+    pub fn new_review(thecards: NonEmpty<CardId>) -> Self {
+        Self::Review(ReviewState::new(thecards))
+    }
+
+    pub fn new_edit_card(id: CardId) -> Self {
+        let card = APP.read().load_card(id);
+        Self::CardViewer(CardViewer::new_from_card(card))
+    }
+
+    pub fn new_create_card() -> Self {
+        Self::CardViewer(CardViewer::new())
     }
 
     pub fn new_text_input(q: String, hook: Arc<Box<dyn Fn(String)>>) -> Self {

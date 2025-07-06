@@ -17,7 +17,6 @@ use speki_core::{
 use tracing::info;
 
 use crate::{
-    append_overlay,
     components::{
         backside::{BackPutRender, BacksideError, TimestampRender},
         card_mastery::MasterySection,
@@ -413,7 +412,7 @@ fn RenderDependencies(
                         if let Some(id)  = card_id {
                             props = props.with_forbidden_cards(vec![id]);
                         }
-                        append_overlay(OverlayEnum::CardSelector(props));
+                        OverlayEnum::CardSelector(props).append();
                     }
                 }
             }
@@ -426,7 +425,7 @@ fn RenderDependencies(
                         onclick: move|_|{
                             if let Some(card) = APP.read().try_load_card(id) {
                                 let viewer = CardViewer::new_from_card(card);
-                                append_overlay(OverlayEnum::CardViewer(viewer));
+                                OverlayEnum::CardViewer(viewer).append();
                             }
                         },
                         "{name}"
@@ -1057,7 +1056,7 @@ fn RenderAttrs(card: Option<CardId>, attrs: Signal<Vec<AttrEditor>>) -> Element 
                                         let allowed = vec![CardTy::Class];
 
                                         let props = CardSelector::ref_picker(fun, filter).with_allowed_cards(allowed);
-                                        append_overlay(OverlayEnum::CardSelector(props));
+                                        OverlayEnum::CardSelector(props).append();
                                 })).with_title("answer must be instance of a given class");
 
 

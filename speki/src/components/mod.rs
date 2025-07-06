@@ -15,7 +15,6 @@ use speki_core::{card::CardId, collection::DynCard, set::SetExpr};
 use dioxus::prelude::*;
 
 use crate::{
-    append_overlay,
     overlays::{
         card_selector::{CardSelector, MyClosure},
         cardviewer::{AdderHeader, CardViewer},
@@ -35,20 +34,13 @@ pub fn RenderDependents(card_id: CardId, hidden: bool) -> Element {
     let max_limit = 10;
 
     let (deps, qty) = {
-        let mut inner = vec![];
-
         let dep_ids = APP.read().inner().provider.cards.all_dependents(card_id);
-
         let qty = dep_ids.len();
 
         if dep_ids.len() > max_limit {
             (vec![], qty)
         } else {
-            for id in dep_ids {
-                let card = APP.read().load_card(id);
-                inner.push(card);
-            }
-            (inner, qty)
+            (dep_ids.into_iter().collect(), qty)
         }
     };
 
@@ -65,7 +57,7 @@ pub fn RenderDependents(card_id: CardId, hidden: bool) -> Element {
                     title: "Dependents",
                     on_add: move |_| {
                         let props = CardViewer::new().with_dependency(card_id);
-                        append_overlay(OverlayEnum::CardViewer(props));
+                        OverlayEnum::CardViewer(props).append();
 
                     },
 
@@ -78,7 +70,7 @@ pub fn RenderDependents(card_id: CardId, hidden: bool) -> Element {
                     onclick: move|_|{
                         let set = SetExpr::union_with(vec![DynCard::Dependents(card_id)]);
                         let props = CardSelector::new(false, Default::default()).with_set(set);
-                        append_overlay(OverlayEnum::CardSelector(props));
+                        OverlayEnum::CardSelector(props).append();
                     },
                     "view {qty} dependents"
                 }
@@ -87,9 +79,7 @@ pub fn RenderDependents(card_id: CardId, hidden: bool) -> Element {
                     button {
                         class: "mb-1 p-1 bg-gray-100 rounded-md text-left",
                         onclick: move|_|{
-                            let card = card.clone();
-                            let viewer = CardViewer::new_from_card(card);
-                            append_overlay(OverlayEnum::CardViewer(viewer));
+                            OverlayEnum::new_edit_card(card).append();
                         },
                         "{card}"
                     }
@@ -127,7 +117,7 @@ pub fn set_card_link(text: Signal<String>, alias: bool) {
                 .new_on_card_selected(f, true)
                 .with_default_search(theval)
                 .with_allow_new(true);
-            append_overlay(OverlayEnum::CardSelector(props));
+            OverlayEnum::CardSelector(props).append();
         }
     });
 }

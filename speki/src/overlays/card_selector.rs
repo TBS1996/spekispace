@@ -16,7 +16,6 @@ use tracing::info;
 use uuid::Uuid;
 
 use crate::{
-    append_overlay,
     pages::{ExprEditor, RenderExpr},
     pop_overlay, set_overlay,
 };
@@ -30,11 +29,7 @@ use crate::{
 use super::OverlayEnum;
 
 pub fn overlay_card_viewer() -> MyClosure {
-    MyClosure::new(move |card: CardId| {
-        let card = APP.read().load_card(card);
-        let viewer = CardViewer::new_from_card(card);
-        append_overlay(OverlayEnum::CardViewer(viewer));
-    })
+    MyClosure::new(move |card: CardId| OverlayEnum::new_edit_card(card).append())
 }
 
 #[derive(Clone)]
