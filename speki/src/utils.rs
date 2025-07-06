@@ -9,11 +9,7 @@ use speki_core::{
 };
 use tracing::info;
 
-use crate::{
-    append_overlay,
-    overlays::{notice::Notice, OverlayEnum},
-    APP,
-};
+use crate::{overlays::OverlayEnum, APP};
 
 #[derive(Clone)]
 pub struct App(Arc<speki_core::App>);
@@ -117,9 +113,7 @@ pub fn handle_card_event_error(err: EventError<RawCard>) {
         EventError::DeletingWithDependencies => format!("cannot delete card with dependencies"),
     };
 
-    let notice = Notice::new(text);
-    let overlay = OverlayEnum::Notice(notice);
-    append_overlay(overlay);
+    OverlayEnum::new_notice(text).append();
 }
 
 pub fn recall_to_emoji(recall: Recall) -> &'static str {

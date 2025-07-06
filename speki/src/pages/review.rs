@@ -6,7 +6,6 @@ use crate::{
     },
     overlays::{
         card_selector::{CardSelector, MaybeEntry, MyClosure},
-        notice::Notice,
         reviewsession::ReviewState,
         textinput::TextInput,
         Overender, OverlayChoice, OverlayEnum, OverlaySelector,
@@ -468,12 +467,8 @@ fn RenderSet(
                                 let revses = OverlayEnum::Review(ReviewState::new(cards));
                                 append_overlay(revses);
                             },
-                            None => {
-                                let notice = Notice::new ("no cards to review!");
-
-                                let notice = OverlayEnum::Notice(notice);
-                                append_overlay(notice);
-                            },
+                            None =>
+                                OverlayEnum::new_notice("no cards to review!").append(),
                         }
 
                     },

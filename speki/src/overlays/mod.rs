@@ -6,10 +6,11 @@ pub mod textinput;
 pub mod uploader;
 
 use crate::{
+    append_overlay,
     overlays::{
         card_selector::CardSelector,
         cardviewer::CardViewer,
-        notice::{Notice, NoticeRender},
+        notice::NoticeRender,
         reviewsession::ReviewState,
         textinput::{TextInput, TextInputRender},
     },
@@ -74,7 +75,21 @@ pub enum OverlayEnum {
     CardSelector(CardSelector),
     OverlaySelector(OverlaySelector),
     Text(TextInput),
-    Notice(Notice),
+    Notice { text: String, button_text: String },
+}
+
+impl OverlayEnum {
+    pub fn append(self) {
+        append_overlay(self);
+    }
+
+    pub fn new_notice(text: impl AsRef<str>) -> Self {
+        let text = text.as_ref().to_string();
+        Self::Notice {
+            text,
+            button_text: "OK".to_string(),
+        }
+    }
 }
 
 impl Debug for OverlayEnum {
@@ -84,7 +99,7 @@ impl Debug for OverlayEnum {
             Self::CardViewer(_) => f.debug_tuple("card viewer").finish(),
             Self::CardSelector(_) => f.debug_tuple("card selector").finish(),
             Self::OverlaySelector(_) => f.debug_tuple("overlay selector").finish(),
-            Self::Notice(_) => f.debug_tuple("notice").finish(),
+            Self::Notice { .. } => f.debug_tuple("notice").finish(),
             Self::Text(_) => f.debug_tuple("text").finish(),
         }
     }
@@ -148,9 +163,11 @@ pub fn Overender(overlay: Signal<Option<Arc<OverlayEnum>>>, root: Element) -> El
                                 OverlaySelectorRender { title: elm.title.clone(), choices: elm.choices.clone()}
                             },
 
-                            OverlayEnum::Notice(elm) => {
+                            OverlayEnum::Notice{
+                                text, button_text
+                            } => {
                                 rsx! {
-                                    NoticeRender {notice: elm.clone()}
+                                    NoticeRender {text, button_text}
                                 }
                             }
 
