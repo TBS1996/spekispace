@@ -29,56 +29,45 @@ pub static ROUTE_CHANGE: AtomicBool = AtomicBool::new(false);
 
 const TAILWIND_CSS: &str = include_str!("../public/tailwind.css");
 
-#[cfg(target_os = "windows")]
-use windows_sys::Win32::UI::WindowsAndMessaging::{MessageBoxA, MB_ICONINFORMATION, MB_OK};
+use std::ptr::null_mut;
+use windows::core::PCWSTR;
+use windows::Win32::Foundation::HWND;
+use windows::Win32::UI::WindowsAndMessaging::{MessageBoxW, MB_ICONINFORMATION, MB_OK};
 
 fn webview2_is_installed() -> bool {
-    #[cfg(target_os = "windows")]
-    use std::ptr::null_mut;
-    #[cfg(target_os = "windows")]
     use webview2_com::Microsoft::Web::WebView2::Win32::GetAvailableCoreWebView2BrowserVersionString;
-    #[cfg(target_os = "windows")]
-    use windows_sys::core::PWSTR;
 
-    #[cfg(target_os = "windows")]
     unsafe {
-        let mut version: PWSTR = null_mut();
-        let hr = GetAvailableCoreWebView2BrowserVersionString(std::ptr::null(), &mut version);
-        hr == 0 // S_OK
+        let mut version = std::ptr::null_mut();
+        GetAvailableCoreWebView2BrowserVersionString(None, &mut version).is_ok()
     }
+}
 
-    #[cfg(not(target_os = "windows"))]
-    {
-        true
-    }
+fn widestring(s: &str) -> PCWSTR {
+    use std::ffi::OsStr;
+    use std::os::windows::ffi::OsStrExt;
+
+    let wide: Vec<u16> = OsStr::new(s).encode_wide().chain(Some(0)).collect();
+    PCWSTR(wide.as_ptr())
 }
 
 fn main() {
     std::env::set_var("GDK_BACKEND", "x11");
 
     if !webview2_is_installed() {
-        #[cfg(target_os = "windows")]
-        {
-            use std::ffi::CString;
-            use std::process::Command;
-            use windows_sys::Win32::UI::WindowsAndMessaging::*;
-
-            unsafe {
-                MessageBoxA(
-                    0,
-                    CString::new("WebView2 is required.\nClick OK to install it.")
-                        .unwrap()
-                        .as_ptr(),
-                    CString::new("Missing WebView2").unwrap().as_ptr(),
-                    MB_OK | MB_ICONINFORMATION,
-                );
-            }
-
-            let _ = Command::new("rundll32")
-                .arg("url.dll,FileProtocolHandler")
-                .arg("https://go.microsoft.com/fwlink/p/?LinkId=2124703")
-                .spawn();
+        unsafe {
+            MessageBoxW(
+                HWND(0),
+                widestring("WebView2 is required.\nClick OK to install it."),
+                widestring("Missing WebView2"),
+                MB_OK | MB_ICONINFORMATION,
+            );
         }
+
+        let _ = std::process::Command::new("rundll32")
+            .arg("url.dll,FileProtocolHandler")
+            .arg("https://go.microsoft.com/fwlink/p/?LinkId=2124703")
+            .spawn();
 
         return;
     }

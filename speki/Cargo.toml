@@ -34,9 +34,9 @@ dioxus-desktop = "0.6.1"
 rayon.workspace = true
 chrono.workspace = true
 tokio.workspace = true
-webview2-com = "0.23"
-windows = { version = "0.56", features = ["Win32_System_Com", "Win32_System_WinRT", "Win32_UI_Shell"] }
-windows-sys = { version = "0.60.2", features = ["Win32_UI_WindowsAndMessaging"] }
+
+webview2-com = "0.38"
+windows = { version = "0.52", features = ["Win32_UI_WindowsAndMessaging"] }
 
 [features]
 default = ["desktop"]
