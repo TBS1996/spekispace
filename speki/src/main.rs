@@ -29,8 +29,50 @@ pub static ROUTE_CHANGE: AtomicBool = AtomicBool::new(false);
 
 const TAILWIND_CSS: &str = include_str!("../public/tailwind.css");
 
+fn webview2_is_installed() -> bool {
+    #[cfg(target_os = "windows")]
+    use webview2_com::Microsoft::Web::WebView2::Win32::GetAvailableCoreWebView2BrowserVersionString;
+
+    #[cfg(target_os = "windows")]
+    unsafe {
+        GetAvailableCoreWebView2BrowserVersionString(None).is_ok()
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        true
+    }
+}
+
 fn main() {
     std::env::set_var("GDK_BACKEND", "x11");
+
+    if !webview2_is_installed() {
+        #[cfg(target_os = "windows")]
+        {
+            use std::ffi::CString;
+            use std::process::Command;
+            use windows_sys::Win32::UI::WindowsAndMessaging::*;
+
+            unsafe {
+                MessageBoxA(
+                    0,
+                    CString::new("WebView2 is required.\nClick OK to install it.")
+                        .unwrap()
+                        .as_ptr(),
+                    CString::new("Missing WebView2").unwrap().as_ptr(),
+                    MB_OK | MB_ICONINFORMATION,
+                );
+            }
+
+            let _ = Command::new("rundll32")
+                .arg("url.dll,FileProtocolHandler")
+                .arg("https://go.microsoft.com/fwlink/p/?LinkId=2124703")
+                .spawn();
+        }
+
+        return;
+    }
 
     let trace_enabled = std::env::args().any(|arg| arg == "--trace");
     let log_level = if trace_enabled {
