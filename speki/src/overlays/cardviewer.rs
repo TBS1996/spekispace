@@ -206,7 +206,7 @@ pub struct CardEditor {
     back: BackPut,
     default_question: Signal<String>,
     concept: Signal<Option<CardId>>,
-    dependencies: Signal<Vec<Arc<Card>>>,
+    dependencies: Signal<Vec<CardId>>,
     allowed_cards: Vec<CardTy>,
     attrs: Signal<Vec<AttrEditor>>,
     attr_answers: Signal<Vec<AttrQandA>>,
@@ -356,12 +356,7 @@ impl CardEditor {
                 .cloned()
                 .map(|x| x.selected_card().cloned())
                 .flatten(),
-            deps: self
-                .dependencies
-                .cloned()
-                .into_iter()
-                .map(|c| c.id())
-                .collect(),
+            deps: self.dependencies.cloned().into_iter().collect(),
         })
     }
 }
@@ -380,9 +375,21 @@ impl PartialEq for CardEditor {
 fn RenderDependencies(
     card_text: Signal<String>,
     card_id: Option<CardId>,
-    dependencies: Signal<Vec<Arc<Card>>>,
+    dependencies: Signal<Vec<CardId>>,
 ) -> Element {
-    let deps = dependencies.cloned();
+    let name_and_id: Vec<(String, CardId)> = dependencies
+        .cloned()
+        .into_iter()
+        .map(|card| {
+            (
+                APP.read()
+                    .try_load_card(card)
+                    .map(|card| card.name().to_string())
+                    .unwrap_or("<deleted card>".to_string()),
+                card,
+            )
+        })
+        .collect();
 
     rsx! {
         div {
@@ -398,7 +405,6 @@ fn RenderDependencies(
                         let depsig = dependencies.clone();
 
                         let fun = MyClosure::new(move |card: CardId| {
-                            let card = APP.read().load_card(card);
                             depsig.clone().write().push(card);
                         });
 
@@ -412,17 +418,18 @@ fn RenderDependencies(
                 }
             }
 
-            for (idx, card) in deps.into_iter().enumerate() {
+            for (idx, (name, id)) in name_and_id.into_iter().enumerate() {
                 div {
                     class: "flex flex-row",
                     button {
                         class: "mb-1 p-1 bg-gray-100 rounded-md text-left",
                         onclick: move|_|{
-                            let card = card.clone();
-                            let viewer = CardViewer::new_from_card(card);
-                            append_overlay(OverlayEnum::CardViewer(viewer));
+                            if let Some(card) = APP.read().try_load_card(id) {
+                                let viewer = CardViewer::new_from_card(card);
+                                append_overlay(OverlayEnum::CardViewer(viewer));
+                            }
                         },
-                        "{card}"
+                        "{name}"
                     }
 
                     button {
@@ -430,7 +437,7 @@ fn RenderDependencies(
                         onclick: move |_|{
                             let removed =  dependencies.write().remove(idx);
                             if let Some(id) = card_id {
-                                let event = TheLedgerEvent::new_modify(id, CardAction::RemoveDependency(removed.id()));
+                                let event = TheLedgerEvent::new_modify(id, CardAction::RemoveDependency(removed));
                                 if let Err(e) = APP.read().inner().provider.cards.modify(event) {
                                     handle_card_event_error(e);
                                 }
@@ -653,11 +660,8 @@ impl CardViewer {
                 }
             };
 
-            let dependencies: Signal<Vec<Arc<Card>>> = Signal::new_in_scope(
-                card.explicit_dependencies()
-                    .into_iter()
-                    .map(|id| APP.read().load_card(id))
-                    .collect(),
+            let dependencies: Signal<Vec<CardId>> = Signal::new_in_scope(
+                card.explicit_dependencies().into_iter().collect(),
                 ScopeId(3),
             );
 
@@ -692,7 +696,7 @@ impl CardViewer {
 
     pub fn new() -> Self {
         let front = FrontPut::new(CardTy::Normal);
-        let dependencies: Signal<Vec<Arc<Card>>> =
+        let dependencies: Signal<Vec<CardId>> =
             Signal::new_in_scope(Default::default(), ScopeId::APP);
 
         let editor = {
@@ -723,8 +727,7 @@ impl CardViewer {
     }
 
     pub fn with_dependency(mut self, dep: CardId) -> Self {
-        let card = APP.read().load_card(dep);
-        self.editor.dependencies.push(card);
+        self.editor.dependencies.push(dep);
         self
     }
 
