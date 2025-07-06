@@ -205,7 +205,7 @@ pub struct CardEditor {
     namespace: Signal<Option<CardRef>>,
     back: BackPut,
     default_question: Signal<String>,
-    concept: CardRef,
+    concept: Signal<Option<CardId>>,
     dependencies: Signal<Vec<Arc<Card>>>,
     allowed_cards: Vec<CardTy>,
     attrs: Signal<Vec<AttrEditor>>,
@@ -288,7 +288,7 @@ impl CardEditor {
                 }
             }
             CardTy::Class => {
-                let parent_class = self.concept.selected_card().cloned();
+                let parent_class = self.concept.cloned();
                 let back = match backside.try_to_backside() {
                     Ok(back) => Some(back),
                     Err(BacksideError::MissingCard) => None,
@@ -323,7 +323,7 @@ impl CardEditor {
                 }
             }
             CardTy::Instance => {
-                let class = match self.concept.selected_card().cloned() {
+                let class = match self.concept.cloned() {
                     Some(class) => class,
                     None => return Err("must pick class of instance".to_string()),
                 };
@@ -635,15 +635,7 @@ impl CardViewer {
         };
 
         let editor = {
-            let concept = {
-                let concept = CardRef::new().with_allowed(vec![CardTy::Class]);
-                if let Some(class) = raw_ty.data.class() {
-                    let class = APP.read().load_card(class);
-                    concept.set_ref(class.id());
-                }
-
-                concept
-            };
+            let concept = Signal::new_in_scope(raw_ty.data.class(), ScopeId::APP);
 
             let attrs = load_attr_qa(card.id());
             let attr_answers = Signal::new_in_scope(attrs, ScopeId::APP);
@@ -706,7 +698,7 @@ impl CardViewer {
         let editor = {
             let back = BackPut::new(None);
 
-            let concept = CardRef::new().with_allowed(vec![CardTy::Class]);
+            let concept = Signal::new_in_scope(None, ScopeId::APP);
 
             let attr_answers = Signal::new_in_scope(Default::default(), ScopeId::APP);
 
@@ -1083,7 +1075,7 @@ fn InputElements(
     front: FrontPut,
     back: BackPut,
     default_question: Signal<String>,
-    concept: CardRef,
+    concept: Signal<Option<CardId>>,
     ty: CardTy,
     card_id: Option<CardId>,
     mut namespace: Signal<Option<CardRef>>,
@@ -1118,12 +1110,9 @@ fn InputElements(
                     "Parent class"
 
                     CardRefRender{
-                        selected_card: concept.card.clone(),
+                        selected_card: concept,
                         placeholder: "pick parent class",
-                        on_select: concept.on_select.clone(),
-                        on_deselect: concept.on_deselect.clone(),
-                        allowed: concept.allowed.clone(),
-                        filter: concept.filter.clone(),
+                        allowed: vec![CardTy::Class],
                     },
                 }
 
@@ -1142,12 +1131,9 @@ fn InputElements(
                     style: "margin-right: 81px;",
                     "Class of instance"
                     CardRefRender{
-                        selected_card: concept.card.clone(),
+                        selected_card: concept,
                         placeholder: "pick class of instance",
-                        on_select: concept.on_select.clone(),
-                        on_deselect: concept.on_deselect.clone(),
-                        allowed: concept.allowed.clone(),
-                        filter: concept.filter.clone(),
+                        allowed: vec![CardTy::Class],
                     },
                 }
 
@@ -1167,10 +1153,6 @@ fn InputElements(
                         CardRefRender{
                             selected_card: ns.card.clone(),
                             placeholder: "choose namespace",
-                            on_select: ns.on_select.clone(),
-                            on_deselect: ns.on_deselect.clone(),
-                            allowed: ns.allowed.clone(),
-                            filter: ns.filter.clone(),
                         },
                     }
                 }

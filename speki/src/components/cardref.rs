@@ -81,8 +81,8 @@ pub fn ForcedCardRefRender(
 #[component]
 pub fn CardRefRender(
     selected_card: Signal<Option<CardId>>,
-    placeholder: &'static str,
-    allowed: Vec<CardTy>,
+    placeholder: Option<&'static str>,
+    #[props(default = vec![])] allowed: Vec<CardTy>,
     on_select: Option<MyClosure>,
     on_deselect: Option<MyClosure>,
     #[props(default = SetExpr::All)] filter: SetExpr,
@@ -95,6 +95,11 @@ pub fn CardRefRender(
             None => String::new(),
         })
     });
+
+    let placeholder: &'static str = match placeholder {
+        Some(ph) => ph,
+        None => "pick card...",
+    };
 
     rsx! {
         div {
