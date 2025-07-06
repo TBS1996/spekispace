@@ -46,7 +46,7 @@ fn webview2_is_installed() -> bool {
     unsafe {
         let mut version: PWSTR = PWSTR::null();
         use std::ptr::addr_of_mut;
-        GetAvailableCoreWebView2BrowserVersionString(None, addr_of_mut!(version))
+        GetAvailableCoreWebView2BrowserVersionString(None, addr_of_mut!(version)).is_ok()
     }
 }
 
