@@ -41,13 +41,12 @@ use windows::Win32::UI::WindowsAndMessaging::{MessageBoxW, MB_ICONINFORMATION, M
 #[cfg(target_os = "windows")]
 fn webview2_is_installed() -> bool {
     use webview2_com::Microsoft::Web::WebView2::Win32::GetAvailableCoreWebView2BrowserVersionString;
-    use windows::core::PWSTR;
+    use windows_sys::Win32::Foundation::PWSTR;
 
-    unsafe {
-        let mut version: PWSTR = PWSTR::null();
-        use std::ptr::addr_of_mut;
-        GetAvailableCoreWebView2BrowserVersionString(None, addr_of_mut!(version)).is_ok()
-    }
+    let mut version: PWSTR = std::ptr::null_mut();
+    let hr =
+        unsafe { GetAvailableCoreWebView2BrowserVersionString(std::ptr::null(), &mut version) };
+    hr == 0
 }
 
 #[cfg(target_os = "windows")]
