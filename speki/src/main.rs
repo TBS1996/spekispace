@@ -29,11 +29,16 @@ pub static ROUTE_CHANGE: AtomicBool = AtomicBool::new(false);
 
 const TAILWIND_CSS: &str = include_str!("../public/tailwind.css");
 
+#[cfg(target_os = "windows")]
 use std::ptr::null_mut;
+#[cfg(target_os = "windows")]
 use windows::core::PCWSTR;
+#[cfg(target_os = "windows")]
 use windows::Win32::Foundation::HWND;
+#[cfg(target_os = "windows")]
 use windows::Win32::UI::WindowsAndMessaging::{MessageBoxW, MB_ICONINFORMATION, MB_OK};
 
+#[cfg(target_os = "windows")]
 fn webview2_is_installed() -> bool {
     use webview2_com::Microsoft::Web::WebView2::Win32::GetAvailableCoreWebView2BrowserVersionString;
     use windows::core::PWSTR;
@@ -44,6 +49,7 @@ fn webview2_is_installed() -> bool {
     }
 }
 
+#[cfg(target_os = "windows")]
 fn widestring(s: &str) -> PCWSTR {
     use std::ffi::OsStr;
     use std::os::windows::ffi::OsStrExt;
@@ -55,6 +61,7 @@ fn widestring(s: &str) -> PCWSTR {
 fn main() {
     std::env::set_var("GDK_BACKEND", "x11");
 
+    #[cfg(target_os = "windows")]
     if !webview2_is_installed() {
         unsafe {
             MessageBoxW(
