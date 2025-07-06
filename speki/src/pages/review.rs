@@ -7,7 +7,6 @@ use crate::{
     overlays::{
         card_selector::{CardSelector, MaybeEntry, MyClosure},
         reviewsession::ReviewState,
-        textinput::TextInput,
         Overender, OverlayChoice, OverlayEnum, OverlaySelector,
     },
     APP,
@@ -754,8 +753,7 @@ fn RenderSets(filter: CardFilter, sets: Signal<Vec<SetEditor>>) -> Element {
                         APP.read().inner().provider.sets.modify(event).unwrap();
                         the_sets.clone().set(load_sets());
                     }));
-                    let x = TextInput::new("name of set".to_string(), f);
-                    append_overlay(OverlayEnum::Text(x));
+                    OverlayEnum::new_text_input("name of set".to_string(), f).append();
                 },
                 "new set"
             }

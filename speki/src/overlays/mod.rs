@@ -8,11 +8,8 @@ pub mod uploader;
 use crate::{
     append_overlay,
     overlays::{
-        card_selector::CardSelector,
-        cardviewer::CardViewer,
-        notice::NoticeRender,
-        reviewsession::ReviewState,
-        textinput::{TextInput, TextInputRender},
+        card_selector::CardSelector, cardviewer::CardViewer, notice::NoticeRender,
+        reviewsession::ReviewState, textinput::TextInputRender,
     },
     pop_overlay, set_overlay,
 };
@@ -74,13 +71,28 @@ pub enum OverlayEnum {
     CardViewer(CardViewer),
     CardSelector(CardSelector),
     OverlaySelector(OverlaySelector),
-    Text(TextInput),
-    Notice { text: String, button_text: String },
+    Text {
+        question: Arc<String>,
+        input_value: Signal<String>,
+        on_submit: Arc<Box<dyn Fn(String)>>,
+    },
+    Notice {
+        text: String,
+        button_text: String,
+    },
 }
 
 impl OverlayEnum {
     pub fn append(self) {
         append_overlay(self);
+    }
+
+    pub fn new_text_input(q: String, hook: Arc<Box<dyn Fn(String)>>) -> Self {
+        Self::Text {
+            question: Arc::new(q),
+            input_value: Signal::new_in_scope(Default::default(), ScopeId::APP),
+            on_submit: hook,
+        }
     }
 
     pub fn new_notice(text: impl AsRef<str>) -> Self {
@@ -100,7 +112,7 @@ impl Debug for OverlayEnum {
             Self::CardSelector(_) => f.debug_tuple("card selector").finish(),
             Self::OverlaySelector(_) => f.debug_tuple("overlay selector").finish(),
             Self::Notice { .. } => f.debug_tuple("notice").finish(),
-            Self::Text(_) => f.debug_tuple("text").finish(),
+            Self::Text { .. } => f.debug_tuple("text").finish(),
         }
     }
 }
@@ -126,14 +138,15 @@ pub fn Overender(overlay: Signal<Option<Arc<OverlayEnum>>>, root: Element) -> El
                             "❌"
                         }
 
-                        match &*elm {
-                            OverlayEnum::Text(elm) => {
+                        match Arc::unwrap_or_clone(elm) {
+                            OverlayEnum::Text{ question, input_value, on_submit } => {
                                 rsx!{
                                     TextInputRender {
-                                        question: elm.question.clone(),
-                                        input_value: elm.input_value,
-                                        on_submit: elm.on_submit.clone(),
-                                        crud: elm.crud,
+                                        question: question.clone(),
+                                        input_value: input_value.clone(),
+                                        on_submit: move |val| {
+                                            (on_submit)(val);
+                                        },
                                     }
                                 }
                             },
