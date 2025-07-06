@@ -29,13 +29,22 @@ pub static ROUTE_CHANGE: AtomicBool = AtomicBool::new(false);
 
 const TAILWIND_CSS: &str = include_str!("../public/tailwind.css");
 
+#[cfg(target_os = "windows")]
+use windows_sys::Win32::UI::WindowsAndMessaging::{MessageBoxA, MB_ICONINFORMATION, MB_OK};
+
 fn webview2_is_installed() -> bool {
     #[cfg(target_os = "windows")]
+    use std::ptr::null_mut;
+    #[cfg(target_os = "windows")]
     use webview2_com::Microsoft::Web::WebView2::Win32::GetAvailableCoreWebView2BrowserVersionString;
+    #[cfg(target_os = "windows")]
+    use windows_sys::core::PWSTR;
 
     #[cfg(target_os = "windows")]
     unsafe {
-        GetAvailableCoreWebView2BrowserVersionString(None).is_ok()
+        let mut version: PWSTR = null_mut();
+        let hr = GetAvailableCoreWebView2BrowserVersionString(std::ptr::null(), &mut version);
+        hr == 0 // S_OK
     }
 
     #[cfg(not(target_os = "windows"))]

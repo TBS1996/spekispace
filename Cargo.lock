@@ -4174,6 +4174,7 @@ dependencies = [
  "uuid",
  "webview2-com 0.23.0",
  "windows 0.56.0",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
