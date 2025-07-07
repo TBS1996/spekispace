@@ -46,7 +46,12 @@ pub enum DynCard {
 
 impl DynCard {
     pub fn display(&self, provider: CardProvider) -> String {
-        let name = |id: &CardId| provider.load(*id).unwrap().name().to_string();
+        let name = |id: &CardId| {
+            provider
+                .load(*id)
+                .map(|card| card.name().to_string())
+                .unwrap_or("<invalid card>".to_string())
+        };
 
         match self {
             DynCard::Instances(id) => format!("instances: {}", name(id)),

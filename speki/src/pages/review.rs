@@ -107,9 +107,8 @@ fn RenderInput(
                 .inner()
                 .card_provider
                 .load(card)
-                .unwrap()
-                .name()
-                .to_string();
+                .map(|card| card.name().to_string())
+                .unwrap_or("<invalid card>".to_string());
             Some(name)
         }
         InputEditor::Leaf(card) => {

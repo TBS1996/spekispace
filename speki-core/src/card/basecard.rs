@@ -25,6 +25,15 @@ impl TextData {
         }
     }
 
+    pub fn push_link(&mut self, id: CardId, alias: Option<String>) {
+        let link = TextLink { id, alias };
+        self.0.push(Either::Right(link));
+    }
+
+    pub fn push_string(&mut self, s: String) {
+        self.0.push(Either::Left(s));
+    }
+
     pub fn is_empty(&self) -> bool {
         self.0.is_empty()
     }
@@ -478,9 +487,14 @@ impl CardType {
                 name, parent_class, ..
             } => match parent_class {
                 Some(class) => {
-                    let parent = provider.load(*class).unwrap().name_textdata();
                     let mut name = name.clone();
-                    name.extend(parent.clone());
+
+                    if self.backside().is_some() {
+                        name.push_string(" ( ".to_string());
+                        name.push_link(*class, None);
+                        name.push_string(")".to_string());
+                    }
+
                     name
                 }
                 None => name.clone(),

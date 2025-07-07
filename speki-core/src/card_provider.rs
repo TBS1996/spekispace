@@ -49,7 +49,7 @@ impl CardProvider {
     }
 
     pub fn load(&self, id: CardId) -> Option<Arc<Card>> {
-        let base = self.providers.cards.load(id);
+        let base = self.providers.cards.try_load(id)?;
         let history = match self.providers.reviews.try_load(id) {
             Some(revs) => revs,
             None => History::new(id),

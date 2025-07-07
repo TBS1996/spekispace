@@ -40,6 +40,13 @@ impl EvalText {
         &self.cmps
     }
 
+    pub fn just_some_ref(id: CardId, provider: &CardProvider) -> Self {
+        let mut txt = TextData::default();
+        txt.push_link(id, None);
+
+        Self::from_textdata(txt, provider)
+    }
+
     pub fn just_some_string(s: String, provider: &CardProvider) -> Self {
         Self::from_textdata(TextData::from_raw(&s), provider)
     }
@@ -330,16 +337,13 @@ impl Card {
     ) -> Self {
         let id = base.id;
 
-        let raw_front =
-            |id: Uuid| -> String { card_provider.providers.cards.load(id).data.raw_front() };
-
         let from_back =
             |back: &BackSide| -> EvalText { EvalText::from_backside(back, &card_provider) };
 
         let backside = match &base.data {
             CardType::Instance { back, class, .. } => match back.as_ref() {
                 Some(back) => from_back(back),
-                None => EvalText::just_some_string(raw_front(*class), &card_provider),
+                None => EvalText::just_some_ref(*class, &card_provider),
             },
             CardType::Normal { back, .. } => from_back(back),
             CardType::Unfinished { .. } => {
@@ -355,10 +359,7 @@ impl Card {
                         &card_provider,
                     )
                 }
-                (None, Some(pcl)) => EvalText::just_some_string(
-                    card_provider.providers.cards.load(*pcl).data.raw_front(),
-                    &card_provider,
-                ),
+                (None, Some(pcl)) => EvalText::just_some_ref(*pcl, &card_provider),
                 (Some(back), None) => from_back(back),
                 (_, _) => EvalText::default(),
             },
@@ -376,7 +377,7 @@ impl Card {
             let txt = TextLink::new(namespace);
             frontside
                 .inner_mut()
-                .insert(0, Either::Left(": ".to_string()));
+                .insert(0, Either::Left("::".to_string()));
             frontside.inner_mut().insert(0, Either::Right(txt));
         }
 
