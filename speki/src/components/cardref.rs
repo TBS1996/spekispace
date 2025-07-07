@@ -78,6 +78,113 @@ pub fn ForcedCardRefRender(
 }
 
 #[component]
+pub fn OtherCardRefRender(
+    selected_card: Signal<Option<CardId>>,
+    placeholder: &'static str,
+    remove_title: Option<&'static str>,
+    #[props(default = vec![])] allowed: Vec<CardTy>,
+    on_select: Option<MyClosure>,
+    on_deselect: Option<MyClosure>,
+    #[props(default = SetExpr::All)] filter: SetExpr,
+) -> Element {
+    let is_selected = selected_card.read().is_some();
+
+    let card_display: Memo<String> = ScopeId::APP.in_runtime(|| {
+        Memo::new(move || match selected_card.read().as_ref() {
+            Some(card_id) => APP.read().load_card(*card_id).name().to_string(),
+            None => String::new(),
+        })
+    });
+
+    let remove_title: &'static str = match remove_title {
+        Some(s) => s,
+        None => "",
+    };
+
+    rsx! {
+        div {
+            class: "flex flex-row relative w-full",
+            if is_selected {
+                div {
+                    class: "flex items-center space-x-4 w-full",
+
+                    div {
+                        class: "flex-shrink-0",
+                        style: "width: 80px;",
+                        title: "{remove_title}",
+                        button {
+                            class: "{crate::styles::DELETE_BUTTON}",
+                            onclick: move |_| {
+                                let on_deselect = on_deselect.clone();
+                                if let Some(card) = selected_card.cloned(){
+                                    if let Some(f) = on_deselect.clone(){
+                                        f.call(card);
+                                    }
+                                }
+                                selected_card.clone().set(None);
+                            },
+                            "X"
+                        }
+                    }
+
+                    input {
+                        class: "bg-white w-full border border-gray-300 rounded-md p-2 text-gray-950 cursor-pointer focus:outline-none",
+                        placeholder: "{placeholder}",
+                        value: "{card_display}",
+                        readonly: "true",
+                        onclick: move |_| {
+                            let f = on_select.clone();
+                            let fun = MyClosure::new(move |card: CardId| {
+                                info!("x1");
+                                let f = f.clone();
+                                if let Some(fun) = f.clone() {
+                                    info!("x2");
+                                    fun.0(card.clone());
+                                }
+
+                                selected_card.clone().set(Some(card));
+                            });
+
+                            let allowed = allowed.clone();
+                            let props = CardSelector::ref_picker(fun, filter.clone())
+                                .with_allowed_cards(allowed);
+
+                                OverlayEnum::CardSelector(props).append();
+                        },
+                    }
+                }
+            } else {
+                button {
+                    class: "{crate::styles::XS_UPDATE}",
+                    style: "width: 96px;",
+                    onclick: move |_| {
+                        let f = on_select.clone();
+                        let fun = MyClosure::new(move |card: CardId| {
+                            info!("x1");
+                            let f = f.clone();
+                            if let Some(fun) = f.clone() {
+                                info!("x2");
+                                fun.0(card.clone());
+                            }
+
+                            selected_card.clone().set(Some(card));
+                        });
+
+                        let allowed = allowed.clone();
+                        let props = CardSelector::ref_picker(fun, filter.clone())
+                            .with_allowed_cards(allowed);
+
+                            OverlayEnum::CardSelector(props).append();
+                    },
+                    "{placeholder}"
+                }
+
+            }
+        }
+    }
+}
+
+#[component]
 pub fn CardRefRender(
     selected_card: Signal<Option<CardId>>,
     placeholder: Option<&'static str>,

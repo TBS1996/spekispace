@@ -254,6 +254,12 @@ bg-amber-600 border-0 py-1 px-3 focus:outline-none hover:bg-amber-700 \
 disabled:bg-amber-400 disabled:cursor-not-allowed disabled:opacity-50 \
 rounded text-base md:mt-0";
 
+    pub const XS_UPDATE: &str = "\
+mt-2 inline-flex items-center text-white \
+bg-amber-600 border-0 py-0.5 px-2 focus:outline-none hover:bg-amber-700 \
+disabled:bg-amber-400 disabled:cursor-not-allowed disabled:opacity-50 \
+rounded text-sm md:mt-0";
+
     pub const DELETE_BUTTON: &str = "\
 mt-2 inline-flex items-center text-white \
 bg-red-600 border-0 py-1 px-3 focus:outline-none hover:bg-red-700 \

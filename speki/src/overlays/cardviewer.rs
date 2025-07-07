@@ -20,10 +20,10 @@ use crate::{
     components::{
         backside::{BackPutRender, BacksideError, TimestampRender},
         card_mastery::MasterySection,
-        cardref::{CardRefRender, ForcedCardRefRender},
+        cardref::{CardRefRender, ForcedCardRefRender, OtherCardRefRender},
         dropdown::{ActionDropdown, DropdownAction},
         frontside::FrontPutRender,
-        BackPut, CardRef, CardTy, DropDownMenu, FrontPut, RenderDependents,
+        BackPut, CardTy, DropDownMenu, FrontPut, RenderDependents,
     },
     overlays::{
         card_selector::{CardSelector, MyClosure},
@@ -47,6 +47,12 @@ fn CardProperties(viewer: CardViewer) -> Element {
         RenderDependencies { card_text: viewer.editor.front.text.clone(), card_id: old_card, dependencies: viewer.editor.dependencies.clone()}
         if let Some(card_id) = old_card {
             RenderDependents { card_id, hidden: false}
+        }
+
+        div {
+            class: "mt-4",
+
+            save_button { CardViewer: viewer.clone() }
         }
     }
 }
@@ -201,7 +207,7 @@ impl From<AttrBackType> for AttrBackTypeEditor {
 #[derive(Props, Clone)]
 pub struct CardEditor {
     pub front: FrontPut,
-    namespace: Signal<Option<CardRef>>,
+    namespace: Signal<Option<CardId>>,
     back: BackPut,
     default_question: Signal<String>,
     concept: Signal<Option<CardId>>,
@@ -350,11 +356,7 @@ impl CardEditor {
         Ok(CardRep {
             ty,
             answered_attrs: self.attr_answers.cloned(),
-            namespace: self
-                .namespace
-                .cloned()
-                .map(|x| x.selected_card().cloned())
-                .flatten(),
+            namespace: self.namespace.cloned(),
             deps: self.dependencies.cloned().into_iter().collect(),
         })
     }
@@ -650,10 +652,7 @@ impl CardViewer {
 
             let namespace = {
                 if let Some(card) = card.namespace() {
-                    let namespace = CardRef::new();
-                    let card = APP.read().load_card(card);
-                    namespace.set_ref(card.id());
-                    Signal::new_in_scope(Some(namespace), ScopeId::APP)
+                    Signal::new_in_scope(Some(card), ScopeId::APP)
                 } else {
                     Signal::new_in_scope(None, ScopeId::APP)
                 }
@@ -765,8 +764,6 @@ fn RenderInputs(props: CardViewer) -> Element {
                     Suspend { card: card.id() }
                 }
             }
-
-            save_button { CardViewer: props.clone() }
         }
     }
 }
@@ -1080,7 +1077,7 @@ fn InputElements(
     concept: Signal<Option<CardId>>,
     ty: CardTy,
     card_id: Option<CardId>,
-    mut namespace: Signal<Option<CardRef>>,
+    mut namespace: Signal<Option<CardId>>,
     attrs: Signal<Vec<AttrEditor>>,
     attr_answers: Signal<Vec<AttrQandA>>,
 ) -> Element {
@@ -1145,32 +1142,12 @@ fn InputElements(
             },
         }
 
-        match namespace.cloned() {
-            Some(ns) => {
-                    rsx! {
-                        div {
-                            class: "block text-gray-700 text-sm font-medium mb-2",
-                            style: "margin-right: 82px;",
 
-                        CardRefRender{
-                            selected_card: ns.card.clone(),
-                            placeholder: "choose namespace",
-                        },
-                    }
-                }
-            },
-            None => {
-                rsx! {
-                    button {
-                        class: "{crate::styles::UPDATE_BUTTON} mb-2",
-                        onclick: move |_| {
-                            namespace.set(Some(CardRef::new()));
-                        },
-                        "set namespace"
-                    }
-                }
-            },
-        }
+        OtherCardRefRender{
+            selected_card: namespace.clone(),
+            placeholder: "namespace",
+            remove_title: "clear namespace",
+        },
     }
 }
 
