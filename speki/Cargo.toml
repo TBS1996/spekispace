@@ -9,18 +9,12 @@ name = "Speki"
 
 [dependencies]
 
-dioxus = { version = "0.6.1", features = ["router"] } 
+dioxus.workspace = true
 dioxus-logger.workspace = true
 tracing.workspace = true
-tracing-subscriber.workspace = true
-futures.workspace = true
-futures-util.workspace = true
 serde.workspace = true
 serde_json.workspace = true
-toml.workspace = true
 uuid.workspace = true
-petgraph.workspace = true
-once_cell.workspace = true
 strum.workspace = true
 fancy-regex.workspace = true
 speki-core = { path = "../speki-core" }
@@ -30,7 +24,6 @@ nonempty.workspace = true
 rand.workspace = true
 omtrent.workspace = true
 dirs.workspace = true
-dioxus-desktop = "0.6.1"
 rayon.workspace = true
 chrono.workspace = true
 tokio.workspace = true

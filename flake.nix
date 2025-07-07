@@ -27,6 +27,10 @@
           targets = ["wasm32-unknown-unknown"];
         };
 
+        nightlyToolchain = pkgs.rust-bin.nightly.latest.default.override {
+          extensions = ["rust-src" "rust-analyzer" "clippy"];
+        };
+
         rustBuildInputs =
           [
             pkgs.openssl
@@ -74,6 +78,28 @@
             maintainers = with pkgs.lib.maintainers; [];
             platforms = pkgs.lib.platforms.all;
           };
+        };
+
+        devShells.udeps = pkgs.mkShell {
+          name = "udeps-dev";
+
+          buildInputs =
+            rustBuildInputs
+            ++ [
+              nightlyToolchain
+              pkgs.cargo-udeps
+            ];
+
+          shellHook = ''
+            # Absolute path to nightly cargo binary
+            export CARGO_BIN="${nightlyToolchain}/bin"
+
+            # Optional: make it feel like cargo is just available
+            export PATH="$CARGO_BIN:$PATH"
+
+            echo "Using nightly toolchain with cargo-udeps"
+            echo "You can now run: cargo udeps"
+          '';
         };
 
         devShells.default = pkgs.mkShell {
