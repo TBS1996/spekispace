@@ -13,7 +13,6 @@ fn route_elm(route: Route) -> Element {
 
     rsx! {
         li {
-            class: "mr-8",
             Link {
                 class: "{classes}",
                 to: route,
