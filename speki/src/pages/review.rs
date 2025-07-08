@@ -335,14 +335,18 @@ fn RenderSet(
     #[props(default = 0)] depth: usize,
     #[props(default = true)] editable: bool,
 ) -> Element {
-    let mut name = set.name.clone();
-    let id = set.id;
-    let mut delete_atomic = set.to_delete.clone();
+    let SetEditor {
+        id,
+        mut name,
+        expr,
+        to_delete: mut delete_atomic,
+        show_edit,
+    } = set.clone();
 
     let ledger = APP.read().inner().provider.sets.clone();
     let filter2 = filter.clone();
 
-    let real_set = SetExpr::try_from(set.expr.cloned());
+    let real_set = SetExpr::try_from(expr.cloned());
 
     let (save_button, is_new): (bool, bool) = match real_set.clone() {
         Ok(set_expr) => match APP.read().inner().provider.sets.try_load(set.id) {
@@ -365,16 +369,19 @@ fn RenderSet(
     let show_view_button = real_set.is_ok();
     let set_name = set.name.cloned();
 
+    let edit_name = editable && show_edit.cloned();
+
     rsx! {
         div {
             class: "border border-black p-4",
             div {
                 class: "flex flex-row items-stretch",
 
+
                 input {
                     class: "text-xl font-semibold mb-4 p-2 w-full bg-gray-100 rounded",
                     value: "{name}",
-                    disabled: !editable,
+                    disabled: !edit_name,
                     oninput: move |evt|{
                         let val = evt.value();
                         name.set(val.to_string());
@@ -499,7 +506,18 @@ fn RenderSet(
                     }
                 }
 
-                if editable {
+                if editable  {
+                    button {
+                        class: "{crate::styles::READ_BUTTON} h-[2.75rem]",
+                        onclick: move |_|{
+                            let flag = show_edit.cloned();
+                            show_edit.clone().set(!flag);
+                        },
+                        "☰"
+                    }
+                }
+
+                if editable && show_edit() {
                     button {
                         class: "{crate::styles::DELETE_BUTTON} h-[2.75rem]",
                         onclick: move |_|{
@@ -515,7 +533,7 @@ fn RenderSet(
 
 
             }
-            if editable {
+            if editable && show_edit() {
                 RenderExpr { filter, inputs: set.expr.cloned().inputs.clone(), ty: set.expr.cloned().ty.clone(), depth: depth + 1}
             }
         }
@@ -528,6 +546,7 @@ struct SetEditor {
     name: Signal<String>,
     expr: Signal<ExprEditor>,
     to_delete: Signal<bool>,
+    show_edit: Signal<bool>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -722,11 +741,14 @@ impl From<Input> for InputEditor {
 
 impl SetEditor {
     fn new(set: &Set) -> Self {
+        let show_edit = set.expr == SetExpr::default();
+
         Self {
             id: set.id,
             name: Signal::new_in_scope(set.name.clone(), ScopeId::APP),
             expr: Signal::new_in_scope(set.expr.clone().into(), ScopeId::APP),
             to_delete: Signal::new_in_scope(false, ScopeId::APP),
+            show_edit: Signal::new_in_scope(show_edit, ScopeId::APP),
         }
     }
 }
