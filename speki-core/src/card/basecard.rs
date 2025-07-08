@@ -547,6 +547,10 @@ impl CardType {
     }
 }
 
+fn bool_is_false(b: &bool) -> bool {
+    *b == false
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone, Hash, PartialEq, Eq)]
 pub struct RawCard {
     pub id: Uuid,
@@ -557,6 +561,8 @@ pub struct RawCard {
     pub data: CardType,
     #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
     pub explicit_dependencies: BTreeSet<Uuid>,
+    #[serde(default, skip_serializing_if = "bool_is_false")]
+    pub trivial: bool,
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub tags: BTreeMap<String, String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -1024,6 +1030,13 @@ impl LedgerItem for RawCard {
             out.insert(prop);
         }
 
+        if self.trivial {
+            out.insert(PropertyCache {
+                property: CardProperty::Trivial,
+                value: self.trivial.to_string(),
+            });
+        }
+
         match &self.data {
             CardType::Normal { .. } => {}
             CardType::Unfinished { .. } => {}
@@ -1067,6 +1080,7 @@ impl LedgerItem for RawCard {
                 front: TextData::from_raw("uninit"),
                 back: BackSide::Text("uninit".to_string().into()),
             },
+            trivial: false,
             tags: Default::default(),
             explicit_dependencies: Default::default(),
             front_audio: Default::default(),
@@ -1085,6 +1099,9 @@ impl LedgerItem for RawCard {
             },
             CardAction::SetBackTime(ts) => {
                 self = self.set_backside(BackSide::Time(ts));
+            }
+            CardAction::SetTrivial(flag) => {
+                self.trivial = flag;
             }
             CardAction::SetFrontAudio(audio) => {
                 self.front_audio = audio;

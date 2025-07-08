@@ -186,6 +186,18 @@ impl std::fmt::Display for Card {
 }
 
 impl Card {
+    pub fn trivial(&self) -> bool {
+        if let Some(flag) = self.metadata.trivial {
+            flag
+        } else {
+            self.base.trivial
+        }
+    }
+
+    pub fn reviewable(&self) -> bool {
+        self.is_finished() && !self.trivial()
+    }
+
     pub fn clone_base(&self) -> RawCard {
         self.base.clone()
     }
@@ -501,7 +513,11 @@ impl Card {
 
         for card in self.recursive_dependencies() {
             let card = self.card_provider.load(card).unwrap();
-            min_recall = min_recall.min(card.recall_rate().unwrap_or_default());
+            if card.trivial() {
+                continue;
+            } else {
+                min_recall = min_recall.min(card.recall_rate().unwrap_or_default());
+            }
         }
 
         min_recall

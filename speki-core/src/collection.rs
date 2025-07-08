@@ -42,6 +42,7 @@ pub enum DynCard {
     Dependents(CardId),
     RecDependents(CardId),
     CardType(CType),
+    Trivial(bool),
 }
 
 impl DynCard {
@@ -54,6 +55,7 @@ impl DynCard {
         };
 
         match self {
+            DynCard::Trivial(flag) => format!("trivial: {}", flag),
             DynCard::Instances(id) => format!("instances: {}", name(id)),
             DynCard::Dependents(id) => format!("dependents: {}", name(id)),
             DynCard::RecDependents(id) => format!("dependents: {}", name(id)),
@@ -90,6 +92,13 @@ impl DynCard {
 
                 output
             }
+            DynCard::Trivial(flag) => provider
+                .providers
+                .cards
+                .get_prop_cache(PropertyCache::new(CardProperty::Trivial, flag.to_string()))
+                .into_iter()
+                .map(|id| MaybeCard::Id(id))
+                .collect(),
             DynCard::CardType(ty) => provider
                 .providers
                 .cards

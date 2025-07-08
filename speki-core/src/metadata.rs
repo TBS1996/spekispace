@@ -11,6 +11,7 @@ use crate::{card::CardId, ledger::MetaAction};
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize, Hash, PartialEq, Eq)]
 pub struct Metadata {
+    pub trivial: Option<bool>,
     pub suspended: IsSuspended,
     id: Uuid,
 }
@@ -19,6 +20,7 @@ impl Metadata {
     pub fn new(id: CardId) -> Self {
         Self {
             id,
+            trivial: None,
             suspended: Default::default(),
         }
     }
@@ -34,6 +36,7 @@ impl LedgerItem for Metadata {
     fn inner_run_event(mut self, event: MetaAction) -> Result<Self, ()> {
         match event {
             crate::ledger::MetaAction::Suspend(flag) => self.suspended = flag.into(),
+            crate::ledger::MetaAction::SetTrivial(flag) => self.trivial = flag,
         }
 
         Ok(self)

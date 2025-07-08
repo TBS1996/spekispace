@@ -21,7 +21,7 @@ use crate::{
         backside::{BackPutRender, BacksideError, TimestampRender},
         card_mastery::MasterySection,
         cardref::{CardRefRender, ForcedCardRefRender, OtherCardRefRender},
-        dropdown::{ActionDropdown, DropdownAction},
+        dropdown::{ActionDropdown, DropComponent, DropdownAction},
         frontside::FrontPutRender,
         BackPut, CardTy, DropDownMenu, FrontPut, RenderDependents,
     },
@@ -128,6 +128,7 @@ pub struct CardRep {
     namespace: Option<CardId>,
     deps: Vec<CardId>,
     answered_attrs: Vec<AttrQandA>,
+    trivial: bool,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -208,6 +209,7 @@ impl From<AttrBackType> for AttrBackTypeEditor {
 pub struct CardEditor {
     pub front: FrontPut,
     namespace: Signal<Option<CardId>>,
+    trivial: Signal<bool>,
     back: BackPut,
     default_question: Signal<String>,
     concept: Signal<Option<CardId>>,
@@ -358,6 +360,7 @@ impl CardEditor {
             answered_attrs: self.attr_answers.cloned(),
             namespace: self.namespace.cloned(),
             deps: self.dependencies.cloned().into_iter().collect(),
+            trivial: self.trivial.cloned(),
         })
     }
 }
@@ -675,6 +678,7 @@ impl CardViewer {
             CardEditor {
                 front,
                 attrs: Signal::new_in_scope(attrs, ScopeId::APP),
+                trivial: Signal::new_in_scope(raw_ty.trivial, ScopeId::APP),
                 attr_answers,
                 namespace,
                 back,
@@ -708,6 +712,7 @@ impl CardViewer {
                 attr_answers,
                 front,
                 namespace: Signal::new_in_scope(None, ScopeId::APP),
+                trivial: Signal::new_in_scope(false, ScopeId::APP),
                 back,
                 concept,
                 dependencies,
@@ -755,6 +760,7 @@ fn RenderInputs(props: CardViewer) -> Element {
                 namespace: props.editor.namespace.clone(),
                 attrs: props.editor.attrs.clone(),
                 attr_answers: props.editor.attr_answers.clone(),
+                trivial: props.editor.trivial,
             }
         }
         div {
@@ -1077,9 +1083,10 @@ fn InputElements(
     concept: Signal<Option<CardId>>,
     ty: CardTy,
     card_id: Option<CardId>,
-    mut namespace: Signal<Option<CardId>>,
+    namespace: Signal<Option<CardId>>,
     attrs: Signal<Vec<AttrEditor>>,
     attr_answers: Signal<Vec<AttrQandA>>,
+    trivial: Signal<bool>,
 ) -> Element {
     let has_attr_answers = !attr_answers.read().is_empty();
 
@@ -1142,6 +1149,18 @@ fn InputElements(
             },
         }
 
+        div {
+            class: "flex flex-row items-center mb-4",
+            div {
+                class: "w-24",
+                p {
+                    title: "trivial cards are not reviewed",
+                    "trivial"
+                }
+            }
+
+            DropComponent { options: vec![false, true], selected: trivial }
+        }
 
         OtherCardRefRender{
             selected_card: namespace.clone(),
@@ -1257,6 +1276,7 @@ fn save_button(CardViewer: CardViewer) -> Element {
                 let id = selveste.old_card.clone().map(|card|card.id()).unwrap_or_else(CardId::new_v4);
                 events.push(CardEvent::new_modify(id, CardAction::UpsertCard(card.ty)));
                 events.push(CardEvent::new_modify(id, CardAction::SetNamespace ( card.namespace)));
+                events.push(CardEvent::new_modify(id, CardAction::SetTrivial ( card.trivial)));
 
                 for dep in card.deps {
                     events.push(CardEvent::new_modify(id, CardAction::AddDependency(dep)));

@@ -24,6 +24,7 @@ pub enum CardAction {
     SetNamespace(Option<CardId>),
     InsertAttr(Attrv2),
     RemoveAttr(AttributeId),
+    SetTrivial(bool),
 }
 
 pub enum HistoryEvent {
@@ -35,6 +36,7 @@ pub type MetaEvent = TheLedgerEvent<Metadata>;
 #[derive(Debug, Clone, Serialize, Deserialize, Hash)]
 pub enum MetaAction {
     Suspend(bool),
+    SetTrivial(Option<bool>),
 }
 
 impl From<MetaEvent> for Event {

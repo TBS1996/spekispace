@@ -65,6 +65,7 @@ impl CardRefType {
 
 #[derive(Clone, PartialEq, PartialOrd, Hash, Eq, Debug)]
 pub enum CardProperty {
+    Trivial,
     Bigram,
     Suspended,
     CardType,
@@ -87,6 +88,7 @@ impl AsRef<str> for CardProperty {
             CardProperty::CardType => "cardtype",
             CardProperty::AttrId => "attr_id",
             CardProperty::Attr => "attr",
+            CardProperty::Trivial => "trivial",
         }
     }
 }
