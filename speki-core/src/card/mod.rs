@@ -360,7 +360,7 @@ impl Card {
                     )
                 }
                 (None, Some(pcl)) => EvalText::just_some_ref(*pcl, &card_provider),
-                (Some(back), None) => from_back(back),
+                (Some(back), _) => from_back(back),
                 (_, _) => EvalText::default(),
             },
             CardType::Statement { .. } => {
