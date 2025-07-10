@@ -58,6 +58,27 @@ like a template class
 
 for example, if you have a class called heterosexual monogamous wedding, it'll take in two arguments, the groom and the bride, like you create a template where you name the generics and of which type they must be (in here, male and female).
 
+hmm or what about say, the class 'rust object'. then it can have a generic like which codebase it is defined in.
+which doesn't need to be set when you make an instance i guess?
+
+or maybe i can just re-use the attributes on instances for this?
+like i can have a generic class even programming object/class
+
+then a constraint can be which language, and which repo
+
+say an attribute of smth requires it to be a rust object in gandalf. then we can specify the generics in the constraints. 
+
+can do fancy things with timestamps too, like father of attribute on person can be constrainde to be male born after current person born
+
+need to think clearly the difference between subclasses and constrained classes, if they should be two different concepts or not.
+
+the main diff in my mind is that constrained ones don't have like new properties of sorts but rather is just a subset. idk if that distinctoin makes sense.
+
+the thing with constrained ones is they aren't named so to speak. so that makes it harder to refer to them in a way
+
+hmm smth with attributes i mean they're used for generating questions but here it's more 
+
+
 # reverse cards
 
 reverse cards, i'll need to find a better name, but are cards that itself don't represent a piece of knowledge but rather tests you in it in a better way.
@@ -632,3 +653,7 @@ hmm but how to deal with the maingraphs depedendents, as I update my cards the d
 
 maybe separate directories for each commit where you put dependents/dependencies?
 i guess a textfile there that says the ledger hash it's valid for 
+
+# priorities main graph
+
+so when i have a main graph thing and the user comes in we can ask the user some priority questions like big level topics which they are more interested in then based on this when they click review all it'll find more relevant stuff 

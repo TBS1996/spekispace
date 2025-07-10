@@ -235,6 +235,7 @@ pub enum CardType {
     /// For example, the instance might be Elvis Presley where the concept would be "Person"
     Instance {
         name: TextData,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
         back: Option<BackSide>,
         class: CardId,
     },
@@ -257,8 +258,11 @@ pub enum CardType {
     /// A class might also have sub-classes, for example, the class chemical element has a sub-class isotope
     Class {
         name: TextData,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
         back: Option<BackSide>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
         parent_class: Option<CardId>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
         default_question: Option<TextData>,
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         attrs: Vec<Attrv2>,
