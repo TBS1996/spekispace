@@ -483,7 +483,11 @@ impl CardType {
 
                 let attr = class.get_attr(*attribute).unwrap();
 
-                let new = attr.pattern.replace("{}", &format!("[[{instance}]]"));
+                let new = if attr.pattern.contains("{}") {
+                    attr.pattern.replace("{}", &format!("[[{instance}]]"))
+                } else {
+                    format!("[[{instance}]]: {}", attr.pattern)
+                };
 
                 TextData::from_raw(&new)
             }

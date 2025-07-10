@@ -525,6 +525,8 @@ could try to figure out if a change in a card updates any dependencies or not bu
 # multiple aliases for same concept?
 
 so sometimes, a concept has multiple names to it. not sure how to encode that properly. 
+maybe just on the card have multiple "front sides" or smth.  then i should probably label the frontsides differently.
+
 
 # Store recursive dependents/dependencies in tree structure kinda
 
@@ -657,3 +659,14 @@ i guess a textfile there that says the ledger hash it's valid for
 # priorities main graph
 
 so when i have a main graph thing and the user comes in we can ask the user some priority questions like big level topics which they are more interested in then based on this when they click review all it'll find more relevant stuff 
+
+# classes attributes...
+
+so you have a class like sql database table
+each sql database table have like a list of columns
+
+on a card that shows a certain database table you kinda wanna associate it with the columns yaknow?
+can have a class sql database column
+it would have an attribute like which table it belongs to  
+
+so when you go into table instance card it can show like which columns have this as their belonging database table

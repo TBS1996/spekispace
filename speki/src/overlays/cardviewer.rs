@@ -266,11 +266,8 @@ impl CardEditor {
                     }
                     None => None,
                 };
-                if pattern.contains("{}") {
-                    Some((id, (pattern, ty)))
-                } else {
-                    None
-                }
+
+                Some((id, (pattern, ty)))
             })
             .collect();
 
