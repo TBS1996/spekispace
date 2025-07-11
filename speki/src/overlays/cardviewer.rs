@@ -170,6 +170,36 @@ enum AttrQandA {
     },
 }
 
+impl AttrQandA {
+    fn is_same(me: Vec<Self>, them: Vec<Self>) -> bool {
+        if me.len() != them.len() {
+            return false;
+        }
+
+        for attr in me {
+            if !them.iter().any(|a| match (&attr, a) {
+                (
+                    AttrQandA::Old {
+                        id: me_id,
+                        attr_id: me_attr_id,
+                        ..
+                    },
+                    AttrQandA::Old { id, attr_id, .. },
+                ) => me_id == id && me_attr_id == attr_id,
+                (AttrQandA::Old { .. }, AttrQandA::New { .. }) => false,
+                (AttrQandA::New { .. }, AttrQandA::Old { .. }) => false,
+                (AttrQandA::New { attr_id: me_id, .. }, AttrQandA::New { attr_id, .. }) => {
+                    me_id == attr_id
+                }
+            }) {
+                return false;
+            }
+        }
+
+        true
+    }
+}
+
 #[derive(Clone, Debug)]
 struct AttrEditor {
     id: AttributeId,
@@ -494,6 +524,38 @@ fn load_attr_editors(card_id: CardId) -> Vec<AttrEditor> {
     out
 }
 
+fn load_attr_qa_for_class(card: CardId) -> Vec<AttrQandA> {
+    let Some(card) = APP.read().try_load_card(card) else {
+        debug_assert!(false);
+        return vec![];
+    };
+
+    if !card.is_class() {
+        return vec![];
+    }
+
+    let curr_card = card.clone();
+
+    let attrs: Vec<Attrv2> = curr_card.attributes().unwrap_or_default();
+
+    let mut output: Vec<AttrQandA> = vec![];
+
+    for attr in attrs {
+        let instance = card.name_textdata().to_raw();
+
+        let question = attr.pattern.replace("{}", &instance);
+
+        let val = AttrQandA::New {
+            attr_id: attr,
+            question,
+            answer: Signal::new_in_scope(None, ScopeId::APP),
+        };
+        output.push(val);
+    }
+
+    output
+}
+
 fn load_attr_qa(card: CardId) -> Vec<AttrQandA> {
     let Some(card) = APP.read().try_load_card(card) else {
         debug_assert!(false);
@@ -621,6 +683,8 @@ impl CardViewer {
             card = APP.read().load_card(instance);
         }
 
+        let card_id = card.id();
+
         let raw_ty = card.clone_base();
 
         let front = {
@@ -645,8 +709,7 @@ impl CardViewer {
         let editor = {
             let concept = Signal::new_in_scope(raw_ty.data.class(), ScopeId::APP);
 
-            let attrs = load_attr_qa(card.id());
-            let attr_answers = Signal::new_in_scope(attrs, ScopeId::APP);
+            let attr_answers = { Signal::new_in_scope(load_attr_qa(card_id), ScopeId::APP) };
 
             let attrs = load_attr_editors(card.id());
 
@@ -694,16 +757,14 @@ impl CardViewer {
     }
 
     pub fn new() -> Self {
+        let concept = Signal::new_in_scope(None, ScopeId::APP);
+        let attr_answers: Signal<Vec<AttrQandA>> = Signal::new_in_scope(vec![], ScopeId::APP);
         let front = FrontPut::new(CardTy::Normal);
         let dependencies: Signal<Vec<CardId>> =
             Signal::new_in_scope(Default::default(), ScopeId::APP);
 
         let editor = {
             let back = BackPut::new(None);
-
-            let concept = Signal::new_in_scope(None, ScopeId::APP);
-
-            let attr_answers = Signal::new_in_scope(Default::default(), ScopeId::APP);
 
             CardEditor {
                 attr_answers,
@@ -831,7 +892,11 @@ fn AttrAnswerEditorRender(answer: AttrAnswerEditor) -> Element {
 }
 
 #[component]
-fn AttrAnswers(card: CardId, attr_answers: Signal<Vec<AttrQandA>>) -> Element {
+fn AttrAnswers(
+    card: Option<CardId>,
+    attr_answers: Signal<Vec<AttrQandA>>,
+    class: Signal<Option<CardId>>,
+) -> Element {
     rsx! {
         h4 {
             class: "font-bold",
@@ -852,8 +917,8 @@ fn AttrAnswers(card: CardId, attr_answers: Signal<Vec<AttrQandA>>) -> Element {
                                     p { class: "font-semibold mr-4", "{question}" }
                                     DeleteButton { card_id: id, pop_ol: false, f: {
                                         Some(MyClosure::new(move |_card: CardId|  {
-                                            let new_loaded = load_attr_qa(card);
-                                            attr_answers.clone().set(new_loaded);
+                                            let inner = class.cloned();
+                                            class.clone().set(inner);
                                         }))
                                         }
                                     }
@@ -1085,6 +1150,22 @@ fn InputElements(
     attr_answers: Signal<Vec<AttrQandA>>,
     trivial: Signal<bool>,
 ) -> Element {
+    use_effect(move || match ((front.dropdown.selected)(), concept()) {
+        (CardTy::Instance, Some(class)) => {
+            let new_attrs = match card_id {
+                Some(card) => load_attr_qa(card),
+                None => load_attr_qa_for_class(class),
+            };
+            let old_attrs = attr_answers.cloned();
+            if !AttrQandA::is_same(new_attrs.clone(), old_attrs) {
+                attr_answers.set(new_attrs);
+            }
+        }
+        (_, _) => {
+            attr_answers.clone().set(vec![]);
+        }
+    });
+
     let has_attr_answers = !attr_answers.read().is_empty();
 
     rsx! {
@@ -1140,8 +1221,8 @@ fn InputElements(
                     },
                 }
 
-                if let (true, Some(card)) = (has_attr_answers, card_id) {
-                    AttrAnswers { card, attr_answers }
+                if has_attr_answers {
+                    AttrAnswers { card: card_id, attr_answers, class: concept }
                 }
             },
         }
