@@ -246,6 +246,7 @@ pub struct CardEditor {
     dependencies: Signal<Vec<CardId>>,
     allowed_cards: Vec<CardTy>,
     attrs: Signal<Vec<AttrEditor>>,
+    inherited_attrs: Signal<Vec<AttrEditor>>,
     attr_answers: Signal<Vec<AttrQandA>>,
 }
 
@@ -497,7 +498,7 @@ then when you add a new person instance it'll have those textfields for those qu
 
 */
 
-fn load_attr_editors(card_id: CardId) -> Vec<AttrEditor> {
+fn load_inherited_attr_editors(card_id: CardId) -> Vec<AttrEditor> {
     let Some(card) = APP.read().try_load_card(card_id) else {
         return vec![];
     };
@@ -507,6 +508,41 @@ fn load_attr_editors(card_id: CardId) -> Vec<AttrEditor> {
     }
 
     let attrs = card.attributes().unwrap();
+
+    let mut out: Vec<AttrEditor> = Default::default();
+
+    for attr in attrs {
+        let ty: Option<AttrBackTypeEditor> = attr.back_type.map(From::from);
+
+        let editor = AttrEditor {
+            id: attr.id,
+            pattern: Signal::new_in_scope(attr.pattern, ScopeId::APP),
+            ty: Signal::new_in_scope(ty, ScopeId::APP),
+        };
+
+        out.push(editor);
+    }
+
+    let current: BTreeSet<AttributeId> = load_attr_editors(card_id)
+        .into_iter()
+        .map(|attr| attr.id)
+        .collect();
+
+    out.retain(|attr| !current.contains(&attr.id));
+
+    out
+}
+
+fn load_attr_editors(card_id: CardId) -> Vec<AttrEditor> {
+    let Some(card) = APP.read().try_load_card(card_id) else {
+        return vec![];
+    };
+
+    if !card.is_class() {
+        return vec![];
+    }
+
+    let attrs = card.attributes_on_class().unwrap();
 
     let mut out: Vec<AttrEditor> = Default::default();
 
@@ -618,7 +654,11 @@ fn load_attr_qa(card: CardId) -> Vec<AttrQandA> {
             }
         };
 
-        let question = card.front_side().to_string();
+        let mut question = attr.pattern.clone();
+        if question.contains("{}") {
+            question = card.front_side().to_string()
+        }
+
         let val = AttrQandA::Old {
             attr_id: card.attr_id().unwrap(),
             id: card.id(),
@@ -712,6 +752,7 @@ impl CardViewer {
             let attr_answers = { Signal::new_in_scope(load_attr_qa(card_id), ScopeId::APP) };
 
             let attrs = load_attr_editors(card.id());
+            let inherited_attrs = load_inherited_attr_editors(card.id());
 
             let namespace = {
                 if let Some(card) = card.namespace() {
@@ -738,6 +779,7 @@ impl CardViewer {
             CardEditor {
                 front,
                 attrs: Signal::new_in_scope(attrs, ScopeId::APP),
+                inherited_attrs: Signal::new_in_scope(inherited_attrs, ScopeId::APP),
                 trivial: Signal::new_in_scope(raw_ty.trivial, ScopeId::APP),
                 attr_answers,
                 namespace,
@@ -777,6 +819,7 @@ impl CardViewer {
                 allowed_cards: vec![],
                 default_question: Signal::new_in_scope(String::new(), ScopeId::APP),
                 attrs: Signal::new_in_scope(Default::default(), ScopeId::APP),
+                inherited_attrs: Signal::new_in_scope(Default::default(), ScopeId::APP),
             }
         };
 
@@ -817,6 +860,7 @@ fn RenderInputs(props: CardViewer) -> Element {
                 card_id,
                 namespace: props.editor.namespace.clone(),
                 attrs: props.editor.attrs.clone(),
+                inherited_attrs: props.editor.inherited_attrs.clone(),
                 attr_answers: props.editor.attr_answers.clone(),
                 trivial: props.editor.trivial,
             }
@@ -1011,7 +1055,7 @@ pub fn AdderHeader(title: &'static str, on_add: EventHandler<()>) -> Element {
 }
 
 #[component]
-fn RenderAttrs(card: Option<CardId>, attrs: Signal<Vec<AttrEditor>>) -> Element {
+fn RenderAttrs(card: Option<CardId>, attrs: Signal<Vec<AttrEditor>>, inherited: bool) -> Element {
     let foobar: Vec<(AttrEditor, bool, &'static str)> = attrs
         .cloned()
         .into_iter()
@@ -1035,11 +1079,22 @@ fn RenderAttrs(card: Option<CardId>, attrs: Signal<Vec<AttrEditor>>) -> Element 
         div {
             class: "flex flex-row items-center",
 
-            AdderHeader {
-                title: "Attributes",
-                on_add: move |_| {
-                    attrs.write().push(AttrEditor::new());
-                },
+            if inherited {
+                div {
+                    class: "flex items-center mb-2",
+                    h4 {
+                        class: "font-bold",
+                        title: "attributes inherited from parent classes",
+                        "Inherited attributes"
+                    }
+                }
+            } else {
+                AdderHeader {
+                    title: "Attributes",
+                    on_add: move |_| {
+                        attrs.write().push(AttrEditor::new());
+                    },
+                }
             }
         }
 
@@ -1048,28 +1103,30 @@ fn RenderAttrs(card: Option<CardId>, attrs: Signal<Vec<AttrEditor>>) -> Element 
             for (AttrEditor {id, mut pattern,mut ty }, disabled, title) in foobar {
                 div {
                     class: "flex flex-row gap-2 mb-4",
-                    button {
-                        class: "{crate::styles::DELETE_BUTTON}",
-                        disabled: "{disabled}",
-                        title: "{title}",
-                        onclick: move |_| {
-                            match card {
-                                Some(card) => {
-                                    let event: TheLedgerEvent<RawCard> = TheLedgerEvent::new_modify(card, CardAction::RemoveAttr(id));
-                                    if let Err(e) = APP.read().inner().provider.cards.modify(event) {
-                                        handle_card_event_error(e);
-                                        return;
-                                    }
-                                    attrs.clone().set(load_attr_editors(card));
-                                },
-                                None => {
-                                    let mut _attrs = attrs.cloned();
-                                    _attrs.retain(|a|a.id != id);
-                                    attrs.clone().set(_attrs);
-                                },
-                            };
-                        },
-                        "delete"
+                    if !inherited {
+                        button {
+                            class: "{crate::styles::DELETE_BUTTON}",
+                            disabled: "{disabled}",
+                            title: "{title}",
+                            onclick: move |_| {
+                                match card {
+                                    Some(card) => {
+                                        let event: TheLedgerEvent<RawCard> = TheLedgerEvent::new_modify(card, CardAction::RemoveAttr(id));
+                                        if let Err(e) = APP.read().inner().provider.cards.modify(event) {
+                                            handle_card_event_error(e);
+                                            return;
+                                        }
+                                        attrs.clone().set(load_attr_editors(card));
+                                    },
+                                    None => {
+                                        let mut _attrs = attrs.cloned();
+                                        _attrs.retain(|a|a.id != id);
+                                        attrs.clone().set(_attrs);
+                                    },
+                                };
+                            },
+                            "delete"
+                        }
                     }
                     div {
                         class: "w-1/2",
@@ -1077,6 +1134,7 @@ fn RenderAttrs(card: Option<CardId>, attrs: Signal<Vec<AttrEditor>>) -> Element 
                             class: "bg-white w-full border border-gray-300 rounded-md p-2 text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent",
                             value: "{pattern}",
                             placeholder: "default question",
+                            disabled: inherited,
                             oninput: move |evt| pattern.set(evt.value()),
                         }
                     }
@@ -1085,13 +1143,15 @@ fn RenderAttrs(card: Option<CardId>, attrs: Signal<Vec<AttrEditor>>) -> Element 
 
                         match ty.cloned() {
                             Some(AttrBackTypeEditor::Timestamp) => rsx!{
-                                button {
-                                    title: "remove constraint",
-                                    class: "{crate::styles::UPDATE_BUTTON}",
-                                    onclick: move |_| {
-                                        ty.set(None);
-                                    },
-                                    "X"
+                                if !inherited {
+                                    button {
+                                        title: "remove constraint",
+                                        class: "{crate::styles::UPDATE_BUTTON}",
+                                        onclick: move |_| {
+                                            ty.set(None);
+                                        },
+                                        "X"
+                                    }
                                 }
                                 span {
                                     class: "font-semibold self-center",
@@ -1099,15 +1159,17 @@ fn RenderAttrs(card: Option<CardId>, attrs: Signal<Vec<AttrEditor>>) -> Element 
                                 }
                             },
                             Some(AttrBackTypeEditor::InstanceOfClass(selected)) => rsx! {
-                                button {
-                                    title: "remove constraint",
-                                    class: "{crate::styles::UPDATE_BUTTON}",
-                                    onclick: move |_| {
-                                        ty.set(None);
-                                    },
-                                    "X"
+                                if !inherited {
+                                    button {
+                                        title: "remove constraint",
+                                        class: "{crate::styles::UPDATE_BUTTON}",
+                                        onclick: move |_| {
+                                            ty.set(None);
+                                        },
+                                        "X"
+                                    }
                                 }
-                                ForcedCardRefRender { selected_card: selected, allowed: vec![CardTy::Class], filter: speki_core::set::SetExpr::union_with([DynCard::CardType(speki_core::card::CType::Class)]) }
+                                ForcedCardRefRender { selected_card: selected, allowed: vec![CardTy::Class], filter: speki_core::set::SetExpr::union_with([DynCard::CardType(speki_core::card::CType::Class)]), disabled: inherited }
                             },
                             None => {
 
@@ -1125,8 +1187,12 @@ fn RenderAttrs(card: Option<CardId>, attrs: Signal<Vec<AttrEditor>>) -> Element 
                                 })).with_title("answer must be instance of a given class");
 
 
-                                rsx!{
-                                    ActionDropdown { label: "set answer constraint".to_string(), options: vec![timestamp, instance], title: "hey"  }
+                                if !inherited {
+                                    rsx!{
+                                        ActionDropdown { label: "set answer constraint".to_string(), options: vec![timestamp, instance], title: "hey"  }
+                                    }
+                                } else {
+                                    rsx!{}
                                 }
                             },
                         }
@@ -1147,6 +1213,7 @@ fn InputElements(
     card_id: Option<CardId>,
     namespace: Signal<Option<CardId>>,
     attrs: Signal<Vec<AttrEditor>>,
+    inherited_attrs: Signal<Vec<AttrEditor>>,
     attr_answers: Signal<Vec<AttrQandA>>,
     trivial: Signal<bool>,
 ) -> Element {
@@ -1167,6 +1234,7 @@ fn InputElements(
     });
 
     let has_attr_answers = !attr_answers.read().is_empty();
+    let has_inherited_attrs = !inherited_attrs.read().is_empty();
 
     rsx! {
         FrontPutRender { dropdown: front.dropdown.clone(), text: front.text.clone()}
@@ -1200,8 +1268,10 @@ fn InputElements(
                     },
                 }
 
-                RenderAttrs { attrs }
-
+                RenderAttrs { attrs, inherited: false }
+                if has_inherited_attrs {
+                    RenderAttrs { attrs: inherited_attrs, inherited: true }
+                }
             },
             CardTy::Instance => rsx! {
                 BackPutRender {

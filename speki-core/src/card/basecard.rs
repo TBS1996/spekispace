@@ -181,6 +181,85 @@ impl<'de> Deserialize<'de> for TextData {
 
 pub type AttributeId = Uuid;
 
+/*
+
+ok lets say
+
+the backtype has to be an instance of programming function where codebase == rust.
+hmm it feels kinda recursive in a way.. like can we make infinite
+
+
+InstanceValue {
+instance_of: {programming_function}
+constraints: vec![
+    InstanceFilter{
+        attr: Codebase
+        constraint:Card({rust})
+}]
+}
+
+
+ok lets see, another one, all cards of type male whose father was born in germany after 1960
+
+InstanceValue {
+    instance_of: {male}
+    constraints: vec![
+        AttrFilter{
+            attr: birth_date
+            constraint: ValueOf::TsAfter(1960)
+        },
+        AttrFilter{
+            attr: birthplace
+            constraint: ValueOf::Card({germany})
+        },
+    ]
+}
+
+
+ok lets see, another one, all cards of type female whose mother was born in europe before 1945
+
+InstanceValue {
+    instance_of: {female}
+    constraints: vec![
+        AttrFilter{
+            attr: birth_date
+            constraint: ValueOf::TsBefore(1945)
+        },
+        AttrFilter{
+            attr: birthplace
+            constraint: ValueOf::InstanceOfClass( InstanceValue {
+                instance_of: {country},
+                constraints: vec![AttrFilter {
+                    attr: continent,
+                    constraint: ValueOf::Card(europe)
+                }]
+            })
+        },
+    ]
+}
+
+*/
+
+/// To ensure that a certain attribute has a certain value
+struct AttrFilter {
+    attr: Attrv2,
+    constraint: ValueOf,
+}
+
+struct InstanceValue {
+    instance_of: CardId,
+    constraints: Vec<AttrFilter>,
+}
+
+/// like a filter to verify that the backside type/value is correct
+enum ValueOf {
+    Ts,                  // any timestamp
+    TsBefore(TimeStamp), //timestamp before given time
+    TsAfter(TimeStamp),  //timestamp after given time
+    InstanceOfClass(InstanceValue),
+    Card(CardId),
+}
+
 #[derive(PartialEq, Debug, Clone, Serialize, Hash, Eq)]
 pub enum AttrBackType {
     InstanceOfClass(CardId),

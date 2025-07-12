@@ -40,6 +40,7 @@ pub fn ForcedCardRefRender(
     allowed: Vec<CardTy>,
     on_select: Option<MyClosure>,
     #[props(default = SetExpr::All)] filter: SetExpr,
+    #[props(default = false)] disabled: bool,
 ) -> Element {
     let display = APP
         .read()
@@ -54,6 +55,7 @@ pub fn ForcedCardRefRender(
                 class: "bg-white w-full border border-gray-300 rounded-md p-2 mb-2 text-gray-950 cursor-pointer focus:outline-none",
                 value: "{display}",
                 readonly: "true",
+                disabled,
                 onclick: move |_| {
                     let f = on_select.clone();
                     let fun = MyClosure::new(move |card: CardId| {
