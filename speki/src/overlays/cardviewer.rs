@@ -839,6 +839,8 @@ impl CardViewer {
         self.editor.front.reset();
         self.editor.back.reset();
         self.editor.dependencies.clone().write().clear();
+        self.editor.attrs.clone().write().clear();
+        self.editor.attr_answers.clone().write().clear();
     }
 }
 
@@ -1228,8 +1230,50 @@ fn InputElements(
                 attr_answers.set(new_attrs);
             }
         }
+        (CardTy::Class, class) => {
+            match card_id {
+                Some(card) => {
+                    let mut old = attrs.cloned();
+                    let new_attrs = load_attr_editors(card);
+
+                    let new_attr_ids: BTreeSet<AttributeId> =
+                        new_attrs.iter().map(|a| a.id).collect();
+
+                    // Retain old ones if their ID is in the new set
+                    old.retain(|a| new_attr_ids.contains(&a.id));
+
+                    // Add new ones if their ID wasn't already in old
+                    let old_attr_ids: BTreeSet<AttributeId> = old.iter().map(|a| a.id).collect();
+
+                    let mut combined = old;
+                    combined.extend(
+                        new_attrs
+                            .into_iter()
+                            .filter(|a| !old_attr_ids.contains(&a.id)),
+                    );
+                    if old_attr_ids != new_attr_ids {
+                        attrs.clone().set(combined);
+                    }
+
+                    let new_attrs = load_inherited_attr_editors(card);
+                    inherited_attrs.clone().set(new_attrs);
+                }
+                None => match class {
+                    Some(class) => {
+                        let mut new_attrs = load_inherited_attr_editors(class);
+                        new_attrs.extend(load_attr_editors(class));
+                        inherited_attrs.clone().set(new_attrs);
+                    }
+                    None => {
+                        inherited_attrs.clone().set(vec![]);
+                    }
+                },
+            }
+        }
         (_, _) => {
             attr_answers.clone().set(vec![]);
+            inherited_attrs.clone().set(vec![]);
+            attrs.clone().set(vec![]);
         }
     });
 
