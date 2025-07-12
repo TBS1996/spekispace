@@ -193,6 +193,8 @@ pub fn CardRefRender(
     on_select: Option<MyClosure>,
     on_deselect: Option<MyClosure>,
     #[props(default = SetExpr::All)] filter: SetExpr,
+    #[props(default = false)] disabled: bool,
+    instance_of: Option<CardId>,
 ) -> Element {
     let is_selected = selected_card.read().is_some();
 
@@ -216,6 +218,7 @@ pub fn CardRefRender(
                 placeholder: "{placeholder}",
                 value: "{card_display}",
                 readonly: "true",
+                disabled,
                 onclick: move |_| {
                     let f = on_select.clone();
                     let fun = MyClosure::new(move |card: CardId| {
@@ -230,13 +233,19 @@ pub fn CardRefRender(
                     });
 
                     let allowed = allowed.clone();
-                    let props = CardSelector::ref_picker(fun, filter.clone())
+                    let mut props = CardSelector::ref_picker(fun, filter.clone())
                         .with_allowed_cards(allowed);
 
-                        OverlayEnum::CardSelector(props).append();
+                    if let Some(class) = instance_of {
+                        props = props.with_instance_of(class);
+                    }
+
+                    dbg!(&props, &instance_of);
+
+                    OverlayEnum::CardSelector(props).append();
                 },
             }
-            if is_selected {
+            if is_selected && !disabled {
                 button {
                     class: "absolute top-0 right-0 mt-2 mr-3 ml-6 text-gray-500 hover:text-gray-700 focus:outline-none",
                     onclick: move |_| {

@@ -49,6 +49,7 @@ pub fn Browse() -> Element {
                     filtermemo: browse_state.browse_page.filtermemo.clone(),
                     collection: browse_state.browse_page.collection,
                     edit_collection: browse_state.browse_page.edit_collection,
+                    instance_of: browse_state.browse_page.instance_of.clone(),
                 }
             }
          }

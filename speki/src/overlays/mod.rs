@@ -211,6 +211,7 @@ pub fn Overender(overlay: Signal<Option<Arc<OverlayEnum>>>, root: Element) -> El
                                     filtermemo: elm.filtermemo.clone(),
                                     collection: elm.collection.clone(),
                                     edit_collection: elm.edit_collection,
+                                    instance_of: elm.instance_of.clone(),
                                 }
                             },
                         }

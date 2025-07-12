@@ -8,7 +8,7 @@ use tracing::info;
 
 use crate::components::{dropdown::DropComponent, DropDownMenu};
 
-#[derive(EnumIter, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(EnumIter, Clone, Serialize, Deserialize, PartialEq, Debug)]
 pub enum CardTy {
     Normal,
     Instance,
@@ -52,7 +52,7 @@ impl Display for CardTy {
     }
 }
 
-#[derive(PartialEq, Props, Clone)]
+#[derive(PartialEq, Props, Clone, Debug)]
 pub struct FrontPut {
     pub dropdown: DropDownMenu<CardTy>,
     pub text: Signal<String>,

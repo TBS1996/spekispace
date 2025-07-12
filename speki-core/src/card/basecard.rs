@@ -238,7 +238,6 @@ InstanceValue {
     ]
 }
 
-*/
 
 /// To ensure that a certain attribute has a certain value
 struct AttrFilter {
@@ -259,6 +258,8 @@ enum ValueOf {
     InstanceOfClass(InstanceValue),
     Card(CardId),
 }
+
+*/
 
 #[derive(PartialEq, Debug, Clone, Serialize, Hash, Eq)]
 pub enum AttrBackType {

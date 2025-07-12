@@ -146,6 +146,7 @@ enum AttrAnswerEditor {
     Any(BackPut),
     Card {
         filter: SetExpr,
+        instance_of: Option<CardId>,
         selected: Signal<Option<CardId>>,
     },
     TimeStamp(Signal<String>),
@@ -235,7 +236,7 @@ impl From<AttrBackType> for AttrBackTypeEditor {
 }
 
 /// container for all the structs you edit while creating/modifying a card
-#[derive(Props, Clone)]
+#[derive(Props, Clone, Debug)]
 pub struct CardEditor {
     pub front: FrontPut,
     namespace: Signal<Option<CardId>>,
@@ -248,6 +249,7 @@ pub struct CardEditor {
     attrs: Signal<Vec<AttrEditor>>,
     inherited_attrs: Signal<Vec<AttrEditor>>,
     attr_answers: Signal<Vec<AttrQandA>>,
+    fixed_concept: bool,
 }
 
 impl CardEditor {
@@ -684,7 +686,7 @@ fn load_attr_qa(card: CardId) -> Vec<AttrQandA> {
     output
 }
 
-#[derive(Props, Clone)]
+#[derive(Props, Clone, Debug)]
 pub struct CardViewer {
     pub editor: CardEditor,
     pub save_hook: Option<MyClosure>,
@@ -700,6 +702,12 @@ impl PartialEq for CardViewer {
 impl CardViewer {
     pub fn with_hook(mut self, hook: MyClosure) -> Self {
         self.save_hook = Some(hook);
+        self
+    }
+
+    pub fn with_class(mut self, class: CardId) -> Self {
+        self.editor.concept.clone().set(Some(class));
+        self.editor.fixed_concept = true;
         self
     }
 
@@ -788,6 +796,7 @@ impl CardViewer {
                 dependencies,
                 allowed_cards: vec![],
                 default_question: Signal::new_in_scope(default_question, ScopeId::APP),
+                fixed_concept: false,
             }
         };
 
@@ -820,6 +829,7 @@ impl CardViewer {
                 default_question: Signal::new_in_scope(String::new(), ScopeId::APP),
                 attrs: Signal::new_in_scope(Default::default(), ScopeId::APP),
                 inherited_attrs: Signal::new_in_scope(Default::default(), ScopeId::APP),
+                fixed_concept: false,
             }
         };
 
@@ -865,6 +875,7 @@ fn RenderInputs(props: CardViewer) -> Element {
                 inherited_attrs: props.editor.inherited_attrs.clone(),
                 attr_answers: props.editor.attr_answers.clone(),
                 trivial: props.editor.trivial,
+                fixed_concept: props.editor.fixed_concept,
             }
         }
         div {
@@ -924,13 +935,18 @@ fn AttrAnswerEditorRender(answer: AttrAnswerEditor) -> Element {
                 }
             }
         }
-        AttrAnswerEditor::Card { filter, selected } => {
+        AttrAnswerEditor::Card {
+            filter,
+            selected,
+            instance_of,
+        } => {
             rsx! {
                 CardRefRender {
                     selected_card: selected,
                     placeholder: "select card",
                     allowed: vec![CardTy::Instance],
                     filter,
+                    instance_of,
                 }
             }
         }
@@ -1014,6 +1030,7 @@ fn AttrAnswers(
                                                             let filter = SetExpr::union_with([DynCard::Instances(id)]);
                                                             let ans = AttrAnswerEditor::Card {
                                                                 filter,
+                                                                instance_of: Some(id),
                                                                 selected: Signal::new_in_scope(None, ScopeId::APP),
                                                             };
 
@@ -1218,6 +1235,7 @@ fn InputElements(
     inherited_attrs: Signal<Vec<AttrEditor>>,
     attr_answers: Signal<Vec<AttrQandA>>,
     trivial: Signal<bool>,
+    fixed_concept: bool,
 ) -> Element {
     use_effect(move || match ((front.dropdown.selected)(), concept()) {
         (CardTy::Instance, Some(class)) => {
@@ -1309,6 +1327,7 @@ fn InputElements(
                         selected_card: concept,
                         placeholder: "pick parent class",
                         allowed: vec![CardTy::Class],
+                        disabled: fixed_concept,
                     },
                 }
 
@@ -1332,6 +1351,7 @@ fn InputElements(
                         selected_card: concept,
                         placeholder: "pick class of instance",
                         allowed: vec![CardTy::Class],
+                        disabled: fixed_concept,
                     },
                 }
 
@@ -1510,7 +1530,7 @@ fn save_button(CardViewer: CardViewer) -> Element {
                                             }
                                         }
                                     },
-                                    AttrAnswerEditor::Card { filter: _, selected } => {
+                                    AttrAnswerEditor::Card { filter: _, instance_of: _, selected } => {
                                         if let Some(card) = selected.cloned() {
                                             let back = BackSide::Card(card);
                                             let data = CardType::Attribute { attribute: attr_id.id, back: back, instance: id };

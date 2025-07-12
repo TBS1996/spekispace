@@ -32,7 +32,7 @@ pub fn overlay_card_viewer() -> MyClosure {
     MyClosure::new(move |card: CardId| OverlayEnum::new_edit_card(card).append())
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub enum MaybeEntry {
     Yes(Signal<Card>),
     No(CardId),
@@ -65,7 +65,7 @@ this will mean a lot of times you dont have to even search
 
 type OnCardSelected = (MyClosure, bool); // if true, close the overlay
 
-#[derive(Props, Clone)]
+#[derive(Props, Clone, Debug)]
 pub struct CardSelector {
     pub title: Option<String>,
     pub search: Signal<String>,
@@ -80,6 +80,7 @@ pub struct CardSelector {
     pub col_cards: Memo<BTreeMap<Uuid, Signal<MaybeEntry>>>,
     pub default_search: Signal<Option<String>>,
     pub forbidden_cards: Signal<BTreeSet<CardId>>,
+    pub instance_of: Option<CardId>,
 }
 
 impl Default for CardSelector {
@@ -248,11 +249,19 @@ impl CardSelector {
             col_cards,
             default_search,
             forbidden_cards,
+            instance_of: None,
         }
     }
 
     pub fn new(with_memo: bool, allowed_cards: Vec<CardTy>) -> Self {
         Self::new_with_filter(with_memo, allowed_cards, SetExpr::All)
+    }
+
+    pub fn with_instance_of(self, class: CardId) -> Self {
+        Self {
+            instance_of: Some(class),
+            ..self
+        }
     }
 
     pub fn with_set(self, set: SetExpr) -> Self {
@@ -340,6 +349,12 @@ impl PartialEq for CardSelector {
 #[derive(Clone)]
 pub struct MyClosure(pub Arc<Box<dyn Fn(CardId)>>);
 
+impl std::fmt::Debug for MyClosure {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_tuple("MyClosure").finish()
+    }
+}
+
 impl MyClosure {
     pub fn new<F>(func: F) -> Self
     where
@@ -371,6 +386,7 @@ pub fn CardSelectorRender(
     filtermemo: Memo<Option<CardFilter>>,
     collection: ExprEditor,
     edit_collection: bool,
+    instance_of: Option<CardId>,
 ) -> Element {
     info!("render cardselector");
     let filter = filtermemo.cloned().unwrap_or_default();
@@ -401,7 +417,7 @@ pub fn CardSelectorRender(
 
             div {
                 if allow_new {
-                    NewcardButton { on_card_selected: on_card_selected.clone(), allowed_cards: allowed_cards.cloned(), search }
+                    NewcardButton { on_card_selected: on_card_selected.clone(), allowed_cards: allowed_cards.cloned(), search, instance_of }
                 }
 
                 input {
@@ -424,6 +440,7 @@ fn NewcardButton(
     on_card_selected: OnCardSelected,
     allowed_cards: Vec<CardTy>,
     search: String,
+    instance_of: Option<CardId>,
 ) -> Element {
     let closure = Arc::new(on_card_selected.clone());
     rsx! {
@@ -440,10 +457,17 @@ fn NewcardButton(
                 }
                 });
 
-                let viewer = CardViewer::new()
+                let mut viewer = CardViewer::new()
                     .with_hook(hook)
                     .with_allowed_cards(allowed_cards.clone())
                     .with_front_text(search.clone());
+
+                if let Some(class) = instance_of {
+                    viewer = viewer.with_class(class);
+                }
+
+                dbg!(&viewer);
+
 
                 set_overlay(Some(OverlayEnum::CardViewer(viewer)));
 
