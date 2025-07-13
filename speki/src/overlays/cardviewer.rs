@@ -50,17 +50,6 @@ fn CardProperties(viewer: CardViewer) -> Element {
             RenderDependents { card_id, hidden: false}
         }
 
-        div {
-            class: "flex flex-row mt-4 gap-x-4",
-
-            save_button { CardViewer: viewer.clone() }
-
-            div {
-                if let Some(card) = viewer.old_card.clone() {
-                    DeleteButton{card_id: card.id()}
-                }
-            }
-        }
     }
 }
 
@@ -92,17 +81,17 @@ pub fn CardViewerRender(props: CardViewer) -> Element {
         .map(|card| card.history().to_owned());
 
     // hardcoded for 800px
-    let properties_width = 800;
+    let properties_width = 600;
     let mastery_min_width = 200;
     let _mastery_max_width = 300;
 
-    let show_mastery = *width.read() > properties_width + mastery_min_width;
+    let wide_screen = *width.read() > properties_width + mastery_min_width;
 
-    let card_class = if show_mastery {
+    let card_class = if wide_screen {
         // Tailwind can now detect this
-        "w-[800px] min-w-[800px] flex-shrink-0"
+        "w-[600px] min-w-[600px] flex-shrink-0"
     } else {
-        "max-w-[800px] w-full flex-shrink"
+        "max-w-[600px] w-full flex-shrink"
     };
 
     rsx! {
@@ -113,14 +102,30 @@ pub fn CardViewerRender(props: CardViewer) -> Element {
             div {
                 class: "p-2 box-border {card_class}",
                 CardProperties { viewer: props.clone() }
+
+                if !wide_screen {
+                    DisplayMetadata { metadata: props.editor.metadata.clone()  }
+                }
+
+                div {
+                    class: "flex flex-row mt-4 gap-x-4",
+
+                    save_button { CardViewer: props.clone() }
+
+                    div {
+                        if let Some(card) = props.old_card.clone() {
+                            DeleteButton{card_id: card.id()}
+                        }
+                    }
+                }
             }
 
             div {
                 class: "flex flex-col",
-                DisplayMetadata { metadata: props.editor.metadata.clone()  }
+                if wide_screen {
+                    DisplayMetadata { metadata: props.editor.metadata.clone()  }
 
-                if let Some(history) = history {
-                    if show_mastery {
+                    if let Some(history) = history {
                         div {
                             class: "min-w-[200px] max-w-[300px] w-full flex-shrink",
                             MasterySection { history }
@@ -167,6 +172,11 @@ fn DisplayMetadata(metadata: MetadataEditor) -> Element {
     let MetadataEditor { suspended, trivial } = metadata;
 
     rsx! {
+        h3 {
+            class: "text-sm font-semibold text-gray-600 uppercase tracking-wide",
+            "Metadata"
+        }
+
         div {
             class: "flex flex-row items-center mb-4",
             div {

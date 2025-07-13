@@ -883,6 +883,10 @@ video {
   min-width: 1rem;
 }
 
+.min-w-\[600px\] {
+  min-width: 600px;
+}
+
 .max-w-3xl {
   max-width: 48rem;
 }
@@ -909,6 +913,10 @@ video {
 
 .max-w-sm {
   max-width: 24rem;
+}
+
+.max-w-\[600px\] {
+  max-width: 600px;
 }
 
 .flex-1 {
