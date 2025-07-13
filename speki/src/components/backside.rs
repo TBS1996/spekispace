@@ -62,7 +62,7 @@ pub fn BackPutRender(
 
 
         div {
-            class: "backside-editor flex items-center space-x-4 mb-4",
+            class: "backside-editor flex items-center space-x-4",
 
             div {
                 class: "flex-shrink-0",

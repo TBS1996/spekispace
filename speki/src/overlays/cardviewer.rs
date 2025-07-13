@@ -1035,93 +1035,102 @@ fn AttrAnswers(
     rsx! {
         h4 {
             class: "font-bold",
-            p {"Attributes"}
+            p { "Attributes" }
         }
 
         div {
-            class: "max-h-64 overflow-y-auto flex flex-col gap-2",
+            class: "max-h-64 overflow-y-auto flex flex-col gap-2 min-h-[7rem]",
 
             for answer in attr_answers.iter() {
                 match answer.clone() {
-                    AttrQandA::Old {question, answer, id, ..} => {
+                    AttrQandA::Old { question, answer, id, .. } => {
                         rsx! {
                             div {
-                                class: "border border-black p-3 rounded flex flex-col gap-2",
+                                class: "border border-black p-3 rounded flex flex-row items-center gap-2",
+                                p {
+                                    class: "font-semibold",
+                                    "{question}: "
+                                }
+
+                                OldAttrAnswerEditorRender { answer }
+
                                 div {
-                                    class: "flex flex-row items-center",
-                                    p { class: "font-semibold mr-4", "{question}" }
-                                    DeleteButton { card_id: id, pop_ol: false, f: {
-                                        Some(MyClosure::new(move |_card: CardId|  {
+                                    class: "max-h-32",
+                                    DeleteButton {
+                                        card_id: id,
+                                        pop_ol: false,
+                                        f: Some(MyClosure::new(move |_card: CardId| {
                                             let inner = class.cloned();
                                             class.clone().set(inner);
-                                        }))
-                                        }
+                                        })),
                                     }
                                 }
-                                OldAttrAnswerEditorRender { answer }
                             }
                         }
-                    },
-                    AttrQandA::New {question, mut answer, attr_id} => {
-                        rsx! {
-                            match answer.cloned(){
-                                Some(the_answer) => {
-                                    rsx! {
-                                        div {
-                                            class: "border border-black p-3 rounded flex flex-col gap-2",
-                                            p { class: "font-semibold", "{question}" }
+                    }
 
-                                            div {
-                                                class: "flex flex-row items-start gap-2",
-                                                button {
-                                                    class: "{crate::styles::DELETE_BUTTON} mt-1",
-                                                    onclick: move |_| {
-                                                        answer.set(None);
-                                                    },
-                                                    "X"
-                                                }
-                                                AttrAnswerEditorRender { answer: the_answer }
+                    AttrQandA::New { question, mut answer, attr_id } => {
+                        match answer.cloned() {
+                            Some(the_answer) => {
+                                rsx! {
+                                    div {
+                                        class: "border border-black p-3 rounded flex flex-row items-center gap-2",
+                                        p {
+                                            class: "font-semibold",
+                                            "{question}: "
+                                        }
+                                        button {
+                                            class: "{crate::styles::DELETE_BUTTON}",
+                                            onclick: move |_| {
+                                                answer.set(None);
+                                            },
+                                            "X"
+                                        }
+                                        AttrAnswerEditorRender { answer: the_answer }
+                                    }
+                                }
+                            }
+                            None => {
+                                rsx! {
+                                    div {
+                                        class: "border border-black p-3 rounded flex flex-row items-center gap-2",
+
+                                        div {
+                                            class: "w-[20ch] shrink-0",
+                                            p {
+                                                class: "font-semibold break-words",
+                                                "{question}:"
                                             }
                                         }
-                                    }
-                                }
 
-                                None => {
-                                    rsx! {
-                                        div {
-                                            class: "flex flex-row",
-                                            p{"{question}"}
-                                            button {
-                                                class: "{crate::styles::CREATE_BUTTON} ml-4",
-                                                onclick: move |_| {
-                                                    match attr_id.back_type {
-                                                        Some(AttrBackType::TimeStamp) => {
-                                                            answer.set(Some(AttrAnswerEditor::TimeStamp(Signal::new_in_scope(String::new(), ScopeId::APP))));
-
-                                                        },
-                                                        Some(AttrBackType::InstanceOfClass(id)) => {
-                                                            let filter = SetExpr::union_with([DynCard::Instances(id)]);
-                                                            let ans = AttrAnswerEditor::Card {
-                                                                filter,
-                                                                instance_of: Some(id),
-                                                                selected: Signal::new_in_scope(None, ScopeId::APP),
-                                                            };
-
-                                                            answer.set(Some(ans))
-                                                        },
-                                                        None => {
-                                                            answer.set(Some(AttrAnswerEditor::Any(BackPut::new(None))));
-                                                        },
+                                        button {
+                                            class: "{crate::styles::CREATE_BUTTON}",
+                                            onclick: move |_| {
+                                                match attr_id.back_type {
+                                                    Some(AttrBackType::TimeStamp) => {
+                                                        answer.set(Some(AttrAnswerEditor::TimeStamp(Signal::new_in_scope(String::new(), ScopeId::APP))));
                                                     }
-                                                },
+                                                    Some(AttrBackType::InstanceOfClass(id)) => {
+                                                        let filter = SetExpr::union_with([DynCard::Instances(id)]);
+                                                        let ans = AttrAnswerEditor::Card {
+                                                            filter,
+                                                            instance_of: Some(id),
+                                                            selected: Signal::new_in_scope(None, ScopeId::APP),
+                                                        };
+                                                        answer.set(Some(ans));
+                                                    }
+                                                    None => {
+                                                        answer.set(Some(AttrAnswerEditor::Any(BackPut::new(None))));
+                                                    }
+                                                }
+                                            },
                                             "add answer"
                                         }
-                                        }
                                     }
-                                },
+                                }
                             }
                         }
-                    },
+                    }
                 }
             }
         }
@@ -1443,7 +1452,12 @@ fn InputElements(
 }
 
 #[component]
-fn DeleteButton(card_id: CardId, pop_ol: Option<bool>, f: Option<MyClosure>) -> Element {
+fn DeleteButton(
+    card_id: CardId,
+    pop_ol: Option<bool>,
+    f: Option<MyClosure>,
+    class: Option<&'static str>,
+) -> Element {
     let card = APP.read().inner().card_provider.load(card_id);
     debug_assert!(card.is_some());
 
@@ -1462,9 +1476,15 @@ fn DeleteButton(card_id: CardId, pop_ol: Option<bool>, f: Option<MyClosure>) -> 
     let title = title.unwrap_or_default();
     let pop_ol = pop_ol.unwrap_or(true);
 
+    let class = format!(
+        "{} {}",
+        crate::styles::DELETE_BUTTON,
+        class.unwrap_or_default()
+    );
+
     rsx! {
         button {
-            class: "{crate::styles::DELETE_BUTTON}",
+            class,
             title: "{title}",
             disabled: disabled,
             onclick: move |_| {

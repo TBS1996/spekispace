@@ -699,6 +699,10 @@ video {
   margin-top: 2rem;
 }
 
+.ml-auto {
+  margin-left: auto;
+}
+
 .box-border {
   box-sizing: border-box;
 }
@@ -775,8 +779,24 @@ video {
   max-height: 80vh;
 }
 
+.max-h-24 {
+  max-height: 6rem;
+}
+
+.max-h-32 {
+  max-height: 8rem;
+}
+
 .min-h-screen {
   min-height: 100vh;
+}
+
+.min-h-\[6rem\] {
+  min-height: 6rem;
+}
+
+.min-h-\[7rem\] {
+  min-height: 7rem;
 }
 
 .w-1\/12 {
@@ -831,6 +851,18 @@ video {
   width: 100vw;
 }
 
+.w-6 {
+  width: 1.5rem;
+}
+
+.w-\[30ch\] {
+  width: 30ch;
+}
+
+.w-\[20ch\] {
+  width: 20ch;
+}
+
 .min-w-0 {
   min-width: 0px;
 }
@@ -845,6 +877,10 @@ video {
 
 .min-w-full {
   min-width: 100%;
+}
+
+.min-w-\[1rem\] {
+  min-width: 1rem;
 }
 
 .max-w-3xl {
@@ -888,6 +924,10 @@ video {
 }
 
 .flex-shrink-0 {
+  flex-shrink: 0;
+}
+
+.shrink-0 {
   flex-shrink: 0;
 }
 
@@ -1025,6 +1065,14 @@ video {
 
 .overflow-x-hidden {
   overflow-x: hidden;
+}
+
+.whitespace-normal {
+  white-space: normal;
+}
+
+.break-words {
+  overflow-wrap: break-word;
 }
 
 .rounded {
@@ -1186,6 +1234,10 @@ video {
 
 .p-6 {
   padding: 1.5rem;
+}
+
+.p-10 {
+  padding: 2.5rem;
 }
 
 .px-2 {
