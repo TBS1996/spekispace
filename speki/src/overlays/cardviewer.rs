@@ -11,6 +11,7 @@ use speki_core::{
     card::{AttrBackType, AttributeId, Attrv2, BackSide, CType, CardId, RawCard, TextData},
     collection::DynCard,
     ledger::{CardAction, CardEvent},
+    metadata::Metadata,
     set::SetExpr,
     Card, CardProperty, CardType,
 };
@@ -108,14 +109,81 @@ pub fn CardViewerRender(props: CardViewer) -> Element {
                 CardProperties { viewer: props.clone() }
             }
 
-            if let Some(history) = history {
-                if show_mastery {
-                    div {
-                        class: "min-w-[200px] max-w-[300px] w-full flex-shrink",
-                        MasterySection { history }
+            div {
+                class: "flex flex-col",
+                DisplayMetadata { metadata: props.editor.metadata.clone()  }
+
+                if let Some(history) = history {
+                    if show_mastery {
+                        div {
+                            class: "min-w-[200px] max-w-[300px] w-full flex-shrink",
+                            MasterySection { history }
+                        }
                     }
                 }
             }
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+struct MetadataEditor {
+    suspended: Signal<bool>,
+    trivial: Signal<bool>,
+}
+
+impl MetadataEditor {
+    fn new() -> Self {
+        Self {
+            suspended: Signal::new_in_scope(false, ScopeId::APP),
+            trivial: Signal::new_in_scope(false, ScopeId::APP),
+        }
+    }
+}
+
+impl From<Metadata> for MetadataEditor {
+    fn from(value: Metadata) -> Self {
+        let Metadata {
+            trivial,
+            suspended,
+            id: _,
+        } = value;
+
+        Self {
+            suspended: Signal::new_in_scope(suspended.is_suspended(), ScopeId::APP),
+            trivial: Signal::new_in_scope(trivial.unwrap_or_default(), ScopeId::APP),
+        }
+    }
+}
+
+#[component]
+fn DisplayMetadata(metadata: MetadataEditor) -> Element {
+    let MetadataEditor { suspended, trivial } = metadata;
+
+    rsx! {
+        div {
+            class: "flex flex-row items-center mb-4",
+            div {
+                class: "w-24",
+                p {
+                    title: "trivial cards are not reviewed",
+                    "trivial"
+                }
+            }
+            DropComponent { options: vec![false, true], selected: trivial }
+        }
+
+        div {
+            class: "flex flex-row items-center mb-4",
+            div {
+                class: "w-24",
+                p {
+                    title: "trivial cards are not reviewed",
+                    "suspend"
+                }
+            }
+
+            DropComponent { options: vec![false, true], selected: suspended }
         }
     }
 }
@@ -128,7 +196,7 @@ pub struct CardRep {
     namespace: Option<CardId>,
     deps: Vec<CardId>,
     answered_attrs: Vec<AttrQandA>,
-    trivial: bool,
+    meta: MetadataEditor,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -240,7 +308,6 @@ impl From<AttrBackType> for AttrBackTypeEditor {
 pub struct CardEditor {
     pub front: FrontPut,
     namespace: Signal<Option<CardId>>,
-    trivial: Signal<bool>,
     back: BackPut,
     default_question: Signal<String>,
     concept: Signal<Option<CardId>>,
@@ -250,6 +317,7 @@ pub struct CardEditor {
     inherited_attrs: Signal<Vec<AttrEditor>>,
     attr_answers: Signal<Vec<AttrQandA>>,
     fixed_concept: bool,
+    metadata: MetadataEditor,
 }
 
 impl CardEditor {
@@ -390,7 +458,7 @@ impl CardEditor {
             answered_attrs: self.attr_answers.cloned(),
             namespace: self.namespace.cloned(),
             deps: self.dependencies.cloned().into_iter().collect(),
-            trivial: self.trivial.cloned(),
+            meta: self.metadata,
         })
     }
 }
@@ -784,11 +852,19 @@ impl CardViewer {
                 String::new()
             };
 
+            let metadata = MetadataEditor::from(
+                APP.read()
+                    .inner()
+                    .provider
+                    .metadata
+                    .try_load(card.id())
+                    .unwrap_or_default(),
+            );
+
             CardEditor {
                 front,
                 attrs: Signal::new_in_scope(attrs, ScopeId::APP),
                 inherited_attrs: Signal::new_in_scope(inherited_attrs, ScopeId::APP),
-                trivial: Signal::new_in_scope(raw_ty.trivial, ScopeId::APP),
                 attr_answers,
                 namespace,
                 back,
@@ -797,6 +873,7 @@ impl CardViewer {
                 allowed_cards: vec![],
                 default_question: Signal::new_in_scope(default_question, ScopeId::APP),
                 fixed_concept: false,
+                metadata,
             }
         };
 
@@ -821,7 +898,6 @@ impl CardViewer {
                 attr_answers,
                 front,
                 namespace: Signal::new_in_scope(None, ScopeId::APP),
-                trivial: Signal::new_in_scope(false, ScopeId::APP),
                 back,
                 concept,
                 dependencies,
@@ -830,6 +906,7 @@ impl CardViewer {
                 attrs: Signal::new_in_scope(Default::default(), ScopeId::APP),
                 inherited_attrs: Signal::new_in_scope(Default::default(), ScopeId::APP),
                 fixed_concept: false,
+                metadata: MetadataEditor::new(),
             }
         };
 
@@ -874,7 +951,6 @@ fn RenderInputs(props: CardViewer) -> Element {
                 attrs: props.editor.attrs.clone(),
                 inherited_attrs: props.editor.inherited_attrs.clone(),
                 attr_answers: props.editor.attr_answers.clone(),
-                trivial: props.editor.trivial,
                 fixed_concept: props.editor.fixed_concept,
             }
         }
@@ -882,7 +958,6 @@ fn RenderInputs(props: CardViewer) -> Element {
             if let Some(card) = props.old_card.clone() {
                 if card_exists {
                     DeleteButton{card_id: card.id()}
-                    Suspend { card: card.id() }
                 }
             }
         }
@@ -1235,7 +1310,6 @@ fn InputElements(
     attrs: Signal<Vec<AttrEditor>>,
     inherited_attrs: Signal<Vec<AttrEditor>>,
     attr_answers: Signal<Vec<AttrQandA>>,
-    trivial: Signal<bool>,
     fixed_concept: bool,
 ) -> Element {
     use_effect(move || match ((front.dropdown.selected)(), concept()) {
@@ -1362,19 +1436,6 @@ fn InputElements(
             },
         }
 
-        div {
-            class: "flex flex-row items-center mb-4",
-            div {
-                class: "w-24",
-                p {
-                    title: "trivial cards are not reviewed",
-                    "trivial"
-                }
-            }
-
-            DropComponent { options: vec![false, true], selected: trivial }
-        }
-
         OtherCardRefRender{
             selected_card: namespace.clone(),
             placeholder: "namespace",
@@ -1489,7 +1550,7 @@ fn save_button(CardViewer: CardViewer) -> Element {
                 let id = selveste.old_card.clone().map(|card|card.id()).unwrap_or_else(CardId::new_v4);
                 events.push(CardEvent::new_modify(id, CardAction::UpsertCard(card.ty)));
                 events.push(CardEvent::new_modify(id, CardAction::SetNamespace ( card.namespace)));
-                events.push(CardEvent::new_modify(id, CardAction::SetTrivial ( card.trivial)));
+                events.push(CardEvent::new_modify(id, CardAction::SetTrivial ( card.meta.trivial.cloned())));
 
                 for dep in card.deps {
                     events.push(CardEvent::new_modify(id, CardAction::AddDependency(dep)));

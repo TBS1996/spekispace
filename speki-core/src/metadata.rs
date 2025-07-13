@@ -13,7 +13,7 @@ use crate::{card::CardId, ledger::MetaAction};
 pub struct Metadata {
     pub trivial: Option<bool>,
     pub suspended: IsSuspended,
-    id: Uuid,
+    pub id: Uuid,
 }
 
 impl Metadata {
