@@ -1085,12 +1085,14 @@ fn RenderAttrs(card: Option<CardId>, attrs: Signal<Vec<AttrEditor>>, inherited: 
             ));
             let cached = APP.read().inner().provider.cards.load_getter(getter);
             let disabled = !cached.is_empty();
-            let title = if disabled {
+            let title = if inherited {
+                "can't delete inherited attributes"
+            } else if disabled {
                 "can't delete used attributes"
             } else {
                 ""
             };
-            (attr, !cached.is_empty(), title)
+            (attr, disabled || inherited, title)
         })
         .collect();
 
@@ -1122,30 +1124,29 @@ fn RenderAttrs(card: Option<CardId>, attrs: Signal<Vec<AttrEditor>>, inherited: 
             for (AttrEditor {id, mut pattern,mut ty }, disabled, title) in foobar {
                 div {
                     class: "flex flex-row gap-2 mb-4",
-                    if !inherited {
-                        button {
-                            class: "{crate::styles::DELETE_BUTTON}",
-                            disabled: "{disabled}",
-                            title: "{title}",
-                            onclick: move |_| {
-                                match card {
-                                    Some(card) => {
-                                        let event: TheLedgerEvent<RawCard> = TheLedgerEvent::new_modify(card, CardAction::RemoveAttr(id));
-                                        if let Err(e) = APP.read().inner().provider.cards.modify(event) {
-                                            handle_card_event_error(e);
-                                            return;
-                                        }
-                                        attrs.clone().set(load_attr_editors(card));
-                                    },
-                                    None => {
-                                        let mut _attrs = attrs.cloned();
-                                        _attrs.retain(|a|a.id != id);
-                                        attrs.clone().set(_attrs);
-                                    },
-                                };
-                            },
-                            "delete"
-                        }
+
+                    button {
+                        class: "{crate::styles::DELETE_BUTTON}",
+                        disabled: "{disabled}",
+                        title: "{title}",
+                        onclick: move |_| {
+                            match card {
+                                Some(card) => {
+                                    let event: TheLedgerEvent<RawCard> = TheLedgerEvent::new_modify(card, CardAction::RemoveAttr(id));
+                                    if let Err(e) = APP.read().inner().provider.cards.modify(event) {
+                                        handle_card_event_error(e);
+                                        return;
+                                    }
+                                    attrs.clone().set(load_attr_editors(card));
+                                },
+                                None => {
+                                    let mut _attrs = attrs.cloned();
+                                    _attrs.retain(|a|a.id != id);
+                                    attrs.clone().set(_attrs);
+                                },
+                            };
+                        },
+                        "delete"
                     }
                     div {
                         class: "w-1/2",
