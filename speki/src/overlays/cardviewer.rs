@@ -51,9 +51,15 @@ fn CardProperties(viewer: CardViewer) -> Element {
         }
 
         div {
-            class: "mt-4",
+            class: "flex flex-row mt-4 gap-x-4",
 
             save_button { CardViewer: viewer.clone() }
+
+            div {
+                if let Some(card) = viewer.old_card.clone() {
+                    DeleteButton{card_id: card.id()}
+                }
+            }
         }
     }
 }
@@ -936,7 +942,6 @@ fn RenderInputs(props: CardViewer) -> Element {
     info!("render inputs");
     let ty = props.editor.front.dropdown.selected.clone();
     let card_id = props.old_card.as_ref().map(|c| c.id());
-    let card_exists = props.old_card.is_some();
 
     rsx! {
         div {
@@ -952,13 +957,6 @@ fn RenderInputs(props: CardViewer) -> Element {
                 inherited_attrs: props.editor.inherited_attrs.clone(),
                 attr_answers: props.editor.attr_answers.clone(),
                 fixed_concept: props.editor.fixed_concept,
-            }
-        }
-        div {
-            if let Some(card) = props.old_card.clone() {
-                if card_exists {
-                    DeleteButton{card_id: card.id()}
-                }
             }
         }
     }
