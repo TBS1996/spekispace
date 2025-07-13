@@ -39,12 +39,25 @@ use crate::{
 #[component]
 fn CardProperties(viewer: CardViewer) -> Element {
     let old_card: Option<CardId> = viewer.old_card.as_ref().map(|c| c.id());
+
+    let ty = viewer.editor.front.dropdown.selected.clone();
+    let card_id = viewer.old_card.as_ref().map(|c| c.id());
+
     rsx! {
-        RenderInputs {
-            editor:viewer.editor.clone(),
-            save_hook:viewer.save_hook.clone(),
-            old_card:viewer.old_card.clone(),
+        InputElements {
+            front: viewer.editor.front.clone(),
+            back: viewer.editor.back.clone(),
+            default_question: viewer.editor.default_question.clone(),
+            concept: viewer.editor.concept.clone(),
+            ty: ty.cloned(),
+            card_id,
+            namespace: viewer.editor.namespace.clone(),
+            attrs: viewer.editor.attrs.clone(),
+            inherited_attrs: viewer.editor.inherited_attrs.clone(),
+            attr_answers: viewer.editor.attr_answers.clone(),
+            fixed_concept: viewer.editor.fixed_concept,
         }
+
         RenderDependencies { card_text: viewer.editor.front.text.clone(), card_id: old_card, dependencies: viewer.editor.dependencies.clone()}
         if let Some(card_id) = old_card {
             RenderDependents { card_id, hidden: false}
@@ -948,31 +961,6 @@ impl CardViewer {
 }
 
 #[component]
-fn RenderInputs(props: CardViewer) -> Element {
-    info!("render inputs");
-    let ty = props.editor.front.dropdown.selected.clone();
-    let card_id = props.old_card.as_ref().map(|c| c.id());
-
-    rsx! {
-        div {
-            InputElements {
-                front: props.editor.front.clone(),
-                back: props.editor.back.clone(),
-                default_question: props.editor.default_question.clone(),
-                concept: props.editor.concept.clone(),
-                ty: ty.cloned(),
-                card_id,
-                namespace: props.editor.namespace.clone(),
-                attrs: props.editor.attrs.clone(),
-                inherited_attrs: props.editor.inherited_attrs.clone(),
-                attr_answers: props.editor.attr_answers.clone(),
-                fixed_concept: props.editor.fixed_concept,
-            }
-        }
-    }
-}
-
-#[component]
 fn OldAttrAnswerEditorRender(answer: OldAttrAnswerEditor) -> Element {
     match answer {
         OldAttrAnswerEditor::Any(answer) => {
@@ -1410,17 +1398,23 @@ fn InputElements(
                     ref_card: back.ref_card.clone(),
                 }
 
-                div {
-                    class: "block text-gray-700 text-sm font-medium mb-2",
-                    style: "margin-right: 82px;",
-                    "Parent class"
 
-                    CardRefRender{
+                div {
+                    class: "flex items-center flex-row text-gray-700 text-sm font-medium mb-2 mt-4",
+
+                    h3 {
+                        class: "font-bold",
+                        style: "width: 113px;",
+                        title: "pick parent class",
+                        "Class"
+                    }
+
+                    CardRefRender {
                         selected_card: concept,
                         placeholder: "pick parent class",
                         allowed: vec![CardTy::Class],
                         disabled: fixed_concept,
-                    },
+                    }
                 }
 
                 RenderAttrs { attrs, inherited: false }
@@ -1436,15 +1430,21 @@ fn InputElements(
                 }
 
                 div {
-                    class: "block text-gray-700 text-sm font-medium mb-2",
-                    style: "margin-right: 81px;",
-                    "Class of instance"
-                    CardRefRender{
+                    class: "flex items-center flex-row text-gray-700 text-sm font-medium mb-2 mt-4",
+
+                    h3 {
+                        class: "font-bold",
+                        style: "width: 113px;",
+                        title: "pick class of instance",
+                        "Class"
+                    }
+
+                    CardRefRender {
                         selected_card: concept,
                         placeholder: "pick class of instance",
                         allowed: vec![CardTy::Class],
                         disabled: fixed_concept,
-                    },
+                    }
                 }
 
                 if has_attr_answers {
@@ -1453,11 +1453,14 @@ fn InputElements(
             },
         }
 
-        OtherCardRefRender{
-            selected_card: namespace.clone(),
-            placeholder: "namespace",
-            remove_title: "clear namespace",
-        },
+        div {
+            class: "mt-4",
+            OtherCardRefRender{
+                selected_card: namespace.clone(),
+                placeholder: "namespace",
+                remove_title: "clear namespace",
+            },
+        }
     }
 }
 
