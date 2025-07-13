@@ -10,7 +10,7 @@ use omtrent::TimeStamp;
 use speki_core::{
     card::{AttrBackType, AttributeId, Attrv2, BackSide, CType, CardId, RawCard, TextData},
     collection::DynCard,
-    ledger::{CardAction, CardEvent},
+    ledger::{CardAction, CardEvent, MetaAction, MetaEvent},
     metadata::Metadata,
     set::SetExpr,
     Card, CardProperty, CardType,
@@ -185,7 +185,7 @@ fn DisplayMetadata(metadata: MetadataEditor) -> Element {
                 class: "w-24",
                 p {
                     title: "trivial cards are not reviewed",
-                    "suspend"
+                    "suspended"
                 }
             }
 
@@ -1538,7 +1538,7 @@ fn save_button(CardViewer: CardViewer) -> Element {
             title:"{title}",
             disabled: !enabled,
             onclick: move |_| {
-                let Ok(card) = selv.editor.clone().into_cardrep() else {
+                let Ok(CardRep { ty, namespace, deps, answered_attrs, meta }) = selv.editor.clone().into_cardrep() else {
                     return;
                 };
 
@@ -1546,11 +1546,31 @@ fn save_button(CardViewer: CardViewer) -> Element {
                 let mut events: Vec<CardEvent> = vec![];
 
                 let id = selveste.old_card.clone().map(|card|card.id()).unwrap_or_else(CardId::new_v4);
-                events.push(CardEvent::new_modify(id, CardAction::UpsertCard(card.ty)));
-                events.push(CardEvent::new_modify(id, CardAction::SetNamespace ( card.namespace)));
-                events.push(CardEvent::new_modify(id, CardAction::SetTrivial ( card.meta.trivial.cloned())));
 
-                for dep in card.deps {
+
+                {
+                    let event = MetaEvent::new_modify(id, MetaAction::Suspend(meta.suspended.cloned()));
+
+                    if let Err(e) = APP.read().inner().provider.metadata.modify(event) {
+                        let err = format!("{e:?}");
+                        OverlayEnum::new_notice(err).append();
+                        return;
+                    }
+
+                    let event = MetaEvent::new_modify(id, MetaAction::SetTrivial(Some(meta.trivial.cloned())));
+
+                    if let Err(e) = APP.read().inner().provider.metadata.modify(event) {
+                        let err = format!("{e:?}");
+                        OverlayEnum::new_notice(err).append();
+                        return;
+                    }
+                }
+
+                events.push(CardEvent::new_modify(id, CardAction::UpsertCard(ty)));
+                events.push(CardEvent::new_modify(id, CardAction::SetNamespace ( namespace)));
+                events.push(CardEvent::new_modify(id, CardAction::SetTrivial ( meta.trivial.cloned())));
+
+                for dep in deps {
                     events.push(CardEvent::new_modify(id, CardAction::AddDependency(dep)));
                 }
 
@@ -1561,7 +1581,7 @@ fn save_button(CardViewer: CardViewer) -> Element {
                     }
                 }
 
-                for answer in card.answered_attrs {
+                for answer in answered_attrs {
                     match answer {
                         AttrQandA::New { attr_id, question: _, answer } => {
                             if let Some(answer) = answer.cloned() {
