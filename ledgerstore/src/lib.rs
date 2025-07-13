@@ -245,6 +245,7 @@ struct ModifyResult<T: LedgerItem> {
     item: Option<T>,
     added_caches: HashSet<(CacheKey<T>, T::Key)>,
     removed_caches: HashSet<(CacheKey<T>, T::Key)>,
+    is_no_op: bool,
 }
 
 #[derive(Clone)]
@@ -708,16 +709,18 @@ impl<T: LedgerItem> Ledger<T> {
         cache: bool,
     ) -> Result<ModifyResult<T>, EventError<T>> {
         let key = event.id;
-        let (old_caches, new_caches, item) = match event.action.clone() {
+        let (old_caches, new_caches, item, is_no_op) = match event.action.clone() {
             TheLedgerAction::Modify(action) => {
                 let (old_caches, old_item) = match self.try_load(key) {
                     Some(item) if cache => (item.caches(self), item),
                     Some(item) => (Default::default(), item),
                     None => (Default::default(), T::new_default(key)),
                 };
+                let old_cloned = old_item.clone();
                 let modified_item = old_item.run_event(action, self, verify)?;
+                let no_op = old_cloned == modified_item;
                 let new_caches = modified_item.caches(self);
-                (old_caches, new_caches, Some(modified_item))
+                (old_caches, new_caches, Some(modified_item), no_op)
             }
             TheLedgerAction::Create(mut item) => {
                 if verify {
@@ -728,12 +731,12 @@ impl<T: LedgerItem> Ledger<T> {
                 } else {
                     Default::default()
                 };
-                (HashSet::default(), caches, Some(item))
+                (HashSet::default(), caches, Some(item), false)
             }
             TheLedgerAction::Delete => {
                 let old_item = self.load(key);
                 let old_caches = old_item.caches(self);
-                (old_caches, Default::default(), None)
+                (old_caches, Default::default(), None, false)
             }
         };
 
@@ -745,6 +748,7 @@ impl<T: LedgerItem> Ledger<T> {
             item,
             added_caches,
             removed_caches,
+            is_no_op,
         })
     }
 
@@ -754,7 +758,12 @@ impl<T: LedgerItem> Ledger<T> {
             item,
             added_caches,
             removed_caches,
+            is_no_op,
         } = res;
+
+        if is_no_op {
+            debug_assert!(added_caches.is_empty() && removed_caches.is_empty());
+        }
 
         match item {
             Some(item) => self.save(item),
@@ -797,7 +806,7 @@ impl<T: LedgerItem> Ledger<T> {
         let res = self._modify(event.clone(), verify, cache)?;
         tracing::debug!("res: {:?}", &res);
         self.run_result(res.clone(), cache).unwrap();
-        if save {
+        if save && !res.is_no_op {
             let hash = self.entries.save(event);
             self.set_ledger_hash(hash);
         }

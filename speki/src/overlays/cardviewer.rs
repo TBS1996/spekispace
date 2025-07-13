@@ -93,7 +93,6 @@ pub fn CardViewerRender(props: CardViewer) -> Element {
         .as_ref()
         .map(|card| card.history().to_owned());
 
-    // hardcoded for 800px
     let properties_width = 600;
     let mastery_min_width = 200;
     let _mastery_max_width = 300;
@@ -101,7 +100,6 @@ pub fn CardViewerRender(props: CardViewer) -> Element {
     let wide_screen = *width.read() > properties_width + mastery_min_width;
 
     let card_class = if wide_screen {
-        // Tailwind can now detect this
         "w-[600px] min-w-[600px] flex-shrink-0"
     } else {
         "max-w-[600px] w-full flex-shrink"
