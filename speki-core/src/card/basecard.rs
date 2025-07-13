@@ -261,7 +261,7 @@ enum ValueOf {
 
 */
 
-#[derive(PartialEq, Debug, Clone, Serialize, Hash, Eq)]
+#[derive(PartialEq, Debug, Clone, Serialize, Hash, Eq, Ord, PartialOrd)]
 pub enum AttrBackType {
     InstanceOfClass(CardId),
     TimeStamp,
@@ -298,7 +298,7 @@ impl<'de> Deserialize<'de> for AttrBackType {
 /// For example, all instances of `Person` can have the quesiton "when was {} born?"
 ///
 /// Instances refer to both direct instances of the class, and instances of any sub-classes of the class.
-#[derive(PartialEq, Debug, Clone, Serialize, Deserialize, Hash, Eq)]
+#[derive(PartialEq, Debug, Clone, Serialize, Deserialize, Hash, Eq, PartialOrd, Ord)]
 pub struct Attrv2 {
     pub id: AttributeId,
     pub pattern: String,
@@ -344,8 +344,8 @@ pub enum CardType {
         parent_class: Option<CardId>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         default_question: Option<TextData>,
-        #[serde(default, skip_serializing_if = "Vec::is_empty")]
-        attrs: Vec<Attrv2>,
+        #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
+        attrs: BTreeSet<Attrv2>,
     },
 
     /// A statement is a fact which cant easily be represented with a flashcard,
@@ -698,7 +698,7 @@ impl RawCard {
         }
     }
 
-    pub fn mut_backside(&mut self) -> Option<&mut BackSide> {
+    pub fn ref_mut_backside(&mut self) -> Option<&mut BackSide> {
         match &mut self.data {
             CardType::Instance { back, .. } => back.as_mut(),
             CardType::Normal { back, .. } => Some(back),
@@ -706,7 +706,7 @@ impl RawCard {
             CardType::Attribute { back, .. } => Some(back),
             CardType::Class { back, .. } => back.as_mut(),
             CardType::Statement { .. } => None,
-            CardType::Event { .. } => todo!(),
+            CardType::Event { .. } => None,
         }
     }
 
@@ -719,6 +719,14 @@ impl RawCard {
             CardType::Class { back, .. } => back.as_ref(),
             CardType::Statement { .. } => None,
             CardType::Event { .. } => None,
+        }
+    }
+
+    fn attrs(&self) -> BTreeSet<Attrv2> {
+        if let CardType::Class { ref attrs, .. } = &self.data {
+            return attrs.clone();
+        } else {
+            Default::default()
         }
     }
 
@@ -1164,9 +1172,8 @@ impl LedgerItem for RawCard {
         Self {
             id,
             namespace: None,
-            data: CardType::Normal {
+            data: CardType::Unfinished {
                 front: TextData::from_raw("uninit"),
-                back: BackSide::Text("uninit".to_string().into()),
             },
             trivial: false,
             tags: Default::default(),
@@ -1215,9 +1222,7 @@ impl LedgerItem for RawCard {
             }
             CardAction::InsertAttr(attrv2) => {
                 if let CardType::Class { ref mut attrs, .. } = self.data {
-                    if !attrs.iter().any(|attr| attr.id == attrv2.id) {
-                        attrs.push(attrv2);
-                    }
+                    attrs.insert(attrv2);
                 } else {
                     panic!("expeted class");
                 }
@@ -1231,6 +1236,124 @@ impl LedgerItem for RawCard {
                     panic!("expeted class");
                 }
             }
+            CardAction::SetParentClass(new_parent_class) => {
+                if let CardType::Class {
+                    ref mut parent_class,
+                    ..
+                } = self.data
+                {
+                    *parent_class = new_parent_class;
+                } else {
+                    panic!("expeted class");
+                }
+            }
+            CardAction::SetInstanceClass(instance_class) => {
+                if let CardType::Instance { ref mut class, .. } = self.data {
+                    *class = instance_class;
+                } else {
+                    panic!("expected instance");
+                }
+            }
+            CardAction::AttributeType {
+                attribute,
+                back,
+                instance,
+            } => {
+                self.data = CardType::Attribute {
+                    attribute,
+                    back,
+                    instance,
+                };
+            }
+            CardAction::NormalType { front, back } => {
+                self.data = CardType::Normal { front, back };
+            }
+            CardAction::InstanceType { front, class } => {
+                let back = self.ref_backside().cloned();
+                self.data = CardType::Instance {
+                    name: front,
+                    back,
+                    class,
+                };
+            }
+            CardAction::StatementType { front } => {
+                self.data = CardType::Statement { front };
+            }
+            CardAction::ClassType { front } => {
+                self.data = CardType::Class {
+                    name: front,
+                    back: self.ref_backside().cloned(),
+                    parent_class: self.parent_class(),
+                    default_question: None,
+                    attrs: self.attrs(),
+                };
+            }
+            CardAction::UnfinishedType { front } => {
+                self.data = CardType::Unfinished { front };
+            }
+            CardAction::EventType { front, start_time } => {
+                self.data = CardType::Event {
+                    front,
+                    start_time,
+                    end_time: None,
+                    parent_event: None,
+                };
+            }
+            CardAction::SetBackside(back_side) => match &mut self.data {
+                CardType::Instance { ref mut back, .. } => {
+                    *back = back_side;
+                }
+                CardType::Normal { ref mut back, .. } => {
+                    if let Some(back_side) = back_side {
+                        *back = back_side;
+                    } else {
+                        panic!("normal cards require backside");
+                    }
+                }
+                CardType::Unfinished { .. } => {
+                    panic!("nope, unfinishde");
+                }
+                CardType::Attribute { ref mut back, .. } => {
+                    if let Some(back_side) = back_side {
+                        *back = back_side;
+                    } else {
+                        panic!("attr cards require backside");
+                    }
+                }
+                CardType::Class { ref mut back, .. } => {
+                    *back = back_side;
+                }
+                CardType::Statement { .. } => panic!("no back on statement"),
+                CardType::Event { .. } => panic!("no back on event"),
+            },
+            CardAction::InsertAttrs(new_attrs) => {
+                if let CardType::Class { ref mut attrs, .. } = self.data {
+                    *attrs = new_attrs;
+                } else {
+                    panic!("expected class");
+                }
+            }
+            CardAction::SetFront(new_front) => match &mut self.data {
+                CardType::Instance { ref mut name, .. } => {
+                    *name = new_front;
+                }
+                CardType::Normal { front, .. } => {
+                    *front = new_front;
+                }
+                CardType::Unfinished { front } => {
+                    *front = new_front;
+                }
+                CardType::Attribute { .. } => {
+                    panic!("cant set frontside on attr cards")
+                }
+                CardType::Class { name, .. } => {
+                    *name = new_front;
+                }
+                CardType::Statement { front } => *front = new_front,
+                CardType::Event { front, .. } => {
+                    *front = new_front;
+                }
+            },
         };
 
         let implicit_deps: BTreeSet<Uuid> = {

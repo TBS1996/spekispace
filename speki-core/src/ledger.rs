@@ -1,6 +1,8 @@
+use std::collections::BTreeSet;
+
 use crate::{
     audio::AudioId,
-    card::{AttributeId, Attrv2, CardId, RawCard},
+    card::{AttributeId, Attrv2, BackSide, CardId, RawCard, TextData},
     metadata::Metadata,
     recall_rate::{Review, ReviewEvent},
     CardType,
@@ -23,8 +25,39 @@ pub enum CardAction {
     SetDefaultQuestion(Option<String>),
     SetNamespace(Option<CardId>),
     InsertAttr(Attrv2),
+    InsertAttrs(BTreeSet<Attrv2>),
     RemoveAttr(AttributeId),
     SetTrivial(bool),
+    SetParentClass(Option<CardId>),
+    SetInstanceClass(CardId),
+    AttributeType {
+        attribute: AttributeId,
+        back: BackSide,
+        instance: CardId,
+    },
+    NormalType {
+        front: TextData,
+        back: BackSide,
+    },
+    InstanceType {
+        front: TextData,
+        class: CardId,
+    },
+    StatementType {
+        front: TextData,
+    },
+    ClassType {
+        front: TextData,
+    },
+    UnfinishedType {
+        front: TextData,
+    },
+    EventType {
+        front: TextData,
+        start_time: TimeStamp,
+    },
+    SetBackside(Option<BackSide>),
+    SetFront(TextData),
 }
 
 pub enum HistoryEvent {

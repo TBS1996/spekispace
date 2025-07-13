@@ -204,7 +204,7 @@ impl Card {
 
     pub fn attributes_on_class(&self) -> Option<Vec<Attrv2>> {
         if let CardType::Class { attrs, .. } = self.base.clone().data {
-            return Some(attrs);
+            return Some(attrs.into_iter().collect());
         } else {
             None
         }
