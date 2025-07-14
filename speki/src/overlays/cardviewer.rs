@@ -1055,6 +1055,7 @@ fn AttrAnswers(
                                     class: "max-h-32",
                                     DeleteButton {
                                         card_id: id,
+                                        show_deps: true,
                                         pop_ol: false,
                                         f: Some(MyClosure::new(move |_card: CardId| {
                                             let inner = class.cloned();
@@ -1469,13 +1470,16 @@ fn DeleteButton(
     pop_ol: Option<bool>,
     f: Option<MyClosure>,
     class: Option<&'static str>,
+    #[props(default = false)] show_deps: bool,
 ) -> Element {
     let card = APP.read().inner().card_provider.load(card_id);
     debug_assert!(card.is_some());
 
-    let title: Option<&'static str> = match card {
-        Some(card) => {
-            if card.dependents_ids().is_empty() {
+    let dependents = card.map(|c| c.dependents_ids());
+
+    let title: Option<&'static str> = match dependents {
+        Some(deps) => {
+            if deps.is_empty() {
                 None
             } else {
                 Some("cannot delete card with dependents")
@@ -1484,9 +1488,10 @@ fn DeleteButton(
         None => Some("missing card"),
     };
 
-    let disabled = title.is_some();
+    let has_deps = title.is_some();
     let title = title.unwrap_or_default();
     let pop_ol = pop_ol.unwrap_or(true);
+    let disabled = has_deps && !show_deps;
 
     let class = format!(
         "{} {}",
@@ -1498,18 +1503,25 @@ fn DeleteButton(
         button {
             class,
             title: "{title}",
-            disabled: disabled,
+            disabled,
             onclick: move |_| {
-                if let Err(e) = APP.read().inner().provider.cards.modify(TheLedgerEvent::new_delete(card_id)) {
-                    handle_card_event_error(e);
-                    return;
-                }
-                if let Some(f) = &f {
-                    f.call(card_id);
-                }
+                if has_deps {
+                    let set = SetExpr::union_with(vec![DynCard::Dependents(card_id)]);
+                    let props = CardSelector::new(true, Default::default()).with_set(set);
+                    OverlayEnum::CardSelector(props).append();
+                    OverlayEnum::new_notice("cannot delete card due to dependents").append();
+                } else {
+                    if let Err(e) = APP.read().inner().provider.cards.modify(TheLedgerEvent::new_delete(card_id)) {
+                        handle_card_event_error(e);
+                        return;
+                    }
+                    if let Some(f) = &f {
+                        f.call(card_id);
+                    }
 
-                if pop_ol {
-                    pop_overlay();
+                    if pop_ol {
+                        pop_overlay();
+                    }
                 }
             },
             "delete"
@@ -1575,7 +1587,7 @@ fn save_button(CardViewer: CardViewer) -> Element {
                 };
 
                 let selveste = selv.clone();
-                let mut events: Vec<CardAction> = vec![];
+                let mut actions: Vec<CardAction> = vec![];
 
                 let id = selveste.old_card.clone().map(|card|card.id()).unwrap_or_else(CardId::new_v4);
 
@@ -1602,73 +1614,71 @@ fn save_button(CardViewer: CardViewer) -> Element {
                 let old_ty = selv.old_card.clone().map(|c|c.clone_base().data);
 
                 let same_type = match &old_ty {
-                    Some(old_ty) => {
-                        mem::discriminant(old_ty) == mem::discriminant(&ty)
-                    },
+                    Some(old_ty) => mem::discriminant(old_ty) == mem::discriminant(&ty),
                     None => false,
                 };
 
                 match (ty, same_type) {
                     (CardType::Instance { name, back, class }, false) => {
-                        events.push(CardAction::InstanceType { front: name, class });
-                        events.push(CardAction::SetBackside(back));
+                        actions.push(CardAction::InstanceType { front: name, class });
+                        actions.push(CardAction::SetBackside(back));
                     }
                     (CardType::Instance { name, back, class }, true) => {
-                        events.push(CardAction::SetFront(name));
-                        events.push(CardAction::SetBackside(back));
-                        events.push(CardAction::SetInstanceClass(class));
+                        actions.push(CardAction::SetFront(name));
+                        actions.push(CardAction::SetBackside(back));
+                        actions.push(CardAction::SetInstanceClass(class));
                     },
                     (CardType::Normal { front, back }, true) => {
-                        events.push(CardAction::SetFront(front));
-                        events.push(CardAction::SetBackside(Some(back)));
+                        actions.push(CardAction::SetFront(front));
+                        actions.push(CardAction::SetBackside(Some(back)));
 
                     },
                     (CardType::Normal { front, back }, false) => {
-                        events.push(CardAction::NormalType {front, back});
+                        actions.push(CardAction::NormalType {front, back});
                     },
                     (CardType::Unfinished { front }, true) => {
-                        events.push(CardAction::SetFront(front));
+                        actions.push(CardAction::SetFront(front));
                     },
                     (CardType::Unfinished { front }, false) => {
-                        events.push(CardAction::UnfinishedType {front});
+                        actions.push(CardAction::UnfinishedType {front});
                     },
                     (CardType::Attribute { attribute, back, instance }, true) => {
-                        events.push(CardAction::AttributeType {attribute, back, instance});
+                        actions.push(CardAction::AttributeType {attribute, back, instance});
                     }
                     (CardType::Attribute { attribute, back, instance }, false) => {
-                        events.push(CardAction::AttributeType {attribute, back, instance});
+                        actions.push(CardAction::AttributeType {attribute, back, instance});
                     },
                     (CardType::Class { name, back, parent_class, default_question: _, attrs }, true) => {
-                        events.push(CardAction::SetFront(name));
-                        events.push(CardAction::SetBackside(back));
-                        events.push(CardAction::SetParentClass(parent_class));
-                        events.push(CardAction::InsertAttrs(attrs));
+                        actions.push(CardAction::SetFront(name));
+                        actions.push(CardAction::SetBackside(back));
+                        actions.push(CardAction::SetParentClass(parent_class));
+                        actions.push(CardAction::InsertAttrs(attrs));
                     },
                     (CardType::Class { name, back, parent_class, default_question: _, attrs }, false) => {
-                        events.push(CardAction::ClassType { front: name });
-                        events.push(CardAction::SetBackside(back));
-                        events.push(CardAction::SetParentClass(parent_class));
-                        events.push(CardAction::InsertAttrs(attrs));
+                        actions.push(CardAction::ClassType { front: name });
+                        actions.push(CardAction::SetBackside(back));
+                        actions.push(CardAction::SetParentClass(parent_class));
+                        actions.push(CardAction::InsertAttrs(attrs));
                     },
                     (CardType::Statement { front }, true) => {
-                        events.push(CardAction::SetFront(front));
+                        actions.push(CardAction::SetFront(front));
                     },
                     (CardType::Statement { front }, false) => {
-                        events.push(CardAction::StatementType { front });
+                        actions.push(CardAction::StatementType { front });
                     },
                     (CardType::Event {..}, _) => {
                         todo!()
                     },
                 }
 
-                events.push(CardAction::SetNamespace ( namespace));
-                events.push(CardAction::SetTrivial ( meta.trivial.cloned()));
+                actions.push(CardAction::SetNamespace ( namespace));
+                actions.push(CardAction::SetTrivial ( meta.trivial.cloned()));
 
                 for dep in deps {
-                    events.push(CardAction::AddDependency(dep));
+                    actions.push(CardAction::AddDependency(dep));
                 }
 
-                for event in events {
+                for event in actions {
                     let event = CardEvent::new_modify(id, event);
                     if let Err(e) = APP.read().inner().provider.cards.modify(event) {
                         handle_card_event_error(e);

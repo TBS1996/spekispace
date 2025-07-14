@@ -264,11 +264,11 @@ impl CardSelector {
         }
     }
 
-    pub fn with_set(self, set: SetExpr) -> Self {
-        Self {
-            collection: ExprEditor::from(set),
-            ..self
-        }
+    pub fn with_set(mut self, set: SetExpr) -> Self {
+        let editor: ExprEditor = ExprEditor::from(set);
+        self.collection.inputs.set(editor.inputs.cloned());
+        self.collection.ty.set(editor.ty.cloned());
+        self
     }
 
     pub fn with_edit_collection(self, edit_collection: bool) -> Self {
