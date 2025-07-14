@@ -1212,6 +1212,7 @@ fn RenderAttrs(card: Option<CardId>, attrs: Signal<Vec<AttrEditor>>, inherited: 
                         onclick: move |_| {
                             match card {
                                 Some(card) => {
+                                    dbg!();
                                     let event: TheLedgerEvent<RawCard> = TheLedgerEvent::new_modify(card, CardAction::RemoveAttr(id));
                                     if let Err(e) = APP.read().inner().provider.cards.modify(event) {
                                         handle_card_event_error(e);
@@ -1220,6 +1221,7 @@ fn RenderAttrs(card: Option<CardId>, attrs: Signal<Vec<AttrEditor>>, inherited: 
                                     attrs.clone().set(load_attr_editors(card));
                                 },
                                 None => {
+                                    dbg!();
                                     let mut _attrs = attrs.cloned();
                                     _attrs.retain(|a|a.id != id);
                                     attrs.clone().set(_attrs);
@@ -1417,9 +1419,9 @@ fn InputElements(
                     }
                 }
 
-                RenderAttrs { attrs, inherited: false }
+                RenderAttrs { attrs, inherited: false, card: card_id }
                 if has_inherited_attrs {
-                    RenderAttrs { attrs: inherited_attrs, inherited: true }
+                    RenderAttrs { attrs: inherited_attrs, inherited: true, card: card_id }
                 }
             },
             CardTy::Instance => rsx! {
@@ -1473,7 +1475,7 @@ fn DeleteButton(
     #[props(default = false)] show_deps: bool,
 ) -> Element {
     let card = APP.read().inner().card_provider.load(card_id);
-    debug_assert!(card.is_some());
+    //debug_assert!(card.is_some());
 
     let dependents = card.map(|c| c.dependents_ids());
 
@@ -1505,6 +1507,10 @@ fn DeleteButton(
             title: "{title}",
             disabled,
             onclick: move |_| {
+                let Some(has_deps) = APP.read().inner().card_provider.load(card_id).map(|c|!c.dependents_ids().is_empty()) else {
+                    return;
+                };
+
                 if has_deps {
                     let set = SetExpr::union_with(vec![DynCard::Dependents(card_id)]);
                     let props = CardSelector::new(true, Default::default()).with_set(set);

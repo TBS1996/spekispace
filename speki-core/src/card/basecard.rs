@@ -1229,9 +1229,11 @@ impl LedgerItem for RawCard {
             }
             CardAction::RemoveAttr(attr_id) => {
                 if let CardType::Class { ref mut attrs, .. } = self.data {
+                    dbg!(&attrs);
                     let attr_len = attrs.len();
                     attrs.retain(|attr| attr.id != attr_id);
                     assert_eq!(attr_len - 1, attrs.len());
+                    dbg!(&attrs);
                 } else {
                     panic!("expeted class");
                 }
