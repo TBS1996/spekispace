@@ -1106,6 +1106,7 @@ impl LedgerItem for RawCard {
                 BackSide::Time(_) => {}
                 BackSide::Trivial => {}
                 BackSide::Invalid => {}
+                BackSide::Bool(_) => {}
             }
         }
 
@@ -1384,6 +1385,7 @@ impl LedgerItem for RawCard {
 
 #[derive(Serialize, Ord, PartialOrd, Eq, Hash, PartialEq, Debug, Clone)]
 pub enum BackSide {
+    Bool(bool),
     Text(TextData),
     Card(CardId),
     List(Vec<CardId>),
@@ -1394,6 +1396,7 @@ pub enum BackSide {
 
 #[derive(Serialize, Deserialize, Ord, PartialOrd, Eq, Hash, PartialEq, Debug, Clone)]
 pub enum BarSide {
+    Bool(bool),
     Text(String),
     Card(CardId),
     List(Vec<CardId>),
@@ -1406,6 +1409,7 @@ impl From<BarSide> for BackSide {
     fn from(value: BarSide) -> Self {
         match value {
             BarSide::Text(val) => BackSide::Text(val.into()),
+            BarSide::Bool(val) => BackSide::Bool(val),
             BarSide::Card(val) => BackSide::Card(val),
             BarSide::List(val) => BackSide::List(val),
             BarSide::Time(val) => BackSide::Time(val),
@@ -1472,6 +1476,7 @@ impl BackSide {
 
     pub fn to_string(&self) -> String {
         match self {
+            BackSide::Bool(b) => b.to_string(),
             BackSide::Text(s) => s.to_raw(),
             BackSide::Card(id) => id.to_string(),
             BackSide::List(ids) => format!("{ids:?}"),
@@ -1496,6 +1501,7 @@ impl BackSide {
             BackSide::Time(_) => {}
             BackSide::Trivial => {}
             BackSide::Invalid => {}
+            BackSide::Bool(_) => {}
         }
 
         set

@@ -79,6 +79,7 @@ impl EvalText {
             BackSide::Time(ts) => Self::just_some_string(ts.to_string(), provider),
             BackSide::Trivial => Self::just_some_string("<trivial>".to_string(), provider),
             BackSide::Invalid => Self::just_some_string("<invalid>".to_string(), provider),
+            BackSide::Bool(b) => Self::just_some_string(b.to_string(), provider),
         }
     }
 
@@ -544,6 +545,7 @@ impl Card {
                 BackSide::Time(_) => None,
                 BackSide::Trivial => None,
                 BackSide::Invalid => None,
+                BackSide::Bool(_) => None,
             },
             None => None,
         }
