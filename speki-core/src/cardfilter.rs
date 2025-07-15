@@ -78,7 +78,7 @@ impl CardFilter {
             recall,
             rec_recall,
             stability,
-            rec_stability: _,
+            rec_stability,
             suspended,
             lapses,
         } = self.clone();
@@ -143,6 +143,27 @@ impl CardFilter {
                 }
                 MyNumOrd::Less => {
                     if recall > num {
+                        return false;
+                    }
+                }
+            }
+        }
+        if let Some(NumOp { ord, num }) = rec_stability {
+            let stability = card.min_rec_stability();
+
+            match ord {
+                MyNumOrd::Equal => {
+                    if stability != num {
+                        return false;
+                    }
+                }
+                MyNumOrd::Greater => {
+                    if stability < num {
+                        return false;
+                    }
+                }
+                MyNumOrd::Less => {
+                    if stability > num {
                         return false;
                     }
                 }

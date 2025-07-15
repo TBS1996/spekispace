@@ -516,6 +516,22 @@ impl Card {
         deps
     }
 
+    pub fn min_rec_stability(&self) -> f32 {
+        tracing::trace!("min rec recall of {}", self.id);
+        let mut min_stability: RecallRate = f32::MAX;
+
+        for card in self.recursive_dependencies() {
+            let card = self.card_provider.load(card).unwrap();
+            if card.trivial() {
+                continue;
+            } else {
+                min_stability = min_stability.min(card.maturity_days().unwrap_or_default());
+            }
+        }
+
+        min_stability
+    }
+
     pub fn min_rec_recall_rate(&self) -> RecallRate {
         tracing::trace!("min rec recall of {}", self.id);
         let mut min_recall: RecallRate = 1.0;
