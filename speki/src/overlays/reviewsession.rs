@@ -36,10 +36,12 @@ fn RecallButton(
     mut show_backside: Signal<bool>,
 ) -> Element {
     let label = recall_to_emoji(recall);
+    let title = recall.desc();
 
     rsx! {
         button {
             class: "bg-blue-500 mt-6 inline-flex items-center justify-center text-white border-0 py-4 px-6 focus:outline-none hover:bg-blue-700 rounded text-4xl leading-none font-emoji",
+            title,
             onclick: move |_| {
                 let mut card = card.clone();
                 info!("do review");
