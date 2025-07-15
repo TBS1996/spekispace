@@ -837,18 +837,7 @@ impl CardViewer {
             frnt
         };
 
-        let back = {
-            let bck = BackPut::new(raw_ty.data.backside().cloned());
-
-            let back = match raw_ty.data.backside() {
-                Some(BackSide::Time(ts)) => ts.to_string(),
-                Some(b) if b.is_text() => b.to_string(),
-                _ => String::new(),
-            };
-
-            bck.text.clone().set(back);
-            bck
-        };
+        let back = BackPut::new(raw_ty.data.backside().cloned());
 
         let editor = {
             let concept = Signal::new_in_scope(raw_ty.data.class(), ScopeId::APP);

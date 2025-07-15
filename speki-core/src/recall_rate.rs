@@ -221,14 +221,10 @@ impl LedgerItem for History {
 )]
 #[serde(rename_all = "lowercase")]
 pub enum Recall {
-    // No recall, not even when you saw the answer.
     #[default]
     None,
-    // No recall, but you remember the answer when you read it.
     Late,
-    // Struggled but you got the answer right or somewhat right.
     Some,
-    // No hesitation, perfect recall.
     Perfect,
 }
 
@@ -239,6 +235,15 @@ impl Recall {
             Recall::Late => 0.25,
             Recall::Some => 2.,
             Recall::Perfect => 3.,
+        }
+    }
+
+    pub fn desc(&self) -> &'static str {
+        match self {
+            Recall::None => "No recall even after seeing the answer",
+            Recall::Late => "No/failed recall but recognized the answer when it was revelead",
+            Recall::Some => "Correcct recall but it took some effort",
+            Recall::Perfect => "No hesitation, perfect recall",
         }
     }
 }

@@ -1450,6 +1450,10 @@ impl BackSide {
         }
     }
 
+    pub fn is_time(&self) -> bool {
+        matches!(self, Self::Time(_))
+    }
+
     pub fn is_text(&self) -> bool {
         matches!(self, Self::Text(_))
     }
@@ -1480,7 +1484,7 @@ impl BackSide {
             BackSide::Text(s) => s.to_raw(),
             BackSide::Card(id) => id.to_string(),
             BackSide::List(ids) => format!("{ids:?}"),
-            BackSide::Time(ts) => format!("{ts}"),
+            BackSide::Time(ts) => dbg!(ts.serialize()),
             BackSide::Trivial => "<trivial>".to_string(),
             BackSide::Invalid => "<invalid>".to_string(),
         }

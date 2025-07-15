@@ -131,10 +131,14 @@ impl BackPut {
 
         let text = default.to_string();
 
-        let backopt = if default.is_ref() {
-            BackOpts::Card
-        } else {
-            BackOpts::Text
+        let backopt = match default {
+            BackSide::Bool(_) => todo!(),
+            BackSide::Text(_) => BackOpts::Text,
+            BackSide::Card(_) => BackOpts::Card,
+            BackSide::List(_) => BackOpts::Text,
+            BackSide::Time(_) => BackOpts::Time,
+            BackSide::Trivial => BackOpts::Text,
+            BackSide::Invalid => BackOpts::Text,
         };
 
         Self {
