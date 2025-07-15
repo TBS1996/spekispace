@@ -83,6 +83,34 @@ impl CardFilter {
             lapses,
         } = self.clone();
 
+        if let Some(flag) = suspended {
+            if flag != card.is_suspended() {
+                return false;
+            }
+        }
+
+        if let Some(NumOp { ord, num }) = lapses {
+            let lapses = card.lapses() as f32;
+
+            match ord {
+                MyNumOrd::Equal => {
+                    if lapses != num {
+                        return false;
+                    }
+                }
+                MyNumOrd::Greater => {
+                    if lapses < num {
+                        return false;
+                    }
+                }
+                MyNumOrd::Less => {
+                    if lapses > num {
+                        return false;
+                    }
+                }
+            }
+        }
+
         if let Some(NumOp { ord, num }) = recall {
             let recall = card.recall_rate().unwrap_or_default();
 
@@ -167,34 +195,6 @@ impl CardFilter {
                         return false;
                     }
                 }
-            }
-        }
-
-        if let Some(NumOp { ord, num }) = lapses {
-            let lapses = card.lapses() as f32;
-
-            match ord {
-                MyNumOrd::Equal => {
-                    if lapses != num {
-                        return false;
-                    }
-                }
-                MyNumOrd::Greater => {
-                    if lapses < num {
-                        return false;
-                    }
-                }
-                MyNumOrd::Less => {
-                    if lapses > num {
-                        return false;
-                    }
-                }
-            }
-        }
-
-        if let Some(flag) = suspended {
-            if flag != card.is_suspended() {
-                return false;
             }
         }
 
