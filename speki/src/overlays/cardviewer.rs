@@ -1780,8 +1780,7 @@ fn save_button(CardViewer: CardViewer) -> Element {
                                     AttrAnswerEditor::TimeStamp(ts) => {
                                         if let Ok(ts) = TimeStamp::from_str(&ts.cloned()) {
                                             let back = BackSide::Time(ts.clone());
-                                            let data = CardType::Attribute { attribute: attr_id.id, back: back, instance: id };
-                                            let action = CardAction::UpsertCard(data);
+                                            let action = CardAction::AttributeType { attribute: attr_id.id, back , instance: id };
                                             let event = CardEvent::new_modify(CardId::new_v4(), action);
                                             if let Err(e) = APP.read().inner().provider.cards.modify(event) {
                                                 handle_card_event_error(e);
@@ -1791,8 +1790,7 @@ fn save_button(CardViewer: CardViewer) -> Element {
                                     },
                                     AttrAnswerEditor::Any(back_put) => {
                                         if let Some(back) = back_put.to_backside() {
-                                            let data = CardType::Attribute { attribute: attr_id.id, back: back, instance: id };
-                                            let action = CardAction::UpsertCard(data);
+                                            let action = CardAction::AttributeType { attribute: attr_id.id, back , instance: id };
                                             let event = CardEvent::new_modify(CardId::new_v4(), action);
                                             if let Err(e) = APP.read().inner().provider.cards.modify(event) {
                                                 handle_card_event_error(e);
@@ -1803,8 +1801,7 @@ fn save_button(CardViewer: CardViewer) -> Element {
                                     AttrAnswerEditor::Card { filter: _, instance_of: _, selected } => {
                                         if let Some(card) = selected.cloned() {
                                             let back = BackSide::Card(card);
-                                            let data = CardType::Attribute { attribute: attr_id.id, back: back, instance: id };
-                                            let action = CardAction::UpsertCard(data);
+                                            let action = CardAction::AttributeType { attribute: attr_id.id, back , instance: id };
                                             let event = CardEvent::new_modify(CardId::new_v4(), action);
                                             if let Err(e) = APP.read().inner().provider.cards.modify(event) {
                                                 handle_card_event_error(e);
@@ -1836,8 +1833,7 @@ fn save_button(CardViewer: CardViewer) -> Element {
                                     let prev_back = APP.read().inner().card_provider.providers.cards.load(attr_card_id).ref_backside().cloned().unwrap();
                                     if let Some(back) = back_put.to_backside() {
                                         if back != prev_back {
-                                            let data = CardType::Attribute { attribute: attr_id, back: back, instance: id };
-                                            let action = CardAction::UpsertCard(data);
+                                            let action = CardAction::AttributeType { attribute: attr_id, back , instance: id };
                                             let event = CardEvent::new_modify(attr_card_id, action);
                                             if let Err(e) = APP.read().inner().provider.cards.modify(event) {
                                                 handle_card_event_error(e);
@@ -1850,8 +1846,7 @@ fn save_button(CardViewer: CardViewer) -> Element {
                                 OldAttrAnswerEditor::Card { filter: _, selected } => {
                                     let card = selected.cloned();
                                     let back = BackSide::Card(card);
-                                    let data = CardType::Attribute { attribute: attr_id, back: back, instance: id };
-                                    let action = CardAction::UpsertCard(data);
+                                    let action = CardAction::AttributeType { attribute: attr_id, back , instance: id };
                                     let event = CardEvent::new_modify(attr_card_id, action);
                                     if let Err(e) = APP.read().inner().provider.cards.modify(event) {
                                         handle_card_event_error(e);
