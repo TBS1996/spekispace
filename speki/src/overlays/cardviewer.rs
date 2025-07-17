@@ -94,6 +94,8 @@ pub fn CardViewerRender(props: CardViewer) -> Element {
         .as_ref()
         .map(|card| card.history().to_owned());
 
+    let props_for_clear = props.clone();
+
     let properties_width = 600;
     let mastery_min_width = 200;
     let _mastery_max_width = 300;
@@ -127,6 +129,15 @@ pub fn CardViewerRender(props: CardViewer) -> Element {
                     div {
                         if let Some(card) = props.old_card.clone() {
                             DeleteButton{card_id: card.id()}
+                        } else {
+                            button {
+                                class: "{crate::styles::GRAY_BUTTON}",
+                                onclick: move |_| {
+                                    props_for_clear.full_reset();
+                                },
+                                "Clear"
+                            }
+
                         }
                     }
                 }
@@ -161,6 +172,12 @@ impl MetadataEditor {
             suspended: Signal::new_in_scope(false, ScopeId::APP),
             trivial: Signal::new_in_scope(false, ScopeId::APP),
         }
+    }
+
+    fn clear(&self) {
+        let Self { suspended, trivial } = Self::new();
+        self.suspended.clone().set(suspended.cloned());
+        self.trivial.clone().set(trivial.cloned());
     }
 }
 
@@ -939,7 +956,41 @@ impl CardViewer {
         self
     }
 
-    fn reset(&self) {
+    fn full_reset(&self) {
+        if self.old_card.is_some() {
+            debug_assert!(true);
+            pop_overlay();
+            return;
+        }
+
+        let CardEditor {
+            front,
+            namespace,
+            back,
+            default_question,
+            concept,
+            dependencies,
+            allowed_cards: _,
+            attrs,
+            inherited_attrs,
+            attr_answers,
+            fixed_concept: _,
+            metadata,
+        } = &self.editor;
+
+        front.reset();
+        namespace.clone().set(None);
+        back.reset();
+        default_question.clone().set(String::new());
+        concept.clone().set(None);
+        dependencies.clone().clear();
+        attrs.clone().clear();
+        inherited_attrs.clone().clear();
+        attr_answers.clone().clear();
+        metadata.clear();
+    }
+
+    fn light_reset(&self) {
         self.editor.front.reset();
         self.editor.back.reset();
         self.editor.dependencies.clone().write().clear();
@@ -1782,7 +1833,7 @@ fn save_button(CardViewer: CardViewer) -> Element {
                 if let Some(hook) = selveste.save_hook.clone() {
                     hook.call(inner_card.id());
                 } else {
-                    selveste.reset();
+                    selveste.light_reset();
                     pop_overlay();
                 }
 

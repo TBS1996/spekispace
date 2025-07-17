@@ -670,3 +670,25 @@ can have a class sql database column
 it would have an attribute like which table it belongs to  
 
 so when you go into table instance card it can show like which columns have this as their belonging database table
+
+# Classes with answered attribute
+
+atom class have the attribute how many protons of the given instance
+
+then chemical element is a subclass of atom, and it's defined by how many protons
+
+like, nitrogen is also a class, since there's many diff nitrogen atoms, but all of them have the same proton,
+so on the class definition of nitrogen it should be defined that there's 7 protons in all of the instances of nitrogen 
+so i need to be able to also answer parent attributes in a class not just the instances
+
+and then for isotopes, which are sub-classes of chemical element, they need to also inherit the proton number hmm 
+
+where to save these though? in the class? or have the attribute type also be able to refer to classes not just instances?
+should it ask the proton numbers of all the instances or just the class?
+
+i think it should just ask for the class
+and i think it should be in the attribute card, since the idea is each card should represent one piece of knowledge.
+
+would be easy to fetch answered attributes on classes cause of the cache system
+
+hmm.. although it does 'belong' to the class so to speak so it's a bit odd to not encode it in the class?

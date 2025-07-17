@@ -230,6 +230,12 @@ pub mod styles {
         }
     }
 
+    pub const GRAY_BUTTON: &str = "\
+mt-2 inline-flex items-center text-white \
+bg-gray-600 border-0 py-1 px-3 focus:outline-none hover:bg-gray-500 \
+disabled:bg-gray-300 disabled:cursor-not-allowed disabled:opacity-50 \
+rounded text-base md:mt-0";
+
     pub const BLACK_BUTTON: &'static str = "\
 mt-2 inline-flex items-center text-white \
 bg-gray-800 border-0 py-1 px-3 focus:outline-none hover:bg-gray-700 \
