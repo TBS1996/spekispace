@@ -196,7 +196,7 @@ impl Card {
     }
 
     pub fn reviewable(&self) -> bool {
-        self.is_finished() && !self.trivial()
+        self.is_finished() && !self.trivial() && self.back_side().is_some()
     }
 
     pub fn clone_base(&self) -> RawCard {
@@ -522,7 +522,7 @@ impl Card {
 
         for card in self.recursive_dependencies() {
             let card = self.card_provider.load(card).unwrap();
-            if card.trivial() {
+            if !card.reviewable() {
                 continue;
             } else {
                 min_stability = min_stability.min(card.maturity_days().unwrap_or_default());
@@ -538,7 +538,7 @@ impl Card {
 
         for card in self.recursive_dependencies() {
             let card = self.card_provider.load(card).unwrap();
-            if card.trivial() {
+            if !card.reviewable() {
                 continue;
             } else {
                 min_recall = min_recall.min(card.recall_rate().unwrap_or_default());

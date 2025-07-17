@@ -7,7 +7,6 @@ use speki_core::{
     recall_rate::Recall,
     Card, CardRefType,
 };
-use tracing::info;
 
 use crate::{overlays::OverlayEnum, APP};
 
