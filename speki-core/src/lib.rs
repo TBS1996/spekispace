@@ -193,59 +193,6 @@ impl App {
         ids
     }
 
-    pub fn add_instance(
-        &self,
-        front: String,
-        back: Option<impl Into<BackSide>>,
-        class: CardId,
-    ) -> CardId {
-        let back = back.map(|back| back.into());
-        let data = CardType::Instance {
-            name: TextData::from_raw(&front),
-            back,
-            class,
-        };
-        let id = CardId::new_v4();
-        let event = CardAction::UpsertCard(data);
-        let event = CardEvent::new_modify(id, event);
-
-        self.provider.cards.modify(event).unwrap();
-        id
-    }
-
-    pub async fn add_card_with_id(&self, front: String, back: impl Into<BackSide>, id: CardId) {
-        let back = back.into();
-        let data = CardType::Normal {
-            front: TextData::from_raw(&front),
-            back,
-        };
-        let event = CardEvent::new_modify(id, CardAction::UpsertCard(data));
-        self.provider.cards.modify(event).unwrap();
-    }
-
-    pub fn add_card(&self, front: String, back: impl Into<BackSide>) -> CardId {
-        let back = back.into();
-        let data = CardType::Normal {
-            front: TextData::from_raw(&front),
-            back,
-        };
-
-        let id = CardId::new_v4();
-        let event = CardEvent::new_modify(id, CardAction::UpsertCard(data));
-        self.provider.cards.modify(event).unwrap();
-        id
-    }
-
-    pub async fn add_unfinished(&self, front: String) -> CardId {
-        let data = CardType::Unfinished {
-            front: TextData::from_raw(&front),
-        };
-        let id = CardId::new_v4();
-        let event = CardEvent::new_modify(id, CardAction::UpsertCard(data));
-        self.provider.cards.modify(event).unwrap();
-        id
-    }
-
     pub fn load_class_cards(&self) -> Vec<Arc<Card>> {
         self.load_all_cards()
             .into_iter()

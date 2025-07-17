@@ -3,7 +3,6 @@ pub mod cardviewer;
 pub mod notice;
 pub mod reviewsession;
 pub mod textinput;
-pub mod uploader;
 
 use crate::{
     append_overlay,

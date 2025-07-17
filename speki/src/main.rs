@@ -9,11 +9,11 @@ use dioxus::prelude::*;
 use dioxus_logger::tracing::{info, Level};
 #[cfg(not(feature = "desktop"))]
 use firebase::AuthUser;
-use pages::{ImportState, ReviewPage};
+use pages::ReviewPage;
 
 use crate::{
     overlays::OverlayEnum,
-    pages::{Add, Browse, Import, Review},
+    pages::{Add, Browse, Review},
     utils::App,
 };
 
@@ -48,7 +48,6 @@ fn main() {
 
 #[component]
 pub fn TheApp() -> Element {
-    use_context_provider(ImportState::new);
     use_context_provider(ReviewPage::new);
 
     rsx! {
@@ -93,7 +92,6 @@ impl Overlays {
             Route::Review {} => self.review.0.clone(),
             Route::Add {} => self.add_cards.0.clone(),
             Route::Browse {} => self.browse.0.clone(),
-            _ => todo!(),
         }
     }
 
@@ -117,7 +115,6 @@ impl Overlays {
                 self.browse.1.pop();
                 self.browse.1.extend(new_overlay);
             }
-            _ => todo!(),
         }
     }
 
@@ -138,7 +135,6 @@ impl Overlays {
                 self.browse.0.set(Some(new_overlay.clone()));
                 self.browse.1.push(new_overlay);
             }
-            _ => todo!(),
         }
     }
 
@@ -161,7 +157,6 @@ impl Overlays {
                 let new = self.browse.1.last().cloned();
                 self.browse.0.set(new);
             }
-            _ => todo!(),
         }
     }
 }
@@ -194,8 +189,6 @@ pub enum Route {
     Add {},
     #[route("/browse")]
     Browse {},
-    #[route("/import")]
-    Import {},
 }
 
 impl Route {
@@ -204,7 +197,6 @@ impl Route {
             Route::Review {} => "review",
             Route::Add {} => "add cards",
             Route::Browse {} => "browse",
-            Route::Import {} => "import",
         }
     }
 }

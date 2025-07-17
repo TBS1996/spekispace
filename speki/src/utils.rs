@@ -50,20 +50,6 @@ impl App {
         self.try_load_card(id)
             .expect(&format!("unable to load card with id: {id}"))
     }
-
-    pub fn new_instance(&self, front: String, back: Option<String>, class: CardId) -> Arc<Card> {
-        info!("new simple");
-        let id = self.0.add_instance(front, back, class);
-        let card = Arc::new(self.0.load_card(id).unwrap());
-        card
-    }
-
-    pub fn new_simple(&self, front: String, back: String) -> Arc<Card> {
-        info!("new simple");
-        let id = self.0.add_card(front, back);
-        let card = Arc::new(self.0.load_card(id).unwrap());
-        card
-    }
 }
 
 impl Debug for App {
