@@ -48,7 +48,6 @@ fn CardProperties(viewer: CardViewer) -> Element {
         InputElements {
             front: viewer.editor.front.clone(),
             back: viewer.editor.back.clone(),
-            default_question: viewer.editor.default_question.clone(),
             concept: viewer.editor.concept.clone(),
             ty: ty.cloned(),
             card_id,
@@ -356,7 +355,6 @@ pub struct CardEditor {
     pub front: FrontPut,
     namespace: Signal<Option<CardId>>,
     back: BackPut,
-    default_question: Signal<String>,
     concept: Signal<Option<CardId>>,
     dependencies: Signal<Vec<CardId>>,
     allowed_cards: Vec<CardTy>,
@@ -373,7 +371,6 @@ impl CardEditor {
             front,
             namespace,
             back,
-            default_question: _,
             concept,
             dependencies,
             allowed_cards: _,
@@ -525,14 +522,7 @@ impl CardEditor {
                     back,
                     parent_class,
                     attrs,
-                    default_question: {
-                        let s = self.default_question.cloned();
-                        if s.is_empty() {
-                            None
-                        } else {
-                            Some(TextData::from_raw(&s))
-                        }
-                    },
+                    default_question: None,
                 }
             }
             CardTy::Instance => {
@@ -940,15 +930,6 @@ impl CardViewer {
                 ScopeId(3),
             );
 
-            let default_question = if let CardType::Class {
-                default_question, ..
-            } = card.clone_base().data
-            {
-                default_question.unwrap_or_default().to_raw()
-            } else {
-                String::new()
-            };
-
             let metadata = MetadataEditor::from(
                 APP.read()
                     .inner()
@@ -968,7 +949,6 @@ impl CardViewer {
                 concept,
                 dependencies,
                 allowed_cards: vec![],
-                default_question: Signal::new_in_scope(default_question, ScopeId::APP),
                 fixed_concept: false,
                 metadata,
             }
@@ -999,7 +979,6 @@ impl CardViewer {
                 concept,
                 dependencies,
                 allowed_cards: vec![],
-                default_question: Signal::new_in_scope(String::new(), ScopeId::APP),
                 attrs: Signal::new_in_scope(Default::default(), ScopeId::APP),
                 inherited_attrs: Signal::new_in_scope(Default::default(), ScopeId::APP),
                 fixed_concept: false,
@@ -1030,7 +1009,6 @@ impl CardViewer {
             front,
             namespace,
             back,
-            default_question,
             concept,
             dependencies,
             allowed_cards: _,
@@ -1044,7 +1022,6 @@ impl CardViewer {
         front.reset();
         namespace.clone().set(None);
         back.reset();
-        default_question.clone().set(String::new());
         concept.clone().set(None);
         dependencies.clone().clear();
         attrs.clone().clear();
@@ -1412,7 +1389,6 @@ fn RenderAttrs(card: Option<CardId>, attrs: Signal<Vec<AttrEditor>>, inherited: 
 fn InputElements(
     front: FrontPut,
     back: BackPut,
-    default_question: Signal<String>,
     concept: Signal<Option<CardId>>,
     ty: CardTy,
     card_id: Option<CardId>,
