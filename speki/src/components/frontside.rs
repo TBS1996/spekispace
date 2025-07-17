@@ -58,6 +58,12 @@ pub struct FrontPut {
     pub text: Signal<String>,
 }
 
+impl FrontPut {
+    pub fn is_empty(&self) -> bool {
+        self.text.read().is_empty()
+    }
+}
+
 #[component]
 pub fn FrontPutRender(dropdown: DropDownMenu<CardTy>, mut text: Signal<String>) -> Element {
     use crate::components::set_card_link;

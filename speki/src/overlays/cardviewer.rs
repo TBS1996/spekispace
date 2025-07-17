@@ -95,6 +95,7 @@ pub fn CardViewerRender(props: CardViewer) -> Element {
         .map(|card| card.history().to_owned());
 
     let props_for_clear = props.clone();
+    let clear_enabled = props.old_card.is_none() && props.editor.has_data();
 
     let properties_width = 600;
     let mastery_min_width = 200;
@@ -132,6 +133,7 @@ pub fn CardViewerRender(props: CardViewer) -> Element {
                         } else {
                             button {
                                 class: "{crate::styles::GRAY_BUTTON}",
+                                disabled: !clear_enabled,
                                 onclick: move |_| {
                                     props_for_clear.full_reset();
                                 },
@@ -366,6 +368,67 @@ pub struct CardEditor {
 }
 
 impl CardEditor {
+    fn has_data(&self) -> bool {
+        let Self {
+            front,
+            namespace,
+            back,
+            default_question: _,
+            concept,
+            dependencies,
+            allowed_cards: _,
+            attrs,
+            inherited_attrs,
+            attr_answers,
+            fixed_concept: _,
+            metadata,
+        } = self;
+
+        if !front.is_empty() {
+            return true;
+        }
+
+        if !back.text.read().is_empty() || back.ref_card.card.read().is_some() {
+            return true;
+        }
+
+        if namespace.read().is_some() {
+            return true;
+        }
+
+        if concept.read().is_some() {
+            return true;
+        }
+
+        if !dependencies.read().is_empty() {
+            return true;
+        }
+
+        if !attrs.read().is_empty() {
+            return true;
+        }
+
+        if !inherited_attrs.read().is_empty() {
+            return true;
+        }
+
+        if !attr_answers.read().is_empty() {
+            return true;
+        }
+
+        let MetadataEditor { trivial, suspended } = metadata;
+
+        if trivial.cloned() {
+            return true;
+        }
+
+        if suspended.cloned() {
+            return true;
+        }
+
+        false
+    }
+
     fn into_cardrep(self) -> Result<CardRep, String> {
         let backside = self.back.clone();
         let frontside = self.front.clone();
