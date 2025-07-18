@@ -2,15 +2,13 @@
 
 # AI stuff?
 
-
 like a button to auto-answer a question. Can feed the AI a lot of contextual information due to the way speki is set up.
 
 for an instance we can simply click like generate all properties lol.
 
 can we make the AI tell us if it's not sure though?
 
-also, might be tricky to make it answer with link cards? 
-
+also, might be tricky to make it answer with link cards?
 
 # OWL logic
 
@@ -20,31 +18,27 @@ like whether membership in one class exclude membership in another class?
 
 also it mentioned that theres two kinda properties, one which assign an o
 
-
->Properties in OWL 2 are further subdivided. Object properties relate objects to objects (like a person to their spouse), while datatype properties assign data values to objects (like an age to a person). Annotation properties are used to encode information about (parts of) the ontology itself (like the author and creation date of an axiom) instead of the domain of interest. 
+> Properties in OWL 2 are further subdivided. Object properties relate objects to objects (like a person to their spouse), while datatype properties assign data values to objects (like an age to a person). Annotation properties are used to encode information about (parts of) the ontology itself (like the author and creation date of an axiom) instead of the domain of interest.
 
 hmm, some properties necessarily go both ways while others not?
 like mary's spouse is john, means that john's spouse is mary
 
->he following example states that the class Mother consists of exactly those objects which are instances of both Woman and Parent:
+> he following example states that the class Mother consists of exactly those objects which are instances of both Woman and Parent:
 > EquivalentClasses(
->   :Mother 
->   ObjectIntersectionOf( :Woman :Parent )
-> ) 
-
-
->The following statement indicates that every Grandfather is both a man and a parent (whereas the converse is not necessarily true):
-> SubClassOf( 
->   :Grandfather 
->   ObjectIntersectionOf( :Man :Parent )
+> :Mother
+> ObjectIntersectionOf( :Woman :Parent )
 > )
 
-
->EquivalentClasses(
->   :Parent 
->   ObjectSomeValuesFrom( :hasChild :Person )
+> The following statement indicates that every Grandfather is both a man and a parent (whereas the converse is not necessarily true):
+> SubClassOf(
+> :Grandfather
+> ObjectIntersectionOf( :Man :Parent )
 > )
 
+> EquivalentClasses(
+> :Parent
+> ObjectSomeValuesFrom( :hasChild :Person )
+> )
 
 # attributes
 
@@ -66,7 +60,7 @@ like i can have a generic class even programming object/class
 
 then a constraint can be which language, and which repo
 
-say an attribute of smth requires it to be a rust object in gandalf. then we can specify the generics in the constraints. 
+say an attribute of smth requires it to be a rust object in gandalf. then we can specify the generics in the constraints.
 
 can do fancy things with timestamps too, like father of attribute on person can be constrainde to be male born after current person born
 
@@ -76,8 +70,7 @@ the main diff in my mind is that constrained ones don't have like new properties
 
 the thing with constrained ones is they aren't named so to speak. so that makes it harder to refer to them in a way
 
-hmm smth with attributes i mean they're used for generating questions but here it's more 
-
+hmm smth with attributes i mean they're used for generating questions but here it's more
 
 # reverse cards
 
@@ -100,15 +93,13 @@ but in speki, each piece of knowledge is supposed to be just 1 card. so that you
 but for language, if you know gato is cat, you might still struggle to remember that cat -> gato. so you still wanna learn this.
 or maybe if you learn two concepts that are related and often confused for each other you might want to have an additional card specifically asking the difference between them, even though you have a card each for the two concepts. this new card also woulnd't carry any new information strictly.
 
-so i propose, a kind of card, like a tag on cards, that say this card doesn't bring new knowledge. so in the cat example, the "true" card representing the gato->cat knwoledge owuld be the one asking for spanish word for gato. then you can make that reverse card thing which asks what the spanish word for gato means. 
+so i propose, a kind of card, like a tag on cards, that say this card doesn't bring new knowledge. so in the cat example, the "true" card representing the gato->cat knwoledge owuld be the one asking for spanish word for gato. then you can make that reverse card thing which asks what the spanish word for gato means.
 
-i believe a constraint should be there really shouldn't be any new information provided by this card. 
+i believe a constraint should be there really shouldn't be any new information provided by this card.
 so maybe, it won't allow traditional dependencies but rather it should list all the cards that it's testing on.
 
-so maybe instead of a boolean it should be a list of the cards its testing. usually just one like in the gato example. 
-but say you have a card which is like "what is the difference between the authentication server and the resource server in oauth. the difference should be known by the two cards authentiication and reosurce srever. so it doesnt bring new knowledge. 
-
-
+so maybe instead of a boolean it should be a list of the cards its testing. usually just one like in the gato example.
+but say you have a card which is like "what is the difference between the authentication server and the resource server in oauth. the difference should be known by the two cards authentiication and reosurce srever. so it doesnt bring new knowledge.
 
 i have a class called gandalf rust module
 then an instance is called "shutdown"
@@ -120,22 +111,19 @@ to memorize better you might wanna create an opposite card which is like asking 
 
 can maybe have a button that auto-fills the following
 
-
 Q: which gandalf rust module: responsible for shutting down gandalf when signal comes
 A: link->shutdown
 
 user can edit that ofc it's just plaintext but yeah
 
-anyway, an important constraint, if a card is tagged like this that it doesnt contain new knowledge, it can then not be used by other cards as a dependency, *unless* that card also is tagged as reversed. 
-
+anyway, an important constraint, if a card is tagged like this that it doesnt contain new knowledge, it can then not be used by other cards as a dependency, _unless_ that card also is tagged as reversed.
 
 # review sort
 
 like the algorithm use to determine the review priority. so for example recall rate, min recall etc..
 it should return something like an Option<f32>, meaning, whether it should be reviewed at all, and if it should, its priority
 
-
-# review 
+# review
 
 reviewing will be done by choosing two items
 
@@ -151,7 +139,6 @@ hmm maybe we should allow metadata stuff like suspended since we can tie it to t
 
 should move into using ML for determining recall rate, can just feed a lot of the reviews into a model lol
 
-
 # priority
 
 to figure out which cards have higher/lower priority:
@@ -161,7 +148,6 @@ figure out automatically what makes certain cards more important than others bas
 
 like some kinda smart algorithm that figures out commonalities by why certain cards more important than other cards.
 based on this, it can estimtae which cards more important than others based on which dependencies/dependents they have
-
 
 hmm i guess if A depends on B, and B depends on C, then by definition, C is _at least_ more important than A though.
 that could be another constraint.
@@ -200,9 +186,7 @@ if user ranks A higher than B, B higher than C, and C higher than A? in that cas
 maybe then ask for 3 at a time? like rank A, B, and C. can i resolve a chain larger than 3 without asking for more than 3 at a time? this might not represent an invalid
 choice by the user if some time have passed and the priorities simply have changed.
 
-
 conflict can also occur if user ranks A more important than B, even though A depends on B. in that case it's a user error, since by definition it's more important to know the dependencies first.
-
 
 ok waitt so lets see
 
@@ -232,10 +216,10 @@ then some normalization stuff like ensuring the constraints wrt sum of dependent
 
 actually im a bit unsure how to proceed here.
 
-hmm maybe i can insert every card in that queue, like if an item haven't been compared then they'll all be put in the middle. 
-or wait no not straight up in the middle but in the middle of constraints, like an item might due to dependency cant be in middle but have to be between M..N then put it in the middle between M and N. 
+hmm maybe i can insert every card in that queue, like if an item haven't been compared then they'll all be put in the middle.
+or wait no not straight up in the middle but in the middle of constraints, like an item might due to dependency cant be in middle but have to be between M..N then put it in the middle between M and N.
 it could be a list of buckets in a way, like where in each bucket theres no comparison thing that imply one is greater than the other
-then use the ml inference to give a value to rank each item in each bucket with each other or smth 
+then use the ml inference to give a value to rank each item in each bucket with each other or smth
 
 max(bucket[1]) < min(bucket[2]) is a constraint though
 
@@ -248,29 +232,25 @@ wait no lol, cause the bucket can be between two singletons that arent next to e
 
 maybe can integrate smart watch data into the app so users can see how well their memory affected by things like sleep recovery exercise
 
-
 # extension vs intension classes
 
 extension classes can have instances where the instance itself is also a class. is the same also true for intension classes?
 
 on whether the answer on an instances should be which class it belongs to or something about its property, is whether it's intensional or extension class matter here?
 
-
 # sorter
 
-
-like an item for sorting cards. takes in a card as an input, returns a float value you can use to sort with. mainly used for review but can use the same concept in browse page, either explicitly by selecting a sorter or implicitly when you click one of the columns. 
+like an item for sorting cards. takes in a card as an input, returns a float value you can use to sort with. mainly used for review but can use the same concept in browse page, either explicitly by selecting a sorter or implicitly when you click one of the columns.
 
 so a review session basically takes in 3 arguments.
 
 the collection of items, based on static data saved in the RawCard type.
 user data, which is basically reviews + metadata
-and the sorter, which decides the order you see the items in 
+and the sorter, which decides the order you see the items in
 
 so the sorter should be like a method i guess on the card which takes in an enum which will return a numeric value. example fields of enum: lastmodified, recall_rate, dependenc_qty...
 
 hmm in a way this seems like a superset of both the static and user data things.. i should explore that. maybe those can just wrap this thing? maybe the enum can be on the top level two enum fields, one for static and one for user data.
-
 
 # github sync
 
@@ -291,8 +271,7 @@ integrity is kinda crucial, hard to ensure integrity when all cards depend on ea
 i should write out a list of invariants basically
 it's too expensive to run proper healthcheck all the time
 maybe i should write a separate script to run the healthcheck? or maybe not
-not sure how i can reasonably integrate more with type system. for example i could re-introduce the types of instances vs classes as diff types but i think it's more annoying than not. 
-
+not sure how i can reasonably integrate more with type system. for example i could re-introduce the types of instances vs classes as diff types but i think it's more annoying than not.
 
 # relational properties
 
@@ -315,72 +294,69 @@ so let's see...
 we have card type relation
 
 struct Object {
-    name: String
-    id: Uuid,
+name: String
+id: Uuid,
 }
 
 struct ObjectClass {
-    name: String,
-    id: ObjectId,
-    /// so like if we want to ensure that this object is of a certain subclass
-    /// like if the name of object is "Father", the class will be "Male"
-    class: Option<CardId>, 
+name: String,
+id: ObjectId,
+/// so like if we want to ensure that this object is of a certain subclass
+/// like if the name of object is "Father", the class will be "Male"
+class: Option<CardId>,
 
 }
 
 struct RelationshipClass{
-    name: String
-    id: RelID,
-    objects: Vec<ObjectClass>,
+name: String
+id: RelID,
+objects: Vec<ObjectClass>,
 }
 
 struct RelationshipInstance {
-    relationship: RelId,
-    objects: VeC<Object>,
+relationship: RelId,
+objects: VeC<Object>,
 
 }
 
 struct ObjectInstance {
-    card: CardId,
-    object_class: ObjectId,
+card: CardId,
+object_class: ObjectId,
 }
-
 
 so for example..
 
-
 let father = ObjectClass {
-    name: "father",
-    class: Some({male})
-    id: Uuid::new_v4(),
+name: "father",
+class: Some({male})
+id: Uuid::new_v4(),
 }
 
 let daughter = ObjectClass {
-    name: "daughter",
-    class:  Some({female})
-    id: Uuid::new_v4(),
+name: "daughter",
+class: Some({female})
+id: Uuid::new_v4(),
 }
 
-
 let rel_class = RelationshipClass {
-    name: "parent-daughter",
-    id: Uuid::new_v4(),
-    objects: vec![father, daughter],
+name: "parent-daughter",
+id: Uuid::new_v4(),
+objects: vec![father, daughter],
 }
 
 let father_instance = ObjectInstance {
-    card: {id of father instance},
-    object_class: father.id,
+card: {id of father instance},
+object_class: father.id,
 }
 
 let daughter_instance = ObjectInstance {
-    card: {id of daughter instance},
-    object_class: daughter.id,
+card: {id of daughter instance},
+object_class: daughter.id,
 }
 
 let relationship = RelationshipInstance {
-    relationship: rel_class.id,
-    objects: vec![fahter_instance, daughter_instance],
+relationship: rel_class.id,
+objects: vec![fahter_instance, daughter_instance],
 }
 
 ok so, here we have a kind of relationship class card, for any given father-daughter relationship
@@ -390,10 +366,10 @@ we should then be able to, on a given instance of either male or female, refer t
 that instance belongs to, which can in this instance be known automatically
 
 or yeah, i guess, we go to a male or female, then we can click like add father-daughter relationship, and it'll take us to a relationship instance card
-in this case, if we go to male and click it, it can pre-fill that the "father" is the male, same if you went from female it'll guess that the card you came 
+in this case, if we go to male and click it, it can pre-fill that the "father" is the male, same if you went from female it'll guess that the card you came
 from is the daughter (due to class constraint). you then obviously have to select the other generic, in order to be able to save the relationship instance
 
-this property will then be referenced on both the parent and daughter attribute set. 
+this property will then be referenced on both the parent and daughter attribute set.
 
 the relationship class should specify how the question should be. like maybe just one question, like 'how is the familial relatoinship between {father} and {daughter}. maybe generate more cards too.
 
@@ -407,7 +383,7 @@ also, you can think of it as a knowledge fact by itself, like you should underes
 # property-dependencies
 
 so sometimes when you depend on some instance, it might not be enough to just know the instance itself but you should know a certain amount of the properties.
-maybe make it easier to, when you add an instance as a dependency, also select which attributes of it are also required. like on the dependency list it can just say smth like 'albert einstein (+4)' where the +4 mean you 
+maybe make it easier to, when you add an instance as a dependency, also select which attributes of it are also required. like on the dependency list it can just say smth like 'albert einstein (+4)' where the +4 mean you
 selected 4 attributes of him and you can just hover your mouse over to see them.
 
 # properties
@@ -419,11 +395,11 @@ but a card that's like, whats churchill favorite author and if it's shakespeare 
 
 could be used to determine which cards should be reviewed first to understand something. like if A has a dependency on B, you need to learn B first, but maybe you could also learn all the properties of B, even tho not strictly necessary. hmm... or i guess A should depend on the correct properties of A but i still feel it's better to know all the properties yaknow?
 
-also would make it easier to learn about a given subject, like if you do wanna learn about shakespeaere, first it'll teach you to learn the depencies (here just "male" i guess), then you'll learn the concept itself of shakespeare which is just a person (dumb example lol), and then it can start drilling you on its properties, so all the dependents that are considered properties. 
+also would make it easier to learn about a given subject, like if you do wanna learn about shakespeaere, first it'll teach you to learn the depencies (here just "male" i guess), then you'll learn the concept itself of shakespeare which is just a person (dumb example lol), and then it can start drilling you on its properties, so all the dependents that are considered properties.
 
 and it can just skip all the references to it cause that's not important, or at least put that last lol.
 
-can all cards have properties of itself? i guess instances can, classes can too right? can properties have properties? i dont think so.. 
+can all cards have properties of itself? i guess instances can, classes can too right? can properties have properties? i dont think so..
 
 attributes would automatically be considered properties tho but i guess we can't fit everything into the attributes thing. or maybe we can rename attributes to properties and not only have the auto-generated ones be that?
 
@@ -431,8 +407,8 @@ should propertyness be defined in the card itself or in the dependency?
 
 maybe extra properties should simply be that in the instancee on the list of the derived properties you can also add custom ones? So that also means when you edit these properties you do so within the big instane class basically.
 
-maybe the properties should be sorted by how essential they are to understanding this instance? so while they may not depend on each other, it'd still make sense to prioritize some over the other. 
-that could also be used for that priorities thing. 
+maybe the properties should be sorted by how essential they are to understanding this instance? so while they may not depend on each other, it'd still make sense to prioritize some over the other.
+that could also be used for that priorities thing.
 
 # contextual unfinished cards
 
@@ -447,12 +423,9 @@ so, some properties should be unlocked by other properties, yaknow?
 
 like, on human, cause of death only unlocked if is_dead == true
 
-
 # other sync options?
 
-
 dropbox? google drive?
-
 
 # ledgerstuff
 
@@ -476,10 +449,9 @@ like if you have class "function", you can say that there's also a class "functi
 hmm
 so function argument is a a class by itself. and then you can say each instance of "function" generate a new sub-class of "function argument" which would be like "function argument for {class instance}".
 
-
 hmm, how about like, invocation of terraform resources
 you could say there's a class of all terraform resources
-then a class of all invocations of a resource? 
+then a class of all invocations of a resource?
 or a class of all invocations of a certain type of terraform resource?
 or a class of all invocations of a certain type of tf resource within a certain repository?
 
@@ -492,9 +464,8 @@ like, we have a class
 then we can have a template to create sub-classes
 like, class tf invocation
 then types is like, resource type, repo, ...
-it can create a subclass for each combination? uh no that's ugly. 
-maybe just have various sub-classes and have a way to make an instnce 
-
+it can create a subclass for each combination? uh no that's ugly.
+maybe just have various sub-classes and have a way to make an instnce
 
 # SavedItem wrapper
 
@@ -510,7 +481,7 @@ for example, we can internally save the hash of the entire state, and have some 
 when we read from the card, we can check if any of the card's dependencies are on that list
 if any of the card's dependencies are on the list, we can then reload the card. Although, unfortunately this would require global state.
 
-maybe that's fine tho, if we roll with having global state anyway like a reference to ledger inside the SavedItem thing anyway, then we can do things like, when calling dependencies or whatever instead of 
+maybe that's fine tho, if we roll with having global state anyway like a reference to ledger inside the SavedItem thing anyway, then we can do things like, when calling dependencies or whatever instead of
 returning IDs we can return the actual other SavedItem's.
 
 and maybe instead of it checking to see if it's gotten invalid it can be more push-based so when we update the Ledger it can send a signal to invalidate all dependents of a card.
@@ -518,20 +489,19 @@ maybe just a flag inside the SavedItem that ledger will trigger, so that we can 
 
 proper use of Arc so that various containers that keep SavedItem won't keep any copies.
 
-maybe also have an uninit state within SavedItem so at first it might just keep the ID until deref is getting called. 
+maybe also have an uninit state within SavedItem so at first it might just keep the ID until deref is getting called.
 
 could try to figure out if a change in a card updates any dependencies or not but that's probably too complicated
 
 # multiple aliases for same concept?
 
-so sometimes, a concept has multiple names to it. not sure how to encode that properly. 
-maybe just on the card have multiple "front sides" or smth.  then i should probably label the frontsides differently.
-
+so sometimes, a concept has multiple names to it. not sure how to encode that properly.
+maybe just on the card have multiple "front sides" or smth. then i should probably label the frontsides differently.
 
 # Store recursive dependents/dependencies in tree structure kinda
 
 maybe a way to quickly store like the dag would be that each item hsa a folder, with a textfile like 'item' or whatever
-and then a bunch of symlinks to its dependencies 
+and then a bunch of symlinks to its dependencies
 
 so you can just like do recursively walk the tree down to get all the items
 ehh fast but, shitty space complexity ig
@@ -539,7 +509,7 @@ ehh fast but, shitty space complexity ig
 # Fail on dependnecies during review
 
 if you're reviewing something and you realize it has a dependency that you had forgotten about, you should be able to click the dependency (while holding a butotn or something),
-and it'll give that dependency a negative review. 
+and it'll give that dependency a negative review.
 
 also when checking recall rate of a card, i guess it'd make sense it'll also look through all its dependents and add the successful ones there too?
 just the succesful ones though, i mean, if you succesfully recall a card it makes sense you also recalled the dependencies implicitly, but if you didn't recall it, you may still know the dependencies
@@ -547,11 +517,9 @@ just the succesful ones though, i mean, if you succesfully recall a card it make
 hmm maybe it can figure out if the dependencies are correct based on whether you're able to review a card based on wehther you could review its dependencies.
 like if you fail a dependency when you have correctly recalled a dependent then something's up.
 
-
 # Whoop lol
 
 maybe whoop/fitness tracker integration so it can use things like your sleep data to see how likely you are to know something and how much better the memory gets.
-
 
 # Subclass vs subset?
 
@@ -559,10 +527,9 @@ maybe have a subset of istances be differend than a subclass?
 i mean a subclass implies the istances f this class has more strict property requirements than the parent class
 like, the class 'male' requires everything presn do but also XY chromosomes
 
-but subset is more like, in relation to, idk. like rust functions in the gandalf codebase. theyre still just rust functions. 
+but subset is more like, in relation to, idk. like rust functions in the gandalf codebase. theyre still just rust functions.
 
-or maybe im not thinking clearly here.. 
-
+or maybe im not thinking clearly here..
 
 # Lazy update
 
@@ -573,23 +540,22 @@ it'll keep a cache of all the cards you've loaded into memory
 then whenever there's a new event run
 it'll remove all the dependencies of the card that is changed
 
-
 # db overhaul
 
-screw the snapshot thing 
+screw the snapshot thing
 
 can still keep ledger though but should modify in-place, will make life easier.
 can also keep a hash of all the content though just for soundness, like so we have a ledger->hash map.
 
-each item have its own directory 
+each item have its own directory
 
-like 
+like
 
 {key_id}/
 item (file with actual contents)
 then a list of dependent stuff
 either, a textfile for each dependent type that has a list of key_ids
-or a folder with hardlinks to the items 
+or a folder with hardlinks to the items
 
 this will more tightly couple the caching with the store though but i think that's fine, maybe even preferable
 
@@ -598,7 +564,7 @@ just have a current_state_hash file, which contains the hash of the ledger and t
 so when in the program you check the ledger hash and ensure it's the same as in that file, if not, nuke the state and rebuild everything
 
 i'd say put dependencies also in textfile, one textfile per dep type
-then it's a nice symmetry to cleanly mirror the dependent thing 
+then it's a nice symmetry to cleanly mirror the dependent thing
 
 like say a dependency type is called instance
 
@@ -612,7 +578,7 @@ B has
 
 dependent-instance -> A
 
-or maybe two folders within one is called dependencies and the other dependents and within that keep files with just the name of the dependency/dependent 
+or maybe two folders within one is called dependencies and the other dependents and within that keep files with just the name of the dependency/dependent
 
 could also make the dependency textfiles the source of truth, so instead of them being derived from item.
 so like if i wanna add a dependency, in my program i'd have a wrapper around my item that holds the values from these dependency textfiles basically
@@ -635,15 +601,14 @@ then we can use this to search for all dependents/dependencies of an item
 which allows us to store dependents like root/dependents/reftype/key
 and when fetching all deps of a key you can look them up all in parallel
 
-
 # integrate main graph
 
-so maybe a cardevent should be to update the remote to a certain hash, like, it'd contain the hash of the new upstream version, then we'll do git checkout {hash} on a git repo for the main graph, it'll then as usual try to do the various healthchecks to see if you can successfully upgrade, otherwise your own cards may conflict with the new upstream version. if it fails it'll tell you in the normal way what you need to do to succeed and it wont add that event to your ledger entry.  
+so maybe a cardevent should be to update the remote to a certain hash, like, it'd contain the hash of the new upstream version, then we'll do git checkout {hash} on a git repo for the main graph, it'll then as usual try to do the various healthchecks to see if you can successfully upgrade, otherwise your own cards may conflict with the new upstream version. if it fails it'll tell you in the normal way what you need to do to succeed and it wont add that event to your ledger entry.
 
 failing will mean we go back to previous hash that we know works with your cards
 
 but how to deal with having two diff states?
-so the upstream one can have my cards as dependents, i can have its cards as dependencies, but not vice versa. 
+so the upstream one can have my cards as dependents, i can have its cards as dependencies, but not vice versa.
 
 i can still simply hardlink between them ofc.
 hmm should I save upstream as a bunch of entries or just the item store?
@@ -651,14 +616,14 @@ i think maybe just the itemstore
 
 i should probably split up the dependencies/dependents locations like have them on the top level instead, would make it easier to just fetch the items
 
-hmm but how to deal with the maingraphs depedendents, as I update my cards the dependents there will be modified but like the git commit shouldn't be modified? 
+hmm but how to deal with the maingraphs depedendents, as I update my cards the dependents there will be modified but like the git commit shouldn't be modified?
 
 maybe separate directories for each commit where you put dependents/dependencies?
-i guess a textfile there that says the ledger hash it's valid for 
+i guess a textfile there that says the ledger hash it's valid for
 
 # priorities main graph
 
-so when i have a main graph thing and the user comes in we can ask the user some priority questions like big level topics which they are more interested in then based on this when they click review all it'll find more relevant stuff 
+so when i have a main graph thing and the user comes in we can ask the user some priority questions like big level topics which they are more interested in then based on this when they click review all it'll find more relevant stuff
 
 # classes attributes...
 
@@ -667,7 +632,7 @@ each sql database table have like a list of columns
 
 on a card that shows a certain database table you kinda wanna associate it with the columns yaknow?
 can have a class sql database column
-it would have an attribute like which table it belongs to  
+it would have an attribute like which table it belongs to
 
 so when you go into table instance card it can show like which columns have this as their belonging database table
 
@@ -678,10 +643,10 @@ atom class have the attribute how many protons of the given instance
 then chemical element is a subclass of atom, and it's defined by how many protons
 
 like, nitrogen is also a class, since there's many diff nitrogen atoms, but all of them have the same proton,
-so on the class definition of nitrogen it should be defined that there's 7 protons in all of the instances of nitrogen 
+so on the class definition of nitrogen it should be defined that there's 7 protons in all of the instances of nitrogen
 so i need to be able to also answer parent attributes in a class not just the instances
 
-and then for isotopes, which are sub-classes of chemical element, they need to also inherit the proton number hmm 
+and then for isotopes, which are sub-classes of chemical element, they need to also inherit the proton number hmm
 
 where to save these though? in the class? or have the attribute type also be able to refer to classes not just instances?
 should it ask the proton numbers of all the instances or just the class?
@@ -692,3 +657,10 @@ and i think it should be in the attribute card, since the idea is each card shou
 would be easy to fetch answered attributes on classes cause of the cache system
 
 hmm.. although it does 'belong' to the class so to speak so it's a bit odd to not encode it in the class?
+
+# marking an attribute as more inherent somehow?
+
+attributes were supposed to be like questions about the instance, but with attributes that more delineate a subset of the class instances, they'll act more like generics
+of a class. should we mark attributes somehow? or add generics to classes as a separate concept?
+
+like rust function class, one attribute is which codebase, helps to actually imagine which specific rust function we're talking about, so it's in a way inherent.

@@ -35,12 +35,6 @@ impl App {
         self.0.clone()
     }
 
-    pub fn try_load_card_signal(&self, id: CardId) -> Option<Signal<Card>> {
-        self.0
-            .load_card(id)
-            .map(|c| Signal::new_in_scope(c, ScopeId::APP))
-    }
-
     pub fn try_load_card(&self, id: CardId) -> Option<Arc<Card>> {
         self.0.load_card(id).map(Arc::new)
     }

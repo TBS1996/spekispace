@@ -34,18 +34,18 @@ pub fn overlay_card_viewer() -> MyClosure {
 
 #[derive(Debug, Clone)]
 pub enum MaybeEntry {
-    Yes(Signal<Card>),
+    Yes(Arc<Card>),
     No(CardId),
 }
 
 impl MaybeEntry {
-    pub fn entry(&mut self) -> Option<Signal<Card>> {
+    pub fn entry(&mut self) -> Option<Arc<Card>> {
         let id = match self {
             Self::Yes(card) => return Some(card.clone()),
             Self::No(id) => id,
         };
 
-        let card = APP.read().try_load_card_signal(*id)?;
+        let card = APP.read().try_load_card(*id)?;
 
         *self = Self::Yes(card.clone());
         Some(card)
@@ -76,7 +76,7 @@ pub struct CardSelector {
     pub filtermemo: Memo<Option<CardFilter>>,
     pub collection: ExprEditor,
     pub edit_collection: bool,
-    pub cards: Memo<Vec<Signal<Card>>>,
+    pub cards: Memo<Vec<Arc<Card>>>,
     pub col_cards: Memo<BTreeMap<Uuid, Signal<MaybeEntry>>>,
     pub default_search: Signal<Option<String>>,
     pub forbidden_cards: Signal<BTreeSet<CardId>>,
@@ -140,7 +140,7 @@ impl CardSelector {
                 let search = search.cloned();
 
                 let allowed_cards = allowed_cards.clone();
-                let mut filtered_cards: Vec<(u32, Signal<Card>)> = Default::default();
+                let mut filtered_cards: Vec<(u32, Arc<Card>)> = Default::default();
 
                 let cards = cards.read();
 
@@ -193,7 +193,7 @@ impl CardSelector {
                     #[allow(deprecated)]
                     let card = entry.write_silent().entry().unwrap();
 
-                    if forbidden_cards.read().contains(&card.read().id()) {
+                    if forbidden_cards.read().contains(&card.id()) {
                         continue;
                     }
 
@@ -204,10 +204,10 @@ impl CardSelector {
                     if allowed_cards.is_empty()
                         || allowed_cards
                             .read()
-                            .contains(&CardTy::from_ctype(card.read().card_type()))
+                            .contains(&CardTy::from_ctype(card.card_type()))
                     {
                         let flag = match filtermemo.cloned() {
-                            Some(filter) => filter.filter(Arc::new(card.cloned())),
+                            Some(filter) => filter.filter(card.clone()),
                             None => true,
                         };
 
@@ -222,8 +222,8 @@ impl CardSelector {
                 filtered_cards.sort_by(|a, b| {
                     let ord_key = b.0.cmp(&a.0);
                     if ord_key == std::cmp::Ordering::Equal {
-                        let card_a = a.1.read();
-                        let card_b = b.1.read();
+                        let card_a = &a.1;
+                        let card_b = &b.1;
                         card_a.name().len().cmp(&card_b.name().len())
                     } else {
                         ord_key
@@ -379,7 +379,7 @@ pub fn CardSelectorRender(
     title: Option<String>,
     search: Signal<String>,
     on_card_selected: OnCardSelected,
-    cards: Memo<Vec<Signal<Card>>>,
+    cards: Memo<Vec<Arc<Card>>>,
     allow_new: bool,
     allowed_cards: Signal<Vec<CardTy>>,
     filtereditor: FilterEditor,
@@ -478,7 +478,7 @@ fn NewcardButton(
 }
 
 #[component]
-fn TableRender(cards: Memo<Vec<Signal<Card>>>, on_card_selected: OnCardSelected) -> Element {
+fn TableRender(cards: Memo<Vec<Arc<Card>>>, on_card_selected: OnCardSelected) -> Element {
     let closure = Arc::new(on_card_selected.clone());
 
     let filtered_cards: Vec<_> = cards
@@ -511,16 +511,16 @@ fn TableRender(cards: Memo<Vec<Signal<Card>>>, on_card_selected: OnCardSelected)
                                 info!("clicky");
                                 let card = card.clone();
                                 let closure = _closure.clone();
-                                closure.0.call(card.read().id());
+                                closure.0.call(card.id());
                                 if closure.1 {
                                     pop_overlay();
                                 }
                             },
 
                             td { class: "border border-gray-300 px-4 py-2 w-2/3", "{card}" }
-                            td { class: "border border-gray-300 px-4 py-2 w-1/12", "{card.read().recall_rate().unwrap_or_default():.2}" }
-                            td { class: "border border-gray-300 px-4 py-2 w-1/12", "{maybe_dur(card.read().maturity())}"}
-                            td { class: "border border-gray-300 px-4 py-2 w-1/24", "{card.read().card_type().short_form()}" }
+                            td { class: "border border-gray-300 px-4 py-2 w-1/12", "{card.recall_rate().unwrap_or_default():.2}" }
+                            td { class: "border border-gray-300 px-4 py-2 w-1/12", "{maybe_dur(card.maturity())}"}
+                            td { class: "border border-gray-300 px-4 py-2 w-1/24", "{card.card_type().short_form()}" }
                         }
                     }
                 }

@@ -605,10 +605,7 @@ impl ExprEditor {
                             let id = c.id();
                             let entry = match c {
                                 MaybeCard::Id(id) => MaybeEntry::No(id),
-                                MaybeCard::Card(card) => MaybeEntry::Yes(Signal::new_in_scope(
-                                    Arc::unwrap_or_clone(card),
-                                    ScopeId::APP,
-                                )),
+                                MaybeCard::Card(card) => MaybeEntry::Yes(card),
                             };
 
                             out.insert(id, Signal::new_in_scope(entry, ScopeId::APP));
