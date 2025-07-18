@@ -188,10 +188,19 @@ impl CardSelector {
                 info!("{} cards sorted", sorted_cards.len());
 
                 for (matches, card) in sorted_cards {
-                    let entry = cards.get(&card).unwrap();
+                    let entry = match cards.get(&card) {
+                        Some(card) => card,
+                        None => {
+                            tracing::error!("missing card: {}", card);
+                            continue;
+                        }
+                    };
 
                     #[allow(deprecated)]
-                    let card = entry.write_silent().entry().unwrap();
+                    let card = match entry.write_silent().entry() {
+                        Some(card) => card,
+                        None => continue,
+                    };
 
                     if forbidden_cards.read().contains(&card.id()) {
                         continue;
