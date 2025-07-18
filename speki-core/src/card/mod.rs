@@ -538,7 +538,9 @@ impl Card {
 
         for card in self.recursive_dependencies() {
             let card = self.card_provider.load(card).unwrap();
-            if !card.reviewable() {
+            if !card.is_finished() {
+                return 0.0;
+            } else if !card.reviewable() {
                 continue;
             } else {
                 min_recall = min_recall.min(card.recall_rate().unwrap_or_default());
