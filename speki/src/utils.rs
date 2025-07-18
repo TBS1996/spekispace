@@ -38,11 +38,6 @@ impl App {
     pub fn try_load_card(&self, id: CardId) -> Option<Arc<Card>> {
         self.0.load_card(id).map(Arc::new)
     }
-
-    pub fn load_card(&self, id: CardId) -> Arc<Card> {
-        self.try_load_card(id)
-            .expect(&format!("unable to load card with id: {id}"))
-    }
 }
 
 impl Debug for App {

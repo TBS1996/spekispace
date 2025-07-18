@@ -625,8 +625,10 @@ fn RenderDependencies(
                         class: "mb-1 p-1 bg-gray-100 rounded-md text-left",
                         onclick: move|_|{
                             if let Some(card) = APP.read().try_load_card(id) {
-                                let viewer = CardViewer::new_from_card(card);
-                                OverlayEnum::CardViewer(viewer).append();
+                                match CardViewer::new_from_card(card) {
+                                    Ok(viewer) => OverlayEnum::CardViewer(viewer).append(),
+                                    Err(s) => OverlayEnum::new_notice(s).append(),
+                                }
                             }
                         },
                         "{name}"
@@ -891,10 +893,13 @@ impl CardViewer {
         self
     }
 
-    pub fn new_from_card(mut card: Arc<Card>) -> Self {
+    pub fn new_from_card(mut card: Arc<Card>) -> Result<Self, String> {
         if card.is_attribute() {
             let instance = card.attribute_instance();
-            card = APP.read().load_card(instance);
+            card = match APP.read().try_load_card(instance) {
+                Some(card) => card,
+                None => return Err("instance of attribute is missing".to_string()),
+            }
         }
 
         let card_id = card.id();
@@ -954,11 +959,11 @@ impl CardViewer {
             }
         };
 
-        Self {
+        Ok(Self {
             editor,
             old_card: Some(card.clone()),
             save_hook: None,
-        }
+        })
     }
 
     pub fn new() -> Self {
@@ -1610,23 +1615,6 @@ fn DeleteButton(
                 }
             },
             "delete"
-        }
-    }
-}
-
-#[component]
-fn Suspend(card: CardId) -> Element {
-    let mut card = Arc::unwrap_or_clone(APP.read().load_card(card));
-    let is_suspended = card.is_suspended();
-    let txt = if is_suspended { "unsuspend" } else { "suspend" };
-
-    rsx! {
-        button {
-            class: "{crate::styles::UPDATE_BUTTON}",
-            onclick: move |_| {
-                card.set_suspend(!is_suspended);
-            },
-            "{txt}"
         }
     }
 }

@@ -121,7 +121,10 @@ pub fn ReviewRender(
         let mut deps: Vec<Arc<Card>> = vec![];
 
         for dep in &card.explicit_dependencies() {
-            let dep = APP.read().load_card(*dep);
+            let dep = APP
+                .read()
+                .try_load_card(*dep)
+                .expect("failed to load dependency");
             deps.push(dep);
         }
         deps
@@ -351,19 +354,34 @@ fn Infobar(
 
 #[component]
 fn Suspend(card: CardId, mut queue: Signal<Queue>, show_backside: Signal<bool>) -> Element {
-    let card = Arc::unwrap_or_clone(APP.read().load_card(card));
-    let is_suspended = card.is_suspended();
-    let txt = if is_suspended { "unsuspend" } else { "suspend" };
+    let card = APP.read().try_load_card(card);
+    let is_suspended = card.as_ref().map(|c| c.is_suspended());
+    let txt = match is_suspended {
+        Some(true) => "unsuspend",
+        Some(false) => "suspend",
+        None => "suspend",
+    };
+
+    let title = card
+        .is_none()
+        .then_some("card not found")
+        .unwrap_or_default();
+
+    let disabled = card.is_none();
 
     rsx! {
         button {
             class: "{crate::styles::UPDATE_BUTTON}",
+            disabled,
+            title,
             onclick: move |_| {
-                let card = card.clone();
-                let mut card = card;
-                card.set_suspend(!is_suspended);
-                queue.write().next();
-                show_backside.set(false);
+                if let Some(card) = card.clone() {
+                    let mut card = Arc::unwrap_or_clone(card);
+                    card.set_suspend(!is_suspended.unwrap_or_default());
+                    queue.write().next();
+                    show_backside.set(false);
+
+                }
             },
             "{txt}"
         }
@@ -425,8 +443,10 @@ fn RenderDependencies(
                         class: "mb-1 p-1 bg-gray-100 rounded-md text-left",
                         onclick: move|_|{
                             let card = card.clone();
-                            let viewer = CardViewer::new_from_card(card);
-                            OverlayEnum::CardViewer(viewer).append();
+                            match CardViewer::new_from_card(card) {
+                                Ok(viewer) => OverlayEnum::CardViewer(viewer).append(),
+                                Err(s) => OverlayEnum::new_notice(s).append(),
+                            }
                         },
                         "{card}"
                     }
@@ -468,9 +488,17 @@ fn RenderEvalText(eval: EvalText) -> Element {
                                 button {
                                     class: "inline underline text-blue-600 hover:text-blue-800",
                                     onclick: move |_| {
-                                        let card = APP.read().load_card(id);
-                                        let props = CardViewer::new_from_card(card);
-                                        OverlayEnum::CardViewer(props).append();
+                                        match APP.read().try_load_card(id) {
+                                            Some(card) => {
+                                                match CardViewer::new_from_card(card) {
+                                                    Ok(viewer) => OverlayEnum::CardViewer(viewer).append(),
+                                                    Err(s) => OverlayEnum::new_notice(s).append(),
+                                                }
+                                            },
+                                            None => {
+                                                OverlayEnum::new_notice("card not found").append();
+                                            },
+                                        }
                                     },
                                     " {s}"
                                 }

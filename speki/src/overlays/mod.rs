@@ -93,8 +93,13 @@ impl OverlayEnum {
     }
 
     pub fn new_edit_card(id: CardId) -> Self {
-        let card = APP.read().load_card(id);
-        Self::CardViewer(CardViewer::new_from_card(card))
+        match APP.read().try_load_card(id) {
+            Some(card) => match CardViewer::new_from_card(card) {
+                Ok(viewer) => Self::CardViewer(viewer),
+                Err(s) => Self::new_notice(s),
+            },
+            None => Self::new_notice("card not found"),
+        }
     }
 
     pub fn new_create_card() -> Self {

@@ -44,9 +44,9 @@ pub fn ForcedCardRefRender(
 ) -> Element {
     let display = APP
         .read()
-        .load_card(selected_card.cloned())
-        .name()
-        .to_string();
+        .try_load_card(selected_card.cloned())
+        .map(|c| c.name().to_string())
+        .unwrap_or("missing card".to_string());
 
     rsx! {
         div {
@@ -93,7 +93,11 @@ pub fn OtherCardRefRender(
 
     let card_display: Memo<String> = ScopeId::APP.in_runtime(|| {
         Memo::new(move || match selected_card.read().as_ref() {
-            Some(card_id) => APP.read().load_card(*card_id).name().to_string(),
+            Some(card_id) => APP
+                .read()
+                .try_load_card(*card_id)
+                .map(|c| c.name().to_string())
+                .unwrap_or("missing card".to_string()),
             None => String::new(),
         })
     });
@@ -200,7 +204,11 @@ pub fn CardRefRender(
 
     let card_display: Memo<String> = ScopeId::APP.in_runtime(|| {
         Memo::new(move || match selected_card.read().as_ref() {
-            Some(card_id) => APP.read().load_card(*card_id).name().to_string(),
+            Some(card_id) => APP
+                .read()
+                .try_load_card(*card_id)
+                .map(|c| c.name().to_string())
+                .unwrap_or("missing card".to_string()),
             None => String::new(),
         })
     });
