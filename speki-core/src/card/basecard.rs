@@ -391,11 +391,27 @@ impl CardType {
 
     pub fn backside(&self) -> Option<&BackSide> {
         match self {
-            CardType::Instance { back, .. } => back.as_ref(),
+            CardType::Instance {
+                back: Some(back), ..
+            } => {
+                if back.is_empty_text() {
+                    None
+                } else {
+                    Some(back)
+                }
+            }
+            CardType::Instance { back: None, .. } => None,
             CardType::Normal { back, .. } => Some(back),
             CardType::Unfinished { .. } => None,
+            CardType::Attribute { back, .. } if !back.is_empty_text() => Some(back),
             CardType::Attribute { back, .. } => Some(back),
-            CardType::Class { back, .. } => back.as_ref(),
+            CardType::Class {
+                back: Some(back), ..
+            } if !back.is_empty_text() => Some(back),
+            CardType::Class {
+                back: Some(back), ..
+            } => Some(back),
+            CardType::Class { back: None, .. } => None,
             CardType::Statement { .. } => None,
             CardType::Event { .. } => None,
         }
