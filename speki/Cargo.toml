@@ -1,8 +1,10 @@
 [package]
-name = "speki"
+name = "speki-app"
 version = "0.1.0"
 authors = ["tor <torberge@outlook.com>"]
 edition = "2021"
+description = "ontological flashcard app"
+license = "GPL-3.0-or-later"
 
 [package.metadata.bundle]
 name = "Speki"
@@ -17,8 +19,9 @@ serde_json.workspace = true
 uuid.workspace = true
 strum.workspace = true
 fancy-regex.workspace = true
-speki-core = { path = "../speki-core" }
-ledgerstore.workspace = true
+#speki-core = { path = "../speki-core" }
+speki-core = "0.1.10"
+ledgerstore = "0.1.2"
 either.workspace = true
 nonempty.workspace = true
 rand.workspace = true

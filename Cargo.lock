@@ -2513,7 +2513,21 @@ checksum = "bbd2bcb4c963f2ddae06a2efc7e9f3591312473c50c6685e1f298068316e66fe"
 
 [[package]]
 name = "ledgerstore"
-version = "0.1.1"
+version = "0.1.2"
+dependencies = [
+ "either",
+ "serde",
+ "serde_json",
+ "tracing",
+ "uuid",
+ "walkdir",
+]
+
+[[package]]
+name = "ledgerstore"
+version = "0.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ee10f0f9d0715f26f8c1c159454c495d7b9f7c38ce33092cf7f8ddf6018b33c2"
 dependencies = [
  "either",
  "serde",
@@ -3082,7 +3096,16 @@ dependencies = [
 
 [[package]]
 name = "omtrent"
-version = "0.1.0"
+version = "0.1.1"
+dependencies = [
+ "serde",
+]
+
+[[package]]
+name = "omtrent"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b12f024f777ca5b19ee5c8349f78cc229185a3e5f35627f86369bb7a4de4c004"
 dependencies = [
  "serde",
 ]
@@ -4108,7 +4131,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "speki"
+name = "speki-app"
 version = "0.1.0"
 dependencies = [
  "chrono",
@@ -4117,9 +4140,9 @@ dependencies = [
  "dirs 5.0.1",
  "either",
  "fancy-regex",
- "ledgerstore",
+ "ledgerstore 0.1.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "nonempty",
- "omtrent",
+ "omtrent 0.1.1",
  "rand 0.8.5",
  "rayon",
  "serde",
@@ -4140,9 +4163,9 @@ dependencies = [
  "either",
  "fancy-regex",
  "gkquad",
- "ledgerstore",
+ "ledgerstore 0.1.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "nonempty",
- "omtrent",
+ "omtrent 0.1.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "serde",
  "serde_json",
  "strum",
