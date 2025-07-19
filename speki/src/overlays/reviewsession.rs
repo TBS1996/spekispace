@@ -16,10 +16,10 @@ use speki_core::{
 use tracing::info;
 
 use crate::{
-    components::{card_mastery::MasterySection, RenderDependents},
+    components::{card_mastery::MasterySection, RenderDependents, SectionWithTitle},
     overlays::{
         card_selector::{CardSelector, MyClosure},
-        cardviewer::{AdderHeader, CardViewer},
+        cardviewer::CardViewer,
     },
     pop_overlay,
     utils::recall_to_emoji,
@@ -407,35 +407,7 @@ fn RenderDependencies(
     let my_iter = deps.clone().into_iter().zip(wtf).enumerate();
     let card2 = card.id();
 
-    rsx! {
-        div {
-            class: "flex flex-col {show_graph} w-full h-auto bg-white p-2 shadow-md rounded-md overflow-y-auto",
-
-
-            div {
-                class: "flex items-center justify-between mb-2",
-
-                AdderHeader {
-                    title: "Explicit dependencies",
-                    on_add: move |_| {
-                        let currcard = card.clone();
-
-                        let fun = MyClosure::new(move |card: CardId| {
-                            let  old_card = currcard.clone();
-                            let mut old_card = Arc::unwrap_or_clone(old_card);
-                            old_card.add_dependency(card).unwrap();
-                            let _ = queue.clone().write();
-                        });
-
-                        let card = card.clone();
-                        let front = format!("{}{}", card.print(), card.display_backside());
-                        let props = CardSelector::dependency_picker(fun).with_default_search(front).with_forbidden_cards(vec![card.id()]);
-                        OverlayEnum::CardSelector(props).append();
-
-                    },
-                 }
-            }
-
+    let children = rsx! {
             for (idx, (card, deps)) in my_iter{
                 div {
                     class: "flex flex-row",
@@ -466,6 +438,36 @@ fn RenderDependencies(
 
                 }
            }
+    };
+
+    rsx! {
+        div {
+            class: "flex flex-col {show_graph} w-full h-auto bg-white p-2 shadow-md rounded-md overflow-y-auto",
+
+            div {
+                class: "flex items-center justify-between mb-2",
+
+                SectionWithTitle {
+                    title: "Explicit dependencies",
+                    on_add: move |_| {
+                        let currcard = card.clone();
+
+                        let fun = MyClosure::new(move |card: CardId| {
+                            let  old_card = currcard.clone();
+                            let mut old_card = Arc::unwrap_or_clone(old_card);
+                            old_card.add_dependency(card).unwrap();
+                            let _ = queue.clone().write();
+                        });
+
+                        let card = card.clone();
+                        let front = format!("{}{}", card.print(), card.display_backside());
+                        let props = CardSelector::dependency_picker(fun).with_default_search(front).with_forbidden_cards(vec![card.id()]);
+                        OverlayEnum::CardSelector(props).append();
+
+                    },
+                    children
+                 }
+            }
         }
     }
 }

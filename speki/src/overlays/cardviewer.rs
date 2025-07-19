@@ -25,7 +25,7 @@ use crate::{
         cardref::{CardRefRender, ForcedCardRefRender, OtherCardRefRender},
         dropdown::{ActionDropdown, DropComponent, DropdownAction},
         frontside::FrontPutRender,
-        BackPut, CardTy, DropDownMenu, FrontPut, RenderDependents,
+        BackPut, CardTy, DropDownMenu, FrontPut, RenderDependents, SectionWithTitle,
     },
     overlays::{
         card_selector::{CardSelector, MyClosure},
@@ -202,34 +202,34 @@ fn DisplayMetadata(metadata: MetadataEditor) -> Element {
     let MetadataEditor { suspended, trivial } = metadata;
 
     rsx! {
-        h3 {
-            class: "text-sm font-semibold text-gray-600 uppercase tracking-wide",
-            "Metadata"
-        }
-
-        div {
-            class: "flex flex-row items-center mb-4",
-            div {
-                class: "w-24",
-                p {
-                    title: "trivial cards are not reviewed",
-                    "trivial"
+        SectionWithTitle {
+            title: "Metadata".to_string(),
+            children: rsx! {
+                div {
+                    class: "flex flex-row items-center mb-4",
+                    div {
+                        class: "w-24",
+                        p {
+                            title: "trivial cards are not reviewed",
+                            "trivial"
+                        }
+                    }
+                    DropComponent { options: vec![false, true], selected: trivial }
                 }
-            }
-            DropComponent { options: vec![false, true], selected: trivial }
-        }
 
-        div {
-            class: "flex flex-row items-center mb-4",
-            div {
-                class: "w-24",
-                p {
-                    title: "trivial cards are not reviewed",
-                    "suspended"
+                div {
+                    class: "flex flex-row items-center mb-4",
+                    div {
+                        class: "w-24",
+                        p {
+                            title: "trivial cards are not reviewed",
+                            "suspended"
+                        }
+                    }
+
+                    DropComponent { options: vec![false, true], selected: suspended }
                 }
-            }
-
-            DropComponent { options: vec![false, true], selected: suspended }
+            },
         }
     }
 }
@@ -591,64 +591,62 @@ fn RenderDependencies(
         })
         .collect();
 
+    let children = rsx! {
+        for (idx, (name, id)) in name_and_id.into_iter().enumerate() {
+            div {
+                class: "flex flex-row",
+                button {
+                    class: "mb-1 p-1 bg-gray-100 rounded-md text-left",
+                    onclick: move |_| {
+                        if let Some(card) = APP.read().try_load_card(id) {
+                            match CardViewer::new_from_card(card) {
+                                Ok(viewer) => OverlayEnum::CardViewer(viewer).append(),
+                                Err(s) => OverlayEnum::new_notice(s).append(),
+                            }
+                        }
+                    },
+                    "{name}"
+                }
+
+                button {
+                    class: "p-1 hover:bg-gray-200 hover:border-gray-400 border border-transparent rounded-md transition-colors",
+                    onclick: move |_| {
+                        let removed = dependencies.write().remove(idx);
+                        if let Some(id) = card_id {
+                            let event = TheLedgerEvent::new_modify(id, CardAction::RemoveDependency(removed));
+                            if let Err(e) = APP.read().inner().provider.cards.modify(event) {
+                                handle_card_event_error(e);
+                            }
+                        }
+                    },
+                    "X"
+                }
+            }
+        }
+    };
+
     rsx! {
         div {
             class: "flex flex-col opacity-100 visible w-full h-auto bg-white p-2 shadow-md rounded-md overflow-y-auto",
+            SectionWithTitle {
+                title: "Explicit dependencies".to_string(),
+                on_add: move |_| {
+                    let currcard = card_text.cloned();
+                    let depsig = dependencies.clone();
 
-            div {
-                class: "flex items-center justify-between mb-2",
+                    let fun = MyClosure::new(move |card: CardId| {
+                        depsig.clone().write().push(card);
+                    });
 
-                AdderHeader {
-                    title: "Explicit dependencies",
-                    on_add: move |_|{
-                        let currcard = card_text.cloned();
-                        let depsig = dependencies.clone();
-
-                        let fun = MyClosure::new(move |card: CardId| {
-                            depsig.clone().write().push(card);
-                        });
-
-                        let front = currcard.clone();
-                        let mut props = CardSelector::dependency_picker(fun).with_default_search(front);
-                        if let Some(id)  = card_id {
-                            props = props.with_forbidden_cards(vec![id]);
-                        }
-                        OverlayEnum::CardSelector(props).append();
+                    let front = currcard.clone();
+                    let mut props = CardSelector::dependency_picker(fun).with_default_search(front);
+                    if let Some(id)  = card_id {
+                        props = props.with_forbidden_cards(vec![id]);
                     }
-                }
+                    OverlayEnum::CardSelector(props).append();
+                },
+                children
             }
-
-            for (idx, (name, id)) in name_and_id.into_iter().enumerate() {
-                div {
-                    class: "flex flex-row",
-                    button {
-                        class: "mb-1 p-1 bg-gray-100 rounded-md text-left",
-                        onclick: move|_|{
-                            if let Some(card) = APP.read().try_load_card(id) {
-                                match CardViewer::new_from_card(card) {
-                                    Ok(viewer) => OverlayEnum::CardViewer(viewer).append(),
-                                    Err(s) => OverlayEnum::new_notice(s).append(),
-                                }
-                            }
-                        },
-                        "{name}"
-                    }
-
-                    button {
-                        class: "p-1 hover:bg-gray-200 hover:border-gray-400 border border-transparent rounded-md transition-colors",
-                        onclick: move |_|{
-                            let removed =  dependencies.write().remove(idx);
-                            if let Some(id) = card_id {
-                                let event = TheLedgerEvent::new_modify(id, CardAction::RemoveDependency(removed));
-                                if let Err(e) = APP.read().inner().provider.cards.modify(event) {
-                                    handle_card_event_error(e);
-                                }
-                            }
-                        },
-                        "X"
-                    }
-                }
-           }
         }
     }
 }
@@ -1221,24 +1219,6 @@ fn AttrAnswers(
 }
 
 #[component]
-pub fn AdderHeader(title: &'static str, on_add: EventHandler<()>) -> Element {
-    rsx! {
-        div {
-            class: "flex items-center mb-2",
-            h4 {
-                class: "font-bold",
-                "{title}"
-            }
-            button {
-                class: "ml-4 p-1 hover:bg-gray-200 hover:border-gray-400 border border-transparent rounded-md transition-colors",
-                onclick: move |_| on_add.call(()),
-                "➕"
-            }
-        }
-    }
-}
-
-#[component]
 fn RenderAttrs(card: Option<CardId>, attrs: Signal<Vec<AttrEditor>>, inherited: bool) -> Element {
     let foobar: Vec<(AttrEditor, bool, &'static str)> = attrs
         .cloned()
@@ -1261,29 +1241,7 @@ fn RenderAttrs(card: Option<CardId>, attrs: Signal<Vec<AttrEditor>>, inherited: 
         })
         .collect();
 
-    rsx! {
-        div {
-            class: "flex flex-row items-center",
-
-            if inherited {
-                div {
-                    class: "flex items-center mb-2",
-                    h4 {
-                        class: "font-bold",
-                        title: "attributes inherited from parent classes",
-                        "Inherited attributes"
-                    }
-                }
-            } else {
-                AdderHeader {
-                    title: "Attributes",
-                    on_add: move |_| {
-                        attrs.write().push(AttrEditor::new());
-                    },
-                }
-            }
-        }
-
+    let children = rsx! {
         div {
             class: "max-h-64 overflow-y-auto",
             for (AttrEditor {id, mut pattern,mut ty }, disabled, title) in foobar {
@@ -1384,6 +1342,26 @@ fn RenderAttrs(card: Option<CardId>, attrs: Signal<Vec<AttrEditor>>, inherited: 
                             },
                         }
                     }
+                }
+            }
+        }
+    };
+
+    rsx! {
+        div {
+            if inherited {
+                SectionWithTitle {
+                    title: "Inherited attributes".to_string(),
+                    tooltip: "attributes inherited from parent classes",
+                    children
+                }
+            } else {
+                SectionWithTitle {
+                    title: "Attributes".to_string(),
+                    on_add: move |_| {
+                        attrs.write().push(AttrEditor::new());
+                    },
+                    children
                 }
             }
         }
