@@ -4147,7 +4147,7 @@ dependencies = [
  "rayon",
  "serde",
  "serde_json",
- "speki-core",
+ "speki-core 0.1.10 (registry+https://github.com/rust-lang/crates.io-index)",
  "strum",
  "tokio",
  "tracing",
@@ -4170,6 +4170,28 @@ dependencies = [
  "serde_json",
  "strum",
  "tokio",
+ "toml",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
+name = "speki-core"
+version = "0.1.10"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b167c32bf682f3b822dd2c4dec8273a750b8f9c811b196aefd5a8a3b7d3bb7f6"
+dependencies = [
+ "deunicode",
+ "dioxus-logger",
+ "either",
+ "fancy-regex",
+ "gkquad",
+ "ledgerstore 0.1.2 (registry+https://github.com/rust-lang/crates.io-index)",
+ "nonempty",
+ "omtrent 0.1.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "serde",
+ "serde_json",
+ "strum",
  "toml",
  "tracing",
  "uuid",
