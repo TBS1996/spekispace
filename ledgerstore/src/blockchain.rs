@@ -71,7 +71,6 @@ impl<T: LedgerItem> BlockChain<T> {
     }
 
     fn load_ledger(space: &Path) -> Vec<LedgerEntry<T>> {
-        dbg!(space);
         let mut foo: Vec<(usize, LedgerEntry<T>)> = {
             let map: HashMap<String, Vec<u8>> = load_file_contents(space);
             let mut foo: Vec<(usize, LedgerEntry<T>)> = Default::default();

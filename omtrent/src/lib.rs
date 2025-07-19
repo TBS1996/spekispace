@@ -236,6 +236,100 @@ impl TimeStamp {
 
         s
     }
+
+    pub fn into_precision(self, pres: Precision) -> Self {
+        match pres {
+            Precision::Millenium => Self {
+                millenium: self.millenium,
+                ..Default::default()
+            },
+            Precision::Century => Self {
+                millenium: self.millenium,
+                century: self.century,
+                ..Default::default()
+            },
+            Precision::Decade => Self {
+                millenium: self.millenium,
+                century: self.century,
+                decade: self.decade,
+                ..Default::default()
+            },
+            Precision::Year => Self {
+                millenium: self.millenium,
+                century: self.century,
+                decade: self.decade,
+                year: self.year,
+                ..Default::default()
+            },
+            Precision::Month => Self {
+                millenium: self.millenium,
+                century: self.century,
+                decade: self.decade,
+                year: self.year,
+                month: self.month,
+                ..Default::default()
+            },
+            Precision::Day => Self {
+                millenium: self.millenium,
+                century: self.century,
+                decade: self.decade,
+                year: self.year,
+                month: self.month,
+                day: self.day,
+                ..Default::default()
+            },
+            Precision::Hour => Self {
+                millenium: self.millenium,
+                century: self.century,
+                decade: self.decade,
+                year: self.year,
+                month: self.month,
+                day: self.day,
+                hour: self.hour,
+                ..Default::default()
+            },
+            Precision::Minute => self,
+        }
+    }
+
+    pub fn clock_emoji(&self) -> &'static str {
+        match self.hour {
+            Some(hr) => {
+                let hr = hr % 12;
+                let minute = self.minute.unwrap_or_default();
+                let half = minute >= 30;
+
+                match (hr, half) {
+                    (0, false) => "🕛",
+                    (0, true) => "🕧",
+                    (1, false) => "🕐",
+                    (1, true) => "🕜",
+                    (2, false) => "🕑",
+                    (2, true) => "🕝",
+                    (3, false) => "🕒",
+                    (3, true) => "🕞",
+                    (4, false) => "🕓",
+                    (4, true) => "🕟",
+                    (5, false) => "🕔",
+                    (5, true) => "🕠",
+                    (6, false) => "🕕",
+                    (6, true) => "🕡",
+                    (7, false) => "🕖",
+                    (7, true) => "🕢",
+                    (8, false) => "🕗",
+                    (8, true) => "🕣",
+                    (9, false) => "🕘",
+                    (9, true) => "🕤",
+                    (10, false) => "🕙",
+                    (10, true) => "🕥",
+                    (11, false) => "🕚",
+                    (11, true) => "🕦",
+                    _ => "🕓",
+                }
+            }
+            None => "🕓",
+        }
+    }
 }
 
 impl FromStr for TimeStamp {

@@ -664,3 +664,10 @@ attributes were supposed to be like questions about the instance, but with attri
 of a class. should we mark attributes somehow? or add generics to classes as a separate concept?
 
 like rust function class, one attribute is which codebase, helps to actually imagine which specific rust function we're talking about, so it's in a way inherent.
+you'd imagine a function foobar should be presented like: "foobar (rust_function<database = gandalf>)". and knowing about gandalf should be a prerequisite to "know" about foobar.
+
+# custom review
+
+way to review a set without saving the set lol
+
+hmm maybe a review button on browse page
