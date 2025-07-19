@@ -57,7 +57,10 @@ impl EvalText {
             BackSide::Card(id) => {
                 let eval = provider.load(*id).unwrap().frontside.to_string();
                 Self {
-                    cmps: vec![Either::Right((eval.clone(), *id))],
+                    cmps: vec![
+                        Either::Left("🔗".to_string()),
+                        Either::Right((eval.clone(), *id)),
+                    ],
                     eval,
                 }
             }
@@ -81,7 +84,17 @@ impl EvalText {
             }
             BackSide::Trivial => Self::just_some_string("<trivial>".to_string(), provider),
             BackSide::Invalid => Self::just_some_string("<invalid>".to_string(), provider),
-            BackSide::Bool(b) => Self::just_some_string(b.to_string(), provider),
+            BackSide::Bool(b) => Self::just_some_string(
+                format!(
+                    "🔘 {}",
+                    if *b {
+                        "yes".to_string()
+                    } else {
+                        "no".to_string()
+                    }
+                ),
+                provider,
+            ),
         }
     }
 

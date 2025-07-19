@@ -1486,6 +1486,14 @@ impl BackSide {
         }
     }
 
+    pub fn as_bool(&self) -> Option<bool> {
+        if let Self::Bool(b) = self {
+            Some(*b)
+        } else {
+            None
+        }
+    }
+
     pub fn as_card(&self) -> Option<CardId> {
         if let Self::Card(card) = self {
             Some(*card)

@@ -484,6 +484,9 @@ impl CardEditor {
                     Err(BacksideError::MissingCard) => {
                         return Err("no card selected".to_string());
                     }
+                    Err(BacksideError::MissingBool) => {
+                        return Err("no boolean selected".to_string());
+                    }
                     Err(BacksideError::MissingText) => {
                         return Err("backside can't be empty".to_string());
                     }
@@ -503,6 +506,7 @@ impl CardEditor {
                     Ok(back) => Some(back),
                     Err(BacksideError::MissingCard) => None,
                     Err(BacksideError::MissingText) => None,
+                    Err(BacksideError::MissingBool) => None,
                     Err(BacksideError::InvalidTimestamp) => {
                         return Err("invalid timestamp".to_string())
                     }
@@ -535,6 +539,7 @@ impl CardEditor {
                     Ok(back) => Some(back),
                     Err(BacksideError::MissingCard) => None,
                     Err(BacksideError::MissingText) => None,
+                    Err(BacksideError::MissingBool) => None,
                     Err(BacksideError::InvalidTimestamp) => {
                         return Err("invalid timestamp".to_string())
                     }
@@ -1051,6 +1056,7 @@ fn OldAttrAnswerEditorRender(answer: OldAttrAnswerEditor) -> Element {
                     text: answer.text.clone(),
                     dropdown: answer.dropdown.clone(),
                     ref_card: answer.ref_card.clone(),
+                    boolean: answer.boolean.clone(),
                 }
             }
         }
@@ -1085,6 +1091,7 @@ fn AttrAnswerEditorRender(answer: AttrAnswerEditor) -> Element {
                     text: answer.text.clone(),
                     dropdown: answer.dropdown.clone(),
                     ref_card: answer.ref_card.clone(),
+                    boolean: answer.boolean.clone(),
                 }
             }
         }
@@ -1453,6 +1460,7 @@ fn InputElements(
                     text: back.text.clone(),
                     dropdown: back.dropdown.clone(),
                     ref_card: back.ref_card.clone(),
+                    boolean: back.boolean.clone(),
                 }
             },
             CardTy::Class => rsx! {
@@ -1460,6 +1468,7 @@ fn InputElements(
                     text: back.text.clone(),
                     dropdown: back.dropdown.clone(),
                     ref_card: back.ref_card.clone(),
+                    boolean: back.boolean.clone(),
                 }
 
 
@@ -1491,6 +1500,7 @@ fn InputElements(
                     text: back.text.clone(),
                     dropdown: back.dropdown.clone(),
                     ref_card: back.ref_card.clone(),
+                    boolean: back.boolean.clone(),
                 }
 
                 div {

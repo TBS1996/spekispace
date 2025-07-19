@@ -24,6 +24,7 @@ pub struct BackPut {
     pub text: Signal<String>,
     pub dropdown: DropDownMenu<BackOpts>,
     pub ref_card: CardRef,
+    pub boolean: Signal<Option<bool>>,
 }
 
 #[component]
@@ -55,62 +56,102 @@ pub fn BackPutRender(
     text: Signal<String>,
     dropdown: DropDownMenu<BackOpts>,
     ref_card: CardRef,
+    boolean: Signal<Option<bool>>,
 ) -> Element {
     rsx! {
         div {
-        class: "block text-gray-700 text-sm font-medium max-w-full",
-
-
-        div {
-            class: "backside-editor flex items-center space-x-4",
+            class: "block text-gray-700 text-sm font-medium max-w-full",
 
             div {
-                class: "flex-shrink-0",
-                style: "width: 80px;",
-                DropComponent {
-                    options: dropdown.options.clone(),
-                    selected: dropdown.selected.clone(),
+                class: "backside-editor flex items-center space-x-4",
+
+                div {
+                    class: "flex-shrink-0",
+                    style: "width: 80px;",
+                    DropComponent {
+                        options: dropdown.options.clone(),
+                        selected: dropdown.selected.clone(),
+                    }
                 }
-            }
 
-            div {
-                class: "flex-grow overflow-hidden",
+                div {
+                    class: "flex-grow overflow-hidden",
 
-                match *dropdown.selected.read() {
-                    BackOpts::Time => {
-                        rsx!{TimestampRender { text }}
-                    },
-                    BackOpts::Text => {
-                        let mut sig = text.clone();
+                    match *dropdown.selected.read() {
+                        BackOpts::Time => rsx! {
+                            TimestampRender { text }
+                        },
 
-                        rsx! {
-                            input {
-                                class: "bg-white w-full border border-gray-300 rounded-md p-2 text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent",
-                                value: "{sig}",
-                                placeholder: "back side",
-                                oninput: move |evt| sig.set(evt.value()),
-                                onmouseup: move |e| {
-                                    let with_alias = e.modifiers().shift();
-                                    let text = text.clone();
-                                    set_card_link(text, with_alias);
-                                },
+                        BackOpts::Bool => {
+                            let selected = boolean.cloned();
+                            let yes_selected = selected == Some(true);
+                            let no_selected = selected == Some(false);
+
+                            rsx! {
+                                div {
+                                    class: "flex flex-row gap-2",
+
+                                    button {
+                                        class: if yes_selected {
+                                            "px-3 py-1 rounded-md border border-blue-500 bg-blue-100"
+                                        } else {
+                                            "px-3 py-1 rounded-md border border-gray-300 bg-white hover:bg-gray-100"
+                                        },
+                                        onclick: move |_| {
+                                            let mut b = boolean.write();
+                                            *b = if *b == Some(true) { None } else { Some(true) };
+                                        },
+                                        "yes"
+                                    }
+
+                                    button {
+                                        class: if no_selected {
+                                            "px-3 py-1 rounded-md border border-blue-500 bg-blue-100"
+                                        } else {
+                                            "px-3 py-1 rounded-md border border-gray-300 bg-white hover:bg-gray-100"
+                                        },
+                                        onclick: move |_| {
+                                            let mut b = boolean.write();
+                                            *b = if *b == Some(false) { None } else { Some(false) };
+                                        },
+                                        "no"
+                                    }
+                                }
                             }
                         }
-                    },
-                    BackOpts::Card => rsx! {
-                        CardRefRender {
-                            selected_card: ref_card.card.clone(),
-                            placeholder: ref_card.placeholder.cloned(),
-                            on_select: ref_card.on_select.clone(),
-                            on_deselect: ref_card.on_deselect.clone(),
-                            allowed: ref_card.allowed.clone(),
-                            filter: ref_card.filter.clone(),
+
+                        BackOpts::Text => {
+                            let mut sig = text.clone();
+
+                            rsx! {
+                                input {
+                                    class: "bg-white w-full border border-gray-300 rounded-md p-2 text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent",
+                                    value: "{sig}",
+                                    placeholder: "back side",
+                                    oninput: move |evt| sig.set(evt.value()),
+                                    onmouseup: move |e| {
+                                        let with_alias = e.modifiers().shift();
+                                        let text = text.clone();
+                                        set_card_link(text, with_alias);
+                                    },
+                                }
+                            }
                         }
-                    },
+
+                        BackOpts::Card => rsx! {
+                            CardRefRender {
+                                selected_card: ref_card.card.clone(),
+                                placeholder: ref_card.placeholder.cloned(),
+                                on_select: ref_card.on_select.clone(),
+                                on_deselect: ref_card.on_deselect.clone(),
+                                allowed: ref_card.allowed.clone(),
+                                filter: ref_card.filter.clone(),
+                            }
+                        }
+                    }
                 }
             }
         }
-    }
     }
 }
 
@@ -119,6 +160,7 @@ pub enum BacksideError {
     InvalidTimestamp,
     MissingCard,
     MissingText,
+    MissingBool,
 }
 
 impl BackPut {
@@ -129,10 +171,12 @@ impl BackPut {
             ref_card.set_ref(card);
         }
 
+        let boolean = Signal::new_in_scope(default.as_bool(), ScopeId::APP);
+
         let text = default.to_string();
 
         let backopt = match default {
-            BackSide::Bool(_) => todo!(),
+            BackSide::Bool(_) => BackOpts::Bool,
             BackSide::Text(_) => BackOpts::Text,
             BackSide::Card(_) => BackOpts::Card,
             BackSide::List(_) => BackOpts::Text,
@@ -145,6 +189,7 @@ impl BackPut {
             text: Signal::new_in_scope(text, ScopeId(3)),
             dropdown: DropDownMenu::new(BackOpts::iter(), Some(backopt)),
             ref_card,
+            boolean,
         }
     }
 
@@ -169,6 +214,10 @@ impl BackPut {
         info!("chosen is: {:?}", chosen);
 
         match chosen {
+            BackOpts::Bool => match self.boolean.cloned() {
+                Some(b) => Ok(BackSide::Bool(b)),
+                None => Err(BacksideError::MissingBool),
+            },
             BackOpts::Card => match self.ref_card.selected_card().cloned() {
                 Some(card) => Ok(BackSide::Card(card)),
                 None => Err(BacksideError::MissingCard),
@@ -202,6 +251,7 @@ impl BackPut {
         info!("chosen is: {:?}", chosen);
 
         match chosen {
+            BackOpts::Bool => Some(BackSide::Bool(self.boolean.cloned()?)),
             BackOpts::Card => Some(BackSide::Card(self.ref_card.selected_card().cloned()?)),
             BackOpts::Text => {
                 let s = self.text.cloned();
@@ -222,6 +272,7 @@ pub enum BackOpts {
     Text,
     Card,
     Time,
+    Bool,
 }
 
 impl Display for BackOpts {
@@ -230,6 +281,7 @@ impl Display for BackOpts {
             BackOpts::Text => "🔤",
             BackOpts::Card => "🔗",
             BackOpts::Time => "🕒",
+            BackOpts::Bool => "🔘",
         };
 
         write!(f, "{s}")
