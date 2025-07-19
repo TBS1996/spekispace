@@ -4142,7 +4142,7 @@ dependencies = [
  "fancy-regex",
  "ledgerstore 0.1.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "nonempty",
- "omtrent 0.1.1",
+ "omtrent 0.1.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "rand 0.8.5",
  "rayon",
  "serde",
