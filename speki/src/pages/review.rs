@@ -1,7 +1,7 @@
 use crate::{
     components::{
         dropdown::{ActionDropdown, DropComponent, DropdownAction},
-        FilterComp, FilterEditor,
+        FilterComp, FilterEditor, SectionWithTitle,
     },
     overlays::{
         card_selector::{CardSelector, MaybeEntry, MyClosure},
@@ -82,9 +82,17 @@ pub fn Review() -> Element {
             overlay,
             root: rsx!{
                 div {
-                    class: "flex flex-row items-start min-h-screen space-y-4 justify-start w-full",
-                    FilterComp {editor}
-                    RenderSets {filter: state.filter.to_filter(), sets }
+                    class: "flex flex-row items-start min-h-screen gap-x-6 justify-start w-full",
+                    SectionWithTitle {
+                        title: "Filter".to_string(),
+                        FilterComp { editor }
+                    }
+
+                    SectionWithTitle {
+                        title: "Sets".to_string(),
+                        RenderSets {filter: state.filter.to_filter(), sets }
+                     }
+
                 }
             }
         }

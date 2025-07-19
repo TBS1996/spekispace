@@ -146,24 +146,28 @@ pub fn SectionWithTitle(
     let tooltip = tooltip.unwrap_or_default();
     rsx! {
         div {
-            class: "flex items-center mb-1",
-            h4 {
-                class: "font-bold",
-                title: tooltip,
-                "{title}"
-            }
-            if let Some(add) = on_add {
-                button {
-                    class: "ml-4 p-1 hover:bg-gray-200 hover:border-gray-400 border border-transparent rounded-md transition-colors",
-                    onclick: move |_| add.call(()),
-                    "➕"
+            class: "flex flex-col",
+
+            div {
+                class: "flex items-center mb-1",
+                h4 {
+                    class: "font-bold",
+                    title: tooltip,
+                    "{title}"
+                }
+                if let Some(add) = on_add {
+                    button {
+                        class: "ml-4 p-1 hover:bg-gray-200 hover:border-gray-400 border border-transparent rounded-md transition-colors",
+                        onclick: move |_| add.call(()),
+                        "➕"
+                    }
                 }
             }
-        }
 
-        div {
-            class: "mt-2",
-            {children}
+            div {
+                class: "mt-2",
+                {children}
+            }
         }
     }
 }
