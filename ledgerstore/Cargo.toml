@@ -1,6 +1,6 @@
 [package]
 name = "ledgerstore"
-version = "0.1.1"
+version = "0.1.2"
 edition = "2021"
 authors = ["tor torberge@outlook.com"]
 description = "ledger based database"
