@@ -21,6 +21,7 @@ pub enum CardAction {
     AddDependency(CardId),
     UpsertCard(CardType),
     SetBackRef(CardId),
+    SetBackBool(bool),
     SetBackTime(TimeStamp),
     SetDefaultQuestion(Option<String>),
     SetNamespace(Option<CardId>),

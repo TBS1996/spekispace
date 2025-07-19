@@ -265,6 +265,7 @@ enum ValueOf {
 pub enum AttrBackType {
     InstanceOfClass(CardId),
     TimeStamp,
+    Boolean,
 }
 
 impl<'de> Deserialize<'de> for AttrBackType {
@@ -284,12 +285,14 @@ impl<'de> Deserialize<'de> for AttrBackType {
         enum Helper {
             InstanceOfClass(CardId),
             TimeStamp,
+            Boolean,
         }
 
         let helper: Helper = serde_json::from_value(value).map_err(serde::de::Error::custom)?;
         match helper {
             Helper::InstanceOfClass(id) => Ok(AttrBackType::InstanceOfClass(id)),
             Helper::TimeStamp => Ok(AttrBackType::TimeStamp),
+            Helper::Boolean => Ok(AttrBackType::Boolean),
         }
     }
 }
@@ -882,6 +885,7 @@ pub enum CardError {
     WrongCardType,
     AnswerMustBeCard,
     AnswerMustBeTime,
+    AnswerMustBeBool,
     SubClassOfNonClass,
     BackTypeMustBeClass,
 }
@@ -970,6 +974,11 @@ impl LedgerItem for RawCard {
                 };
 
                 match back_type {
+                    Some(AttrBackType::Boolean) => {
+                        if !matches!(attr_back, BackSide::Bool(_)) {
+                            return Err(CardError::AnswerMustBeBool);
+                        }
+                    }
                     Some(AttrBackType::TimeStamp) => {
                         if !matches!(attr_back, BackSide::Time(_)) {
                             return Err(CardError::AnswerMustBeTime);
@@ -1214,6 +1223,10 @@ impl LedgerItem for RawCard {
             }
             CardAction::SetTrivial(flag) => {
                 self.trivial = flag;
+            }
+            CardAction::SetBackBool(b) => {
+                let backside = BackSide::Bool(b);
+                self = self.set_backside(backside);
             }
             CardAction::SetFrontAudio(audio) => {
                 self.front_audio = audio;

@@ -20,7 +20,7 @@ use tracing::info;
 
 use crate::{
     components::{
-        backside::{BackPutRender, BacksideError, TimestampRender},
+        backside::{bool_editor, opt_bool_editor, BackPutRender, BacksideError, TimestampRender},
         card_mastery::MasterySection,
         cardref::{CardRefRender, ForcedCardRefRender, OtherCardRefRender},
         dropdown::{ActionDropdown, DropComponent, DropdownAction},
@@ -253,6 +253,7 @@ enum OldAttrAnswerEditor {
         selected: Signal<CardId>,
     },
     TimeStamp(Signal<String>),
+    Boolean(Signal<bool>),
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -264,6 +265,7 @@ enum AttrAnswerEditor {
         selected: Signal<Option<CardId>>,
     },
     TimeStamp(Signal<String>),
+    Boolean(Signal<Option<bool>>),
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -336,11 +338,13 @@ impl AttrEditor {
 enum AttrBackTypeEditor {
     InstanceOfClass(Signal<CardId>),
     Timestamp,
+    Boolean,
 }
 
 impl From<AttrBackType> for AttrBackTypeEditor {
     fn from(value: AttrBackType) -> Self {
         match value {
+            AttrBackType::Boolean => AttrBackTypeEditor::Boolean,
             AttrBackType::InstanceOfClass(id) => {
                 AttrBackTypeEditor::InstanceOfClass(Signal::new_in_scope(id, ScopeId::APP))
             }
@@ -467,6 +471,7 @@ impl CardEditor {
                 let pattern = pattern.cloned();
                 let ty = match ty.cloned() {
                     Some(AttrBackTypeEditor::Timestamp) => Some(AttrBackType::TimeStamp),
+                    Some(AttrBackTypeEditor::Boolean) => Some(AttrBackType::Boolean),
                     Some(AttrBackTypeEditor::InstanceOfClass(id)) => {
                         Some(AttrBackType::InstanceOfClass(id.cloned()))
                     }
@@ -804,6 +809,13 @@ fn load_attr_qa(card: CardId) -> Vec<AttrQandA> {
         let attr = instance.get_attr(attr_id).unwrap();
 
         let answer = match attr.back_type {
+            Some(AttrBackType::Boolean) => {
+                let b = card
+                    .back_side()
+                    .and_then(|ts| ts.as_bool())
+                    .unwrap_or_default();
+                OldAttrAnswerEditor::Boolean(Signal::new_in_scope(b, ScopeId::APP))
+            }
             Some(AttrBackType::TimeStamp) => {
                 let ts = card
                     .back_side()
@@ -1074,6 +1086,7 @@ fn OldAttrAnswerEditorRender(answer: OldAttrAnswerEditor) -> Element {
                 TimestampRender { text }
             }
         }
+        OldAttrAnswerEditor::Boolean(boolean) => rsx! {bool_editor { boolean }},
     }
 }
 
@@ -1095,6 +1108,7 @@ fn AttrAnswerEditorRender(answer: AttrAnswerEditor) -> Element {
                 }
             }
         }
+        AttrAnswerEditor::Boolean(boolean) => rsx! {opt_bool_editor { boolean }},
         AttrAnswerEditor::Card {
             filter,
             selected,
@@ -1198,6 +1212,9 @@ fn AttrAnswers(
                                                     Some(AttrBackType::TimeStamp) => {
                                                         answer.set(Some(AttrAnswerEditor::TimeStamp(Signal::new_in_scope(String::new(), ScopeId::APP))));
                                                     }
+                                                    Some(AttrBackType::Boolean) => {
+                                                        answer.set(Some(AttrAnswerEditor::Boolean(Signal::new_in_scope(None, ScopeId::APP))))
+                                                    },
                                                     Some(AttrBackType::InstanceOfClass(id)) => {
                                                         let filter = SetExpr::union_with([DynCard::Instances(id)]);
                                                         let ans = AttrAnswerEditor::Card {
@@ -1294,6 +1311,23 @@ fn RenderAttrs(card: Option<CardId>, attrs: Signal<Vec<AttrEditor>>, inherited: 
                         class: "flex flex-row w-1/2 gap-2",
 
                         match ty.cloned() {
+                            Some(AttrBackTypeEditor::Boolean) => rsx!{
+                                if !inherited {
+                                    button {
+                                        title: "remove constraint",
+                                        class: "{crate::styles::UPDATE_BUTTON}",
+                                        onclick: move |_| {
+                                            ty.set(None);
+                                        },
+                                        "X"
+                                    }
+                                }
+                                span {
+                                    class: "font-semibold self-center",
+                                    "boolean"
+                                }
+
+                            },
                             Some(AttrBackTypeEditor::Timestamp) => rsx!{
                                 if !inherited {
                                     button {
@@ -1326,6 +1360,7 @@ fn RenderAttrs(card: Option<CardId>, attrs: Signal<Vec<AttrEditor>>, inherited: 
                             None => {
 
                                 let timestamp = DropdownAction::new("timestamp".to_string(), Box::new(move || {ty.clone().set(Some(AttrBackTypeEditor::Timestamp));})).with_title("answer must be timestamp");
+                                let boolean = DropdownAction::new("boolean".to_string(), Box::new(move || {ty.clone().set(Some(AttrBackTypeEditor::Boolean));})).with_title("answer must be boolean");
                                 let instance = DropdownAction::new("instance".to_string(), Box::new(move || {
                                         let fun = MyClosure::new(move |card: CardId| {
                                             ty.clone().set(Some(AttrBackTypeEditor::InstanceOfClass(Signal::new_in_scope(card, ScopeId::APP))));
@@ -1341,7 +1376,7 @@ fn RenderAttrs(card: Option<CardId>, attrs: Signal<Vec<AttrEditor>>, inherited: 
 
                                 if !inherited {
                                     rsx!{
-                                        ActionDropdown { label: "set answer constraint".to_string(), options: vec![timestamp, instance], title: "hey"  }
+                                        ActionDropdown { label: "set answer constraint".to_string(), options: vec![timestamp, instance, boolean], title: "hey"  }
                                     }
                                 } else {
                                     rsx!{}
@@ -1753,6 +1788,18 @@ fn save_button(CardViewer: CardViewer) -> Element {
                             if let Some(answer) = answer.cloned() {
 
                                 match answer {
+                                    AttrAnswerEditor::Boolean(boolean) => {
+                                        if let Some(boolean) = boolean.cloned() {
+                                            let back = BackSide::Bool(boolean);
+                                            let action = CardAction::AttributeType { attribute: attr_id.id, back , instance: id };
+                                            let event = CardEvent::new_modify(CardId::new_v4(), action);
+                                            if let Err(e) = APP.read().inner().provider.cards.modify(event) {
+                                                handle_card_event_error(e);
+                                                return;
+                                            }
+
+                                        }
+                                    },
                                     AttrAnswerEditor::TimeStamp(ts) => {
                                         if let Ok(ts) = TimeStamp::from_str(&ts.cloned()) {
                                             let back = BackSide::Time(ts.clone());
@@ -1790,6 +1837,20 @@ fn save_button(CardViewer: CardViewer) -> Element {
                         },
                         AttrQandA::Old { id: attr_card_id, question: _, answer, attr_id } => {
                             match answer {
+                                OldAttrAnswerEditor::Boolean(boolean) => {
+                                    let boolean = boolean.cloned();
+                                    let prev_back = APP.read().inner().card_provider.providers.cards.load(attr_card_id).ref_backside().cloned().unwrap();
+                                    let back = BackSide::Bool(boolean);
+                                        if prev_back != back {
+                                            let action = CardAction::SetBackBool(boolean);
+                                            let event = CardEvent::new_modify(attr_card_id, action);
+                                            if let Err(e) = APP.read().inner().provider.cards.modify(event) {
+                                                handle_card_event_error(e);
+                                                return;
+                                            }
+                                        }
+
+                                }
                                 OldAttrAnswerEditor::TimeStamp(ts) => {
                                     let prev_back = APP.read().inner().card_provider.providers.cards.load(attr_card_id).ref_backside().cloned().unwrap();
                                     if let Ok(ts) = TimeStamp::from_str(&ts.cloned()) {

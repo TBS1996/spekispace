@@ -52,6 +52,82 @@ pub fn TimestampRender(text: Signal<String>) -> Element {
 }
 
 #[component]
+pub fn bool_editor(boolean: Signal<bool>) -> Element {
+    let selected = boolean.cloned();
+
+    rsx! {
+        div {
+            class: "flex flex-row gap-2",
+
+            button {
+                class: if selected {
+                    "px-3 py-1 rounded-md border border-blue-500 bg-blue-100"
+                } else {
+                    "px-3 py-1 rounded-md border border-gray-300 bg-white hover:bg-gray-100"
+                },
+                onclick: move |_| {
+                    let mut b = boolean.write();
+                    *b = true;
+                },
+                "yes"
+            }
+
+            button {
+                class: if !selected {
+                    "px-3 py-1 rounded-md border border-blue-500 bg-blue-100"
+                } else {
+                    "px-3 py-1 rounded-md border border-gray-300 bg-white hover:bg-gray-100"
+                },
+                onclick: move |_| {
+                    let mut b = boolean.write();
+                    *b = false;
+                },
+                "no"
+            }
+        }
+    }
+}
+
+#[component]
+pub fn opt_bool_editor(boolean: Signal<Option<bool>>) -> Element {
+    let selected = boolean.cloned();
+    let yes_selected = selected == Some(true);
+    let no_selected = selected == Some(false);
+
+    rsx! {
+        div {
+            class: "flex flex-row gap-2",
+
+            button {
+                class: if yes_selected {
+                    "px-3 py-1 rounded-md border border-blue-500 bg-blue-100"
+                } else {
+                    "px-3 py-1 rounded-md border border-gray-300 bg-white hover:bg-gray-100"
+                },
+                onclick: move |_| {
+                    let mut b = boolean.write();
+                    *b = if *b == Some(true) { None } else { Some(true) };
+                },
+                "yes"
+            }
+
+            button {
+                class: if no_selected {
+                    "px-3 py-1 rounded-md border border-blue-500 bg-blue-100"
+                } else {
+                    "px-3 py-1 rounded-md border border-gray-300 bg-white hover:bg-gray-100"
+                },
+                onclick: move |_| {
+                    let mut b = boolean.write();
+                    *b = if *b == Some(false) { None } else { Some(false) };
+                },
+                "no"
+            }
+        }
+    }
+}
+
+#[component]
 pub fn BackPutRender(
     text: Signal<String>,
     dropdown: DropDownMenu<BackOpts>,
@@ -83,41 +159,10 @@ pub fn BackPutRender(
                         },
 
                         BackOpts::Bool => {
-                            let selected = boolean.cloned();
-                            let yes_selected = selected == Some(true);
-                            let no_selected = selected == Some(false);
-
-                            rsx! {
-                                div {
-                                    class: "flex flex-row gap-2",
-
-                                    button {
-                                        class: if yes_selected {
-                                            "px-3 py-1 rounded-md border border-blue-500 bg-blue-100"
-                                        } else {
-                                            "px-3 py-1 rounded-md border border-gray-300 bg-white hover:bg-gray-100"
-                                        },
-                                        onclick: move |_| {
-                                            let mut b = boolean.write();
-                                            *b = if *b == Some(true) { None } else { Some(true) };
-                                        },
-                                        "yes"
-                                    }
-
-                                    button {
-                                        class: if no_selected {
-                                            "px-3 py-1 rounded-md border border-blue-500 bg-blue-100"
-                                        } else {
-                                            "px-3 py-1 rounded-md border border-gray-300 bg-white hover:bg-gray-100"
-                                        },
-                                        onclick: move |_| {
-                                            let mut b = boolean.write();
-                                            *b = if *b == Some(false) { None } else { Some(false) };
-                                        },
-                                        "no"
-                                    }
-                                }
+                            rsx!{
+                                opt_bool_editor { boolean }
                             }
+
                         }
 
                         BackOpts::Text => {
