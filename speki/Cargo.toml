@@ -1,7 +1,7 @@
 [package]
 name = "speki"
 version = "0.1.0"
-authors = ["tor <tor.saebjornsen@cognite.com>"]
+authors = ["tor <torberge@outlook.com>"]
 edition = "2021"
 
 [package.metadata.bundle]
