@@ -146,7 +146,7 @@ pub fn SectionWithTitle(
     let tooltip = tooltip.unwrap_or_default();
     rsx! {
         div {
-            class: "flex items-center mb-2",
+            class: "flex items-center mb-1",
             h4 {
                 class: "font-bold",
                 title: tooltip,

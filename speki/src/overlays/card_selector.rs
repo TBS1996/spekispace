@@ -16,6 +16,7 @@ use tracing::info;
 use uuid::Uuid;
 
 use crate::{
+    components::SectionWithTitle,
     pages::{reviewable_cards, ExprEditor, RenderExpr},
     pop_overlay, set_overlay,
 };
@@ -419,36 +420,51 @@ pub fn CardSelectorRender(
     rsx! {
         div {
             class: "flex flex-row",
+                div {
+                class: "flex flex-col",
 
-        div {
-            class: "flex flex-col",
-            if filtermemo.read().is_some() {
-                FilterComp {editor: filtereditor}
-            }
-
-            if edit_collection {
-                RenderExpr { filter, inputs: collection.inputs.clone(), ty: collection.ty.clone()}
-            }
-
-            if reviewable {
-                button {
-                    class: "{crate::styles::READ_BUTTON}",
-                    disabled,
-                    title: review_title,
-                    onclick: move |_|{
-                        if let Ok(expr) = expr.clone() {
-                            if let Some(cards) = reviewable_cards(expr, Some(review_filter.clone())) {
-                                OverlayEnum::new_review(cards).append();
-                            } else {
-                                debug_assert!(false);
-                            }
+                if filtermemo.read().is_some() {
+                    div {
+                        class: "mb-6",
+                        SectionWithTitle {
+                            title: "Filter".to_string(),
+                            FilterComp { editor: filtereditor }
                         }
-                    },
-                    "review"
-                 }
+                    }
+                }
+
+                if edit_collection {
+                    div {
+                        class: "mb-6",
+                        SectionWithTitle {
+                            title: "Set".to_string(),
+                            RenderExpr { filter, inputs: collection.inputs.clone(), ty: collection.ty.clone() }
+                        }
+                    }
+                }
+
+                if reviewable {
+                    div {
+                        class: "mb-6",
+                        button {
+                            class: "{crate::styles::READ_BUTTON} w-full",
+                            disabled,
+                            title: review_title,
+                            onclick: move |_| {
+                                if let Ok(expr) = expr.clone() {
+                                    if let Some(cards) = reviewable_cards(expr, Some(review_filter.clone())) {
+                                        OverlayEnum::new_review(cards).append();
+                                    } else {
+                                        debug_assert!(false);
+                                    }
+                                }
+                            },
+                            "review"
+                        }
+                    }
+                }
             }
 
-        }
 
         div {
             class: "h-screen flex flex-col w-full max-w-3xl",
