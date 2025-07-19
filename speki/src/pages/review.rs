@@ -14,7 +14,6 @@ use dioxus::prelude::*;
 use ledgerstore::TheLedgerEvent;
 use nonempty::NonEmpty;
 use speki_core::card::CType;
-use speki_core::cardfilter::MyNumOrd;
 use speki_core::{
     card::CardId,
     cardfilter::CardFilter,
@@ -429,61 +428,8 @@ fn RenderSet(
                             }
                         };
 
-                        let filter = filter2.clone();
-                        let provider = APP.read().inner().card_provider.clone();
-                        let cards = expr.eval(&provider);
 
-                        let card_ids: HashSet<CardId> = cards.iter().map(|card|card.id()).collect();
-                        let all_recursive_dependencies: HashSet<CardId> = card_ids.iter().map(|id|APP.read().inner().provider.cards.recursive_dependencies(*id)).flatten().collect();
-
-                        let mut cards_with_deps: BTreeSet<Arc<Card>> = Default::default();
-
-                        for (idx, card) in cards.into_iter().enumerate() {
-                            if idx % 50 == 0 {
-                                dbg!(idx);
-                            }
-
-                            let card = match card {
-                                MaybeCard::Card(card) => card,
-                                MaybeCard::Id(id) => {
-                                    provider.load(id).unwrap()
-                                },
-                            };
-
-                            cards_with_deps.insert(card);
-                        }
-
-                        for card in all_recursive_dependencies {
-                            let card = provider.load(card).unwrap();
-                            cards_with_deps.insert(card);
-                        }
-
-
-                        use rayon::prelude::*;
-
-
-                        let filtered_cards: Vec<Arc<Card>> = cards_with_deps
-                            .iter()
-                            .cloned()
-                            .collect::<Vec<Arc<Card>>>()
-                            .into_par_iter()
-                            .filter(|card| card.reviewable() && filter.filter(card.clone()))
-                            .collect();
-
-
-                        if let Some(recall) = filter.recall {
-                            if recall.ord == MyNumOrd::Less {
-                                //filtered_cards.retain(|card| card.full_recall_rate().unwrap_or_default() < recall.num);
-                            }
-                        }
-
-                        let mut filtered_cards: Vec<CardId> = filtered_cards.into_iter().map(|card|card.id()).collect();
-
-
-                        use rand::seq::SliceRandom;
-                        filtered_cards.shuffle(&mut rand::thread_rng());
-
-                        match NonEmpty::from_vec(filtered_cards) {
+                        match reviewable_cards(expr, Some(filter2.clone())) {
                             Some(cards) => OverlayEnum::new_review(cards).append(),
                             None => OverlayEnum::new_notice("no cards to review!").append(),
                         }
@@ -538,6 +484,67 @@ fn RenderSet(
             }
         }
     }
+}
+
+pub fn reviewable_cards(expr: SetExpr, filter: Option<CardFilter>) -> Option<NonEmpty<CardId>> {
+    let provider = APP.read().inner().card_provider.clone();
+    let cards = expr.eval(&provider);
+
+    let card_ids: HashSet<CardId> = cards.iter().map(|card| card.id()).collect();
+    let all_recursive_dependencies: HashSet<CardId> = card_ids
+        .iter()
+        .map(|id| {
+            APP.read()
+                .inner()
+                .provider
+                .cards
+                .recursive_dependencies(*id)
+        })
+        .flatten()
+        .collect();
+
+    let mut cards_with_deps: BTreeSet<Arc<Card>> = Default::default();
+
+    for (idx, card) in cards.into_iter().enumerate() {
+        if idx % 50 == 0 {
+            dbg!(idx);
+        }
+
+        let card = match card {
+            MaybeCard::Card(card) => card,
+            MaybeCard::Id(id) => provider.load(id).unwrap(),
+        };
+
+        cards_with_deps.insert(card);
+    }
+
+    for card in all_recursive_dependencies {
+        let card = provider.load(card).unwrap();
+        cards_with_deps.insert(card);
+    }
+
+    use rayon::prelude::*;
+
+    let filtered_cards: Vec<Arc<Card>> = cards_with_deps
+        .into_iter()
+        .collect::<Vec<Arc<Card>>>()
+        .into_par_iter()
+        .filter(|card| {
+            card.reviewable()
+                && filter
+                    .as_ref()
+                    .map(|filter| filter.filter(card.clone()))
+                    .unwrap_or(true)
+        })
+        .collect();
+
+    let mut filtered_cards: Vec<CardId> =
+        filtered_cards.into_iter().map(|card| card.id()).collect();
+
+    use rand::seq::SliceRandom;
+    filtered_cards.shuffle(&mut rand::thread_rng());
+
+    NonEmpty::from_vec(filtered_cards)
 }
 
 #[derive(Debug, Clone, PartialEq)]

@@ -16,7 +16,7 @@ use tracing::info;
 use uuid::Uuid;
 
 use crate::{
-    pages::{ExprEditor, RenderExpr},
+    pages::{reviewable_cards, ExprEditor, RenderExpr},
     pop_overlay, set_overlay,
 };
 
@@ -396,9 +396,26 @@ pub fn CardSelectorRender(
     collection: ExprEditor,
     edit_collection: bool,
     instance_of: Option<CardId>,
+    #[props(default = false)] reviewable: bool,
 ) -> Element {
     info!("render cardselector");
     let filter = filtermemo.cloned().unwrap_or_default();
+    let has_cards = !cards.read().is_empty();
+
+    let expr = SetExpr::try_from(collection.clone());
+
+    let review_title = if expr.is_err() {
+        Some("invalid set")
+    } else if !has_cards {
+        Some("no cards to review")
+    } else {
+        None
+    };
+
+    let disabled = review_title.is_some();
+    let review_title = review_title.unwrap_or_default();
+    let review_filter = filter.clone();
+
     rsx! {
         div {
             class: "flex flex-row",
@@ -412,6 +429,25 @@ pub fn CardSelectorRender(
             if edit_collection {
                 RenderExpr { filter, inputs: collection.inputs.clone(), ty: collection.ty.clone()}
             }
+
+            if reviewable {
+                button {
+                    class: "{crate::styles::READ_BUTTON}",
+                    disabled,
+                    title: review_title,
+                    onclick: move |_|{
+                        if let Ok(expr) = expr.clone() {
+                            if let Some(cards) = reviewable_cards(expr, Some(review_filter.clone())) {
+                                OverlayEnum::new_review(cards).append();
+                            } else {
+                                debug_assert!(false);
+                            }
+                        }
+                    },
+                    "review"
+                 }
+            }
+
         }
 
         div {

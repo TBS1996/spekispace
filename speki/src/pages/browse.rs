@@ -50,6 +50,7 @@ pub fn Browse() -> Element {
                     collection: browse_state.browse_page.collection,
                     edit_collection: browse_state.browse_page.edit_collection,
                     instance_of: browse_state.browse_page.instance_of.clone(),
+                    reviewable: true,
                 }
             }
          }
