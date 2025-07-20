@@ -52,7 +52,7 @@ pub fn RenderDependents(card_id: CardId, hidden: bool) -> Element {
                         (
                             APP.read()
                                 .try_load_card(dep)
-                                .map(|card| card.name().to_string())
+                                .map(|card| card.front_side().to_string())
                                 .unwrap_or("<deleted card>".to_string()),
                             ty,
                             dep,
