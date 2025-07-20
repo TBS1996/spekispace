@@ -10,7 +10,7 @@ pub use cardref::CardRef;
 pub use dropdown::DropDownMenu;
 pub use filtereditor::*;
 pub use frontside::{CardTy, FrontPut};
-use speki_core::{card::CardId, collection::DynCard, set::SetExpr};
+use speki_core::{card::CardId, collection::DynCard, set::SetExpr, CardRefType};
 
 use dioxus::prelude::*;
 
@@ -33,8 +33,13 @@ pub fn RenderDependents(card_id: CardId, hidden: bool) -> Element {
 
     let max_limit = 10;
 
-    let (deps, qty): (Vec<(String, CardId)>, usize) = {
-        let dep_ids = APP.read().inner().provider.cards.all_dependents(card_id);
+    let (deps, qty): (Vec<(String, CardRefType, CardId)>, usize) = {
+        let dep_ids = APP
+            .read()
+            .inner()
+            .provider
+            .cards
+            .all_dependents_with_ty(card_id);
         let qty = dep_ids.len();
 
         if dep_ids.len() > max_limit {
@@ -43,12 +48,13 @@ pub fn RenderDependents(card_id: CardId, hidden: bool) -> Element {
             (
                 dep_ids
                     .into_iter()
-                    .map(|dep| {
+                    .map(|(ty, dep)| {
                         (
                             APP.read()
                                 .try_load_card(dep)
                                 .map(|card| card.name().to_string())
                                 .unwrap_or("<deleted card>".to_string()),
+                            ty,
                             dep,
                         )
                     })
@@ -71,9 +77,10 @@ pub fn RenderDependents(card_id: CardId, hidden: bool) -> Element {
             "view {qty} dependents"
         }
     } else {
-        for (name, id) in deps {
+        for (name, ty, id) in deps {
             button {
                 class: "mb-1 p-1 bg-gray-100 rounded-md text-left",
+                title: ty.to_str(),
                 onclick: move|_|{
                     OverlayEnum::new_edit_card(id).append();
                 },

@@ -31,7 +31,16 @@ pub trait LedgerItem:
     type Error: Debug;
 
     /// The different ways an item can reference another item
-    type RefType: AsRef<str> + Display + Clone + Hash + PartialEq + Eq + Send + Sync + Debug;
+    type RefType: AsRef<str>
+        + Display
+        + Clone
+        + Hash
+        + PartialEq
+        + Eq
+        + Send
+        + Sync
+        + Debug
+        + FromStr;
 
     /// Cache regarding property of a card so you get like all the cards that have a certain value or whatever
     type PropertyType: AsRef<str> + Display + Clone + Hash + PartialEq + Eq + Send + Sync + Debug;

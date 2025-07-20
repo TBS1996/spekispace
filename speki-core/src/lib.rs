@@ -56,6 +56,23 @@ impl AsRef<str> for CardRefType {
     }
 }
 
+use std::str::FromStr;
+
+impl FromStr for CardRefType {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "explicit_dependency" => Ok(Self::ExplicitDependency),
+            "class_of_instance" => Ok(Self::ClassOfInstance),
+            "linkref" => Ok(Self::LinkRef),
+            "parent_class" => Ok(Self::ParentClass),
+            "instance_of_attribute" => Ok(Self::InstanceOfAttribute),
+            _ => Err(()),
+        }
+    }
+}
+
 impl CardRefType {
     pub fn to_str(&self) -> &str {
         self.as_ref()

@@ -2524,20 +2524,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "ledgerstore"
-version = "0.1.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ee10f0f9d0715f26f8c1c159454c495d7b9f7c38ce33092cf7f8ddf6018b33c2"
-dependencies = [
- "either",
- "serde",
- "serde_json",
- "tracing",
- "uuid",
- "walkdir",
-]
-
-[[package]]
 name = "libappindicator"
 version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3097,15 +3083,6 @@ dependencies = [
 [[package]]
 name = "omtrent"
 version = "0.1.1"
-dependencies = [
- "serde",
-]
-
-[[package]]
-name = "omtrent"
-version = "0.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b12f024f777ca5b19ee5c8349f78cc229185a3e5f35627f86369bb7a4de4c004"
 dependencies = [
  "serde",
 ]
@@ -4140,14 +4117,14 @@ dependencies = [
  "dirs 5.0.1",
  "either",
  "fancy-regex",
- "ledgerstore 0.1.2 (registry+https://github.com/rust-lang/crates.io-index)",
+ "ledgerstore",
  "nonempty",
- "omtrent 0.1.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "omtrent",
  "rand 0.8.5",
  "rayon",
  "serde",
  "serde_json",
- "speki-core 0.1.10 (registry+https://github.com/rust-lang/crates.io-index)",
+ "speki-core",
  "strum",
  "tokio",
  "tracing",
@@ -4163,35 +4140,13 @@ dependencies = [
  "either",
  "fancy-regex",
  "gkquad",
- "ledgerstore 0.1.2 (registry+https://github.com/rust-lang/crates.io-index)",
+ "ledgerstore",
  "nonempty",
- "omtrent 0.1.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "omtrent",
  "serde",
  "serde_json",
  "strum",
  "tokio",
- "toml",
- "tracing",
- "uuid",
-]
-
-[[package]]
-name = "speki-core"
-version = "0.1.10"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b167c32bf682f3b822dd2c4dec8273a750b8f9c811b196aefd5a8a3b7d3bb7f6"
-dependencies = [
- "deunicode",
- "dioxus-logger",
- "either",
- "fancy-regex",
- "gkquad",
- "ledgerstore 0.1.2 (registry+https://github.com/rust-lang/crates.io-index)",
- "nonempty",
- "omtrent 0.1.1 (registry+https://github.com/rust-lang/crates.io-index)",
- "serde",
- "serde_json",
- "strum",
  "toml",
  "tracing",
  "uuid",

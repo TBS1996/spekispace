@@ -190,8 +190,8 @@ pub type ReviewEvent = TheLedgerEvent<History>;
 impl LedgerItem for History {
     type Error = ();
     type Key = CardId;
-    type PropertyType = &'static str;
-    type RefType = &'static str;
+    type PropertyType = String;
+    type RefType = String;
     type Modifier = ReviewAction;
 
     fn inner_run_event(mut self, event: ReviewAction) -> Result<Self, ()> {

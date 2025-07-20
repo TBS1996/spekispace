@@ -12,7 +12,7 @@ pub mod basecard;
 pub use basecard::*;
 
 use either::Either;
-use ledgerstore::{EventError, TheCacheGetter, TheLedgerAction, TimeProvider};
+use ledgerstore::{EventError, RefGetter, TheCacheGetter, TheLedgerAction, TimeProvider};
 use nonempty::NonEmpty;
 use serde::Deserializer;
 use serde_json::Value;
@@ -250,12 +250,12 @@ impl Card {
             _ => panic!(),
         };
 
-        let getter = TheCacheGetter::ItemRef {
+        let getter = TheCacheGetter::ItemRef(RefGetter {
             reversed: false,
             ty: Some(CardRefType::ParentClass),
             key,
             recursive: true,
-        };
+        });
 
         let mut classes = self.card_provider.providers.cards.load_getter(getter);
         classes.insert(key);
@@ -452,12 +452,12 @@ impl Card {
             debug_assert!(false);
         }
 
-        let getter = TheCacheGetter::ItemRef {
+        let getter = TheCacheGetter::ItemRef(RefGetter {
             reversed: true,
             key: self.id,
             ty: Some(CardRefType::InstanceOfAttribute),
             recursive: false,
-        };
+        });
 
         self.card_provider.providers.cards.load_getter(getter)
     }
@@ -503,10 +503,7 @@ impl Card {
     }
 
     pub fn recursive_dependents(&self) -> HashSet<CardId> {
-        self.card_provider
-            .providers
-            .cards
-            .recursive_dependents(self.id)
+        self.card_provider.providers.cards.all_dependents(self.id)
     }
 
     pub fn recursive_dependencies(&self) -> Vec<CardId> {

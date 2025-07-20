@@ -29,8 +29,8 @@ impl Metadata {
 impl LedgerItem for Metadata {
     type Error = ();
     type Key = Uuid;
-    type PropertyType = &'static str;
-    type RefType = &'static str;
+    type PropertyType = String;
+    type RefType = String;
     type Modifier = MetaAction;
 
     fn inner_run_event(mut self, event: MetaAction) -> Result<Self, ()> {
