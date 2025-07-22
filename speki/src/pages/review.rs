@@ -540,13 +540,28 @@ pub fn reviewable_cards(expr: SetExpr, filter: Option<CardFilter>) -> Option<Non
         })
         .collect();
 
-    let mut filtered_cards: Vec<CardId> =
-        filtered_cards.into_iter().map(|card| card.id()).collect();
+    let mut seen_cards: Vec<CardId> = vec![];
+    let mut unseen_cards: Vec<CardId> = vec![];
 
-    use rand::seq::SliceRandom;
-    filtered_cards.shuffle(&mut rand::thread_rng());
+    for card in filtered_cards {
+        if card.history().is_empty() {
+            unseen_cards.push(card.id());
+        } else {
+            seen_cards.push(card.id());
+        }
+    }
 
-    NonEmpty::from_vec(filtered_cards)
+    use rand::prelude::SliceRandom;
+
+    seen_cards.shuffle(&mut rand::thread_rng());
+    unseen_cards.shuffle(&mut rand::thread_rng());
+
+    let mut all_cards: Vec<CardId> = Vec::with_capacity(seen_cards.len() + unseen_cards.len());
+
+    all_cards.extend(seen_cards);
+    all_cards.extend(unseen_cards);
+
+    NonEmpty::from_vec(all_cards)
 }
 
 #[derive(Debug, Clone, PartialEq)]
