@@ -782,7 +782,7 @@ impl<T: LedgerItem> Ledger<T> {
             reversed: false,
             key,
             ty: None,
-            recursive: false,
+            recursive: true,
         });
         self.load_getter(getter)
     }
@@ -792,7 +792,7 @@ impl<T: LedgerItem> Ledger<T> {
             reversed: true,
             key,
             ty: None,
-            recursive: false,
+            recursive: true,
         };
         self.load_getter_ty(getter)
     }
@@ -802,7 +802,7 @@ impl<T: LedgerItem> Ledger<T> {
             reversed: true,
             key,
             ty: None,
-            recursive: false,
+            recursive: true,
         });
         self.load_getter(getter)
     }
