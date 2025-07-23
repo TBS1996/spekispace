@@ -49,6 +49,7 @@ impl<T: LedgerItem> ItemReference<T> {
     }
 }
 
+#[derive(Clone)]
 pub struct RefGetter<T: LedgerItem> {
     pub reversed: bool, // whether it fetches links from the item to other items or the way this item being referenced
     pub key: T::Key,    // item in question
@@ -57,6 +58,7 @@ pub struct RefGetter<T: LedgerItem> {
 }
 
 /// Represents a way to fetch an item based on either its properites
+#[derive(Clone)]
 pub enum TheCacheGetter<T: LedgerItem> {
     ItemRef(RefGetter<T>),
     Property(PropertyCache<T>),
@@ -356,9 +358,13 @@ impl<T: LedgerItem> Ledger<T> {
         selv
     }
 
+    pub fn modify(&self, event: TheLedgerEvent<T>) -> Result<(), EventError<T>> {
+        self.modify_it(event, true, true, true)?;
+        Ok(())
+    }
+
     pub fn load_ids(&self) -> HashSet<T::Key> {
         let mut ids = self.local.load_ids();
-
         if let Some(remote) = self.remote.as_ref() {
             ids.extend(remote.load_ids());
         }
@@ -367,29 +373,76 @@ impl<T: LedgerItem> Ledger<T> {
     }
 
     pub fn all_dependents_with_ty(&self, key: T::Key) -> HashSet<(T::RefType, T::Key)> {
-        self.local.all_dependents_with_ty(key)
+        let mut items = self.local.all_dependents_with_ty(key);
+        if let Some(remote) = self.remote.as_ref() {
+            items.extend(remote.all_dependents_with_ty(key));
+        }
+
+        items
     }
 
     pub fn get_prop_cache(&self, key: PropertyCache<T>) -> HashSet<T::Key> {
-        self.local.get_prop_cache(key)
+        let mut items = self.local.get_prop_cache(key.clone());
+        if let Some(remote) = self.remote.as_ref() {
+            items.extend(remote.get_prop_cache(key));
+        }
+
+        items
     }
 
     pub fn all_dependencies(&self, key: T::Key) -> HashSet<T::Key> {
-        self.local.all_dependencies(key)
+        let mut items = self.local.all_dependencies(key);
+        if let Some(remote) = self.remote.as_ref() {
+            items.extend(remote.all_dependencies(key));
+        }
+
+        items
     }
 
     pub fn all_dependents(&self, key: T::Key) -> HashSet<T::Key> {
-        self.local.all_dependents(key)
+        let mut items = self.local.all_dependents(key);
+        if let Some(remote) = self.remote.as_ref() {
+            items.extend(remote.all_dependents(key));
+        }
+        items
     }
 
     pub fn load_getter(&self, getter: TheCacheGetter<T>) -> HashSet<T::Key> {
-        self.local.load_getter(getter)
+        let mut items = self.local.load_getter(getter.clone());
+        if let Some(remote) = self.remote.as_ref() {
+            items.extend(remote.load_getter(getter));
+        }
+        items
     }
 
     pub fn with_remote(mut self, url: String) -> Self {
         let remote = Remote::new(&self.root, url);
         self.remote = Some(Arc::new(remote));
         self
+    }
+
+    pub fn load_all(&self) -> HashSet<T> {
+        let mut items = self.local.load_all();
+        if let Some(remote) = self.remote.as_ref() {
+            items.extend(remote.load_all());
+        }
+
+        items
+    }
+
+    pub fn load(&self, key: T::Key) -> Option<T> {
+        if let Some(remote) = self.remote.as_ref() {
+            let item = remote.load(key);
+            if item.is_some() {
+                return item;
+            }
+        }
+
+        self.local.load(key)
+    }
+
+    pub fn currently_applied_ledger_hash(&self) -> Option<LedgerHash> {
+        fs::read_to_string(&*self.ledger_hash).ok()
     }
 
     fn item_path(&self, key: T::Key) -> PathBuf {
@@ -519,28 +572,9 @@ impl<T: LedgerItem> Ledger<T> {
         }
     }
 
-    pub fn load_all(&self) -> HashSet<T> {
-        self.local.load_all()
-    }
-
-    pub fn load(&self, key: T::Key) -> Option<T> {
-        if let Some(remote) = self.remote.as_ref() {
-            let item = remote.load(key);
-            if item.is_some() {
-                return item;
-            }
-        }
-
-        self.local.load(key)
-    }
-
     fn set_ledger_hash(&self, hash: LedgerHash) {
         let mut f = fs::File::create(&*self.ledger_hash).unwrap();
         f.write_all(hash.as_bytes()).unwrap();
-    }
-
-    pub fn currently_applied_ledger_hash(&self) -> Option<LedgerHash> {
-        fs::read_to_string(&*self.ledger_hash).ok()
     }
 
     fn remove_dependent(&self, key: T::Key, ty: T::RefType, dependent: T::Key) {
@@ -672,7 +706,7 @@ impl<T: LedgerItem> Ledger<T> {
         Ok(())
     }
 
-    pub fn modify_it(
+    fn modify_it(
         &self,
         event: TheLedgerEvent<T>,
         save: bool,
@@ -692,17 +726,12 @@ impl<T: LedgerItem> Ledger<T> {
         })
     }
 
-    pub fn modify(&self, event: TheLedgerEvent<T>) -> Result<(), EventError<T>> {
-        self.modify_it(event, true, true, true)?;
-        Ok(())
-    }
-
-    pub fn remove(&self, key: T::Key) {
+    fn remove(&self, key: T::Key) {
         let path = self.item_path(key);
         std::fs::remove_file(path).unwrap();
     }
 
-    pub fn save(&self, item: T) {
+    fn save(&self, item: T) {
         let key = item.item_id();
         let item_path = self.item_path(key);
         let serialized = serde_json::to_string_pretty(&item).unwrap();
