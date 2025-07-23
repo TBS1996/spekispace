@@ -49,12 +49,12 @@ impl CardProvider {
     }
 
     pub fn load(&self, id: CardId) -> Option<Arc<Card>> {
-        let base = self.providers.cards.try_load(id)?;
-        let history = match self.providers.reviews.try_load(id) {
+        let base = self.providers.cards.load(id)?;
+        let history = match self.providers.reviews.load(id) {
             Some(revs) => revs,
             None => History::new(id),
         };
-        let metadata = match self.providers.metadata.try_load(id) {
+        let metadata = match self.providers.metadata.load(id) {
             Some(meta) => meta,
             None => Metadata::new(id),
         };

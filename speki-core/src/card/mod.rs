@@ -234,7 +234,7 @@ impl Card {
         let mut output = vec![];
 
         for class in self.parent_classes() {
-            let card = self.card_provider.providers.cards.load(class);
+            let card = self.card_provider.providers.cards.load(class).unwrap();
             if let CardType::Class { attrs, .. } = card.data {
                 output.extend(attrs);
             }
@@ -391,7 +391,13 @@ impl Card {
             } => match (back, parent_class) {
                 (Some(theback), Some(pcl)) if theback.is_empty_text() => {
                     EvalText::just_some_string(
-                        card_provider.providers.cards.load(*pcl).data.raw_front(),
+                        card_provider
+                            .providers
+                            .cards
+                            .load(*pcl)
+                            .unwrap()
+                            .data
+                            .raw_front(),
                         &card_provider,
                     )
                 }
@@ -607,7 +613,7 @@ impl Card {
     pub fn full_history(&self) -> History {
         let mut reviews: Vec<Review> = vec![];
         for dep in self.dependents_ids() {
-            let Some(history) = self.card_provider.providers.reviews.try_load(dep) else {
+            let Some(history) = self.card_provider.providers.reviews.load(dep) else {
                 continue;
             };
 

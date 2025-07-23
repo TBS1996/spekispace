@@ -141,7 +141,7 @@ fn RenderInput(
                     p { "{leaf}" }}
             },
             InputEditor::Reference(id) => {
-                rsx!{RenderSet { filter, set: SetEditor::new(&ledger.load(id)), depth: depth + 1}}
+                rsx!{RenderSet { filter, set: SetEditor::new(&ledger.load(id).unwrap()), depth: depth + 1}}
             },
             InputEditor::Expr(expr) => {
                 rsx!{
@@ -356,7 +356,7 @@ fn RenderSet(
     let real_set = SetExpr::try_from(expr.cloned());
 
     let (save_button, is_new): (bool, bool) = match real_set.clone() {
-        Ok(set_expr) => match APP.read().inner().provider.sets.try_load(set.id) {
+        Ok(set_expr) => match APP.read().inner().provider.sets.load(set.id) {
             Some(old_set) => (
                 old_set.expr != set_expr || old_set.name != set.name.cloned(),
                 false,
@@ -525,12 +525,10 @@ pub fn reviewable_cards(expr: SetExpr, filter: Option<CardFilter>) -> Option<Non
         cards_with_deps.insert(card);
     }
 
-    use rayon::prelude::*;
-
     let filtered_cards: Vec<Arc<Card>> = cards_with_deps
         .into_iter()
         .collect::<Vec<Arc<Card>>>()
-        .into_par_iter()
+        .into_iter()
         .filter(|card| {
             card.reviewable()
                 && filter

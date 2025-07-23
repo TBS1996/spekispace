@@ -988,7 +988,7 @@ impl CardViewer {
                     .inner()
                     .provider
                     .metadata
-                    .try_load(card.id())
+                    .load(card.id())
                     .unwrap_or_default(),
             );
 
@@ -1881,7 +1881,7 @@ fn save_button(CardViewer: CardViewer) -> Element {
                             match answer {
                                 OldAttrAnswerEditor::Boolean(boolean) => {
                                     let boolean = boolean.cloned();
-                                    let prev_back = APP.read().inner().card_provider.providers.cards.load(attr_card_id).ref_backside().cloned().unwrap();
+                                    let prev_back = APP.read().inner().card_provider.providers.cards.load(attr_card_id).unwrap().ref_backside().cloned().unwrap();
                                     let back = BackSide::Bool(boolean);
                                         if prev_back != back {
                                             let action = CardAction::SetBackBool(boolean);
@@ -1894,7 +1894,7 @@ fn save_button(CardViewer: CardViewer) -> Element {
 
                                 }
                                 OldAttrAnswerEditor::TimeStamp(ts) => {
-                                    let prev_back = APP.read().inner().card_provider.providers.cards.load(attr_card_id).ref_backside().cloned().unwrap();
+                                    let prev_back = APP.read().inner().card_provider.providers.cards.load(attr_card_id).unwrap().ref_backside().cloned().unwrap();
                                     if let Ok(ts) = TimeStamp::from_str(&ts.cloned()) {
                                         let back = BackSide::Time(ts.clone());
                                         if prev_back != back {
@@ -1909,7 +1909,7 @@ fn save_button(CardViewer: CardViewer) -> Element {
                                 },
 
                                 OldAttrAnswerEditor::Any(back_put) => {
-                                    let prev_back = APP.read().inner().card_provider.providers.cards.load(attr_card_id).ref_backside().cloned().unwrap();
+                                    let prev_back = APP.read().inner().card_provider.providers.cards.load(attr_card_id).unwrap().ref_backside().cloned().unwrap();
                                     if let Some(back) = back_put.to_backside() {
                                         if back != prev_back {
                                             let action = CardAction::AttributeType { attribute: attr_id, back , instance: id };

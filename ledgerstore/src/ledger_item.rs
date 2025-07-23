@@ -124,7 +124,7 @@ pub trait LedgerItem:
             let dependencies = if selv.0 == current {
                 selv.1.ref_cache()
             } else {
-                ledger.load(current).ref_cache()
+                ledger.load(current).unwrap().ref_cache()
             };
 
             for ItemReference {
@@ -234,7 +234,7 @@ pub trait LedgerItem:
             if !visited.insert(key) {
                 return;
             }
-            let item = ledger.load(key);
+            let item = ledger.load(key).unwrap();
 
             out.insert(item.clone());
 

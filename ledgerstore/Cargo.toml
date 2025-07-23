@@ -13,3 +13,4 @@ uuid.workspace = true
 tracing.workspace = true
 walkdir.workspace = true
 either.workspace = true
+git2.workspace = true

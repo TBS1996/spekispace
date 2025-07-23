@@ -83,6 +83,7 @@ pub fn handle_card_event_error(err: EventError<RawCard>) {
             s
         }
         EventError::Invariant(inv) => format!("invariant broken: {inv:?}"),
+        EventError::Remote => format!("remote card cannot be modified"),
         EventError::ItemNotFound => format!("card not found"),
         EventError::DeletingWithDependencies => format!("cannot delete card with dependencies"),
     };

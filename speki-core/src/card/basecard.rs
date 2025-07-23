@@ -528,7 +528,7 @@ impl CardType {
                 name, class, back, ..
             } => {
                 let (class_name, default_question) =
-                    match provider.providers.cards.load(*class).data {
+                    match provider.providers.cards.load(*class).unwrap().data {
                         CardType::Class {
                             default_question,
                             name,
@@ -692,7 +692,7 @@ impl RawCard {
                 dbg!(&self);
                 let attr = self.get_attr_rec(ledger.to_owned()).unwrap();
 
-                let instance = ledger.load(instance).data.name_fixed_ledger();
+                let instance = ledger.load(instance).unwrap().data.name_fixed_ledger();
                 let instance = instance.to_raw();
 
                 let new = attr.pattern.replace("{}", &instance);
@@ -767,10 +767,10 @@ impl RawCard {
             return None;
         };
 
-        let mut card: Self = ledger.load(*instance);
+        let mut card: Self = ledger.load(*instance).unwrap();
 
         while let Some(parent) = card.parent_class() {
-            card = ledger.load(parent);
+            card = ledger.load(parent).unwrap();
             if let Some(attr) = card.get_attr(*attribute) {
                 return Some(attr);
             }
@@ -857,7 +857,7 @@ fn resolve_text(txt: String, ledger: &Ledger<RawCard>, re: &Regex) -> String {
 
     let mut s: String = re.replace_all(&txt, "").to_string();
     for id in uuids {
-        let card = ledger.load(id);
+        let card = ledger.load(id).unwrap();
         let txt = card.cache_front(ledger);
         s.push_str(&resolve_text(txt, ledger, re));
     }
@@ -891,7 +891,7 @@ pub enum CardError {
 }
 
 fn instance_is_of_type(instance: CardId, ty: CardId, ledger: &LedgerType<RawCard>) -> bool {
-    let instance = ledger.load(instance);
+    let instance = ledger.load(instance).unwrap();
     assert!(instance.data.is_instance());
 
     get_parent_classes(ty, ledger)
@@ -901,13 +901,13 @@ fn instance_is_of_type(instance: CardId, ty: CardId, ledger: &LedgerType<RawCard
 }
 
 fn get_parent_classes(class: CardId, ledger: &LedgerType<RawCard>) -> Vec<RawCard> {
-    let class = ledger.load(class);
+    let class = ledger.load(class).unwrap();
     let mut classes: Vec<RawCard> = vec![class.clone()];
     assert!(class.data.is_class());
     let mut parent_class = class.parent_class();
 
     while let Some(parent) = parent_class {
-        let class = ledger.load(parent);
+        let class = ledger.load(parent).unwrap();
         assert!(class.data.is_class());
         parent_class = class.parent_class();
         classes.push(class);
@@ -942,7 +942,7 @@ impl LedgerItem for RawCard {
                 back: _,
                 class,
             } => {
-                if !ledger.load(*class).data.is_class() {
+                if !ledger.load(*class).unwrap().data.is_class() {
                     return Err(CardError::InstanceOfNonClass);
                 }
             }
@@ -954,12 +954,13 @@ impl LedgerItem for RawCard {
                 back: attr_back,
                 instance,
             } => {
-                let CardType::Instance { name, back, class } = ledger.load(*instance).data else {
+                let CardType::Instance { name, back, class } = ledger.load(*instance).unwrap().data
+                else {
                     return Err(CardError::InstanceOfNonClass);
                 };
 
                 let class = {
-                    let class = ledger.load(class);
+                    let class = ledger.load(class).unwrap();
                     if !class.data.is_class() {
                         return Err(CardError::InstanceOfNonClass);
                     }
@@ -1010,14 +1011,14 @@ impl LedgerItem for RawCard {
                 attrs,
             } => {
                 if let Some(parent) = parent_class {
-                    if !ledger.load(*parent).data.is_class() {
+                    if !ledger.load(*parent).unwrap().data.is_class() {
                         return Err(CardError::SubClassOfNonClass);
                     }
                 }
 
                 for attr in attrs {
                     if let Some(AttrBackType::InstanceOfClass(back_type)) = attr.back_type {
-                        if !ledger.load(back_type).data.is_class() {
+                        if !ledger.load(back_type).unwrap().data.is_class() {
                             return Err(CardError::BackTypeMustBeClass);
                         }
                     }

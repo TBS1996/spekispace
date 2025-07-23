@@ -2,6 +2,7 @@ use either::Either;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use std::fs::{self, hard_link};
 use std::io::Write;
+use std::marker::PhantomData;
 use std::path::{Path, PathBuf};
 use std::vec::Vec;
 use std::{
@@ -21,49 +22,6 @@ pub type CacheKey<T> = Either<PropertyCache<T>, ItemRefCache<T>>;
 use blockchain::BlockChain;
 
 pub use ledger_item::LedgerItem;
-
-/*
-struct StateDir<T: LedgerItem> {
-    root: Arc<PathBuf>,
-    dir: RelDir<T>,
-}
-
-impl<T: LedgerItem> StateDir<T> {
-    fn path(&self) -> PathBuf {
-        self.dir.path(self.root.clone())
-    }
-}
-
-/// Represents a leaf directory containing items
-enum RelDir<T: LedgerItem> {
-    Dependencies { id: T::Key, ty: T::RefType },
-    Dependents { id: T::Key, ty: T::RefType },
-    Items([char; 2]),
-    Properties { ty: T::PropertyType, val: String },
-}
-
-impl<T: LedgerItem> RelDir<T> {
-    fn path(&self, root: Arc<PathBuf>) -> PathBuf {
-        let p = match self {
-            RelDir::Dependencies { id, ty } => root
-                .join("dependencies")
-                .join(id.to_string())
-                .join(ty.to_string()),
-            RelDir::Dependents { id, ty } => root
-                .join("dependents")
-                .join(id.to_string())
-                .join(ty.to_string()),
-            RelDir::Items([a, b]) => root.join("items").join(format!("{}{}", a, b)),
-            RelDir::Properties { ty, val } => {
-                root.join("properties").join(ty.to_string()).join(val)
-            }
-        };
-
-        std::fs::create_dir_all(&p).unwrap();
-        p
-    }
-}
-*/
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, Ord, PartialOrd)]
 pub struct PropertyCache<T: LedgerItem> {
@@ -122,6 +80,7 @@ pub enum EventError<T: LedgerItem> {
     Invariant(T::Error),
     ItemNotFound,
     DeletingWithDependencies,
+    Remote,
 }
 
 pub trait TimeProvider {
@@ -212,7 +171,7 @@ pub enum LedgerType<T: LedgerItem> {
 }
 
 impl<T: LedgerItem> LedgerType<T> {
-    pub fn load(&self, key: T::Key) -> T {
+    pub fn load(&self, key: T::Key) -> Option<T> {
         match self {
             LedgerType::OverRide(ledger) => ledger.load(key),
             LedgerType::Normal(ledger) => ledger.load(key),
@@ -261,16 +220,16 @@ impl<T: LedgerItem> OverrideLedger<T> {
         }
     }
 
-    pub fn load(&self, key: T::Key) -> T {
+    pub fn load(&self, key: T::Key) -> Option<T> {
         if self.new_id == key {
-            self.new.clone()
+            Some(self.new.clone())
         } else {
             self.inner.load(key)
         }
     }
 
     pub fn dependencies(&self, key: T::Key) -> HashSet<T::Key> {
-        self.load(key).dependencies()
+        self.load(key).unwrap().dependencies()
     }
 
     pub fn dependents(&self, key: T::Key) -> HashSet<T::Key> {
@@ -284,6 +243,42 @@ impl<T: LedgerItem> OverrideLedger<T> {
     }
 }
 
+struct Remote<T: LedgerItem> {
+    _url: String,
+    _repo: Repository,
+    path: Arc<PathBuf>,
+    _phantom: PhantomData<T>,
+}
+
+use git2::Repository;
+
+impl<T: LedgerItem> ReadLedger for Remote<T> {
+    type Item = T;
+
+    fn root_path(&self) -> PathBuf {
+        self.path.to_path_buf()
+    }
+}
+
+impl<T: LedgerItem> Remote<T> {
+    fn new(root: &Path, url: String) -> Self {
+        let path = root.join("remote");
+        fs::create_dir_all(&path).unwrap();
+
+        let repo = match Repository::clone(&url, &path) {
+            Ok(repo) => repo,
+            Err(_) => Repository::open(&path).unwrap(),
+        };
+
+        Self {
+            _url: url,
+            _repo: repo,
+            path: Arc::new(path),
+            _phantom: PhantomData,
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 struct ModifyResult<T: LedgerItem> {
     key: T::Key,
@@ -294,196 +289,170 @@ struct ModifyResult<T: LedgerItem> {
 }
 
 #[derive(Clone)]
-pub struct Ledger<T: LedgerItem> {
-    entries: BlockChain<T>,
-    properties: Arc<PathBuf>,
-    dependencies: Arc<PathBuf>,
-    dependents: Arc<PathBuf>,
-    items: Arc<PathBuf>,
-    ledger_hash: Arc<PathBuf>,
+struct Local<T: LedgerItem> {
+    root: Arc<PathBuf>,
+    _phantom: PhantomData<T>,
 }
 
-impl<T: LedgerItem> Ledger<T> {
-    pub fn new(root: PathBuf) -> Self {
-        let root = root.join(Self::item_name());
-        let entries = BlockChain::new(root.join("entries"));
-        let root = root.join("state");
+impl<T: LedgerItem> ReadLedger for Local<T> {
+    type Item = T;
 
-        let properties = root.join("properties");
-        let dependencies = root.join("dependencies");
-        let dependents = root.join("dependents");
-        let items = root.join("items");
-        let ledger_hash = root.join("applied");
+    fn root_path(&self) -> PathBuf {
+        self.root.to_path_buf()
+    }
+}
 
-        std::fs::create_dir_all(&properties).unwrap();
-        std::fs::create_dir_all(&dependencies).unwrap();
-        std::fs::create_dir_all(&dependents).unwrap();
-        std::fs::create_dir_all(&items).unwrap();
+trait ReadLedger {
+    type Item: LedgerItem;
 
-        let selv = Self {
-            properties: Arc::new(properties),
-            dependencies: Arc::new(dependencies),
-            dependents: Arc::new(dependents),
-            items: Arc::new(items),
-            ledger_hash: Arc::new(ledger_hash),
-            entries,
-        };
+    fn root_path(&self) -> PathBuf;
 
-        if selv.entries.current_hash() != selv.currently_applied_ledger_hash() {
-            selv.apply();
+    fn load_all(&self) -> HashSet<Self::Item> {
+        let ids = self.load_ids();
+        let mut out = HashSet::with_capacity(ids.len());
+
+        for id in ids {
+            out.insert(self.load(id).unwrap());
         }
 
-        selv
+        out
     }
 
-    fn collect_all_dependents_recursive(
-        &self,
-        key: T::Key,
-        ty: Option<T::RefType>,
-        out: &mut HashSet<T::Key>,
-        reversed: bool,
-    ) {
-        let dep_dir = match reversed {
-            true => self.root_dependents_dir(key),
-            false => self.root_dependencies_dir(key),
-        };
+    fn load_ids(&self) -> HashSet<<Self::Item as LedgerItem>::Key> {
+        let mut entries: Vec<PathBuf> = vec![];
 
-        let dirs = match ty.clone() {
-            Some(ty) => vec![dep_dir.join(ty.to_string())],
-            None => fs::read_dir(&dep_dir)
-                .unwrap()
-                .filter_map(|entry| {
-                    let path = entry.unwrap().path();
-                    if path.is_dir() {
-                        Some(path)
-                    } else {
-                        None
-                    }
-                })
-                .collect(),
-        };
+        for entry in fs::read_dir(self.items_path()).unwrap() {
+            let entry = entry.unwrap().path();
+            entries.push(entry);
+        }
+        let mut keys: HashSet<<Self::Item as LedgerItem>::Key> = HashSet::default();
 
-        for dir in dirs {
-            for dep_key in Self::item_keys_from_dir(dir) {
-                if out.insert(dep_key.clone()) {
-                    self.collect_all_dependents_recursive(dep_key, ty.clone(), out, reversed);
-                }
+        for entry in entries {
+            for entry in fs::read_dir(entry).unwrap() {
+                match entry
+                    .unwrap()
+                    .file_name()
+                    .to_str()
+                    .unwrap()
+                    .parse::<<Self::Item as LedgerItem>::Key>()
+                {
+                    Ok(key) => keys.insert(key),
+                    Err(_) => panic!(),
+                };
+            }
+        }
+
+        keys
+    }
+
+    fn cache_dir(&self, cache: CacheKey<Self::Item>) -> PathBuf {
+        match cache {
+            CacheKey::Left(PropertyCache { property, value }) => self
+                .properties_path()
+                .join(property.to_string())
+                .join(&value),
+            CacheKey::Right(ItemRefCache { reftype, id }) => {
+                self.root_dependents_dir(id).join(reftype.to_string())
             }
         }
     }
 
-    fn collect_all_dependents_recursive_with_ty(
-        &self,
-        key: T::Key,
-        ty: Option<T::RefType>,
-        out: &mut HashSet<(T::RefType, T::Key)>,
-        reversed: bool,
-    ) {
-        let dep_dir = match reversed {
-            true => self.root_dependents_dir(key),
-            false => self.root_dependencies_dir(key),
-        };
-
-        let dirs = match ty.clone() {
-            Some(ty) => vec![dep_dir.join(ty.to_string())],
-            None => fs::read_dir(&dep_dir)
-                .unwrap()
-                .filter_map(|entry| {
-                    let path = entry.unwrap().path();
-                    if path.is_dir() {
-                        Some(path)
-                    } else {
-                        None
-                    }
-                })
-                .collect(),
-        };
-
-        for dir in dirs {
-            let the_ty: T::RefType = match dir.file_name().unwrap().to_str().unwrap().parse() {
-                Ok(ty) => ty,
-                Err(_) => panic!(),
-            };
-
-            for dep_key in Self::item_keys_from_dir(dir) {
-                if out.insert((the_ty.clone(), dep_key.clone())) {
-                    self.collect_all_dependents_recursive_with_ty(
-                        dep_key,
-                        ty.clone(),
-                        out,
-                        reversed,
-                    );
-                }
-            }
-        }
+    fn properties_path(&self) -> PathBuf {
+        let p = self.root_path().join("properties");
+        fs::create_dir_all(&p).unwrap();
+        p
     }
 
-    pub fn load_getter_ty(&self, getter: RefGetter<T>) -> HashSet<(T::RefType, T::Key)> {
-        let RefGetter {
-            reversed,
+    fn get_prop_cache(
+        &self,
+        key: PropertyCache<Self::Item>,
+    ) -> HashSet<<Self::Item as LedgerItem>::Key> {
+        let path = self
+            .properties_path()
+            .join(key.property.to_string())
+            .join(&key.value);
+        Self::item_keys_from_dir(path)
+    }
+
+    fn all_dependencies(
+        &self,
+        key: <Self::Item as LedgerItem>::Key,
+    ) -> HashSet<<Self::Item as LedgerItem>::Key> {
+        let getter = RefGetter {
+            reversed: false,
             key,
-            ty,
-            recursive,
-        } = getter;
+            ty: None,
+            recursive: false,
+        };
 
-        match (recursive, reversed, key, ty) {
-            (true, reversed, key, ty) => {
-                let mut out = HashSet::new();
-                self.collect_all_dependents_recursive_with_ty(key, ty, &mut out, reversed);
-                out
-            }
-            (false, true, key, Some(ty)) => {
-                let dir = self.dependents_dir(key, ty.clone());
-                Self::item_keys_from_dir(dir)
-                    .into_iter()
-                    .map(|key| (ty.clone(), key))
-                    .collect()
-            }
-            (false, true, key, None) => {
-                let mut out: HashSet<(T::RefType, T::Key)> = Default::default();
-                let dep_dir = self.root_dependents_dir(key);
-                for dir in fs::read_dir(&dep_dir).unwrap() {
-                    let dir = dir.unwrap();
-                    let ty: T::RefType = match dir.file_name().to_str().unwrap().parse() {
-                        Ok(ty) => ty,
-                        Err(_) => panic!(),
-                    };
-
-                    for key in Self::item_keys_from_dir(dir.path()) {
-                        out.insert((ty.clone(), key));
-                    }
-                }
-
-                out
-            }
-            (false, false, key, Some(ty)) => {
-                let dir = self.root_dependencies_dir(key).join(ty.to_string());
-                Self::item_keys_from_dir(dir)
-                    .into_iter()
-                    .map(|key| (ty.clone(), key))
-                    .collect()
-            }
-            (false, false, key, None) => {
-                let mut out: HashSet<(T::RefType, T::Key)> = Default::default();
-                let dep_dir = self.root_dependencies_dir(key);
-                for dir in fs::read_dir(&dep_dir).unwrap() {
-                    let dir = dir.unwrap();
-                    let ty: T::RefType = match dir.file_name().to_str().unwrap().parse() {
-                        Ok(ty) => ty,
-                        Err(_) => panic!(),
-                    };
-
-                    for key in Self::item_keys_from_dir(dir.path()) {
-                        out.insert((ty.clone(), key));
-                    }
-                }
-
-                out
-            }
-        }
+        self.load_getter_ty(getter)
+            .into_iter()
+            .map(|x| x.1)
+            .collect()
     }
 
-    pub fn load_getter(&self, getter: TheCacheGetter<T>) -> HashSet<T::Key> {
+    fn all_dependents_with_ty(
+        &self,
+        key: <Self::Item as LedgerItem>::Key,
+    ) -> HashSet<(
+        <Self::Item as LedgerItem>::RefType,
+        <Self::Item as LedgerItem>::Key,
+    )> {
+        let getter = RefGetter {
+            reversed: true,
+            key,
+            ty: None,
+            recursive: true,
+        };
+        self.load_getter_ty(getter)
+    }
+
+    fn all_dependents(
+        &self,
+        key: <Self::Item as LedgerItem>::Key,
+    ) -> HashSet<<Self::Item as LedgerItem>::Key> {
+        self.all_dependents_with_ty(key)
+            .into_iter()
+            .map(|x| x.1)
+            .collect()
+    }
+
+    fn item_keys_from_dir_recursive(path: PathBuf) -> HashSet<<Self::Item as LedgerItem>::Key> {
+        if !path.exists() {
+            return Default::default();
+        }
+
+        let mut out = HashSet::new();
+
+        for entry in WalkDir::new(&path)
+            .follow_links(false)
+            .into_iter()
+            .filter_map(Result::ok)
+            .filter(|e| e.file_type().is_file())
+        {
+            match entry
+                .file_name()
+                .to_str()
+                .unwrap()
+                .parse::<<Self::Item as LedgerItem>::Key>()
+            {
+                Ok(key) => {
+                    out.insert(key);
+                }
+                Err(_) => {
+                    dbg!(entry.path());
+                    panic!("Failed to parse key from file name");
+                }
+            }
+        }
+
+        out
+    }
+
+    fn load_getter(
+        &self,
+        getter: TheCacheGetter<Self::Item>,
+    ) -> HashSet<<Self::Item as LedgerItem>::Key> {
         match getter {
             TheCacheGetter::ItemRef(RefGetter {
                 recursive: true,
@@ -535,6 +504,359 @@ impl<T: LedgerItem> Ledger<T> {
         }
     }
 
+    fn root_dependencies_dir(&self, key: <Self::Item as LedgerItem>::Key) -> PathBuf {
+        let p = self.root_path().join("dependencies").join(key.to_string());
+        std::fs::create_dir_all(&p).unwrap();
+        p
+    }
+
+    fn root_dependents_dir(&self, key: <Self::Item as LedgerItem>::Key) -> PathBuf {
+        let p = self.root_path().join("dependents").join(key.to_string());
+        std::fs::create_dir_all(&p).unwrap();
+        p
+    }
+
+    fn dependents_dir(
+        &self,
+        key: <Self::Item as LedgerItem>::Key,
+        ty: <Self::Item as LedgerItem>::RefType,
+    ) -> PathBuf {
+        let p = self.root_dependents_dir(key).join(ty.to_string());
+        std::fs::create_dir_all(&p).unwrap();
+        p
+    }
+
+    fn items_path(&self) -> PathBuf {
+        let p = self.root_path().join("items");
+        fs::create_dir_all(&p).unwrap();
+        p
+    }
+
+    fn collect_all_dependents_recursive(
+        &self,
+        key: <Self::Item as LedgerItem>::Key,
+        ty: Option<<Self::Item as LedgerItem>::RefType>,
+        out: &mut HashSet<<Self::Item as LedgerItem>::Key>,
+        reversed: bool,
+    ) {
+        let dep_dir = match reversed {
+            true => self.root_dependents_dir(key),
+            false => self.root_dependencies_dir(key),
+        };
+
+        let dirs = match ty.clone() {
+            Some(ty) => vec![dep_dir.join(ty.to_string())],
+            None => fs::read_dir(&dep_dir)
+                .unwrap()
+                .filter_map(|entry| {
+                    let path = entry.unwrap().path();
+                    if path.is_dir() {
+                        Some(path)
+                    } else {
+                        None
+                    }
+                })
+                .collect(),
+        };
+
+        for dir in dirs {
+            for dep_key in Self::item_keys_from_dir(dir) {
+                if out.insert(dep_key.clone()) {
+                    self.collect_all_dependents_recursive(dep_key, ty.clone(), out, reversed);
+                }
+            }
+        }
+    }
+
+    fn collect_all_dependents_recursive_with_ty(
+        &self,
+        key: <Self::Item as LedgerItem>::Key,
+        ty: Option<<Self::Item as LedgerItem>::RefType>,
+        out: &mut HashSet<(
+            <Self::Item as LedgerItem>::RefType,
+            <Self::Item as LedgerItem>::Key,
+        )>,
+        reversed: bool,
+    ) {
+        let dep_dir = match reversed {
+            true => self.root_dependents_dir(key),
+            false => self.root_dependencies_dir(key),
+        };
+
+        let dirs = match ty.clone() {
+            Some(ty) => vec![dep_dir.join(ty.to_string())],
+            None => fs::read_dir(&dep_dir)
+                .unwrap()
+                .filter_map(|entry| {
+                    let path = entry.unwrap().path();
+                    if path.is_dir() {
+                        Some(path)
+                    } else {
+                        None
+                    }
+                })
+                .collect(),
+        };
+
+        for dir in dirs {
+            let the_ty: <Self::Item as LedgerItem>::RefType =
+                match dir.file_name().unwrap().to_str().unwrap().parse() {
+                    Ok(ty) => ty,
+                    Err(_) => panic!(),
+                };
+
+            for dep_key in Self::item_keys_from_dir(dir) {
+                if out.insert((the_ty.clone(), dep_key.clone())) {
+                    self.collect_all_dependents_recursive_with_ty(
+                        dep_key,
+                        ty.clone(),
+                        out,
+                        reversed,
+                    );
+                }
+            }
+        }
+    }
+
+    /// Returns the path a key corresponds to. Does not guarantee that the item is actually there.
+    fn item_path(&self, key: <Self::Item as LedgerItem>::Key) -> PathBuf {
+        let key = key.to_string();
+        let mut chars = key.chars();
+
+        let prefix = if let (Some(ch1), Some(ch2)) = (chars.next(), chars.next()) {
+            format!("{}{}", ch1, ch2)
+        } else {
+            panic!();
+        };
+
+        let prefix = self.items_path().join(prefix);
+        fs::create_dir_all(&prefix).unwrap();
+
+        prefix.join(key)
+    }
+
+    fn item_keys_from_dir(path: PathBuf) -> HashSet<<Self::Item as LedgerItem>::Key> {
+        if !path.exists() {
+            Default::default()
+        } else {
+            let mut out = HashSet::default();
+            for entry in fs::read_dir(&path).unwrap() {
+                match entry
+                    .unwrap()
+                    .file_name()
+                    .to_str()
+                    .unwrap()
+                    .parse::<<Self::Item as LedgerItem>::Key>()
+                {
+                    Ok(key) => out.insert(key),
+                    Err(_e) => {
+                        dbg!(path);
+                        panic!();
+                    }
+                };
+            }
+            out
+        }
+    }
+
+    fn load_getter_ty(
+        &self,
+        getter: RefGetter<Self::Item>,
+    ) -> HashSet<(
+        <Self::Item as LedgerItem>::RefType,
+        <Self::Item as LedgerItem>::Key,
+    )> {
+        let RefGetter {
+            reversed,
+            key,
+            ty,
+            recursive,
+        } = getter;
+
+        match (recursive, reversed, key, ty) {
+            (true, reversed, key, ty) => {
+                let mut out = HashSet::new();
+                self.collect_all_dependents_recursive_with_ty(key, ty, &mut out, reversed);
+                out
+            }
+            (false, true, key, Some(ty)) => {
+                let dir = self.dependents_dir(key, ty.clone());
+                Self::item_keys_from_dir(dir)
+                    .into_iter()
+                    .map(|key| (ty.clone(), key))
+                    .collect()
+            }
+            (false, true, key, None) => {
+                let mut out: HashSet<(
+                    <Self::Item as LedgerItem>::RefType,
+                    <Self::Item as LedgerItem>::Key,
+                )> = Default::default();
+                let dep_dir = self.root_dependents_dir(key);
+                for dir in fs::read_dir(&dep_dir).unwrap() {
+                    let dir = dir.unwrap();
+                    let ty: <Self::Item as LedgerItem>::RefType =
+                        match dir.file_name().to_str().unwrap().parse() {
+                            Ok(ty) => ty,
+                            Err(_) => panic!(),
+                        };
+
+                    for key in Self::item_keys_from_dir(dir.path()) {
+                        out.insert((ty.clone(), key));
+                    }
+                }
+
+                out
+            }
+            (false, false, key, Some(ty)) => {
+                let dir = self.root_dependencies_dir(key).join(ty.to_string());
+                Self::item_keys_from_dir(dir)
+                    .into_iter()
+                    .map(|key| (ty.clone(), key))
+                    .collect()
+            }
+            (false, false, key, None) => {
+                let mut out: HashSet<(
+                    <Self::Item as LedgerItem>::RefType,
+                    <Self::Item as LedgerItem>::Key,
+                )> = Default::default();
+                let dep_dir = self.root_dependencies_dir(key);
+                for dir in fs::read_dir(&dep_dir).unwrap() {
+                    let dir = dir.unwrap();
+                    let ty: <Self::Item as LedgerItem>::RefType =
+                        match dir.file_name().to_str().unwrap().parse() {
+                            Ok(ty) => ty,
+                            Err(_) => panic!(),
+                        };
+
+                    for key in Self::item_keys_from_dir(dir.path()) {
+                        out.insert((ty.clone(), key));
+                    }
+                }
+
+                out
+            }
+        }
+    }
+
+    fn load(&self, key: <Self::Item as LedgerItem>::Key) -> Option<Self::Item> {
+        let path = self.item_path(key);
+
+        if path.is_file() {
+            let s = fs::read_to_string(&path);
+            match s {
+                Ok(s) => Some(serde_json::from_str(&s).unwrap()),
+                Err(e) => {
+                    dbg!(e);
+                    dbg!(key);
+                    dbg!(path);
+                    panic!();
+                }
+            }
+        } else {
+            None
+        }
+    }
+}
+
+#[derive(Clone)]
+pub struct Ledger<T: LedgerItem> {
+    entries: BlockChain<T>,
+    properties: Arc<PathBuf>,
+    dependencies: Arc<PathBuf>,
+    dependents: Arc<PathBuf>,
+    items: Arc<PathBuf>,
+    ledger_hash: Arc<PathBuf>,
+    remote: Option<Arc<Remote<T>>>,
+    local: Local<T>,
+    root: Arc<PathBuf>,
+}
+
+impl<T: LedgerItem> Ledger<T> {
+    pub fn new(root: PathBuf) -> Self {
+        let root = root.join(Self::item_name());
+        let entries = BlockChain::new(root.join("entries"));
+        let root = root.join("state");
+
+        let properties = root.join("properties");
+        let dependencies = root.join("dependencies");
+        let dependents = root.join("dependents");
+        let items = root.join("items");
+        let ledger_hash = root.join("applied");
+
+        std::fs::create_dir_all(&properties).unwrap();
+        std::fs::create_dir_all(&dependencies).unwrap();
+        std::fs::create_dir_all(&dependents).unwrap();
+        std::fs::create_dir_all(&items).unwrap();
+
+        let selv = Self {
+            properties: Arc::new(properties),
+            dependencies: Arc::new(dependencies),
+            dependents: Arc::new(dependents),
+            items: Arc::new(items.clone()),
+            ledger_hash: Arc::new(ledger_hash),
+            entries,
+            remote: None,
+            root: Arc::new(root.clone()),
+            local: Local {
+                root: Arc::new(root.clone()),
+                _phantom: PhantomData,
+            },
+        };
+
+        if selv.entries.current_hash() != selv.currently_applied_ledger_hash() {
+            selv.apply();
+        }
+
+        selv
+    }
+
+    pub fn load_ids(&self) -> HashSet<T::Key> {
+        let mut ids = self.local.load_ids();
+
+        if let Some(remote) = self.remote.as_ref() {
+            ids.extend(remote.load_ids());
+        }
+
+        ids
+    }
+
+    pub fn all_dependents_with_ty(&self, key: T::Key) -> HashSet<(T::RefType, T::Key)> {
+        self.local.all_dependents_with_ty(key)
+    }
+
+    pub fn get_prop_cache(&self, key: PropertyCache<T>) -> HashSet<T::Key> {
+        self.local.get_prop_cache(key)
+    }
+
+    pub fn all_dependencies(&self, key: T::Key) -> HashSet<T::Key> {
+        self.local.all_dependencies(key)
+    }
+
+    pub fn all_dependents(&self, key: T::Key) -> HashSet<T::Key> {
+        self.local.all_dependents(key)
+    }
+
+    pub fn load_getter(&self, getter: TheCacheGetter<T>) -> HashSet<T::Key> {
+        self.local.load_getter(getter)
+    }
+
+    pub fn with_remote(mut self, url: String) -> Self {
+        let remote = Remote::new(&self.root, url);
+        self.remote = Some(Arc::new(remote));
+        self
+    }
+
+    fn item_path(&self, key: T::Key) -> PathBuf {
+        if let Some(remote) = self.remote.as_ref() {
+            let p = remote.item_path(key);
+            if p.is_file() {
+                return p;
+            }
+        }
+
+        self.local.item_path(key)
+    }
+
     fn item_name() -> &'static str {
         use std::any;
         use std::sync::OnceLock;
@@ -573,17 +895,6 @@ impl<T: LedgerItem> Ledger<T> {
         }
 
         Ok(())
-    }
-
-    fn cache_dir(&self, cache: CacheKey<T>) -> PathBuf {
-        match cache {
-            CacheKey::Left(PropertyCache { property, value }) => {
-                self.properties.join(property.to_string()).join(&value)
-            }
-            CacheKey::Right(ItemRefCache { reftype, id }) => {
-                self.root_dependents_dir(id).join(reftype.to_string())
-            }
-        }
     }
 
     fn apply(&self) {
@@ -626,9 +937,9 @@ impl<T: LedgerItem> Ledger<T> {
 
     fn set_dependencies(&self, item: &T) {
         let id = item.item_id();
-        let depencies_dir = self.root_dependencies_dir(id);
+        let depencies_dir = self.local.root_dependencies_dir(id);
         fs::remove_dir_all(&depencies_dir).unwrap();
-        let depencies_dir = self.root_dependencies_dir(id); //recreate it
+        let depencies_dir = self.local.root_dependencies_dir(id); //recreate it
 
         for ItemReference { from: _, to, ty } in item.ref_cache() {
             let dir = depencies_dir.join(ty.to_string());
@@ -663,148 +974,18 @@ impl<T: LedgerItem> Ledger<T> {
     }
 
     pub fn load_all(&self) -> HashSet<T> {
-        let ids = self.load_ids();
-        let mut out = HashSet::with_capacity(ids.len());
-
-        for id in ids {
-            out.insert(self.load(id));
-        }
-
-        out
+        self.local.load_all()
     }
 
-    pub fn load_ids(&self) -> HashSet<T::Key> {
-        let mut entries: Vec<PathBuf> = vec![];
-
-        for entry in fs::read_dir(self.items.as_path()).unwrap() {
-            let entry = entry.unwrap().path();
-            entries.push(entry);
-        }
-        let mut keys: HashSet<T::Key> = HashSet::default();
-
-        for entry in entries {
-            for entry in fs::read_dir(entry).unwrap() {
-                match entry
-                    .unwrap()
-                    .file_name()
-                    .to_str()
-                    .unwrap()
-                    .parse::<T::Key>()
-                {
-                    Ok(key) => keys.insert(key),
-                    Err(_) => panic!(),
-                };
+    pub fn load(&self, key: T::Key) -> Option<T> {
+        if let Some(remote) = self.remote.as_ref() {
+            let item = remote.load(key);
+            if item.is_some() {
+                return item;
             }
         }
 
-        keys
-    }
-
-    pub fn item_keys_from_dir_recursive(path: PathBuf) -> HashSet<T::Key> {
-        if !path.exists() {
-            return Default::default();
-        }
-
-        let mut out = HashSet::new();
-
-        for entry in WalkDir::new(&path)
-            .follow_links(false)
-            .into_iter()
-            .filter_map(Result::ok)
-            .filter(|e| e.file_type().is_file())
-        {
-            match entry.file_name().to_str().unwrap().parse::<T::Key>() {
-                Ok(key) => {
-                    out.insert(key);
-                }
-                Err(_) => {
-                    dbg!(entry.path());
-                    panic!("Failed to parse key from file name");
-                }
-            }
-        }
-
-        out
-    }
-
-    pub fn item_keys_from_dir(path: PathBuf) -> HashSet<T::Key> {
-        if !path.exists() {
-            Default::default()
-        } else {
-            let mut out = HashSet::default();
-            for entry in fs::read_dir(&path).unwrap() {
-                match entry
-                    .unwrap()
-                    .file_name()
-                    .to_str()
-                    .unwrap()
-                    .parse::<T::Key>()
-                {
-                    Ok(key) => out.insert(key),
-                    Err(_e) => {
-                        dbg!(path);
-                        panic!();
-                    }
-                };
-            }
-            out
-        }
-    }
-
-    pub fn get_prop_cache(&self, key: PropertyCache<T>) -> HashSet<T::Key> {
-        let path = self
-            .properties
-            .join(key.property.to_string())
-            .join(&key.value);
-        Self::item_keys_from_dir(path)
-    }
-
-    fn root_dependencies_dir(&self, key: T::Key) -> PathBuf {
-        let p = self.dependencies.join(key.to_string());
-        std::fs::create_dir_all(&p).unwrap();
-        p
-    }
-
-    fn root_dependents_dir(&self, key: T::Key) -> PathBuf {
-        let p = self.dependents.join(key.to_string());
-        std::fs::create_dir_all(&p).unwrap();
-        p
-    }
-
-    fn dependents_dir(&self, key: T::Key, ty: T::RefType) -> PathBuf {
-        let p = self.root_dependents_dir(key).join(ty.to_string());
-        std::fs::create_dir_all(&p).unwrap();
-        p
-    }
-
-    pub fn all_dependencies(&self, key: T::Key) -> HashSet<T::Key> {
-        let getter = TheCacheGetter::ItemRef(RefGetter {
-            reversed: false,
-            key,
-            ty: None,
-            recursive: true,
-        });
-        self.load_getter(getter)
-    }
-
-    pub fn all_dependents_with_ty(&self, key: T::Key) -> HashSet<(T::RefType, T::Key)> {
-        let getter = RefGetter {
-            reversed: true,
-            key,
-            ty: None,
-            recursive: true,
-        };
-        self.load_getter_ty(getter)
-    }
-
-    pub fn all_dependents(&self, key: T::Key) -> HashSet<T::Key> {
-        let getter = TheCacheGetter::ItemRef(RefGetter {
-            reversed: true,
-            key,
-            ty: None,
-            recursive: true,
-        });
-        self.load_getter(getter)
+        self.local.load(key)
     }
 
     fn set_ledger_hash(&self, hash: LedgerHash) {
@@ -818,6 +999,7 @@ impl<T: LedgerItem> Ledger<T> {
 
     fn remove_dependent(&self, key: T::Key, ty: T::RefType, dependent: T::Key) {
         let path = self
+            .local
             .dependents_dir(key, ty.clone())
             .join(dependent.to_string());
         match fs::remove_file(&path) {
@@ -837,7 +1019,7 @@ impl<T: LedgerItem> Ledger<T> {
     }
 
     fn insert_cache(&self, cache: CacheKey<T>, id: T::Key) {
-        let path = self.cache_dir(cache);
+        let path = self.local.cache_dir(cache);
         fs::create_dir_all(&path).unwrap();
         let original = self.item_path(id);
         let link = path.join(id.to_string());
@@ -845,7 +1027,7 @@ impl<T: LedgerItem> Ledger<T> {
     }
 
     fn remove_cache(&self, cache: CacheKey<T>, id: T::Key) {
-        let path = self.cache_dir(cache).join(id.to_string());
+        let path = self.local.cache_dir(cache).join(id.to_string());
         let _res = fs::remove_file(&path);
         debug_assert!(_res.is_ok());
     }
@@ -859,7 +1041,7 @@ impl<T: LedgerItem> Ledger<T> {
         let key = event.id;
         let (old_caches, new_caches, item, is_no_op) = match event.action.clone() {
             TheLedgerAction::Modify(action) => {
-                let (old_caches, old_item) = match self.try_load(key) {
+                let (old_caches, old_item) = match self.load(key) {
                     Some(item) if cache => (item.caches(self), item),
                     Some(item) => (Default::default(), item),
                     None => (Default::default(), T::new_default(key)),
@@ -882,7 +1064,7 @@ impl<T: LedgerItem> Ledger<T> {
                 (HashSet::default(), caches, Some(item), false)
             }
             TheLedgerAction::Delete => {
-                let old_item = self.load(key);
+                let old_item = self.load(key).unwrap();
                 let old_caches = old_item.caches(self);
                 (old_caches, Default::default(), None, false)
             }
@@ -983,45 +1165,6 @@ impl<T: LedgerItem> Ledger<T> {
 
         f.write_all(serialized.as_bytes()).unwrap();
         self.set_dependencies(&item);
-    }
-
-    /// Returns the path a key corresponds to. Does not guarantee that the item is actually there.
-    fn item_path(&self, key: T::Key) -> PathBuf {
-        let key = key.to_string();
-        let mut chars = key.chars();
-
-        let prefix = if let (Some(ch1), Some(ch2)) = (chars.next(), chars.next()) {
-            format!("{}{}", ch1, ch2)
-        } else {
-            panic!();
-        };
-
-        let prefix = self.items.join(prefix);
-        fs::create_dir_all(&prefix).unwrap();
-
-        prefix.join(key)
-    }
-
-    pub fn try_load(&self, key: T::Key) -> Option<T> {
-        if self.item_path(key).is_file() {
-            Some(self.load(key))
-        } else {
-            None
-        }
-    }
-
-    pub fn load(&self, key: T::Key) -> T {
-        let path = self.item_path(key);
-        let s = fs::read_to_string(&path);
-        match s {
-            Ok(s) => serde_json::from_str(&s).unwrap(),
-            Err(e) => {
-                dbg!(e);
-                dbg!(key);
-                dbg!(path);
-                panic!();
-            }
-        }
     }
 }
 

@@ -150,7 +150,8 @@ impl App {
         info!("initialtize app");
 
         let provider = Provider {
-            cards: Ledger::new(root.clone()),
+            cards: Ledger::new(root.clone())
+                .with_remote("https://github.com/TBS1996/speki_graph".to_string()),
             reviews: Ledger::new(root.clone()),
             metadata: Ledger::new(root.clone()),
             time: FsTime,
