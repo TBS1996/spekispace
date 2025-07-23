@@ -112,6 +112,7 @@ impl CardSelector {
                         rec_stability: editor.rec_stability.get_value(),
                         suspended: editor.suspended.get_value(),
                         lapses: editor.lapses.get_value(),
+                        needs_work: editor.needs_work.get_value(),
                     })
                 })
             }

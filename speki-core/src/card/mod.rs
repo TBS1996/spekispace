@@ -441,6 +441,10 @@ impl Card {
         self.namespace
     }
 
+    pub fn needs_work(&self) -> bool {
+        self.metadata.needs_work
+    }
+
     pub fn is_finished(&self) -> bool {
         !matches!(&self.base.data, CardType::Unfinished { .. })
     }

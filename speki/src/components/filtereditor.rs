@@ -20,6 +20,7 @@ pub struct FilterEditor {
     pub rec_stability: FloatEntry,
     pub lapses: FloatEntry,
     pub suspended: BoolEntry,
+    pub needs_work: BoolEntry,
 }
 
 impl FilterEditor {
@@ -48,6 +49,7 @@ fn default_filter() -> CardFilter {
             ord: MyNumOrd::Greater,
         }),
         suspended: Some(false),
+        needs_work: None,
         lapses: Some(NumOp {
             num: 4.,
             ord: MyNumOrd::Less,
@@ -164,6 +166,7 @@ impl FilterEditor {
         let lapses = FloatEntry::from_numop("lapses", filter.lapses);
 
         let suspended = BoolEntry::from_bool("suspended", filter.suspended);
+        let needs_work = BoolEntry::from_bool("needs work", filter.needs_work);
 
         Self {
             filter_name,
@@ -173,6 +176,7 @@ impl FilterEditor {
             stability,
             lapses,
             suspended,
+            needs_work,
         }
     }
 
@@ -188,6 +192,7 @@ impl FilterEditor {
                 rec_stability: selv.rec_stability.get_value(),
                 suspended: selv.suspended.get_value(),
                 lapses: selv.lapses.get_value(),
+                needs_work: selv.needs_work.get_value(),
             }
         })
     }
@@ -200,6 +205,7 @@ impl FilterEditor {
             rec_stability: self.rec_stability.get_value(),
             suspended: self.suspended.get_value(),
             lapses: self.lapses.get_value(),
+            needs_work: self.needs_work.get_value(),
         }
     }
 }
@@ -214,6 +220,7 @@ pub fn FilterComp(editor: FilterEditor) -> Element {
         rec_stability,
         lapses,
         suspended,
+        needs_work,
     } = editor;
     rsx! {
         div {
@@ -225,6 +232,7 @@ pub fn FilterComp(editor: FilterEditor) -> Element {
             FloatEntryRender { input: rec_stability.input.clone(), ord: rec_stability.ord.clone(), name: rec_stability.name.clone() },
             FloatEntryRender { input: lapses.input.clone(), ord: lapses.ord.clone(), name: lapses.name.clone() },
             BoolEntryRender { name: suspended.name.clone(), opt: suspended.opt.clone() },
+            BoolEntryRender { name: needs_work.name.clone(), opt: needs_work.opt.clone() },
         }
     }
 }

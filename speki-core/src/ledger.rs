@@ -71,6 +71,7 @@ pub type MetaEvent = TheLedgerEvent<Metadata>;
 pub enum MetaAction {
     Suspend(bool),
     SetTrivial(Option<bool>),
+    SetNeedsWork(bool),
 }
 
 impl From<MetaEvent> for Event {

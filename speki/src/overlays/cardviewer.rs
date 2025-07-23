@@ -164,6 +164,7 @@ pub fn CardViewerRender(props: CardViewer) -> Element {
 #[derive(Debug, Clone, PartialEq)]
 struct MetadataEditor {
     suspended: Signal<bool>,
+    needs_work: Signal<bool>,
     trivial: Signal<bool>,
 }
 
@@ -172,13 +173,19 @@ impl MetadataEditor {
         Self {
             suspended: Signal::new_in_scope(false, ScopeId::APP),
             trivial: Signal::new_in_scope(false, ScopeId::APP),
+            needs_work: Signal::new_in_scope(false, ScopeId::APP),
         }
     }
 
     fn clear(&self) {
-        let Self { suspended, trivial } = Self::new();
+        let Self {
+            suspended,
+            trivial,
+            needs_work,
+        } = Self::new();
         self.suspended.clone().set(suspended.cloned());
         self.trivial.clone().set(trivial.cloned());
+        self.needs_work.clone().set(needs_work.cloned());
     }
 }
 
@@ -188,18 +195,24 @@ impl From<Metadata> for MetadataEditor {
             trivial,
             suspended,
             id: _,
+            needs_work,
         } = value;
 
         Self {
             suspended: Signal::new_in_scope(suspended.is_suspended(), ScopeId::APP),
             trivial: Signal::new_in_scope(trivial.unwrap_or_default(), ScopeId::APP),
+            needs_work: Signal::new_in_scope(needs_work, ScopeId::APP),
         }
     }
 }
 
 #[component]
 fn DisplayMetadata(metadata: MetadataEditor) -> Element {
-    let MetadataEditor { suspended, trivial } = metadata;
+    let MetadataEditor {
+        suspended,
+        trivial,
+        needs_work,
+    } = metadata;
 
     rsx! {
         SectionWithTitle {
@@ -228,6 +241,18 @@ fn DisplayMetadata(metadata: MetadataEditor) -> Element {
                     }
 
                     DropComponent { options: vec![false, true], selected: suspended }
+                }
+                div {
+                    class: "flex flex-row items-center mb-4",
+                    div {
+                        class: "w-24",
+                        p {
+                            title: "card has room for improvement",
+                            "needs work"
+                        }
+                    }
+
+                    DropComponent { options: vec![false, true], selected: needs_work }
                 }
             },
         }
@@ -417,7 +442,15 @@ impl CardEditor {
             return true;
         }
 
-        let MetadataEditor { trivial, suspended } = metadata;
+        let MetadataEditor {
+            trivial,
+            suspended,
+            needs_work,
+        } = metadata;
+
+        if needs_work.cloned() {
+            return true;
+        }
 
         if trivial.cloned() {
             return true;
@@ -1698,6 +1731,15 @@ fn save_button(CardViewer: CardViewer) -> Element {
                     }
 
                     let event = MetaEvent::new_modify(id, MetaAction::SetTrivial(Some(meta.trivial.cloned())));
+
+                    if let Err(e) = APP.read().inner().provider.metadata.modify(event) {
+                        let err = format!("{e:?}");
+                        OverlayEnum::new_notice(err).append();
+                        return;
+                    }
+
+
+                    let event = MetaEvent::new_modify(id, MetaAction::SetNeedsWork(meta.needs_work.cloned()));
 
                     if let Err(e) = APP.read().inner().provider.metadata.modify(event) {
                         let err = format!("{e:?}");

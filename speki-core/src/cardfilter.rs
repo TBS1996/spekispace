@@ -69,6 +69,7 @@ pub struct CardFilter {
     pub stability: Option<NumOp>,
     pub rec_stability: Option<NumOp>,
     pub suspended: Option<bool>,
+    pub needs_work: Option<bool>,
     pub lapses: Option<NumOp>,
 }
 
@@ -81,10 +82,17 @@ impl CardFilter {
             rec_stability,
             suspended,
             lapses,
+            needs_work,
         } = self.clone();
 
         if let Some(flag) = suspended {
             if flag != card.is_suspended() {
+                return false;
+            }
+        }
+
+        if let Some(flag) = needs_work {
+            if flag != card.needs_work() {
                 return false;
             }
         }
