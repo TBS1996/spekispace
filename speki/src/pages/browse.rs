@@ -13,6 +13,7 @@ use crate::{
 pub struct BrowseState {
     pub browse_page: CardSelector,
     pub prev_cardstate: Option<String>,
+    pub prev_metastate: Option<String>,
 }
 
 static BROWSE_STATE: GlobalSignal<BrowseState> = Signal::global(BrowseState::new);
@@ -21,13 +22,19 @@ static BROWSE_STATE: GlobalSignal<BrowseState> = Signal::global(BrowseState::new
 pub fn Browse() -> Element {
     let mut browse_state = BROWSE_STATE.cloned();
 
+    let meta_state = APP
+        .read()
+        .inner()
+        .provider
+        .metadata
+        .currently_applied_ledger_hash();
     let card_state = APP
         .read()
         .inner()
         .provider
         .cards
         .currently_applied_ledger_hash();
-    if browse_state.prev_cardstate != card_state {
+    if browse_state.prev_cardstate != card_state || browse_state.prev_metastate != meta_state {
         *BROWSE_STATE.write() = BrowseState::new();
         browse_state = BROWSE_STATE.cloned();
     }
@@ -69,9 +76,17 @@ impl BrowseState {
             .cards
             .currently_applied_ledger_hash();
 
+        let prev_metastate = APP
+            .read()
+            .inner()
+            .provider
+            .metadata
+            .currently_applied_ledger_hash();
+
         Self {
             browse_page,
             prev_cardstate,
+            prev_metastate,
         }
     }
 }
