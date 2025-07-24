@@ -1,8 +1,8 @@
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 use crate::{
     audio::AudioId,
-    card::{AttributeId, Attrv2, BackSide, CardId, RawCard, TextData},
+    card::{AttributeId, Attrv2, BackSide, CardId, ParamAnswer, RawCard, TextData},
     metadata::Metadata,
     recall_rate::{Review, ReviewEvent},
     CardType,
@@ -27,6 +27,8 @@ pub enum CardAction {
     SetNamespace(Option<CardId>),
     InsertAttr(Attrv2),
     InsertAttrs(BTreeSet<Attrv2>),
+    InsertParams(BTreeSet<Attrv2>),
+    InsertParamAnswers(BTreeMap<AttributeId, ParamAnswer>),
     RemoveAttr(AttributeId),
     SetTrivial(bool),
     SetParentClass(Option<CardId>),

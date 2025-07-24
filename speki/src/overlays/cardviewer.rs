@@ -565,6 +565,7 @@ impl CardEditor {
                     parent_class,
                     attrs,
                     default_question: None,
+                    params: Default::default(),
                 }
             }
             CardTy::Instance => {
@@ -587,6 +588,7 @@ impl CardEditor {
                     name: TextData::from_raw(&front),
                     back,
                     class,
+                    answered_params: Default::default(),
                 }
             }
             CardTy::Unfinished => CardType::Unfinished {
@@ -1757,14 +1759,17 @@ fn save_button(CardViewer: CardViewer) -> Element {
                 };
 
                 match (ty, same_type) {
-                    (CardType::Instance { name, back, class }, false) => {
+                    (CardType::Instance { name, back, class, answered_params }, false) => {
                         actions.push(CardAction::InstanceType { front: name, class });
                         actions.push(CardAction::SetBackside(back));
+                        actions.push(CardAction::InsertParamAnswers(answered_params));
+
                     }
-                    (CardType::Instance { name, back, class }, true) => {
+                    (CardType::Instance { name, back, class, answered_params }, true) => {
                         actions.push(CardAction::SetFront(name));
                         actions.push(CardAction::SetBackside(back));
                         actions.push(CardAction::SetInstanceClass(class));
+                        actions.push(CardAction::InsertParamAnswers(answered_params));
                     },
                     (CardType::Normal { front, back }, true) => {
                         actions.push(CardAction::SetFront(front));
@@ -1786,17 +1791,19 @@ fn save_button(CardViewer: CardViewer) -> Element {
                     (CardType::Attribute { attribute, back, instance }, false) => {
                         actions.push(CardAction::AttributeType {attribute, back, instance});
                     },
-                    (CardType::Class { name, back, parent_class, default_question: _, attrs }, true) => {
+                    (CardType::Class { name, back, parent_class, default_question: _, attrs, params }, true) => {
                         actions.push(CardAction::SetFront(name));
                         actions.push(CardAction::SetBackside(back));
                         actions.push(CardAction::SetParentClass(parent_class));
                         actions.push(CardAction::InsertAttrs(attrs));
+                        actions.push(CardAction::InsertParams(params.into_values().collect()));
                     },
-                    (CardType::Class { name, back, parent_class, default_question: _, attrs }, false) => {
+                    (CardType::Class { name, back, parent_class, default_question: _, attrs, params }, false) => {
                         actions.push(CardAction::ClassType { front: name });
                         actions.push(CardAction::SetBackside(back));
                         actions.push(CardAction::SetParentClass(parent_class));
                         actions.push(CardAction::InsertAttrs(attrs));
+                        actions.push(CardAction::InsertParams(params.into_values().collect()));
                     },
                     (CardType::Statement { front }, true) => {
                         actions.push(CardAction::SetFront(front));

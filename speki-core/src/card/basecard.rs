@@ -268,6 +268,43 @@ pub enum AttrBackType {
     Boolean,
 }
 
+impl AttrBackType {
+    pub fn is_valid(
+        &self,
+        back_side: &BackSide,
+        ledger: &LedgerType<RawCard>,
+    ) -> Result<(), CardError> {
+        match (self, back_side) {
+            (AttrBackType::InstanceOfClass(instance), BackSide::Card(answer)) => {
+                let mut parent_class: CardId = match ledger.load(*answer).unwrap().data {
+                    CardType::Instance { class, .. } => class,
+                    _ => return Err(CardError::WrongCardType),
+                };
+
+                while parent_class != *instance {
+                    parent_class = match ledger.load(parent_class).unwrap().data {
+                        CardType::Class {
+                            parent_class: Some(class),
+                            ..
+                        } => class,
+                        CardType::Class {
+                            parent_class: None, ..
+                        } => return Err(CardError::InstanceOfNonClass),
+                        _ => return Err(CardError::WrongCardType),
+                    };
+                }
+
+                Ok(())
+            }
+            (AttrBackType::InstanceOfClass(_), _) => Err(CardError::AnswerMustBeCard),
+            (AttrBackType::TimeStamp, BackSide::Time(_)) => Ok(()),
+            (AttrBackType::TimeStamp, _) => Err(CardError::AnswerMustBeTime),
+            (AttrBackType::Boolean, BackSide::Bool(_)) => Ok(()),
+            (AttrBackType::Boolean, _) => Err(CardError::AnswerMustBeBool),
+        }
+    }
+}
+
 impl<'de> Deserialize<'de> for AttrBackType {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
@@ -312,6 +349,11 @@ pub enum BackSideConstraint {
     Card { ty: Option<CardId> },
 }
 
+#[derive(PartialEq, Debug, Clone, Serialize, Deserialize, Hash, Eq, PartialOrd, Ord)]
+pub struct ParamAnswer {
+    answer: BackSide,
+}
+
 #[derive(PartialEq, Debug, Clone, Serialize, Deserialize, Hash, Eq)]
 pub enum CardType {
     /// A specific instance of a class
@@ -321,6 +363,8 @@ pub enum CardType {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         back: Option<BackSide>,
         class: CardId,
+        #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+        answered_params: BTreeMap<AttributeId, ParamAnswer>,
     },
     Normal {
         front: TextData,
@@ -349,6 +393,8 @@ pub enum CardType {
         default_question: Option<TextData>,
         #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
         attrs: BTreeSet<Attrv2>,
+        #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+        params: BTreeMap<AttributeId, Attrv2>,
     },
 
     /// A statement is a fact which cant easily be represented with a flashcard,
@@ -741,6 +787,14 @@ impl RawCard {
         }
     }
 
+    fn params(&self) -> BTreeMap<AttributeId, Attrv2> {
+        if let CardType::Class { ref params, .. } = &self.data {
+            return params.clone();
+        } else {
+            Default::default()
+        }
+    }
+
     fn attrs(&self) -> BTreeSet<Attrv2> {
         if let CardType::Class { ref attrs, .. } = &self.data {
             return attrs.clone();
@@ -786,10 +840,12 @@ impl RawCard {
                 name,
                 back: _,
                 class,
+                answered_params,
             } => CardType::Instance {
                 name,
                 back: Some(new_back),
                 class,
+                answered_params,
             },
             x @ CardType::Statement { .. } => x,
 
@@ -816,12 +872,14 @@ impl RawCard {
                 parent_class,
                 default_question,
                 attrs,
+                params,
             } => CardType::Class {
                 name,
                 back: Some(new_back),
                 parent_class,
                 default_question,
                 attrs,
+                params,
             },
         };
 
@@ -878,6 +936,7 @@ fn resolve_card(card: &RawCard, ledger: &Ledger<RawCard>) -> String {
 
 #[derive(Debug)]
 pub enum CardError {
+    MissingParam,
     InstanceOfNonClass,
     AttributeOfNonInstance,
     MissingAttribute,
@@ -941,9 +1000,23 @@ impl LedgerItem for RawCard {
                 name: _,
                 back: _,
                 class,
+                answered_params,
             } => {
-                if !ledger.load(*class).unwrap().data.is_class() {
+                let class = ledger.load(*class).unwrap();
+
+                let CardType::Class { params, .. } = class.data else {
                     return Err(CardError::InstanceOfNonClass);
+                };
+
+                for (key_ans, val_ans) in answered_params {
+                    match params.get(key_ans).as_ref() {
+                        Some(p) => {
+                            if let Some(back_type) = &p.back_type {
+                                back_type.is_valid(&val_ans.answer, ledger)?;
+                            }
+                        }
+                        None => return Err(CardError::MissingParam),
+                    }
                 }
             }
 
@@ -954,7 +1027,12 @@ impl LedgerItem for RawCard {
                 back: attr_back,
                 instance,
             } => {
-                let CardType::Instance { name, back, class } = ledger.load(*instance).unwrap().data
+                let CardType::Instance {
+                    name,
+                    back,
+                    class,
+                    answered_params: _,
+                } = ledger.load(*instance).unwrap().data
                 else {
                     return Err(CardError::InstanceOfNonClass);
                 };
@@ -1009,6 +1087,7 @@ impl LedgerItem for RawCard {
                 parent_class,
                 default_question: _,
                 attrs,
+                params: _,
             } => {
                 if let Some(parent) = parent_class {
                     if !ledger.load(*parent).unwrap().data.is_class() {
@@ -1041,6 +1120,30 @@ impl LedgerItem for RawCard {
         let from = self.id;
         let mut out: HashSet<ItemReference<Self>> = Default::default();
 
+        fn refs_from_backside(from: CardId, back: &BackSide) -> HashSet<ItemReference<RawCard>> {
+            let mut out: HashSet<ItemReference<RawCard>> = Default::default();
+            match back {
+                BackSide::Text(txt) => {
+                    for id in txt.card_ids() {
+                        out.insert(ItemReference::new(from, id, CardRefType::LinkRef));
+                    }
+                }
+                BackSide::Card(id) => {
+                    out.insert(ItemReference::new(from, *id, CardRefType::LinkRef));
+                }
+                BackSide::List(ids) => {
+                    for id in ids {
+                        out.insert(ItemReference::new(from, *id, CardRefType::LinkRef));
+                    }
+                }
+                BackSide::Time(_) => {}
+                BackSide::Trivial => {}
+                BackSide::Invalid => {}
+                BackSide::Bool(_) => {}
+            }
+            out
+        }
+
         if let Some(ns) = self.namespace {
             out.insert(ItemReference::new(from, ns, CardRefType::LinkRef));
         }
@@ -1064,7 +1167,12 @@ impl LedgerItem for RawCard {
                     out.insert(ItemReference::new(from, id, CardRefType::LinkRef));
                 }
             }
-            CardType::Instance { name, class, .. } => {
+            CardType::Instance {
+                name,
+                class,
+                answered_params,
+                ..
+            } => {
                 for id in name.card_ids() {
                     out.insert(ItemReference::new(from, id, CardRefType::LinkRef));
                 }
@@ -1074,6 +1182,10 @@ impl LedgerItem for RawCard {
                     *class,
                     CardRefType::ClassOfInstance,
                 ));
+
+                for (_, ans) in answered_params.iter() {
+                    out.extend(refs_from_backside(from, &ans.answer));
+                }
             }
             CardType::Attribute { instance, .. } => {
                 out.insert(ItemReference::new(
@@ -1115,25 +1227,7 @@ impl LedgerItem for RawCard {
         };
 
         if let Some(back) = &self.data.backside() {
-            match back {
-                BackSide::Text(txt) => {
-                    for id in txt.card_ids() {
-                        out.insert(ItemReference::new(from, id, CardRefType::LinkRef));
-                    }
-                }
-                BackSide::Card(id) => {
-                    out.insert(ItemReference::new(from, *id, CardRefType::LinkRef));
-                }
-                BackSide::List(ids) => {
-                    for id in ids {
-                        out.insert(ItemReference::new(from, *id, CardRefType::LinkRef));
-                    }
-                }
-                BackSide::Time(_) => {}
-                BackSide::Trivial => {}
-                BackSide::Invalid => {}
-                BackSide::Bool(_) => {}
-            }
+            out.extend(refs_from_backside(from, back));
         }
 
         out
@@ -1222,6 +1316,27 @@ impl LedgerItem for RawCard {
             CardAction::SetBackTime(ts) => {
                 self = self.set_backside(BackSide::Time(ts));
             }
+            CardAction::InsertParams(params) => {
+                let new_params: BTreeMap<AttributeId, Attrv2> =
+                    params.into_iter().map(|attr| (attr.id, attr)).collect();
+
+                let CardType::Class { ref mut params, .. } = &mut self.data else {
+                    return Err(CardError::WrongCardType);
+                };
+
+                *params = new_params;
+            }
+            CardAction::InsertParamAnswers(new_answered_params) => {
+                let CardType::Instance {
+                    ref mut answered_params,
+                    ..
+                } = &mut self.data
+                else {
+                    return Err(CardError::WrongCardType);
+                };
+
+                *answered_params = new_answered_params;
+            }
             CardAction::SetTrivial(flag) => {
                 self.trivial = flag;
             }
@@ -1307,6 +1422,7 @@ impl LedgerItem for RawCard {
                     name: front,
                     back,
                     class,
+                    answered_params: Default::default(),
                 };
             }
             CardAction::StatementType { front } => {
@@ -1319,6 +1435,7 @@ impl LedgerItem for RawCard {
                     parent_class: self.parent_class(),
                     default_question: None,
                     attrs: self.attrs(),
+                    params: self.params(),
                 };
             }
             CardAction::UnfinishedType { front } => {
