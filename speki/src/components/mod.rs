@@ -4,6 +4,7 @@ pub mod cardref;
 pub mod dropdown;
 mod filtereditor;
 pub mod frontside;
+mod toggle;
 
 pub use backside::BackPut;
 pub use cardref::CardRef;
@@ -11,6 +12,7 @@ pub use dropdown::DropDownMenu;
 pub use filtereditor::*;
 pub use frontside::{CardTy, FrontPut};
 use speki_core::{card::CardId, collection::DynCard, set::SetExpr, CardRefType};
+pub use toggle::Toggle;
 
 use dioxus::prelude::*;
 

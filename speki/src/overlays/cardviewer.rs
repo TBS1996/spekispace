@@ -23,9 +23,9 @@ use crate::{
         backside::{bool_editor, opt_bool_editor, BackPutRender, BacksideError, TimestampRender},
         card_mastery::MasterySection,
         cardref::{CardRefRender, ForcedCardRefRender, OtherCardRefRender},
-        dropdown::{ActionDropdown, DropComponent, DropdownAction},
+        dropdown::{ActionDropdown, DropdownAction},
         frontside::FrontPutRender,
-        BackPut, CardTy, DropDownMenu, FrontPut, RenderDependents, SectionWithTitle,
+        BackPut, CardTy, DropDownMenu, FrontPut, RenderDependents, SectionWithTitle, Toggle,
     },
     overlays::{
         card_selector::{CardSelector, MyClosure},
@@ -218,42 +218,9 @@ fn DisplayMetadata(metadata: MetadataEditor) -> Element {
         SectionWithTitle {
             title: "Metadata".to_string(),
             children: rsx! {
-                div {
-                    class: "flex flex-row items-center mb-4",
-                    div {
-                        class: "w-24",
-                        p {
-                            title: "trivial cards are not reviewed",
-                            "trivial"
-                        }
-                    }
-                    DropComponent { options: vec![false, true], selected: trivial }
-                }
-
-                div {
-                    class: "flex flex-row items-center mb-4",
-                    div {
-                        class: "w-24",
-                        p {
-                            title: "trivial cards are not reviewed",
-                            "suspended"
-                        }
-                    }
-
-                    DropComponent { options: vec![false, true], selected: suspended }
-                }
-                div {
-                    class: "flex flex-row items-center mb-4",
-                    div {
-                        class: "w-24",
-                        p {
-                            title: "card has room for improvement",
-                            "needs work"
-                        }
-                    }
-
-                    DropComponent { options: vec![false, true], selected: needs_work }
-                }
+                Toggle { text: "trivial", b: trivial  }
+                Toggle { text: "suspended", b: suspended  }
+                Toggle { text: "needs work", b: needs_work  }
             },
         }
     }
