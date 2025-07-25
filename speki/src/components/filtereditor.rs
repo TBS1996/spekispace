@@ -2,7 +2,9 @@ use std::{fmt::Display, sync::Arc};
 
 use dioxus::prelude::*;
 use serde::{Deserialize, Serialize};
-use speki_core::cardfilter::{CardFilter, MyNumOrd, NumOp, NumOrd};
+use speki_core::cardfilter::{
+    CardFilter, FloatFilter, FloatOp, IntFilter, IntOp, MyFloatOrd, MyIntOrd,
+};
 use strum::EnumIter;
 use tracing::info;
 
@@ -18,7 +20,7 @@ pub struct FilterEditor {
     pub recall: FloatEntry,
     pub stability: FloatEntry,
     pub rec_stability: FloatEntry,
-    pub lapses: FloatEntry,
+    pub lapses: IntEntry,
     pub suspended: BoolEntry,
     pub needs_work: BoolEntry,
 }
@@ -35,24 +37,24 @@ impl FilterEditor {
 
 fn default_filter() -> CardFilter {
     CardFilter {
-        recall: Some(NumOp {
+        recall: Some(FloatOp {
             num: 0.9,
-            ord: MyNumOrd::Less,
+            ord: MyFloatOrd::Less,
         }),
-        rec_recall: Some(NumOp {
+        rec_recall: Some(FloatOp {
             num: 0.9,
-            ord: MyNumOrd::Greater,
+            ord: MyFloatOrd::Greater,
         }),
         stability: None,
-        rec_stability: Some(NumOp {
+        rec_stability: Some(FloatOp {
             num: 10.,
-            ord: MyNumOrd::Greater,
+            ord: MyFloatOrd::Greater,
         }),
         suspended: Some(false),
         needs_work: None,
-        lapses: Some(NumOp {
-            num: 4.,
-            ord: MyNumOrd::Less,
+        lapses: Some(IntOp {
+            num: 4,
+            ord: MyIntOrd::Less,
         }),
     }
 }
@@ -106,53 +108,108 @@ impl BoolEntry {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct FloatEntry {
+pub struct IntEntry {
     input: Signal<String>,
-    ord: DropDownMenu<NumOrd>,
+    ord: DropDownMenu<IntFilter>,
     name: Arc<String>,
 }
 
-impl FloatEntry {
-    fn new(name: &str, ord: NumOrd, val: Option<f32>) -> Self {
+impl IntEntry {
+    fn new(name: &str, ord: IntFilter, val: Option<u32>) -> Self {
         Self {
             input: Signal::new_in_scope(
                 val.map(|val| val.to_string()).unwrap_or_default(),
                 ScopeId::APP,
             ),
             ord: DropDownMenu::new(
-                vec![NumOrd::Any, NumOrd::Greater, NumOrd::Less, NumOrd::Equal],
+                vec![
+                    IntFilter::Any,
+                    IntFilter::Greater,
+                    IntFilter::Less,
+                    IntFilter::Equal,
+                ],
                 Some(ord),
             ),
             name: Arc::new(name.to_string()),
         }
     }
 
-    fn from_numop(name: &str, op: Option<NumOp>) -> Self {
-        let (ord, val) = match op {
-            Some(NumOp { num, ord }) => (ord.into(), Some(num)),
-            None => (NumOrd::Any, None),
+    fn from_numop(name: &str, op: Option<IntOp>) -> Self {
+        let (ord, val): (IntFilter, Option<u32>) = match op {
+            Some(IntOp { num, ord }) => (ord.into(), Some(num)),
+            None => (IntFilter::Any, None),
         };
 
         Self::new(name, ord, val)
     }
 
-    pub fn get_value(&self) -> Option<NumOp> {
+    pub fn get_value(&self) -> Option<IntOp> {
         let input = self.input.cloned();
 
         if input.is_empty() {
             return None;
         }
 
-        let ord: MyNumOrd = match self.ord.selected.cloned() {
-            NumOrd::Equal => MyNumOrd::Equal,
-            NumOrd::Greater => MyNumOrd::Greater,
-            NumOrd::Less => MyNumOrd::Less,
-            NumOrd::Any => return None,
+        let ord: MyIntOrd = match self.ord.selected.cloned() {
+            IntFilter::Greater => MyIntOrd::Greater,
+            IntFilter::Less => MyIntOrd::Less,
+            IntFilter::Equal => MyIntOrd::Equal,
+            IntFilter::Any => return None,
+        };
+
+        let val: u32 = input.parse().unwrap();
+
+        Some(IntOp { num: val, ord })
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct FloatEntry {
+    input: Signal<String>,
+    ord: DropDownMenu<FloatFilter>,
+    name: Arc<String>,
+}
+
+impl FloatEntry {
+    fn new(name: &str, ord: FloatFilter, val: Option<f32>) -> Self {
+        Self {
+            input: Signal::new_in_scope(
+                val.map(|val| val.to_string()).unwrap_or_default(),
+                ScopeId::APP,
+            ),
+            ord: DropDownMenu::new(
+                vec![FloatFilter::Any, FloatFilter::Greater, FloatFilter::Less],
+                Some(ord),
+            ),
+            name: Arc::new(name.to_string()),
+        }
+    }
+
+    fn from_numop(name: &str, op: Option<FloatOp>) -> Self {
+        let (ord, val): (FloatFilter, Option<f32>) = match op {
+            Some(FloatOp { num, ord }) => (ord.into(), Some(num)),
+            None => (FloatFilter::Any, None),
+        };
+
+        Self::new(name, ord, val)
+    }
+
+    pub fn get_value(&self) -> Option<FloatOp> {
+        let input = self.input.cloned();
+
+        if input.is_empty() {
+            return None;
+        }
+
+        let ord: MyFloatOrd = match self.ord.selected.cloned() {
+            FloatFilter::Greater => MyFloatOrd::Greater,
+            FloatFilter::Less => MyFloatOrd::Less,
+            FloatFilter::Any => return None,
         };
 
         let val: f32 = input.parse().unwrap();
 
-        Some(NumOp { num: val, ord })
+        Some(FloatOp { num: val, ord })
     }
 }
 
@@ -163,7 +220,7 @@ impl FilterEditor {
         let recall = FloatEntry::from_numop("recall", filter.recall);
         let rec_stability = FloatEntry::from_numop("rec stability", filter.rec_stability);
         let stability = FloatEntry::from_numop("stability", filter.stability);
-        let lapses = FloatEntry::from_numop("lapses", filter.lapses);
+        let lapses = IntEntry::from_numop("lapses", filter.lapses);
 
         let suspended = BoolEntry::from_bool("suspended", filter.suspended);
         let needs_work = BoolEntry::from_bool("needs work", filter.needs_work);
@@ -230,7 +287,7 @@ pub fn FilterComp(editor: FilterEditor) -> Element {
             FloatEntryRender { input: recall.input.clone(), ord: recall.ord.clone(), name: recall.name.clone() },
             FloatEntryRender { input: stability.input.clone(), ord: stability.ord.clone(), name: stability.name.clone() },
             FloatEntryRender { input: rec_stability.input.clone(), ord: rec_stability.ord.clone(), name: rec_stability.name.clone() },
-            FloatEntryRender { input: lapses.input.clone(), ord: lapses.ord.clone(), name: lapses.name.clone() },
+            IntEntryRender { input: lapses.input.clone(), ord: lapses.ord.clone(), name: lapses.name.clone() },
             BoolEntryRender { name: suspended.name.clone(), opt: suspended.opt.clone() },
             BoolEntryRender { name: needs_work.name.clone(), opt: needs_work.opt.clone() },
         }
@@ -253,9 +310,9 @@ fn BoolEntryRender(name: Arc<String>, opt: DropDownMenu<BoolOpt>) -> Element {
 }
 
 #[component]
-fn FloatEntryRender(
+fn IntEntryRender(
     input: Signal<String>,
-    ord: DropDownMenu<NumOrd>,
+    ord: DropDownMenu<IntFilter>,
     name: Arc<String>,
 ) -> Element {
     let input = input.clone();
@@ -269,7 +326,40 @@ fn FloatEntryRender(
 
             DropComponent {options: ord.options.clone(), selected: ord.selected.clone()  }
 
-            if !matches!(ord.selected.cloned(), NumOrd::Any) {
+            if !matches!(ord.selected.cloned(), IntFilter::Any) {
+                input {
+                    class: "w-20 p-1 border rounded focus:ring focus:ring-blue-200",
+                    value: "{input}",
+                    oninput: move |evt| {
+                        let new_value = evt.value().clone();
+                        if new_value.parse::<u32>().is_ok() || new_value.is_empty() {
+                            input.clone().set(new_value);
+                        }
+                    },
+                }
+            }
+        }
+    }
+}
+
+#[component]
+fn FloatEntryRender(
+    input: Signal<String>,
+    ord: DropDownMenu<FloatFilter>,
+    name: Arc<String>,
+) -> Element {
+    let input = input.clone();
+    rsx! {
+        div {
+            class: "flex items-center gap-x-2",
+            label {
+                class: "text-sm font-medium text-gray-700 w-28",
+                "{name}:"
+            }
+
+            DropComponent {options: ord.options.clone(), selected: ord.selected.clone()  }
+
+            if !matches!(ord.selected.cloned(), FloatFilter::Any) {
                 input {
                     class: "w-20 p-1 border rounded focus:ring focus:ring-blue-200",
                     value: "{input}",

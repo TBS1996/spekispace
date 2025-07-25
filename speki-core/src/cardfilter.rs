@@ -1,44 +1,83 @@
-use std::{fmt::Display, sync::Arc, time::Duration};
+use std::{fmt::Display, sync::Arc};
 
 use serde::{Deserialize, Serialize};
-use uuid::Uuid;
 
 use crate::Card;
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
-pub enum NumOrd {
+pub enum FloatFilter {
+    Greater,
+    Less,
+    Any,
+}
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+pub enum IntFilter {
     Equal,
     Greater,
     Less,
     Any,
 }
 
+impl Display for IntFilter {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let s = match self {
+            IntFilter::Greater => ">",
+            IntFilter::Less => "<",
+            IntFilter::Any => "any",
+            IntFilter::Equal => "=",
+        };
+
+        write!(f, "{s}")
+    }
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Hash)]
-pub enum MyNumOrd {
+pub enum MyIntOrd {
     Equal,
     Greater,
     Less,
 }
 
-impl From<MyNumOrd> for NumOrd {
-    fn from(value: MyNumOrd) -> Self {
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Hash)]
+pub enum MyFloatOrd {
+    Greater,
+    Less,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+pub struct FloatOp {
+    pub num: f32,
+    pub ord: MyFloatOrd,
+}
+
+impl From<MyFloatOrd> for FloatFilter {
+    fn from(value: MyFloatOrd) -> Self {
         match value {
-            MyNumOrd::Equal => NumOrd::Equal,
-            MyNumOrd::Greater => NumOrd::Greater,
-            MyNumOrd::Less => NumOrd::Less,
+            MyFloatOrd::Greater => FloatFilter::Greater,
+            MyFloatOrd::Less => FloatFilter::Less,
         }
     }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
-pub struct NumOp {
-    pub num: f32,
-    pub ord: MyNumOrd,
+impl From<MyIntOrd> for IntFilter {
+    fn from(value: MyIntOrd) -> Self {
+        match value {
+            MyIntOrd::Equal => IntFilter::Equal,
+            MyIntOrd::Greater => IntFilter::Greater,
+            MyIntOrd::Less => IntFilter::Less,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Hash)]
+pub struct IntOp {
+    pub num: u32,
+    pub ord: MyIntOrd,
 }
 
 use std::hash::{Hash, Hasher};
 
-impl Hash for NumOp {
+impl Hash for FloatOp {
     fn hash<H: Hasher>(&self, state: &mut H) {
         // f32 doesn't implement Hash by default because of NaN and other edge cases.
         // Here, we simply hash the underlying bit representation.
@@ -47,13 +86,12 @@ impl Hash for NumOp {
     }
 }
 
-impl Display for NumOrd {
+impl Display for FloatFilter {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let s = match self {
-            NumOrd::Equal => "=",
-            NumOrd::Greater => ">",
-            NumOrd::Less => "<",
-            NumOrd::Any => "any",
+            FloatFilter::Greater => ">",
+            FloatFilter::Less => "<",
+            FloatFilter::Any => "any",
         };
 
         write!(f, "{s}")
@@ -64,13 +102,13 @@ impl Display for NumOrd {
 /// Only uses the user-data part of cards, like reviews or custom tags.
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Default, Hash)]
 pub struct CardFilter {
-    pub recall: Option<NumOp>,
-    pub rec_recall: Option<NumOp>,
-    pub stability: Option<NumOp>,
-    pub rec_stability: Option<NumOp>,
+    pub recall: Option<FloatOp>,
+    pub rec_recall: Option<FloatOp>,
+    pub stability: Option<FloatOp>,
+    pub rec_stability: Option<FloatOp>,
     pub suspended: Option<bool>,
     pub needs_work: Option<bool>,
-    pub lapses: Option<NumOp>,
+    pub lapses: Option<IntOp>,
 }
 
 impl CardFilter {
@@ -97,21 +135,21 @@ impl CardFilter {
             }
         }
 
-        if let Some(NumOp { ord, num }) = lapses {
-            let lapses = card.lapses() as f32;
+        if let Some(IntOp { ord, num }) = lapses {
+            let lapses = card.lapses() as u32;
 
             match ord {
-                MyNumOrd::Equal => {
+                MyIntOrd::Equal => {
                     if lapses != num {
                         return false;
                     }
                 }
-                MyNumOrd::Greater => {
+                MyIntOrd::Greater => {
                     if lapses < num {
                         return false;
                     }
                 }
-                MyNumOrd::Less => {
+                MyIntOrd::Less => {
                     if lapses > num {
                         return false;
                     }
@@ -119,21 +157,16 @@ impl CardFilter {
             }
         }
 
-        if let Some(NumOp { ord, num }) = recall {
+        if let Some(FloatOp { ord, num }) = recall {
             let recall = card.recall_rate().unwrap_or_default();
 
             match ord {
-                MyNumOrd::Equal => {
-                    if recall != num {
-                        return false;
-                    }
-                }
-                MyNumOrd::Greater => {
+                MyFloatOrd::Greater => {
                     if recall < num {
                         return false;
                     }
                 }
-                MyNumOrd::Less => {
+                MyFloatOrd::Less => {
                     if recall > num {
                         return false;
                     }
@@ -141,21 +174,16 @@ impl CardFilter {
             }
         }
 
-        if let Some(NumOp { ord, num }) = stability {
+        if let Some(FloatOp { ord, num }) = stability {
             let stability = card.maturity_days().unwrap_or_default();
 
             match ord {
-                MyNumOrd::Equal => {
-                    if stability != num {
-                        return false;
-                    }
-                }
-                MyNumOrd::Greater => {
+                MyFloatOrd::Greater => {
                     if stability < num {
                         return false;
                     }
                 }
-                MyNumOrd::Less => {
+                MyFloatOrd::Less => {
                     if stability > num {
                         return false;
                     }
@@ -163,42 +191,32 @@ impl CardFilter {
             }
         }
 
-        if let Some(NumOp { ord, num }) = rec_recall {
+        if let Some(FloatOp { ord, num }) = rec_recall {
             let recall = card.min_rec_recall_rate();
 
             match ord {
-                MyNumOrd::Equal => {
-                    if recall != num {
-                        return false;
-                    }
-                }
-                MyNumOrd::Greater => {
+                MyFloatOrd::Greater => {
                     if recall < num {
                         return false;
                     }
                 }
-                MyNumOrd::Less => {
+                MyFloatOrd::Less => {
                     if recall > num {
                         return false;
                     }
                 }
             }
         }
-        if let Some(NumOp { ord, num }) = rec_stability {
+        if let Some(FloatOp { ord, num }) = rec_stability {
             let stability = card.min_rec_stability();
 
             match ord {
-                MyNumOrd::Equal => {
-                    if stability != num {
-                        return false;
-                    }
-                }
-                MyNumOrd::Greater => {
+                MyFloatOrd::Greater => {
                     if stability < num {
                         return false;
                     }
                 }
-                MyNumOrd::Less => {
+                MyFloatOrd::Less => {
                     if stability > num {
                         return false;
                     }
@@ -208,13 +226,4 @@ impl CardFilter {
 
         true
     }
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize, Hash)]
-pub struct FilterItem {
-    last_modified: Duration,
-    name: String,
-    deleted: bool,
-    id: Uuid,
-    filters: CardFilter,
 }
