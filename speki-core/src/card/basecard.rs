@@ -618,10 +618,9 @@ impl CardType {
 
                 let mut segments: Vec<String> = Default::default();
 
-                for (attr, answer) in self.param_to_ans(provider) {
+                for (_, answer) in self.param_to_ans(provider) {
                     let segment = format!(
-                        "{}={}",
-                        attr.pattern,
+                        "{}",
                         EvalText::from_backside(&answer.answer, provider).to_string()
                     );
                     segments.push(segment);
