@@ -1,9 +1,12 @@
-use std::{collections::BTreeSet, sync::Arc};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    sync::Arc,
+};
 
 use dioxus::prelude::*;
 use ledgerstore::{PropertyCache, TheCacheGetter, TheLedgerEvent};
 use speki_core::{
-    card::{AttrBackType, AttributeId, Attrv2, CType, CardId, RawCard},
+    card::{AttrBackType, AttributeId, Attrv2, BackSide, CType, CardId, ParamAnswer, RawCard},
     collection::DynCard,
     ledger::CardAction,
     set::SetExpr,
@@ -12,7 +15,9 @@ use speki_core::{
 
 use crate::{
     components::{
-        backside::{bool_editor, opt_bool_editor, BackPutRender, TimestampRender},
+        backside::{
+            bool_editor, opt_bool_editor, BackPutRender, ForcedTimestampRender, TimestampRender,
+        },
         cardref::{CardRefRender, ForcedCardRefRender},
         dropdown::{ActionDropdown, DropdownAction},
         BackPut, CardTy, DeleteButton, SectionWithTitle,
@@ -334,6 +339,67 @@ pub fn load_attr_qa_for_class(card: CardId) -> Vec<AttrQandA> {
     output
 }
 
+#[derive(PartialEq, Clone, Debug)]
+pub struct ParamAnswerEditor {
+    pub ty: Option<AttrBackType>,
+    pub question: String,
+    pub answer: Signal<Option<AttrAnswerEditor>>,
+}
+
+impl ParamAnswerEditor {
+    pub fn is_same(me: Vec<Self>, them: Vec<Self>) -> bool {
+        if me.len() != them.len() {
+            return false;
+        }
+
+        for attr in me {
+            let a_back = attr.answer.cloned().and_then(|x| x.into_backside());
+
+            if !them
+                .iter()
+                .any(|b| b.answer.cloned().and_then(|x| x.into_backside()) == a_back)
+            {
+                return false;
+            }
+        }
+
+        true
+    }
+}
+
+pub fn load_param_answers_from_class(card: CardId) -> BTreeMap<AttributeId, ParamAnswerEditor> {
+    let class = APP.read().try_load_card(card).unwrap();
+
+    class
+        .params_on_class()
+        .into_iter()
+        .map(|attr| {
+            (
+                attr.id,
+                ParamAnswerEditor {
+                    ty: attr.back_type,
+                    question: attr.pattern.clone(),
+                    answer: Signal::new_in_scope(None, ScopeId::APP),
+                },
+            )
+        })
+        .collect()
+}
+
+pub fn load_param_answers(card: CardId) -> BTreeMap<AttributeId, ParamAnswerEditor> {
+    let card = APP.read().try_load_card(card).unwrap();
+
+    let mut params = load_param_answers_from_class(card.class().unwrap());
+
+    for (id, ans) in card.param_answers() {
+        let param = params.get_mut(&id).unwrap();
+        let editor = AttrAnswerEditor::new(ans.answer, param.ty.clone()).unwrap();
+        param.answer.clone().set(Some(editor));
+    }
+
+    params
+}
+
 pub fn load_attr_qa(card: CardId) -> Vec<AttrQandA> {
     let Some(card) = APP.read().try_load_card(card) else {
         debug_assert!(false);
@@ -507,7 +573,7 @@ fn OldAttrAnswerEditorRender(answer: OldAttrAnswerEditor) -> Element {
         }
         OldAttrAnswerEditor::TimeStamp(text) => {
             rsx! {
-                TimestampRender { text }
+                ForcedTimestampRender { text }
             }
         }
         OldAttrAnswerEditor::Boolean(boolean) => rsx! {bool_editor { boolean }},
@@ -545,6 +611,86 @@ fn AttrAnswerEditorRender(answer: AttrAnswerEditor) -> Element {
                     allowed: vec![CardTy::Instance],
                     filter,
                     instance_of,
+                }
+            }
+        }
+    }
+}
+
+#[component]
+pub fn ParamAnswers(
+    card: Option<CardId>,
+    answers: Signal<BTreeMap<AttributeId, ParamAnswerEditor>>,
+    class: Signal<Option<CardId>>,
+) -> Element {
+    rsx! {
+        h4 {
+            class: "font-bold",
+            p { "Parameters" }
+        }
+
+        for (_id, ParamAnswerEditor{ ty, question, mut answer }) in answers.cloned() {
+            match answer.cloned() {
+                Some(the_answer) => {
+                    rsx! {
+                        div {
+                            class: "border border-black p-3 rounded flex flex-row items-center gap-2",
+                            p {
+                                class: "font-semibold",
+                                "{question}: "
+                            }
+                            button {
+                                class: "{crate::styles::DELETE_BUTTON}",
+                                onclick: move |_| {
+                                    answer.set(None);
+                                },
+                                "X"
+                            }
+                            AttrAnswerEditorRender { answer: the_answer }
+                        }
+                    }
+                }
+                None => {
+                    rsx! {
+                        div {
+                            class: "border border-black p-3 rounded flex flex-row items-center gap-2",
+
+                            div {
+                                class: "w-[20ch] shrink-0",
+                                p {
+                                    class: "font-semibold break-words",
+                                    "{question}:"
+                                }
+                            }
+
+                            button {
+                                class: "{crate::styles::CREATE_BUTTON}",
+                                onclick: move |_| {
+                                    match ty {
+                                        Some(AttrBackType::TimeStamp) => {
+                                            answer.set(Some(AttrAnswerEditor::TimeStamp(Signal::new_in_scope(None, ScopeId::APP))));
+                                        }
+                                        Some(AttrBackType::Boolean) => {
+                                            answer.set(Some(AttrAnswerEditor::Boolean(Signal::new_in_scope(None, ScopeId::APP))))
+                                        },
+                                        Some(AttrBackType::InstanceOfClass(id)) => {
+                                            let filter = SetExpr::union_with([DynCard::Instances(id)]);
+                                            let ans = AttrAnswerEditor::Card {
+                                                filter,
+                                                instance_of: Some(id),
+                                                selected: Signal::new_in_scope(None, ScopeId::APP),
+                                            };
+                                            answer.set(Some(ans));
+                                        }
+                                        None => {
+                                            answer.set(Some(AttrAnswerEditor::Any(BackPut::new(None))));
+                                        }
+                                    }
+                                },
+                                "add answer"
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -634,7 +780,7 @@ pub fn AttrAnswers(
                                             onclick: move |_| {
                                                 match attr_id.back_type {
                                                     Some(AttrBackType::TimeStamp) => {
-                                                        answer.set(Some(AttrAnswerEditor::TimeStamp(Signal::new_in_scope(String::new(), ScopeId::APP))));
+                                                        answer.set(Some(AttrAnswerEditor::TimeStamp(Signal::new_in_scope(None, ScopeId::APP))));
                                                     }
                                                     Some(AttrBackType::Boolean) => {
                                                         answer.set(Some(AttrAnswerEditor::Boolean(Signal::new_in_scope(None, ScopeId::APP))))
@@ -677,6 +823,59 @@ pub enum OldAttrAnswerEditor {
     Boolean(Signal<bool>),
 }
 
+impl OldAttrAnswerEditor {
+    pub fn into_backside(self) -> Option<BackSide> {
+        match self {
+            OldAttrAnswerEditor::Any(back) => back.to_backside(),
+            OldAttrAnswerEditor::Card {
+                filter: _,
+                selected,
+            } => Some(BackSide::Card(selected.cloned())),
+            OldAttrAnswerEditor::TimeStamp(ts) => Some(BackSide::Time(ts.cloned().parse().ok()?)),
+            OldAttrAnswerEditor::Boolean(b) => Some(BackSide::Bool(b.cloned())),
+        }
+    }
+}
+
+impl AttrAnswerEditor {
+    pub fn new(back: BackSide, ty: Option<AttrBackType>) -> Option<Self> {
+        match (back, ty) {
+            (BackSide::Bool(b), Some(AttrBackType::Boolean)) => {
+                Some(Self::Boolean(Signal::new_in_scope(Some(b), ScopeId::APP)))
+            }
+            (BackSide::Time(ts), Some(AttrBackType::TimeStamp)) => Some(Self::TimeStamp(
+                Signal::new_in_scope(Some(ts.serialize()), ScopeId::APP),
+            )),
+
+            (BackSide::Card(card), Some(AttrBackType::InstanceOfClass(class))) => {
+                let filter = SetExpr::union_with([DynCard::Instances(class)]);
+                Some(Self::Card {
+                    filter,
+                    instance_of: Some(class),
+                    selected: Signal::new_in_scope(Some(card), ScopeId::APP),
+                })
+            }
+            (back, None) => Some(Self::Any(BackPut::new(Some(back)))),
+            (_, Some(_)) => None,
+        }
+    }
+
+    pub fn into_backside(self) -> Option<BackSide> {
+        match self {
+            Self::Any(back) => back.to_backside(),
+            Self::TimeStamp(ts) => Some(BackSide::Time(ts.cloned()?.parse().ok()?)),
+            Self::Boolean(b) => Some(BackSide::Bool(b.cloned()?)),
+            Self::Card { selected, .. } => Some(BackSide::Card(selected.cloned()?)),
+        }
+    }
+
+    pub fn into_param_answer(self) -> Option<ParamAnswer> {
+        Some(ParamAnswer {
+            answer: self.into_backside()?,
+        })
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub enum AttrAnswerEditor {
     Any(BackPut),
@@ -685,7 +884,7 @@ pub enum AttrAnswerEditor {
         instance_of: Option<CardId>,
         selected: Signal<Option<CardId>>,
     },
-    TimeStamp(Signal<String>),
+    TimeStamp(Signal<Option<String>>),
     Boolean(Signal<Option<bool>>),
 }
 

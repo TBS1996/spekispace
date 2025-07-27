@@ -351,7 +351,7 @@ pub enum BackSideConstraint {
 
 #[derive(PartialEq, Debug, Clone, Serialize, Deserialize, Hash, Eq, PartialOrd, Ord)]
 pub struct ParamAnswer {
-    answer: BackSide,
+    pub answer: BackSide,
 }
 
 #[derive(PartialEq, Debug, Clone, Serialize, Deserialize, Hash, Eq)]

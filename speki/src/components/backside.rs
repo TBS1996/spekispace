@@ -28,7 +28,7 @@ pub struct BackPut {
 }
 
 #[component]
-pub fn TimestampRender(text: Signal<String>) -> Element {
+pub fn ForcedTimestampRender(text: Signal<String>) -> Element {
     let mut sig = text.clone();
     let interpreted = omtrent::TimeStamp::from_str(&*sig.read())
         .map(|x| x.to_string())
@@ -46,6 +46,59 @@ pub fn TimestampRender(text: Signal<String>) -> Element {
             span {
                 class: "flex-1 text-sm text-gray-500 p-2 bg-gray-50 border border-gray-300 rounded-md",
                 "{interpreted}"
+            }
+        }
+    }
+}
+
+#[component]
+pub fn TimestampRender(text: Signal<Option<String>>) -> Element {
+    let is_editing = text.read().is_some();
+    let mut sig = text.clone();
+
+    if is_editing {
+        let val = text.read().clone().unwrap_or_default();
+        let interpreted = omtrent::TimeStamp::from_str(&val)
+            .map(|x| x.to_string())
+            .unwrap_or_default();
+
+        rsx! {
+            div {
+                class: "flex flex-row gap-2 items-center",
+
+                input {
+                    class: "flex-1 bg-white border border-gray-300 rounded-md p-2 text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent",
+                    value: "{val}",
+                    placeholder: "timestamp",
+                    oninput: move |evt| {
+                        sig.set(Some(evt.value()));
+                    },
+                }
+                span {
+                    class: "text-sm text-gray-500 p-2 bg-gray-50 border border-gray-300 rounded-md",
+                    "{interpreted}"
+                }
+                button {
+                    class: "text-red-500 font-bold px-2",
+                    onclick: move |_| {
+                        sig.set(None);
+                    },
+                    "✕"
+                }
+            }
+        }
+    } else {
+        rsx! {
+            div {
+                class: "flex flex-row gap-2 items-center",
+
+                button {
+                    class: "text-blue-500 font-semibold px-3 py-2 border rounded-md",
+                    onclick: move |_| {
+                        sig.set(Some(String::new()));
+                    },
+                    "Enter timestamp"
+                }
             }
         }
     }
@@ -155,7 +208,7 @@ pub fn BackPutRender(
 
                     match *dropdown.selected.read() {
                         BackOpts::Time => rsx! {
-                            TimestampRender { text }
+                            ForcedTimestampRender { text }
                         },
 
                         BackOpts::Bool => {

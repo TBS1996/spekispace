@@ -8,6 +8,7 @@ use std::{
     sync::Arc,
 };
 
+use attributes::{load_param_answers_from_class, ParamAnswerEditor};
 use dioxus::prelude::*;
 use ledgerstore::TheLedgerEvent;
 use omtrent::TimeStamp;
@@ -31,8 +32,9 @@ use crate::{
         cardviewer::{
             attributes::{
                 load_attr_editors, load_attr_qa, load_attr_qa_for_class,
-                load_inherited_attr_editors, load_param_editors, AttrAnswerEditor, AttrAnswers,
-                AttrBackTypeEditor, AttrEditor, AttrQandA, OldAttrAnswerEditor, RenderAttrs,
+                load_inherited_attr_editors, load_param_answers, load_param_editors,
+                AttrAnswerEditor, AttrAnswers, AttrBackTypeEditor, AttrEditor, AttrQandA,
+                OldAttrAnswerEditor, ParamAnswers, RenderAttrs,
             },
             metadata::{DisplayMetadata, MetadataEditor},
         },
@@ -64,6 +66,7 @@ fn CardProperties(viewer: CardViewer) -> Element {
             inherited_attrs: viewer.editor.inherited_attrs.clone(),
             attr_answers: viewer.editor.attr_answers.clone(),
             fixed_concept: viewer.editor.fixed_concept,
+            param_answers: viewer.editor.param_answers.clone(),
         }
 
         RenderDependencies { card_text: viewer.editor.front.text.clone(), card_id: old_card, dependencies: viewer.editor.dependencies.clone()}
@@ -191,7 +194,7 @@ pub struct CardEditor {
     allowed_cards: Vec<CardTy>,
     attrs: Signal<Vec<AttrEditor>>,
     params: Signal<Vec<AttrEditor>>,
-    param_answers: Signal<BTreeMap<AttributeId, ParamAnswer>>,
+    param_answers: Signal<BTreeMap<AttributeId, ParamAnswerEditor>>,
     inherited_attrs: Signal<Vec<AttrEditor>>,
     attr_answers: Signal<Vec<AttrQandA>>,
     fixed_concept: bool,
@@ -300,8 +303,10 @@ impl CardEditor {
                 AttrQandA::New { answer, .. } => {
                     if let Some(ans) = answer.cloned() {
                         if let AttrAnswerEditor::TimeStamp(ts) = ans {
-                            if let Err(_) = TimeStamp::from_str(&ts.cloned()) {
-                                return Err("invalid timestamp".to_string());
+                            if let Some(ts) = ts.cloned() {
+                                if let Err(_) = TimeStamp::from_str(&ts) {
+                                    return Err("invalid timestamp".to_string());
+                                }
                             }
                         }
                     }
@@ -414,11 +419,26 @@ impl CardEditor {
                     }
                 };
 
+                let answered_params: BTreeMap<AttributeId, ParamAnswer> = self
+                    .param_answers
+                    .cloned()
+                    .into_iter()
+                    .filter_map(|(id, ans)| {
+                        if let Some(ans) =
+                            ans.answer.cloned().and_then(|ans| ans.into_param_answer())
+                        {
+                            Some((id, ans))
+                        } else {
+                            None
+                        }
+                    })
+                    .collect();
+
                 CardType::Instance {
                     name: TextData::from_raw(&front),
                     back,
                     class,
-                    answered_params: Default::default(),
+                    answered_params,
                 }
             }
             CardTy::Unfinished => CardType::Unfinished {
@@ -588,7 +608,13 @@ impl CardViewer {
 
         let editor = {
             let concept = Signal::new_in_scope(raw_ty.data.class(), ScopeId::APP);
-            let param_answers = Signal::new_in_scope(card.param_answers(), ScopeId::APP);
+            let param_answers: BTreeMap<AttributeId, ParamAnswerEditor> = {
+                if !card.is_instance() {
+                    Default::default()
+                } else {
+                    load_param_answers(card.id())
+                }
+            };
             let params = Signal::new_in_scope(
                 card.params_on_class()
                     .into_iter()
@@ -628,7 +654,7 @@ impl CardViewer {
                 front,
                 attrs: Signal::new_in_scope(attrs, ScopeId::APP),
                 inherited_attrs: Signal::new_in_scope(inherited_attrs, ScopeId::APP),
-                param_answers,
+                param_answers: Signal::new_in_scope(param_answers, ScopeId::APP),
                 params,
                 attr_answers,
                 namespace,
@@ -732,6 +758,11 @@ impl CardViewer {
     }
 }
 
+/*
+
+aight..
+*/
+
 #[component]
 fn InputElements(
     front: FrontPut,
@@ -744,10 +775,39 @@ fn InputElements(
     params: Signal<Vec<AttrEditor>>,
     inherited_attrs: Signal<Vec<AttrEditor>>,
     attr_answers: Signal<Vec<AttrQandA>>,
+    param_answers: Signal<BTreeMap<AttributeId, ParamAnswerEditor>>,
     fixed_concept: bool,
 ) -> Element {
     use_effect(move || match ((front.dropdown.selected)(), concept()) {
         (CardTy::Instance, Some(class)) => {
+            dbg!("#######################");
+            let _ = attr_answers.clone();
+            let mut new_params: BTreeMap<AttributeId, ParamAnswerEditor> = match card_id {
+                Some(card) => load_param_answers(card),
+                None => load_param_answers_from_class(class),
+            };
+
+            let old_params = param_answers.cloned();
+
+            let mut new_keys: Vec<&AttributeId> = new_params.keys().collect();
+            new_keys.sort();
+            let mut old_keys: Vec<&AttributeId> = old_params.keys().collect();
+            old_keys.sort();
+
+            dbg!(&new_keys, &old_keys);
+
+            if new_keys != old_keys {
+                dbg!(&old_params, &new_params);
+
+                for (id, ans) in &old_params {
+                    if new_params.get(id).is_some() {
+                        new_params.insert(*id, ans.to_owned());
+                    }
+                }
+
+                param_answers.set(new_params);
+                dbg!(&param_answers);
+            }
             let new_attrs = match card_id {
                 Some(card) => load_attr_qa(card),
                 None => load_attr_qa_for_class(class),
@@ -824,6 +884,7 @@ fn InputElements(
         }
         (_, _) => {
             attr_answers.clone().set(vec![]);
+            param_answers.clone().set(Default::default());
             inherited_attrs.clone().set(vec![]);
             attrs.clone().set(vec![]);
             params.clone().set(vec![]);
@@ -831,7 +892,10 @@ fn InputElements(
     });
 
     let has_attr_answers = !attr_answers.read().is_empty();
+    let has_param_answers = !param_answers.read().is_empty();
     let has_inherited_attrs = !inherited_attrs.read().is_empty();
+
+    dbg!(&attr_answers);
 
     rsx! {
         FrontPutRender { dropdown: front.dropdown.clone(), text: front.text.clone()}
@@ -905,6 +969,10 @@ fn InputElements(
                         allowed: vec![CardTy::Class],
                         disabled: fixed_concept,
                     }
+                }
+
+                if has_param_answers {
+                    ParamAnswers { card: card_id, answers: param_answers, class: concept  }
                 }
 
                 if has_attr_answers {
@@ -1097,13 +1165,15 @@ fn save_button(CardViewer: CardViewer) -> Element {
                                         }
                                     },
                                     AttrAnswerEditor::TimeStamp(ts) => {
-                                        if let Ok(ts) = TimeStamp::from_str(&ts.cloned()) {
-                                            let back = BackSide::Time(ts.clone());
-                                            let action = CardAction::AttributeType { attribute: attr_id.id, back , instance: id };
-                                            let event = CardEvent::new_modify(CardId::new_v4(), action);
-                                            if let Err(e) = APP.read().inner().provider.cards.modify(event) {
-                                                handle_card_event_error(e);
-                                                return;
+                                        if let Some(ts) = ts.cloned() {
+                                            if let Ok(ts) = TimeStamp::from_str(&ts) {
+                                                let back = BackSide::Time(ts.clone());
+                                                let action = CardAction::AttributeType { attribute: attr_id.id, back , instance: id };
+                                                let event = CardEvent::new_modify(CardId::new_v4(), action);
+                                                if let Err(e) = APP.read().inner().provider.cards.modify(event) {
+                                                    handle_card_event_error(e);
+                                                    return;
+                                                }
                                             }
                                         }
                                     },

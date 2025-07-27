@@ -262,6 +262,14 @@ impl Card {
         Some(output)
     }
 
+    pub fn class(&self) -> Option<CardId> {
+        match &self.base.data {
+            CardType::Instance { class, .. } => Some(*class),
+            CardType::Class { parent_class, .. } => *parent_class,
+            _ => None,
+        }
+    }
+
     pub fn parent_classes(&self) -> HashSet<CardId> {
         let key = match self.base.data {
             CardType::Instance { class, .. } => class,
