@@ -31,8 +31,8 @@ use crate::{
         cardviewer::{
             attributes::{
                 load_attr_editors, load_attr_qa, load_attr_qa_for_class,
-                load_inherited_attr_editors, AttrAnswerEditor, AttrAnswers, AttrBackTypeEditor,
-                AttrEditor, AttrQandA, OldAttrAnswerEditor, RenderAttrs,
+                load_inherited_attr_editors, load_param_editors, AttrAnswerEditor, AttrAnswers,
+                AttrBackTypeEditor, AttrEditor, AttrQandA, OldAttrAnswerEditor, RenderAttrs,
             },
             metadata::{DisplayMetadata, MetadataEditor},
         },
@@ -60,6 +60,7 @@ fn CardProperties(viewer: CardViewer) -> Element {
             card_id,
             namespace: viewer.editor.namespace.clone(),
             attrs: viewer.editor.attrs.clone(),
+            params: viewer.editor.params.clone(),
             inherited_attrs: viewer.editor.inherited_attrs.clone(),
             attr_answers: viewer.editor.attr_answers.clone(),
             fixed_concept: viewer.editor.fixed_concept,
@@ -309,6 +310,22 @@ impl CardEditor {
             }
         }
 
+        let params: BTreeMap<AttributeId, Attrv2> = self
+            .params
+            .cloned()
+            .into_iter()
+            .map(|attr| {
+                (
+                    attr.id,
+                    Attrv2 {
+                        id: attr.id,
+                        pattern: attr.pattern.cloned(),
+                        back_type: attr.ty.cloned().map(AttrBackType::from),
+                    },
+                )
+            })
+            .collect();
+
         let attrs: HashMap<AttributeId, (String, Option<AttrBackType>)> = self
             .attrs
             .cloned()
@@ -378,7 +395,7 @@ impl CardEditor {
                     parent_class,
                     attrs,
                     default_question: None,
-                    params: Default::default(),
+                    params,
                 }
             }
             CardTy::Instance => {
@@ -573,7 +590,10 @@ impl CardViewer {
             let concept = Signal::new_in_scope(raw_ty.data.class(), ScopeId::APP);
             let param_answers = Signal::new_in_scope(card.param_answers(), ScopeId::APP);
             let params = Signal::new_in_scope(
-                card.params().into_iter().map(AttrEditor::from).collect(),
+                card.params_on_class()
+                    .into_iter()
+                    .map(AttrEditor::from)
+                    .collect(),
                 ScopeId::APP,
             );
 
@@ -721,6 +741,7 @@ fn InputElements(
     card_id: Option<CardId>,
     namespace: Signal<Option<CardId>>,
     attrs: Signal<Vec<AttrEditor>>,
+    params: Signal<Vec<AttrEditor>>,
     inherited_attrs: Signal<Vec<AttrEditor>>,
     attr_answers: Signal<Vec<AttrQandA>>,
     fixed_concept: bool,
@@ -739,6 +760,31 @@ fn InputElements(
         (CardTy::Class, class) => {
             match card_id {
                 Some(card) => {
+                    {
+                        let mut old = params.cloned();
+                        let new_attrs = load_param_editors(card);
+
+                        let new_attr_ids: BTreeSet<AttributeId> =
+                            new_attrs.iter().map(|a| a.id).collect();
+
+                        // Retain old ones if their ID is in the new set
+                        old.retain(|a| new_attr_ids.contains(&a.id));
+
+                        // Add new ones if their ID wasn't already in old
+                        let old_attr_ids: BTreeSet<AttributeId> =
+                            old.iter().map(|a| a.id).collect();
+
+                        let mut combined = old;
+                        combined.extend(
+                            new_attrs
+                                .into_iter()
+                                .filter(|a| !old_attr_ids.contains(&a.id)),
+                        );
+                        if old_attr_ids != new_attr_ids {
+                            params.clone().set(combined);
+                        }
+                    }
+
                     let mut old = attrs.cloned();
                     let new_attrs = load_attr_editors(card);
 
@@ -780,6 +826,7 @@ fn InputElements(
             attr_answers.clone().set(vec![]);
             inherited_attrs.clone().set(vec![]);
             attrs.clone().set(vec![]);
+            params.clone().set(vec![]);
         }
     });
 
@@ -826,6 +873,8 @@ fn InputElements(
                         disabled: fixed_concept,
                     }
                 }
+
+                RenderAttrs { attrs: params, inherited: false, card: card_id, is_param: true }
 
                 RenderAttrs { attrs, inherited: false, card: card_id }
                 if has_inherited_attrs {

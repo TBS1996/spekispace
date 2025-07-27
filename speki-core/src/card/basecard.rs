@@ -1373,6 +1373,14 @@ impl LedgerItem for RawCard {
                     panic!("expeted class");
                 }
             }
+            CardAction::RemoveParam(param) => {
+                if let CardType::Class { ref mut params, .. } = self.data {
+                    dbg!(&params);
+                    debug_assert!(params.remove(&param).is_some());
+                } else {
+                    panic!("expeted class");
+                }
+            }
             CardAction::RemoveAttr(attr_id) => {
                 if let CardType::Class { ref mut attrs, .. } = self.data {
                     dbg!(&attrs);

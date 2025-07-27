@@ -30,6 +30,7 @@ pub enum CardAction {
     InsertParams(BTreeSet<Attrv2>),
     InsertParamAnswers(BTreeMap<AttributeId, ParamAnswer>),
     RemoveAttr(AttributeId),
+    RemoveParam(AttributeId),
     SetTrivial(bool),
     SetParentClass(Option<CardId>),
     SetInstanceClass(CardId),

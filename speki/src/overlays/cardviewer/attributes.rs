@@ -61,6 +61,18 @@ pub enum AttrBackTypeEditor {
     Boolean,
 }
 
+impl From<AttrBackTypeEditor> for AttrBackType {
+    fn from(editor: AttrBackTypeEditor) -> Self {
+        match editor {
+            AttrBackTypeEditor::InstanceOfClass(class) => {
+                AttrBackType::InstanceOfClass(class.cloned())
+            }
+            AttrBackTypeEditor::Timestamp => AttrBackType::TimeStamp,
+            AttrBackTypeEditor::Boolean => AttrBackType::Boolean,
+        }
+    }
+}
+
 impl From<AttrBackType> for AttrBackTypeEditor {
     fn from(value: AttrBackType) -> Self {
         match value {
@@ -78,6 +90,7 @@ pub fn RenderAttrs(
     card: Option<CardId>,
     attrs: Signal<Vec<AttrEditor>>,
     inherited: bool,
+    #[props(default = false)] is_param: bool,
 ) -> Element {
     let foobar: Vec<(AttrEditor, bool, &'static str)> = attrs
         .cloned()
@@ -115,12 +128,22 @@ pub fn RenderAttrs(
                             match card {
                                 Some(card) => {
                                     dbg!();
+                                    if is_param {
+                                        let event: TheLedgerEvent<RawCard> = TheLedgerEvent::new_modify(card, CardAction::RemoveParam(id));
+                                        if let Err(e) = APP.read().inner().provider.cards.modify(event) {
+                                            handle_card_event_error(e);
+                                            return;
+                                        }
+                                        attrs.clone().set(load_param_editors(card));
+                                    } else {
                                     let event: TheLedgerEvent<RawCard> = TheLedgerEvent::new_modify(card, CardAction::RemoveAttr(id));
                                     if let Err(e) = APP.read().inner().provider.cards.modify(event) {
                                         handle_card_event_error(e);
                                         return;
                                     }
                                     attrs.clone().set(load_attr_editors(card));
+
+                                    }
                                 },
                                 None => {
                                     dbg!();
@@ -224,17 +247,23 @@ pub fn RenderAttrs(
         }
     };
 
+    let title = match (is_param, inherited) {
+        (true, _) => "Params",
+        (false, true) => "Inherited attributes",
+        (false, false) => "Attributes",
+    };
+
     rsx! {
         div {
             if inherited {
                 SectionWithTitle {
-                    title: "Inherited attributes".to_string(),
+                    title: title.to_string(),
                     tooltip: "attributes inherited from parent classes",
                     children
                 }
             } else {
                 SectionWithTitle {
-                    title: "Attributes".to_string(),
+                    title: title.to_string(),
                     on_add: move |_| {
                         attrs.write().push(AttrEditor::new());
                     },
@@ -243,6 +272,20 @@ pub fn RenderAttrs(
             }
         }
     }
+}
+
+pub fn load_param_editors(card_id: CardId) -> Vec<AttrEditor> {
+    let Some(card) = APP.read().try_load_card(card_id) else {
+        return vec![];
+    };
+
+    if !card.is_class() {
+        return vec![];
+    }
+
+    let attrs = card.params_on_class();
+
+    attrs.into_iter().map(AttrEditor::from).collect()
 }
 
 pub fn load_attr_editors(card_id: CardId) -> Vec<AttrEditor> {
@@ -256,20 +299,7 @@ pub fn load_attr_editors(card_id: CardId) -> Vec<AttrEditor> {
 
     let attrs = card.attributes_on_class().unwrap();
 
-    let mut out: Vec<AttrEditor> = Default::default();
-
-    for attr in attrs {
-        let ty: Option<AttrBackTypeEditor> = attr.back_type.map(From::from);
-
-        let editor = AttrEditor {
-            id: attr.id,
-            pattern: Signal::new_in_scope(attr.pattern, ScopeId::APP),
-            ty: Signal::new_in_scope(ty, ScopeId::APP),
-        };
-
-        out.push(editor);
-    }
-    out
+    attrs.into_iter().map(AttrEditor::from).collect()
 }
 
 pub fn load_attr_qa_for_class(card: CardId) -> Vec<AttrQandA> {

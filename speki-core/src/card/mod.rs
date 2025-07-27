@@ -210,7 +210,7 @@ impl Card {
         }
     }
 
-    pub fn params(&self) -> Vec<Attrv2> {
+    pub fn params_on_class(&self) -> Vec<Attrv2> {
         if let CardType::Class { params, .. } = &self.base.data {
             params.values().cloned().collect()
         } else {
