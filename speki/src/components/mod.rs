@@ -1,6 +1,7 @@
 pub mod backside;
 pub mod card_mastery;
 pub mod cardref;
+mod delete_button;
 pub mod dropdown;
 mod filtereditor;
 pub mod frontside;
@@ -8,6 +9,7 @@ mod toggle;
 
 pub use backside::BackPut;
 pub use cardref::CardRef;
+pub use delete_button::DeleteButton;
 pub use dropdown::DropDownMenu;
 pub use filtereditor::*;
 pub use frontside::{CardTy, FrontPut};

@@ -2,7 +2,6 @@ use core::f32;
 use std::{
     cmp::{Ord, Ordering, PartialEq},
     collections::{BTreeMap, BTreeSet, HashSet},
-    default,
     fmt::Debug,
     ops::Deref,
     sync::Arc,
