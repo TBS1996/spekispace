@@ -51,16 +51,20 @@ impl EvalText {
         Self::from_textdata(TextData::from_raw(&s), provider)
     }
 
-    pub fn from_backside(b: &BackSide, provider: &CardProvider) -> Self {
+    pub fn from_backside(b: &BackSide, provider: &CardProvider, hint: bool) -> Self {
         match b {
             BackSide::Text(txt) => Self::from_textdata(txt.clone(), provider),
             BackSide::Card(id) => {
                 let eval = provider.load(*id).unwrap().frontside.to_string();
                 Self {
-                    cmps: vec![
-                        Either::Left("🔗".to_string()),
-                        Either::Right((eval.clone(), *id)),
-                    ],
+                    cmps: if hint {
+                        vec![
+                            Either::Left("🔗".to_string()),
+                            Either::Right((eval.clone(), *id)),
+                        ]
+                    } else {
+                        vec![Either::Right((eval.clone(), *id))]
+                    },
                     eval,
                 }
             }
@@ -80,19 +84,37 @@ impl EvalText {
                 Self::from_textdata(txt, provider)
             }
             BackSide::Time(ts) => {
-                Self::just_some_string(format!("{} {}", ts.clock_emoji(), ts.to_string()), provider)
+                if hint {
+                    Self::just_some_string(
+                        format!("{} {}", ts.clock_emoji(), ts.to_string()),
+                        provider,
+                    )
+                } else {
+                    Self::just_some_string(format!("{}", ts.to_string()), provider)
+                }
             }
             BackSide::Trivial => Self::just_some_string("<trivial>".to_string(), provider),
             BackSide::Invalid => Self::just_some_string("<invalid>".to_string(), provider),
             BackSide::Bool(b) => Self::just_some_string(
-                format!(
-                    "🔘 {}",
-                    if *b {
-                        "yes".to_string()
-                    } else {
-                        "no".to_string()
-                    }
-                ),
+                if hint {
+                    format!(
+                        "🔘 {}",
+                        if *b {
+                            "yes".to_string()
+                        } else {
+                            "no".to_string()
+                        }
+                    )
+                } else {
+                    format!(
+                        "{}",
+                        if *b {
+                            "yes".to_string()
+                        } else {
+                            "no".to_string()
+                        }
+                    )
+                },
                 provider,
             ),
         }
@@ -401,7 +423,7 @@ impl Card {
         let id = base.id;
 
         let from_back =
-            |back: &BackSide| -> EvalText { EvalText::from_backside(back, &card_provider) };
+            |back: &BackSide| -> EvalText { EvalText::from_backside(back, &card_provider, true) };
 
         let backside = match &base.data {
             CardType::Instance { back, class, .. } => match back.as_ref() {
