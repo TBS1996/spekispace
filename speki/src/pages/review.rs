@@ -141,11 +141,12 @@ fn RenderInput(
                     p { "{leaf}" }}
             },
             InputEditor::Reference(id) => {
-                rsx!{RenderSet { filter, set: SetEditor::new(&ledger.load(id).unwrap()), depth: depth + 1}}
+                rsx!{
+                    RenderSet { filter, set: SetEditor::new(&ledger.load(id).unwrap()), depth: depth + 1}
+                }
             },
             InputEditor::Expr(expr) => {
                 rsx!{
-
                     RenderExpr {filter, inputs: expr.inputs.clone(), ty: expr.ty.clone(), depth: depth + 1}
                 }
             },

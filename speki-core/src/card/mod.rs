@@ -2,6 +2,7 @@ use core::f32;
 use std::{
     cmp::{Ord, Ordering, PartialEq},
     collections::{BTreeMap, BTreeSet, HashSet},
+    default,
     fmt::Debug,
     ops::Deref,
     sync::Arc,
@@ -207,6 +208,25 @@ impl Card {
             flag
         } else {
             self.base.trivial
+        }
+    }
+
+    pub fn params(&self) -> Vec<Attrv2> {
+        if let CardType::Class { params, .. } = &self.base.data {
+            params.values().cloned().collect()
+        } else {
+            Default::default()
+        }
+    }
+
+    pub fn param_answers(&self) -> BTreeMap<AttributeId, ParamAnswer> {
+        if let CardType::Instance {
+            answered_params, ..
+        } = &self.base.data
+        {
+            answered_params.clone()
+        } else {
+            Default::default()
         }
     }
 

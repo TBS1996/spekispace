@@ -1,5 +1,5 @@
 use std::{
-    collections::{BTreeSet, HashMap},
+    collections::{BTreeMap, BTreeSet, HashMap},
     mem,
     str::FromStr,
     sync::Arc,
@@ -9,7 +9,9 @@ use dioxus::prelude::*;
 use ledgerstore::{PropertyCache, TheCacheGetter, TheLedgerEvent};
 use omtrent::TimeStamp;
 use speki_core::{
-    card::{AttrBackType, AttributeId, Attrv2, BackSide, CType, CardId, RawCard, TextData},
+    card::{
+        AttrBackType, AttributeId, Attrv2, BackSide, CType, CardId, ParamAnswer, RawCard, TextData,
+    },
     collection::DynCard,
     ledger::{CardAction, CardEvent, MetaAction, MetaEvent},
     metadata::Metadata,
@@ -326,6 +328,18 @@ impl AttrEditor {
     }
 }
 
+impl From<Attrv2> for AttrEditor {
+    fn from(attr: Attrv2) -> Self {
+        let ty: Option<AttrBackTypeEditor> = attr.back_type.map(From::from);
+
+        AttrEditor {
+            id: attr.id,
+            pattern: Signal::new_in_scope(attr.pattern, ScopeId::APP),
+            ty: Signal::new_in_scope(ty, ScopeId::APP),
+        }
+    }
+}
+
 #[derive(Clone, Debug)]
 enum AttrBackTypeEditor {
     InstanceOfClass(Signal<CardId>),
@@ -355,6 +369,8 @@ pub struct CardEditor {
     dependencies: Signal<Vec<CardId>>,
     allowed_cards: Vec<CardTy>,
     attrs: Signal<Vec<AttrEditor>>,
+    params: Signal<Vec<AttrEditor>>,
+    param_answers: Signal<BTreeMap<AttributeId, ParamAnswer>>,
     inherited_attrs: Signal<Vec<AttrEditor>>,
     attr_answers: Signal<Vec<AttrQandA>>,
     fixed_concept: bool,
@@ -375,7 +391,17 @@ impl CardEditor {
             attr_answers,
             fixed_concept: _,
             metadata,
+            param_answers,
+            params,
         } = self;
+
+        if !params.is_empty() {
+            return true;
+        }
+
+        if !param_answers.read().is_empty() {
+            return true;
+        }
 
         if !front.is_empty() {
             return true;
@@ -933,6 +959,11 @@ impl CardViewer {
 
         let editor = {
             let concept = Signal::new_in_scope(raw_ty.data.class(), ScopeId::APP);
+            let param_answers = Signal::new_in_scope(card.param_answers(), ScopeId::APP);
+            let params = Signal::new_in_scope(
+                card.params().into_iter().map(AttrEditor::from).collect(),
+                ScopeId::APP,
+            );
 
             let attr_answers = { Signal::new_in_scope(load_attr_qa(card_id), ScopeId::APP) };
 
@@ -965,6 +996,8 @@ impl CardViewer {
                 front,
                 attrs: Signal::new_in_scope(attrs, ScopeId::APP),
                 inherited_attrs: Signal::new_in_scope(inherited_attrs, ScopeId::APP),
+                param_answers,
+                params,
                 attr_answers,
                 namespace,
                 back,
@@ -1002,6 +1035,8 @@ impl CardViewer {
                 dependencies,
                 allowed_cards: vec![],
                 attrs: Signal::new_in_scope(Default::default(), ScopeId::APP),
+                params: Signal::new_in_scope(Default::default(), ScopeId::APP),
+                param_answers: Signal::new_in_scope(Default::default(), ScopeId::APP),
                 inherited_attrs: Signal::new_in_scope(Default::default(), ScopeId::APP),
                 fixed_concept: false,
                 metadata: MetadataEditor::new(),
@@ -1039,6 +1074,8 @@ impl CardViewer {
             attr_answers,
             fixed_concept: _,
             metadata,
+            param_answers,
+            params,
         } = &self.editor;
 
         front.reset();
@@ -1047,6 +1084,8 @@ impl CardViewer {
         concept.clone().set(None);
         dependencies.clone().clear();
         attrs.clone().clear();
+        params.clone().clear();
+        param_answers.clone().write().clear();
         inherited_attrs.clone().clear();
         attr_answers.clone().clear();
         metadata.clear();
