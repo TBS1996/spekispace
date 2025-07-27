@@ -568,24 +568,69 @@ impl CardType {
         }
     }
 
+    fn param_to_ans(&self, provider: &CardProvider) -> BTreeMap<Attrv2, ParamAnswer> {
+        if let CardType::Instance {
+            answered_params,
+            class,
+            ..
+        } = self
+        {
+            let class = provider.load(*class).unwrap();
+
+            let params = class.params_on_class();
+
+            let mut out: BTreeMap<Attrv2, ParamAnswer> = Default::default();
+
+            for (id, answer) in answered_params {
+                let attr = params.iter().find(|x| x.id == *id).unwrap();
+                out.insert(attr.clone(), answer.clone());
+            }
+
+            out
+        } else {
+            Default::default()
+        }
+    }
+
     pub fn display_front(&self, provider: &CardProvider) -> TextData {
         match self {
             CardType::Instance {
-                name, class, back, ..
+                name,
+                class,
+                back,
+                answered_params: _,
+                ..
             } => {
-                let (class_name, default_question) =
+                let (mut class_name, default_question, _params) =
                     match provider.providers.cards.load(*class).unwrap().data {
                         CardType::Class {
                             default_question,
                             name,
+                            params,
                             ..
-                        } => (name, default_question),
+                        } => (name, default_question, params),
                         other => {
                             dbg!(class);
                             dbg!(other);
                             panic!();
                         }
                     };
+
+                let mut segments: Vec<String> = Default::default();
+
+                for (attr, answer) in self.param_to_ans(provider) {
+                    let segment = format!(
+                        "{}={}",
+                        attr.pattern,
+                        EvalText::from_backside(&answer.answer, provider).to_string()
+                    );
+                    segments.push(segment);
+                }
+
+                if !segments.is_empty() {
+                    let segments: String = segments.join(", ");
+                    class_name.push_string(format!("<{}>", segments));
+                }
 
                 let thename = &name.evaluate(provider);
                 let class_name = &class_name.evaluate(provider);
