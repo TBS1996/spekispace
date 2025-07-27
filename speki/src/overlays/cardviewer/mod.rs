@@ -1,3 +1,5 @@
+mod metadata;
+
 use std::{
     collections::{BTreeMap, BTreeSet, HashMap},
     mem,
@@ -14,7 +16,6 @@ use speki_core::{
     },
     collection::DynCard,
     ledger::{CardAction, CardEvent, MetaAction, MetaEvent},
-    metadata::Metadata,
     set::SetExpr,
     Card, CardProperty, CardType,
 };
@@ -28,10 +29,10 @@ use crate::{
         dropdown::{ActionDropdown, DropdownAction},
         frontside::FrontPutRender,
         BackPut, CardTy, DeleteButton, DropDownMenu, FrontPut, RenderDependents, SectionWithTitle,
-        Toggle,
     },
     overlays::{
         card_selector::{CardSelector, MyClosure},
+        cardviewer::metadata::{DisplayMetadata, MetadataEditor},
         OverlayEnum,
     },
     pop_overlay,
@@ -160,71 +161,6 @@ pub fn CardViewerRender(props: CardViewer) -> Element {
                     }
                 }
             }
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq)]
-struct MetadataEditor {
-    suspended: Signal<bool>,
-    needs_work: Signal<bool>,
-    trivial: Signal<bool>,
-}
-
-impl MetadataEditor {
-    fn new() -> Self {
-        Self {
-            suspended: Signal::new_in_scope(false, ScopeId::APP),
-            trivial: Signal::new_in_scope(false, ScopeId::APP),
-            needs_work: Signal::new_in_scope(false, ScopeId::APP),
-        }
-    }
-
-    fn clear(&self) {
-        let Self {
-            suspended,
-            trivial,
-            needs_work,
-        } = Self::new();
-        self.suspended.clone().set(suspended.cloned());
-        self.trivial.clone().set(trivial.cloned());
-        self.needs_work.clone().set(needs_work.cloned());
-    }
-}
-
-impl From<Metadata> for MetadataEditor {
-    fn from(value: Metadata) -> Self {
-        let Metadata {
-            trivial,
-            suspended,
-            id: _,
-            needs_work,
-        } = value;
-
-        Self {
-            suspended: Signal::new_in_scope(suspended.is_suspended(), ScopeId::APP),
-            trivial: Signal::new_in_scope(trivial.unwrap_or_default(), ScopeId::APP),
-            needs_work: Signal::new_in_scope(needs_work, ScopeId::APP),
-        }
-    }
-}
-
-#[component]
-fn DisplayMetadata(metadata: MetadataEditor) -> Element {
-    let MetadataEditor {
-        suspended,
-        trivial,
-        needs_work,
-    } = metadata;
-
-    rsx! {
-        SectionWithTitle {
-            title: "Metadata".to_string(),
-            children: rsx! {
-                Toggle { text: "trivial", b: trivial  }
-                Toggle { text: "suspended", b: suspended  }
-                Toggle { text: "needs work", b: needs_work  }
-            },
         }
     }
 }
