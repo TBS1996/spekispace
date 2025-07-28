@@ -568,7 +568,7 @@ impl CardType {
         }
     }
 
-    fn param_to_ans(&self, provider: &CardProvider) -> BTreeMap<Attrv2, ParamAnswer> {
+    fn param_to_ans(&self, provider: &CardProvider) -> BTreeMap<Attrv2, Option<ParamAnswer>> {
         if let CardType::Instance {
             answered_params,
             class,
@@ -579,11 +579,13 @@ impl CardType {
 
             let params = class.params_on_class();
 
-            let mut out: BTreeMap<Attrv2, ParamAnswer> = Default::default();
+            let mut out: BTreeMap<Attrv2, Option<ParamAnswer>> = Default::default();
 
-            for (id, answer) in answered_params {
-                let attr = params.iter().find(|x| x.id == *id).unwrap();
-                out.insert(attr.clone(), answer.clone());
+            for param in params {
+                match answered_params.get(&param.id) {
+                    Some(ans) => out.insert(param, Some(ans.to_owned())),
+                    None => out.insert(param, None),
+                };
             }
 
             out
@@ -606,16 +608,18 @@ impl CardType {
 
                 let mut segments: Vec<String> = Default::default();
 
-                let mut params: Vec<(Attrv2, ParamAnswer)> =
+                let mut params: Vec<(Attrv2, Option<ParamAnswer>)> =
                     self.param_to_ans(provider).into_iter().collect();
 
                 params.sort_by_key(|p| p.0.id);
 
                 for (_, answer) in self.param_to_ans(provider) {
-                    let segment = format!(
-                        "{}",
-                        EvalText::from_backside(&answer.answer, provider, false).to_string()
-                    );
+                    let val = match answer {
+                        Some(p) => EvalText::from_backside(&p.answer, provider, false).to_string(),
+                        None => EvalText::just_some_string("_".to_owned(), provider).to_string(),
+                    };
+
+                    let segment = format!("{}", val);
                     segments.push(segment);
                 }
 
