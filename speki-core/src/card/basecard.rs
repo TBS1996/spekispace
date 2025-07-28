@@ -594,43 +594,51 @@ impl CardType {
         }
     }
 
+    fn class_stuff(&self, class: CardId, provider: &CardProvider) -> String {
+        let mut class_name = match provider.providers.cards.load(class).unwrap().data {
+            CardType::Class { name, .. } => name,
+            other => {
+                dbg!(class);
+                dbg!(other);
+                panic!();
+            }
+        };
+
+        let mut segments: Vec<String> = Default::default();
+
+        let mut params: Vec<(Attrv2, Option<ParamAnswer>)> =
+            self.param_to_ans(provider).into_iter().collect();
+
+        params.sort_by_key(|p| p.0.id);
+
+        for (_, answer) in self.param_to_ans(provider) {
+            let val = match answer {
+                Some(p) => EvalText::from_backside(&p.answer, provider, false).to_string(),
+                None => EvalText::just_some_string("_".to_owned(), provider).to_string(),
+            };
+
+            let segment = format!("{}", val);
+            segments.push(segment);
+        }
+
+        if !segments.is_empty() {
+            let segments: String = segments.join(", ");
+            class_name.push_string(format!("<{}>", segments));
+        }
+
+        class_name.evaluate(provider)
+    }
+
+    fn class_stuff_from_instance(&self, instance: CardId, provider: &CardProvider) -> String {
+        let class = provider.load(instance).unwrap().class().unwrap();
+        self.class_stuff(class, provider)
+    }
+
     pub fn display_front(&self, provider: &CardProvider) -> TextData {
         match self {
             CardType::Instance { name, class, .. } => {
-                let mut class_name = match provider.providers.cards.load(*class).unwrap().data {
-                    CardType::Class { name, .. } => name,
-                    other => {
-                        dbg!(class);
-                        dbg!(other);
-                        panic!();
-                    }
-                };
-
-                let mut segments: Vec<String> = Default::default();
-
-                let mut params: Vec<(Attrv2, Option<ParamAnswer>)> =
-                    self.param_to_ans(provider).into_iter().collect();
-
-                params.sort_by_key(|p| p.0.id);
-
-                for (_, answer) in self.param_to_ans(provider) {
-                    let val = match answer {
-                        Some(p) => EvalText::from_backside(&p.answer, provider, false).to_string(),
-                        None => EvalText::just_some_string("_".to_owned(), provider).to_string(),
-                    };
-
-                    let segment = format!("{}", val);
-                    segments.push(segment);
-                }
-
-                if !segments.is_empty() {
-                    let segments: String = segments.join(", ");
-                    class_name.push_string(format!("<{}>", segments));
-                }
-
                 let thename = &name.evaluate(provider);
-                let class_name = &class_name.evaluate(provider);
-
+                let class_name = self.class_stuff(*class, provider);
                 let s = format!("{thename} ({class_name})");
                 TextData::from_raw(&s)
             }
@@ -656,10 +664,12 @@ impl CardType {
 
                 let attr = class.get_attr(*attribute).unwrap();
 
+                let class_name = self.class_stuff_from_instance(*instance, provider);
+
                 let new = if attr.pattern.contains("{}") {
                     attr.pattern.replace("{}", &format!("[[{instance}]]"))
                 } else {
-                    format!("[[{instance}]]: {}", attr.pattern)
+                    format!("[[{instance}]]({}): {}", class_name, attr.pattern)
                 };
 
                 TextData::from_raw(&new)
