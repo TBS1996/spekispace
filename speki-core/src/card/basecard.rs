@@ -594,27 +594,15 @@ impl CardType {
 
     pub fn display_front(&self, provider: &CardProvider) -> TextData {
         match self {
-            CardType::Instance {
-                name,
-                class,
-                back,
-                answered_params: _,
-                ..
-            } => {
-                let (mut class_name, default_question, _params) =
-                    match provider.providers.cards.load(*class).unwrap().data {
-                        CardType::Class {
-                            default_question,
-                            name,
-                            params,
-                            ..
-                        } => (name, default_question, params),
-                        other => {
-                            dbg!(class);
-                            dbg!(other);
-                            panic!();
-                        }
-                    };
+            CardType::Instance { name, class, .. } => {
+                let mut class_name = match provider.providers.cards.load(*class).unwrap().data {
+                    CardType::Class { name, .. } => name,
+                    other => {
+                        dbg!(class);
+                        dbg!(other);
+                        panic!();
+                    }
+                };
 
                 let mut segments: Vec<String> = Default::default();
 
@@ -639,21 +627,8 @@ impl CardType {
                 let thename = &name.evaluate(provider);
                 let class_name = &class_name.evaluate(provider);
 
-                match default_question {
-                    Some(q) => {
-                        let s = q.evaluate(provider).replace("{}", thename);
-                        TextData::from_raw(&s)
-                    }
-
-                    None => {
-                        if back.is_some() {
-                            let s = format!("{thename} ({class_name})");
-                            TextData::from_raw(&s)
-                        } else {
-                            name.clone()
-                        }
-                    }
-                }
+                let s = format!("{thename} ({class_name})");
+                TextData::from_raw(&s)
             }
             CardType::Normal { front, .. } => front.clone(),
             CardType::Unfinished { front, .. } => front.clone(),
