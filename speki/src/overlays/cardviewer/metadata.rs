@@ -52,7 +52,7 @@ impl From<Metadata> for MetadataEditor {
 pub fn DisplayMetadata(metadata: MetadataEditor) -> Element {
     let MetadataEditor {
         suspended,
-        trivial,
+        trivial: _,
         needs_work,
     } = metadata;
 
@@ -60,7 +60,7 @@ pub fn DisplayMetadata(metadata: MetadataEditor) -> Element {
         SectionWithTitle {
             title: "Metadata".to_string(),
             children: rsx! {
-                Toggle { text: "trivial", b: trivial  }
+                //Toggle { text: "trivial", b: trivial  }
                 Toggle { text: "suspended", b: suspended  }
                 Toggle { text: "needs work", b: needs_work  }
             },
