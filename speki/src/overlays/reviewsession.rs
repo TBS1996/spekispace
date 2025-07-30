@@ -134,7 +134,7 @@ pub fn ReviewRender(
 
     let history = card.history().to_owned();
 
-    let front = card.front_side().to_owned();
+    let front = card.name().to_owned();
     let back = card.backside().to_owned();
 
     let card2 = card.clone();
