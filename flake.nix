@@ -43,6 +43,10 @@
             pkgs.libsoup_3
             pkgs.webkitgtk_4_1
             pkgs.xdotool
+
+            pkgs.mesa
+            pkgs.libGL
+            pkgs.egl-wayland
           ]
           ++ lib.optionals pkgs.stdenv.isDarwin (with pkgs.darwin.apple_sdk.frameworks; [
             IOKit

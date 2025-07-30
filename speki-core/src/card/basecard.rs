@@ -613,7 +613,7 @@ impl CardType {
 
         for (_, answer) in self.param_to_ans(provider) {
             let val = match answer {
-                Some(p) => EvalText::from_backside(&p.answer, provider, false).to_string(),
+                Some(p) => EvalText::from_backside(&p.answer, provider, false, true).to_string(),
                 None => EvalText::just_some_string("_".to_owned(), provider).to_string(),
             };
 

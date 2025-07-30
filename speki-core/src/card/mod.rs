@@ -51,11 +51,15 @@ impl EvalText {
         Self::from_textdata(TextData::from_raw(&s), provider)
     }
 
-    pub fn from_backside(b: &BackSide, provider: &CardProvider, hint: bool) -> Self {
+    pub fn from_backside(b: &BackSide, provider: &CardProvider, hint: bool, name: bool) -> Self {
         match b {
             BackSide::Text(txt) => Self::from_textdata(txt.clone(), provider),
             BackSide::Card(id) => {
-                let eval = provider.load(*id).unwrap().frontside.to_string();
+                let eval = if name {
+                    provider.load(*id).unwrap().name.to_string()
+                } else {
+                    provider.load(*id).unwrap().frontside.to_string()
+                };
                 Self {
                     cmps: if hint {
                         vec![
@@ -422,8 +426,9 @@ impl Card {
     ) -> Self {
         let id = base.id;
 
-        let from_back =
-            |back: &BackSide| -> EvalText { EvalText::from_backside(back, &card_provider, true) };
+        let from_back = |back: &BackSide| -> EvalText {
+            EvalText::from_backside(back, &card_provider, true, false)
+        };
 
         let backside = match &base.data {
             CardType::Instance { back, class, .. } => match back.as_ref() {
