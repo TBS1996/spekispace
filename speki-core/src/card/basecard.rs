@@ -568,7 +568,7 @@ impl CardType {
         }
     }
 
-    fn param_to_ans(&self, provider: &CardProvider) -> BTreeMap<Attrv2, Option<ParamAnswer>> {
+    pub fn param_to_ans(&self, provider: &CardProvider) -> BTreeMap<Attrv2, Option<ParamAnswer>> {
         if let CardType::Instance {
             answered_params,
             class,

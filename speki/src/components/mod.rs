@@ -1,4 +1,5 @@
 pub mod backside;
+mod card_data;
 pub mod card_mastery;
 pub mod cardref;
 mod delete_button;
@@ -8,6 +9,7 @@ pub mod frontside;
 mod toggle;
 
 pub use backside::BackPut;
+pub use card_data::CardData;
 pub use cardref::CardRef;
 pub use delete_button::DeleteButton;
 pub use dropdown::DropDownMenu;

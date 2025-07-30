@@ -3,7 +3,7 @@ use std::{fmt::Debug, sync::Arc};
 use dioxus::prelude::*;
 use ledgerstore::EventError;
 use speki_core::{
-    card::{CardId, RawCard},
+    card::{CardId, EvalText, RawCard},
     recall_rate::Recall,
     Card, CardRefType,
 };
@@ -33,6 +33,10 @@ impl App {
 
     pub fn inner(&self) -> Arc<speki_core::App> {
         self.0.clone()
+    }
+
+    pub fn card_name(&self, id: CardId) -> Option<EvalText> {
+        self.try_load_card(id).map(|card| card.name().clone())
     }
 
     pub fn try_load_card(&self, id: CardId) -> Option<Arc<Card>> {

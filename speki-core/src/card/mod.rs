@@ -236,6 +236,10 @@ impl Card {
         }
     }
 
+    pub fn param_to_ans(&self) -> BTreeMap<Attrv2, Option<ParamAnswer>> {
+        self.base.data.param_to_ans(&self.card_provider)
+    }
+
     pub fn params_on_class(&self) -> Vec<Attrv2> {
         if let CardType::Class { params, .. } = &self.base.data {
             params.values().cloned().collect()
