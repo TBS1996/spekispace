@@ -25,6 +25,26 @@ impl TextData {
         }
     }
 
+    pub fn push_eval(&mut self, eval: EvalText) {
+        let mut x: Vec<Either<String, TextLink>> = Default::default();
+
+        for cmp in eval.components() {
+            match cmp {
+                Either::Left(s) => x.push(Either::Left(s.to_owned())),
+                Either::Right((s, id)) => {
+                    let link = TextLink {
+                        id: *id,
+                        alias: Some(s.to_owned()),
+                    };
+
+                    x.push(Either::Right(link));
+                }
+            }
+        }
+
+        self.inner_mut().extend(x);
+    }
+
     pub fn push_link(&mut self, id: CardId, alias: Option<String>) {
         let link = TextLink { id, alias };
         self.0.push(Either::Right(link));
@@ -40,6 +60,10 @@ impl TextData {
 
     pub fn inner(&self) -> &Vec<Either<String, TextLink>> {
         &self.0
+    }
+
+    pub fn pop(&mut self) -> Option<Either<String, TextLink>> {
+        self.0.pop()
     }
 
     pub fn inner_mut(&mut self) -> &mut Vec<Either<String, TextLink>> {

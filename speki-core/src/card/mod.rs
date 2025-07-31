@@ -161,6 +161,115 @@ impl Deref for EvalText {
     }
 }
 
+pub struct DisplayData {
+    data: Data,
+    name: EvalText,
+    namespace: Option<EvalText>,
+}
+
+impl DisplayData {
+    fn display(&self, provider: &CardProvider, with_namespace: bool, with_class: bool) -> EvalText {
+        let mut text = TextData::default();
+        let mut s = String::new();
+
+        if with_namespace {
+            if let Some(ns) = self.namespace.as_ref() {
+                text.push_eval(ns.clone());
+                s.push_str(&ns);
+                text.push_string("::".to_string());
+                s.push_str("::");
+            }
+        }
+
+        if let Data::Attribute { instance } = &self.data {
+            text.push_link(instance.1, None);
+            text.push_string("[".to_string());
+            text.push_eval(self.name.clone());
+            text.push_string("]".to_string());
+
+            return EvalText::from_textdata(text, provider);
+        }
+
+        text.push_eval(self.name.clone());
+        s.push_str(&self.name);
+
+        if with_class {
+            s.push_str(" ");
+            text.push_string(" ".to_string());
+
+            match &self.data {
+                Data::Class {
+                    parent_class: Some(parent_class),
+                } => {
+                    s.push_str("(");
+                    s.push_str(&parent_class.0);
+                    s.push_str(")");
+
+                    text.push_string("(".to_string());
+                    text.push_link(parent_class.1, None);
+                    text.push_string(")".to_string());
+                }
+                Data::Class { parent_class: None } => {}
+                Data::Instance { class, params } => {
+                    s.push_str("(");
+                    s.push_str(&class.0);
+
+                    text.push_string("(".to_string());
+                    text.push_link(class.1, None);
+
+                    if !params.is_empty() {
+                        s.push_str("<");
+                        text.push_string("<".to_string());
+                        for param in params {
+                            s.push_str(&param.1);
+                            s.push_str(", ");
+
+                            text.push_string(param.1.to_string());
+                            text.push_string(", ".to_string());
+                        }
+                        s.pop();
+                        s.pop();
+                        s.push_str(">");
+
+                        text.pop();
+                        text.push_string(">".to_string());
+                    }
+                    s.push_str(")");
+                    text.push_string(")".to_string());
+                }
+                Data::Attribute { .. } => {}
+                Data::Statement => {}
+                Data::Normal => {}
+                Data::Unfinished => {}
+                Data::Event => {}
+                Data::Invalid => {}
+            }
+        }
+
+        EvalText::from_textdata(text, provider)
+    }
+}
+
+enum Data {
+    Normal,
+    Class {
+        parent_class: Option<(String, CardId)>,
+    },
+    Instance {
+        class: (String, CardId),
+        params: Vec<(String, String)>,
+    },
+    Attribute {
+        instance: (String, CardId),
+    },
+    Statement,
+    Unfinished,
+    Event,
+    Invalid,
+}
+
+impl Data {}
+
 /*
 
 hmm maybe we can go back to having generics here?
@@ -233,6 +342,75 @@ impl Card {
             flag
         } else {
             self.base.trivial
+        }
+    }
+
+    pub fn display_card(&self, namespace: bool, class: bool) -> EvalText {
+        self.displaying()
+            .display(&self.card_provider, namespace, class)
+    }
+
+    fn displaying(&self) -> DisplayData {
+        let card_provider = self.card_provider.clone();
+
+        let data: Data = match &self.base.data {
+            CardType::Instance {
+                class: class_id,
+                answered_params: _,
+                ..
+            } => {
+                let class_name = card_provider.load(*class_id).unwrap().name().to_string();
+                let mut params: Vec<(String, String)> = vec![];
+
+                for (attr, ans) in self.param_to_ans() {
+                    if let Some(ans) = ans {
+                        let back =
+                            EvalText::from_backside(&ans.answer, &card_provider, false, true)
+                                .to_string();
+
+                        params.push((attr.pattern, back));
+                    }
+                }
+
+                params.sort();
+
+                Data::Instance {
+                    class: (class_name, *class_id),
+                    params,
+                }
+            }
+            CardType::Normal { .. } => Data::Normal,
+            CardType::Unfinished { .. } => Data::Unfinished,
+            CardType::Attribute { instance, .. } => {
+                match card_provider.load(*instance).map(|x| x.name().to_owned()) {
+                    Some(instance_name) => Data::Attribute {
+                        instance: (instance_name.to_string(), *instance),
+                    },
+                    None => Data::Invalid,
+                }
+            }
+            CardType::Class { parent_class, .. } => match parent_class {
+                Some(parent) => match card_provider.load(*parent).map(|x| x.name().to_owned()) {
+                    Some(parent_class_name) => Data::Class {
+                        parent_class: Some((parent_class_name.to_string(), *parent)),
+                    },
+                    None => Data::Invalid,
+                },
+                None => Data::Class { parent_class: None },
+            },
+            CardType::Statement { .. } => Data::Statement,
+            CardType::Event { .. } => Data::Event,
+        };
+
+        let namespace: Option<EvalText> = match self.namespace() {
+            Some(ns) => card_provider.load(ns).map(|x| x.name.clone()),
+            None => None,
+        };
+
+        DisplayData {
+            data,
+            name: self.name.clone(),
+            namespace,
         }
     }
 
