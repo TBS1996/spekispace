@@ -488,7 +488,7 @@ fn RenderEvalText(eval: EvalText) -> Element {
                     match cmp {
                         Either::Left(s) => {
                             rsx! {
-                                span { " {s}" }
+                                span { "{s}" }
                             }
                         }
                         Either::Right((s, id)) => {
