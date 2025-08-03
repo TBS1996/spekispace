@@ -164,20 +164,17 @@ impl Deref for EvalText {
 pub struct DisplayData {
     data: Data,
     name: EvalText,
-    namespace: Option<EvalText>,
+    namespace: Option<CardId>,
 }
 
 impl DisplayData {
     fn display(&self, provider: &CardProvider, with_namespace: bool, with_class: bool) -> EvalText {
         let mut text = TextData::default();
-        let mut s = String::new();
 
         if with_namespace {
             if let Some(ns) = self.namespace.as_ref() {
-                text.push_eval(ns.clone());
-                s.push_str(&ns);
+                text.push_link(*ns, None);
                 text.push_string("::".to_string());
-                s.push_str("::");
             }
         }
 
@@ -191,50 +188,33 @@ impl DisplayData {
         }
 
         text.push_eval(self.name.clone());
-        s.push_str(&self.name);
 
         if with_class {
-            s.push_str(" ");
             text.push_string(" ".to_string());
 
             match &self.data {
                 Data::Class {
                     parent_class: Some(parent_class),
                 } => {
-                    s.push_str("(");
-                    s.push_str(&parent_class.0);
-                    s.push_str(")");
-
                     text.push_string("(".to_string());
                     text.push_link(parent_class.1, None);
                     text.push_string(")".to_string());
                 }
                 Data::Class { parent_class: None } => {}
                 Data::Instance { class, params } => {
-                    s.push_str("(");
-                    s.push_str(&class.0);
-
                     text.push_string("(".to_string());
                     text.push_link(class.1, None);
 
                     if !params.is_empty() {
-                        s.push_str("<");
                         text.push_string("<".to_string());
                         for param in params {
-                            s.push_str(&param.1);
-                            s.push_str(", ");
-
                             text.push_string(param.1.to_string());
                             text.push_string(", ".to_string());
                         }
-                        s.pop();
-                        s.pop();
-                        s.push_str(">");
 
                         text.pop();
                         text.push_string(">".to_string());
                     }
-                    s.push_str(")");
                     text.push_string(")".to_string());
                 }
                 Data::Attribute { .. } => {}
@@ -402,10 +382,7 @@ impl Card {
             CardType::Event { .. } => Data::Event,
         };
 
-        let namespace: Option<EvalText> = match self.namespace() {
-            Some(ns) => card_provider.load(ns).map(|x| x.name.clone()),
-            None => None,
-        };
+        let namespace = self.namespace();
 
         DisplayData {
             data,
