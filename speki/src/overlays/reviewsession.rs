@@ -16,9 +16,7 @@ use speki_core::{
 use tracing::info;
 
 use crate::{
-    components::{
-        card_mastery::MasterySection, CardData, NeedsWork, RenderDependents, SectionWithTitle,
-    },
+    components::{card_mastery::MasterySection, NeedsWork, RenderDependents, SectionWithTitle},
     overlays::{
         card_selector::{CardSelector, MyClosure},
         cardviewer::CardViewer,
@@ -350,8 +348,6 @@ fn Infobar(
                 queue,
                 show_backside,
             }
-
-            CardData { id: card.id() }
 
             NeedsWork { id: card.id() }
         }
