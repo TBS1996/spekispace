@@ -53,17 +53,6 @@ impl MaybeEntry {
     }
 }
 
-/*
-
-idea: like a default search thing when you dont have anything in search bar
-
-for example, if you click add dependency, and you dont have anything in search bar
-the hidden search thing will be the front of the card that youre adding dependency to
-
-this will mean a lot of times you dont have to even search
-
-*/
-
 type OnCardSelected = (MyClosure, bool); // if true, close the overlay
 
 #[derive(Props, Clone, Debug)]

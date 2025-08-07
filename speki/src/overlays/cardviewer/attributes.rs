@@ -107,13 +107,16 @@ pub fn RenderAttrs(
             ));
             let cached = APP.read().inner().provider.cards.load_getter(getter);
             let disabled = !cached.is_empty();
-            let title = if inherited {
-                "can't delete inherited attributes"
-            } else if disabled {
-                "can't delete used attributes"
-            } else {
-                ""
+
+            let title = match (is_param, inherited, disabled) {
+                (true, true, _) => "cant delete inherited params",
+                (true, false, true) => "can't delete used params",
+                (true, false, false) => "",
+                (false, true, _) => "can't delete inherited attributes",
+                (false, false, true) => "can't delete used attributes",
+                (false, false, false) => "",
             };
+
             (attr, disabled || inherited, title)
         })
         .collect();
@@ -253,7 +256,8 @@ pub fn RenderAttrs(
     };
 
     let title = match (is_param, inherited) {
-        (true, _) => "Params",
+        (true, true) => "Inherited Params",
+        (true, false) => "Params",
         (false, true) => "Inherited attributes",
         (false, false) => "Attributes",
     };
@@ -288,9 +292,9 @@ pub fn load_param_editors(card_id: CardId) -> Vec<AttrEditor> {
         return vec![];
     }
 
-    let attrs = card.params_on_class();
+    let params = card.params_on_class();
 
-    attrs.into_iter().map(AttrEditor::from).collect()
+    params.into_iter().map(AttrEditor::from).collect()
 }
 
 pub fn load_attr_editors(card_id: CardId) -> Vec<AttrEditor> {
@@ -371,8 +375,9 @@ pub fn load_param_answers_from_class(card: CardId) -> BTreeMap<AttributeId, Para
     let class = APP.read().try_load_card(card).unwrap();
 
     class
-        .params_on_class()
-        .into_iter()
+        .recursive_params_on_class()
+        .into_values()
+        .flatten()
         .map(|attr| {
             (
                 attr.id,
@@ -499,20 +504,48 @@ pub fn load_attr_qa(card: CardId) -> Vec<AttrQandA> {
     output
 }
 
-/*
+/// lets see... for classes, it should show all the inherited params, these cannot be edited
+/// for instances, the params
+pub fn load_inherited_param_editors(card_id: CardId, include_self: bool) -> Vec<AttrEditor> {
+    let Some(card) = APP.read().try_load_card(card_id) else {
+        return vec![];
+    };
 
-idea:
+    if !card.is_class() {
+        return vec![];
+    }
 
-when selecting instannce
+    let mut attrs = card.params_on_parent_classes();
 
-it should come up all the attributes from the parent classes (recursively), like it'll ask the asnwer to those questions
-and if you answer it it'll create those attr cards
+    if include_self {
+        attrs.insert(card.id(), card.params_on_class());
+    }
 
-like if `person` has attribute when was {} born, where was {} born,
-then when you add a new person instance it'll have those textfields for those questions so that you can create them easilyy that way
+    let attrs: Vec<Attrv2> = attrs.into_values().flatten().collect();
 
+    let mut out: Vec<AttrEditor> = Default::default();
 
-*/
+    for attr in attrs {
+        let ty: Option<AttrBackTypeEditor> = attr.back_type.map(From::from);
+
+        let editor = AttrEditor {
+            id: attr.id,
+            pattern: Signal::new_in_scope(attr.pattern, ScopeId::APP),
+            ty: Signal::new_in_scope(ty, ScopeId::APP),
+        };
+
+        out.push(editor);
+    }
+
+    let current: BTreeSet<AttributeId> = load_attr_editors(card_id)
+        .into_iter()
+        .map(|attr| attr.id)
+        .collect();
+
+    out.retain(|attr| !current.contains(&attr.id));
+
+    out
+}
 
 pub fn load_inherited_attr_editors(card_id: CardId) -> Vec<AttrEditor> {
     let Some(card) = APP.read().try_load_card(card_id) else {

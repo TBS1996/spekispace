@@ -395,6 +395,25 @@ impl Card {
         self.base.data.param_to_ans(&self.card_provider)
     }
 
+    pub fn params_on_parent_classes(&self) -> BTreeMap<CardId, Vec<Attrv2>> {
+        let mut parents = self.parent_classes();
+        parents.remove(&self.id());
+        let mut out: BTreeMap<CardId, Vec<Attrv2>> = Default::default();
+
+        for parent in parents {
+            let params = self.card_provider.load(parent).unwrap().params_on_class();
+            out.insert(parent, params);
+        }
+
+        out
+    }
+
+    pub fn recursive_params_on_class(&self) -> BTreeMap<CardId, Vec<Attrv2>> {
+        let mut params = self.params_on_parent_classes();
+        params.insert(self.id(), self.params_on_class());
+        params
+    }
+
     pub fn params_on_class(&self) -> Vec<Attrv2> {
         if let CardType::Class { params, .. } = &self.base.data {
             params.values().cloned().collect()

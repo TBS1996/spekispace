@@ -601,7 +601,8 @@ impl CardType {
         {
             let class = provider.load(*class).unwrap();
 
-            let params = class.params_on_class();
+            let mut params = class.params_on_class();
+            params.extend(class.params_on_parent_classes().values().flatten().cloned());
 
             let mut out: BTreeMap<Attrv2, Option<ParamAnswer>> = Default::default();
 
@@ -1064,14 +1065,28 @@ impl LedgerItem for RawCard {
                 class,
                 answered_params,
             } => {
-                let class = ledger.load(*class).unwrap();
+                let mut class: Option<RawCard> = Some(ledger.load(*class).unwrap());
+                let mut recursive_params: BTreeMap<AttributeId, Attrv2> = Default::default();
 
-                let CardType::Class { params, .. } = class.data else {
-                    return Err(CardError::InstanceOfNonClass);
-                };
+                while let Some(the_class) = class.clone() {
+                    let CardType::Class {
+                        params,
+                        parent_class,
+                        ..
+                    } = the_class.data
+                    else {
+                        return Err(CardError::InstanceOfNonClass);
+                    };
+
+                    recursive_params.extend(params);
+                    match parent_class {
+                        Some(parent_class) => class = Some(ledger.load(parent_class).unwrap()),
+                        None => class = None,
+                    }
+                }
 
                 for (key_ans, val_ans) in answered_params {
-                    match params.get(key_ans).as_ref() {
+                    match recursive_params.get(key_ans).as_ref() {
                         Some(p) => {
                             if let Some(back_type) = &p.back_type {
                                 back_type.is_valid(&val_ans.answer, ledger)?;

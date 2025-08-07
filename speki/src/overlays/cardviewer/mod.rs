@@ -32,9 +32,9 @@ use crate::{
         cardviewer::{
             attributes::{
                 load_attr_editors, load_attr_qa, load_attr_qa_for_class,
-                load_inherited_attr_editors, load_param_answers, load_param_editors,
-                AttrAnswerEditor, AttrAnswers, AttrBackTypeEditor, AttrEditor, AttrQandA,
-                OldAttrAnswerEditor, ParamAnswers, RenderAttrs,
+                load_inherited_attr_editors, load_inherited_param_editors, load_param_answers,
+                load_param_editors, AttrAnswerEditor, AttrAnswers, AttrBackTypeEditor, AttrEditor,
+                AttrQandA, OldAttrAnswerEditor, ParamAnswers, RenderAttrs,
             },
             metadata::{DisplayMetadata, MetadataEditor},
         },
@@ -64,6 +64,7 @@ fn CardProperties(viewer: CardViewer) -> Element {
             attrs: viewer.editor.attrs.clone(),
             params: viewer.editor.params.clone(),
             inherited_attrs: viewer.editor.inherited_attrs.clone(),
+            inherited_params: viewer.editor.inherited_params.clone(),
             attr_answers: viewer.editor.attr_answers.clone(),
             fixed_concept: viewer.editor.fixed_concept,
             param_answers: viewer.editor.param_answers.clone(),
@@ -196,6 +197,7 @@ pub struct CardEditor {
     params: Signal<Vec<AttrEditor>>,
     param_answers: Signal<BTreeMap<AttributeId, ParamAnswerEditor>>,
     inherited_attrs: Signal<Vec<AttrEditor>>,
+    inherited_params: Signal<Vec<AttrEditor>>,
     attr_answers: Signal<Vec<AttrQandA>>,
     fixed_concept: bool,
     metadata: MetadataEditor,
@@ -212,6 +214,7 @@ impl CardEditor {
             allowed_cards: _,
             attrs,
             inherited_attrs,
+            inherited_params,
             attr_answers,
             fixed_concept: _,
             metadata,
@@ -252,6 +255,10 @@ impl CardEditor {
         }
 
         if !inherited_attrs.read().is_empty() {
+            return true;
+        }
+
+        if !inherited_params.read().is_empty() {
             return true;
         }
 
@@ -627,6 +634,7 @@ impl CardViewer {
 
             let attrs = load_attr_editors(card.id());
             let inherited_attrs = load_inherited_attr_editors(card.id());
+            let inherited_params = load_inherited_param_editors(card.id(), false);
 
             let namespace = {
                 if let Some(card) = card.namespace() {
@@ -655,6 +663,7 @@ impl CardViewer {
                 attrs: Signal::new_in_scope(attrs, ScopeId::APP),
                 inherited_attrs: Signal::new_in_scope(inherited_attrs, ScopeId::APP),
                 param_answers: Signal::new_in_scope(param_answers, ScopeId::APP),
+                inherited_params: Signal::new_in_scope(inherited_params, ScopeId::APP),
                 params,
                 attr_answers,
                 namespace,
@@ -696,6 +705,7 @@ impl CardViewer {
                 params: Signal::new_in_scope(Default::default(), ScopeId::APP),
                 param_answers: Signal::new_in_scope(Default::default(), ScopeId::APP),
                 inherited_attrs: Signal::new_in_scope(Default::default(), ScopeId::APP),
+                inherited_params: Signal::new_in_scope(Default::default(), ScopeId::APP),
                 fixed_concept: false,
                 metadata: MetadataEditor::new(),
             }
@@ -715,7 +725,6 @@ impl CardViewer {
 
     fn full_reset(&self) {
         if self.old_card.is_some() {
-            debug_assert!(true);
             pop_overlay();
             return;
         }
@@ -729,6 +738,7 @@ impl CardViewer {
             allowed_cards: _,
             attrs,
             inherited_attrs,
+            inherited_params,
             attr_answers,
             fixed_concept: _,
             metadata,
@@ -745,6 +755,7 @@ impl CardViewer {
         params.clone().clear();
         param_answers.clone().write().clear();
         inherited_attrs.clone().clear();
+        inherited_params.clone().clear();
         attr_answers.clone().clear();
         metadata.clear();
     }
@@ -754,14 +765,23 @@ impl CardViewer {
         self.editor.back.reset();
         self.editor.dependencies.clone().write().clear();
         self.editor.attrs.clone().write().clear();
+        self.editor.params.clone().write().clear();
         self.editor.attr_answers.clone().write().clear();
     }
 }
 
-/*
-
-aight..
-*/
+enum _TheEditor {
+    /// so let's persist the param answers
+    Instance {
+        param_answers: ReadOnlySignal<BTreeMap<AttributeId, ParamAnswerEditor>>,
+    },
+    Class {
+        params: Signal<Vec<AttrEditor>>,
+        attrs: Signal<Vec<AttrEditor>>,
+        inherited_attrs: ReadOnlySignal<Vec<AttrEditor>>,
+        inherited_params: ReadOnlySignal<Vec<AttrEditor>>,
+    },
+}
 
 #[component]
 fn InputElements(
@@ -773,6 +793,7 @@ fn InputElements(
     namespace: Signal<Option<CardId>>,
     attrs: Signal<Vec<AttrEditor>>,
     params: Signal<Vec<AttrEditor>>,
+    inherited_params: Signal<Vec<AttrEditor>>,
     inherited_attrs: Signal<Vec<AttrEditor>>,
     attr_answers: Signal<Vec<AttrQandA>>,
     param_answers: Signal<BTreeMap<AttributeId, ParamAnswerEditor>>,
@@ -872,12 +893,15 @@ fn InputElements(
                 }
                 None => match class {
                     Some(class) => {
+                        let new_params = load_inherited_param_editors(class, true);
                         let mut new_attrs = load_inherited_attr_editors(class);
                         new_attrs.extend(load_attr_editors(class));
                         inherited_attrs.clone().set(new_attrs);
+                        inherited_params.clone().set(new_params);
                     }
                     None => {
                         inherited_attrs.clone().set(vec![]);
+                        inherited_params.clone().set(vec![]);
                     }
                 },
             }
@@ -886,6 +910,7 @@ fn InputElements(
             attr_answers.clone().set(vec![]);
             param_answers.clone().set(Default::default());
             inherited_attrs.clone().set(vec![]);
+            inherited_params.clone().set(vec![]);
             attrs.clone().set(vec![]);
             params.clone().set(vec![]);
         }
@@ -894,6 +919,7 @@ fn InputElements(
     let has_attr_answers = !attr_answers.read().is_empty();
     let has_param_answers = !param_answers.read().is_empty();
     let has_inherited_attrs = !inherited_attrs.read().is_empty();
+    let has_inherited_params = !inherited_params.read().is_empty();
 
     dbg!(&attr_answers);
 
@@ -939,6 +965,10 @@ fn InputElements(
                 }
 
                 RenderAttrs { attrs: params, inherited: false, card: card_id, is_param: true }
+
+                if has_inherited_params {
+                    RenderAttrs { attrs: inherited_params, inherited: true, card: card_id, is_param: true }
+                }
 
                 RenderAttrs { attrs, inherited: false, card: card_id }
                 if has_inherited_attrs {
