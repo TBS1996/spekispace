@@ -30,7 +30,7 @@ use crate::{
     APP,
 };
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct AttrEditor {
     pub id: AttributeId,
     pub pattern: Signal<String>,
@@ -86,6 +86,106 @@ impl From<AttrBackType> for AttrBackTypeEditor {
                 AttrBackTypeEditor::InstanceOfClass(Signal::new_in_scope(id, ScopeId::APP))
             }
             AttrBackType::TimeStamp => AttrBackTypeEditor::Timestamp,
+        }
+    }
+}
+
+#[component]
+pub fn RenderInheritedAttrs(
+    card: Option<CardId>,
+    attrs: Memo<Vec<AttrEditor>>,
+    #[props(default = false)] is_param: bool,
+) -> Element {
+    let foobar: Vec<(AttrEditor, bool, &'static str)> = attrs
+        .cloned()
+        .into_iter()
+        .map(|attr| {
+            let getter = TheCacheGetter::Property(PropertyCache::new(
+                CardProperty::AttrId,
+                attr.id.to_string(),
+            ));
+            let cached = APP.read().inner().provider.cards.load_getter(getter);
+            let disabled = !cached.is_empty();
+
+            let title = if is_param {
+                "can't delete inherited params"
+            } else {
+                "can't delete inherited attributes"
+            };
+
+            (attr, disabled, title)
+        })
+        .collect();
+
+    let children = rsx! {
+        div {
+            class: "max-h-64 overflow-y-auto",
+            for (AttrEditor {id: _, mut pattern, ty }, disabled, title) in foobar {
+                div {
+                    class: "flex flex-row gap-2 mb-4",
+
+                    button {
+                        class: "{crate::styles::DELETE_BUTTON}",
+                        disabled: "{disabled}",
+                        title: "{title}",
+                        onclick: move |_| {
+                        },
+                        "delete"
+                    }
+                    div {
+                        class: "w-1/2",
+                        input {
+                            class: "bg-white w-full border border-gray-300 rounded-md p-2 text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent",
+                            value: "{pattern}",
+                            placeholder: "default question",
+                            disabled: true,
+                            oninput: move |evt| pattern.set(evt.value()),
+                        }
+                    }
+                    div {
+                        class: "flex flex-row w-1/2 gap-2",
+
+                        match ty.cloned() {
+                            Some(AttrBackTypeEditor::Boolean) => rsx!{
+                                span {
+                                    class: "font-semibold self-center",
+                                    "boolean"
+                                }
+
+                            },
+                            Some(AttrBackTypeEditor::Timestamp) => rsx!{
+                                span {
+                                    class: "font-semibold self-center",
+                                    "timestamp"
+                                }
+                            },
+                            Some(AttrBackTypeEditor::InstanceOfClass(selected)) => rsx! {
+                                ForcedCardRefRender { selected_card: selected, allowed: vec![CardTy::Class], filter: speki_core::set::SetExpr::union_with([DynCard::CardType(speki_core::card::CType::Class)]), disabled: true }
+                            },
+                            None => {
+
+                                rsx!{}
+
+                            },
+                        }
+                    }
+                }
+            }
+        }
+    };
+
+    let title = match is_param {
+        true => "Inherited Params",
+        false => "Inherited attributes",
+    };
+
+    rsx! {
+        div {
+            SectionWithTitle {
+                title: title.to_string(),
+                tooltip: "attributes inherited from parent classes",
+                children
+            }
         }
     }
 }
@@ -571,13 +671,6 @@ pub fn load_inherited_attr_editors(card_id: CardId) -> Vec<AttrEditor> {
 
         out.push(editor);
     }
-
-    let current: BTreeSet<AttributeId> = load_attr_editors(card_id)
-        .into_iter()
-        .map(|attr| attr.id)
-        .collect();
-
-    out.retain(|attr| !current.contains(&attr.id));
 
     out
 }
