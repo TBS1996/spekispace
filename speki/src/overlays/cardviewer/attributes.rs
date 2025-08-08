@@ -120,18 +120,9 @@ pub fn RenderInheritedAttrs(
     let children = rsx! {
         div {
             class: "max-h-64 overflow-y-auto",
-            for (AttrEditor {id: _, mut pattern, ty }, disabled, title) in foobar {
+            for (AttrEditor {id: _, mut pattern, ty }, _disabled, _title) in foobar {
                 div {
                     class: "flex flex-row gap-2 mb-4",
-
-                    button {
-                        class: "{crate::styles::DELETE_BUTTON}",
-                        disabled: "{disabled}",
-                        title: "{title}",
-                        onclick: move |_| {
-                        },
-                        "delete"
-                    }
                     div {
                         class: "w-1/2",
                         input {

@@ -197,7 +197,7 @@ pub struct CardEditor {
     params: Signal<Vec<AttrEditor>>,
     param_answers: Signal<BTreeMap<AttributeId, ParamAnswerEditor>>,
     inherited_attrs: Memo<Vec<AttrEditor>>,
-    inherited_params: Signal<Vec<AttrEditor>>,
+    inherited_params: Memo<Vec<AttrEditor>>,
     attr_answers: Signal<Vec<AttrQandA>>,
     fixed_concept: bool,
     metadata: MetadataEditor,
@@ -641,7 +641,14 @@ impl CardViewer {
                     })
                 })
             };
-            let inherited_params = load_inherited_param_editors(card.id(), false);
+            let inherited_params: Memo<Vec<AttrEditor>> = {
+                ScopeId::APP.in_runtime(move || {
+                    use_memo(move || match concept.read().as_ref() {
+                        Some(class) => load_inherited_param_editors(*class, true),
+                        None => vec![],
+                    })
+                })
+            };
 
             let namespace = {
                 if let Some(card) = card.namespace() {
@@ -670,7 +677,7 @@ impl CardViewer {
                 attrs: Signal::new_in_scope(attrs, ScopeId::APP),
                 inherited_attrs,
                 param_answers: Signal::new_in_scope(param_answers, ScopeId::APP),
-                inherited_params: Signal::new_in_scope(inherited_params, ScopeId::APP),
+                inherited_params,
                 params,
                 attr_answers,
                 namespace,
@@ -702,6 +709,15 @@ impl CardViewer {
             })
         };
 
+        let inherited_params: Memo<Vec<AttrEditor>> = {
+            ScopeId::APP.in_runtime(move || {
+                use_memo(move || match concept.read().as_ref() {
+                    Some(class) => load_inherited_param_editors(*class, true),
+                    None => vec![],
+                })
+            })
+        };
+
         let attr_answers: Signal<Vec<AttrQandA>> = Signal::new_in_scope(vec![], ScopeId::APP);
         let front = FrontPut::new(CardTy::Normal);
         let dependencies: Signal<Vec<CardId>> =
@@ -722,7 +738,7 @@ impl CardViewer {
                 params: Signal::new_in_scope(Default::default(), ScopeId::APP),
                 param_answers: Signal::new_in_scope(Default::default(), ScopeId::APP),
                 inherited_attrs,
-                inherited_params: Signal::new_in_scope(Default::default(), ScopeId::APP),
+                inherited_params,
                 fixed_concept: false,
                 metadata: MetadataEditor::new(),
             }
@@ -755,7 +771,7 @@ impl CardViewer {
             allowed_cards: _,
             attrs,
             inherited_attrs: _,
-            inherited_params,
+            inherited_params: _,
             attr_answers,
             fixed_concept: _,
             metadata,
@@ -771,7 +787,6 @@ impl CardViewer {
         attrs.clone().clear();
         params.clone().clear();
         param_answers.clone().write().clear();
-        inherited_params.clone().clear();
         attr_answers.clone().clear();
         metadata.clear();
     }
@@ -809,7 +824,7 @@ fn InputElements(
     namespace: Signal<Option<CardId>>,
     attrs: Signal<Vec<AttrEditor>>,
     params: Signal<Vec<AttrEditor>>,
-    inherited_params: Signal<Vec<AttrEditor>>,
+    inherited_params: Memo<Vec<AttrEditor>>,
     inherited_attrs: Memo<Vec<AttrEditor>>,
     attr_answers: Signal<Vec<AttrQandA>>,
     param_answers: Signal<BTreeMap<AttributeId, ParamAnswerEditor>>,
@@ -906,21 +921,16 @@ fn InputElements(
                 }
                 None => match class {
                     Some(class) => {
-                        let new_params = load_inherited_param_editors(class, true);
                         let mut new_attrs = load_inherited_attr_editors(class);
                         new_attrs.extend(load_attr_editors(class));
-                        inherited_params.clone().set(new_params);
                     }
-                    None => {
-                        inherited_params.clone().set(vec![]);
-                    }
+                    None => {}
                 },
             }
         }
         (_, _) => {
             attr_answers.clone().set(vec![]);
             param_answers.clone().set(Default::default());
-            inherited_params.clone().set(vec![]);
             attrs.clone().set(vec![]);
             params.clone().set(vec![]);
         }
@@ -977,7 +987,7 @@ fn InputElements(
                 RenderAttrs { attrs: params, inherited: false, card: card_id, is_param: true }
 
                 if has_inherited_params {
-                    RenderAttrs { attrs: inherited_params, inherited: true, card: card_id, is_param: true }
+                    RenderInheritedAttrs { attrs: inherited_params, card: card_id, is_param: true }
                 }
 
                 RenderAttrs { attrs, inherited: false, card: card_id }
