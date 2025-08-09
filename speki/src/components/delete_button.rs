@@ -1,5 +1,5 @@
 use dioxus::prelude::*;
-use ledgerstore::TheLedgerEvent;
+use ledgerstore::LedgerEvent;
 use speki_core::{card::CardId, collection::DynCard, set::SetExpr};
 
 use crate::{
@@ -63,7 +63,7 @@ pub fn DeleteButton(
                     OverlayEnum::CardSelector(props).append();
                     OverlayEnum::new_notice("cannot delete card due to dependents").append();
                 } else {
-                    if let Err(e) = APP.read().inner().provider.cards.modify(TheLedgerEvent::new_delete(card_id)) {
+                    if let Err(e) = APP.read().inner().provider.cards.modify(LedgerEvent::new_delete(card_id)) {
                         handle_card_event_error(e);
                         return;
                     }

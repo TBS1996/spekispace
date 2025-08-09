@@ -4,7 +4,7 @@ use std::{
     sync::{Arc, RwLock},
 };
 
-use crate::{load_file_contents, Hashed, LedgerEntry, LedgerHash, LedgerItem, TheLedgerEvent};
+use crate::{load_file_contents, Hashed, LedgerEntry, LedgerHash, LedgerItem, LedgerEvent};
 
 #[derive(Clone)]
 pub struct BlockChain<T: LedgerItem> {
@@ -46,7 +46,7 @@ impl<T: LedgerItem> BlockChain<T> {
         self.cached.read().unwrap().last().cloned()
     }
 
-    pub fn save(&self, event: TheLedgerEvent<T>) -> Hashed {
+    pub fn save(&self, event: LedgerEvent<T>) -> Hashed {
         use std::io::Write;
 
         let previous = self.current_head();

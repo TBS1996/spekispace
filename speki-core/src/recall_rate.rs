@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use ledgerstore::{LedgerItem, TheLedgerEvent};
+use ledgerstore::{LedgerItem, LedgerEvent};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -185,7 +185,7 @@ pub enum ReviewAction {
     Insert(Review),
 }
 
-pub type ReviewEvent = TheLedgerEvent<History>;
+pub type ReviewEvent = LedgerEvent<History>;
 
 impl LedgerItem for History {
     type Error = ();

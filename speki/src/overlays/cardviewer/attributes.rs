@@ -4,7 +4,7 @@ use std::{
 };
 
 use dioxus::prelude::*;
-use ledgerstore::{PropertyCache, TheCacheGetter, TheLedgerEvent};
+use ledgerstore::{LedgerEvent, PropertyCache, TheCacheGetter};
 use speki_core::{
     card::{AttrBackType, AttributeId, Attrv2, BackSide, CType, CardId, ParamAnswer, RawCard},
     collection::DynCard,
@@ -224,14 +224,14 @@ pub fn RenderAttrs(
                                 Some(card) => {
                                     dbg!();
                                     if is_param {
-                                        let event: TheLedgerEvent<RawCard> = TheLedgerEvent::new_modify(card, CardAction::RemoveParam(id));
+                                        let event: LedgerEvent<RawCard> = LedgerEvent::new_modify(card, CardAction::RemoveParam(id));
                                         if let Err(e) = APP.read().inner().provider.cards.modify(event) {
                                             handle_card_event_error(e);
                                             return;
                                         }
                                         attrs.clone().set(load_param_editors(card));
                                     } else {
-                                    let event: TheLedgerEvent<RawCard> = TheLedgerEvent::new_modify(card, CardAction::RemoveAttr(id));
+                                    let event: LedgerEvent<RawCard> = LedgerEvent::new_modify(card, CardAction::RemoveAttr(id));
                                     if let Err(e) = APP.read().inner().provider.cards.modify(event) {
                                         handle_card_event_error(e);
                                         return;

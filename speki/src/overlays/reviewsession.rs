@@ -1,6 +1,6 @@
 use dioxus::prelude::*;
 use either::Either;
-use ledgerstore::TheLedgerEvent;
+use ledgerstore::LedgerEvent;
 use nonempty::NonEmpty;
 use std::{collections::BTreeSet, rc::Rc, sync::Arc};
 
@@ -430,7 +430,7 @@ fn RenderDependencies(
                             let wtf = deps.clone();
                             let removed =  wtf.clone().get(idx).cloned().unwrap();
                             let id = card2;
-                            let event = TheLedgerEvent::new_modify(id, CardAction::RemoveDependency(removed.id()));
+                            let event = LedgerEvent::new_modify(id, CardAction::RemoveDependency(removed.id()));
                             APP.read().inner().provider.cards.modify(event).unwrap();
                             ScopeId::APP.needs_update();
                         },

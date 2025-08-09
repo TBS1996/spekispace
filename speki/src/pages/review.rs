@@ -11,7 +11,7 @@ use crate::{
 };
 use crate::{styles, OVERLAY};
 use dioxus::prelude::*;
-use ledgerstore::TheLedgerEvent;
+use ledgerstore::LedgerEvent;
 use nonempty::NonEmpty;
 use speki_core::card::CType;
 use speki_core::{
@@ -479,7 +479,7 @@ fn RenderSet(
                             delete_atomic.set(true);
 
                             if !id.is_nil()  {
-                                APP.read().inner().provider.sets.modify(TheLedgerEvent::new_delete(id)).unwrap();
+                                APP.read().inner().provider.sets.modify(LedgerEvent::new_delete(id)).unwrap();
                             }
                         },
                         "delete"

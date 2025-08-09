@@ -11,7 +11,7 @@ use std::{
 
 use attributes::{load_param_answers_from_class, ParamAnswerEditor};
 use dioxus::prelude::*;
-use ledgerstore::TheLedgerEvent;
+use ledgerstore::LedgerEvent;
 use omtrent::TimeStamp;
 use speki_core::{
     card::{AttributeId, BackSide, CardId},
@@ -229,7 +229,7 @@ fn RenderDependencies(
                     onclick: move |_| {
                         let removed = dependencies.write().remove(idx);
                         if let Some(id) = card_id {
-                            let event = TheLedgerEvent::new_modify(id, CardAction::RemoveDependency(removed));
+                            let event = LedgerEvent::new_modify(id, CardAction::RemoveDependency(removed));
                             if let Err(e) = APP.read().inner().provider.cards.modify(event) {
                                 handle_card_event_error(e);
                             }

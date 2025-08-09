@@ -7,11 +7,11 @@ use crate::{
     recall_rate::{Review, ReviewEvent},
     CardType,
 };
-use ledgerstore::TheLedgerEvent;
+use ledgerstore::LedgerEvent;
 use omtrent::TimeStamp;
 use serde::{Deserialize, Serialize};
 
-pub type CardEvent = TheLedgerEvent<RawCard>;
+pub type CardEvent = LedgerEvent<RawCard>;
 
 #[derive(Deserialize, Serialize, Clone, Debug, Hash)]
 pub enum CardAction {
@@ -68,7 +68,7 @@ pub enum HistoryEvent {
     Review { id: CardId, review: Review },
 }
 
-pub type MetaEvent = TheLedgerEvent<Metadata>;
+pub type MetaEvent = LedgerEvent<Metadata>;
 
 #[derive(Debug, Clone, Serialize, Deserialize, Hash)]
 pub enum MetaAction {

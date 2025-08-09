@@ -115,7 +115,7 @@ pub type CacheHash = Hashed;
 pub struct LedgerEntry<T: LedgerItem> {
     pub previous: Option<Hashed>,
     pub index: usize,
-    pub event: TheLedgerEvent<T>,
+    pub event: LedgerEvent<T>,
 }
 
 impl<T: LedgerItem> LedgerEntry<T> {
@@ -141,7 +141,7 @@ impl<T: LedgerItem> LedgerEntry<T> {
                    T::Key: DeserializeOwned,
                    TheLedgerAction<T>: DeserializeOwned",
 ))]
-pub enum TheLedgerEvent<T: LedgerItem> {
+pub enum LedgerEvent<T: LedgerItem> {
     // Matches the old TheLedgerEvent<T> shape 1:1
     ItemAction {
         id: T::Key,
@@ -153,7 +153,7 @@ pub enum TheLedgerEvent<T: LedgerItem> {
     },
 }
 
-impl<T: LedgerItem> TheLedgerEvent<T> {
+impl<T: LedgerItem> LedgerEvent<T> {
     pub fn new(id: T::Key, action: TheLedgerAction<T>) -> Self {
         Self::ItemAction { id, action }
     }
@@ -372,7 +372,7 @@ impl<T: LedgerItem> Ledger<T> {
         selv
     }
 
-    pub fn modify(&self, event: TheLedgerEvent<T>) -> Result<(), EventError<T>> {
+    pub fn modify(&self, event: LedgerEvent<T>) -> Result<(), EventError<T>> {
         self.modify_it(event, true, true, true)?;
         Ok(())
     }
@@ -628,11 +628,11 @@ impl<T: LedgerItem> Ledger<T> {
 
     fn _modify(
         &self,
-        event: TheLedgerEvent<T>,
+        event: LedgerEvent<T>,
         verify: bool,
         cache: bool,
     ) -> Result<ModifyResult<T>, EventError<T>> {
-        let TheLedgerEvent::ItemAction { id: key, action } = event else {
+        let LedgerEvent::ItemAction { id: key, action } = event else {
             todo!();
         };
 
@@ -725,7 +725,7 @@ impl<T: LedgerItem> Ledger<T> {
 
     fn modify_it(
         &self,
-        event: TheLedgerEvent<T>,
+        event: LedgerEvent<T>,
         save: bool,
         verify: bool,
         cache: bool,
@@ -761,7 +761,7 @@ impl<T: LedgerItem> Ledger<T> {
 }
 
 impl<T: LedgerItem> LedgerEntry<T> {
-    fn new(previous: Option<&Self>, event: TheLedgerEvent<T>) -> Self {
+    fn new(previous: Option<&Self>, event: LedgerEvent<T>) -> Self {
         let (index, previous) = match previous {
             Some(e) => (e.index + 1, Some(e.data_hash())),
             None => (0, None),

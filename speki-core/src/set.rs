@@ -1,6 +1,6 @@
 use std::{collections::BTreeSet, fmt::Display};
 
-use ledgerstore::{LedgerItem, TheLedgerEvent};
+use ledgerstore::{LedgerItem, LedgerEvent};
 use serde::{Deserialize, Serialize};
 use strum::{Display, EnumDiscriminants, EnumIter, EnumString};
 use uuid::Uuid;
@@ -23,7 +23,7 @@ pub enum SetAction {
     SetExpr(SetExpr),
 }
 
-pub type SetEvent = TheLedgerEvent<Set>;
+pub type SetEvent = LedgerEvent<Set>;
 
 impl LedgerItem for Set {
     type Error = ();
