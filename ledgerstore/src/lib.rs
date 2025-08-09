@@ -260,7 +260,7 @@ struct Remote<T: LedgerItem> {
     _phantom: PhantomData<T>,
 }
 
-use git2::{ObjectType, Oid, Repository, ResetType};
+use git2::{Oid, Repository, ResetType};
 
 use crate::read_ledger::ReadLedger;
 
@@ -301,35 +301,39 @@ impl<T: LedgerItem> Remote<T> {
         }
     }
 
-    /// Checkout a commit in *read-only* style:
-    /// - detached HEAD at `commit`
-    /// - hard reset index + workdir to that commit
-    /// - delete untracked and ignored files
-    pub fn set_commit_clean(&self, commit: &str) -> Result<(), git2::Error> {
-        // Fetch everything from origin
-        {
-            let mut remote = self.repo.find_remote("origin")?;
-            remote.fetch::<&str>(&[] /* empty = all refs */, None, None)?;
-        }
+    pub fn hard_reset_current(&self) -> Result<(), git2::Error> {
+        let head = self.repo.head().unwrap(); // symbolic or detached HEAD
+        let obj = head.peel(git2::ObjectType::Commit).unwrap(); // peel to the commit object
 
-        let oid = Oid::from_str(commit)?;
-        let obj = self.repo.find_object(oid, Some(ObjectType::Commit))?;
-
-        // Detach HEAD
-        self.repo.set_head_detached(oid)?;
-
-        // Hard, clean checkout
         let mut cb = CheckoutBuilder::new();
         cb.force()
             .remove_untracked(true)
             .remove_ignored(true)
             .recreate_missing(true);
 
-        self.repo.checkout_tree(&obj, Some(&mut cb))?;
-        self.repo.reset(&obj, ResetType::Hard, Some(&mut cb))?;
+        self.repo.checkout_tree(&obj, Some(&mut cb)).unwrap();
+        self.repo
+            .reset(&obj, ResetType::Hard, Some(&mut cb))
+            .unwrap();
 
         let _ = self.repo.cleanup_state();
         Ok(())
+    }
+
+    /// Checkout a commit in *read-only* style:
+    /// - detached HEAD at `commit`
+    /// - hard reset index + workdir to that commit
+    /// - delete untracked and ignored files
+    pub fn set_commit_clean(&self, commit: &str) -> Result<(), git2::Error> {
+        {
+            let mut remote = self.repo.find_remote("origin").unwrap();
+            remote.fetch::<&str>(&[], None, None).unwrap();
+        }
+
+        let oid = Oid::from_str(commit).unwrap();
+        self.repo.set_head_detached(oid).unwrap();
+
+        self.hard_reset_current()
     }
 }
 
@@ -467,6 +471,7 @@ impl<T: LedgerItem> Ledger<T> {
 
     pub fn with_remote(mut self, url: String) -> Self {
         let remote = Remote::new(&self.root, url);
+        remote.hard_reset_current().unwrap();
         self.remote = Some(Arc::new(remote));
         self
     }
