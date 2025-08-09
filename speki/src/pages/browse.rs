@@ -58,6 +58,7 @@ pub fn Browse() -> Element {
                     edit_collection: browse_state.browse_page.edit_collection,
                     instance_of: browse_state.browse_page.instance_of.clone(),
                     reviewable: true,
+                    update_remote_button: true,
                 }
             }
          }

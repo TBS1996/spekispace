@@ -5,7 +5,7 @@ use std::{
 };
 
 use dioxus::prelude::*;
-use ledgerstore::PropertyCache;
+use ledgerstore::{LedgerEvent, PropertyCache};
 use speki_core::{
     card::{bigrams, normalize_string, CardId},
     cardfilter::CardFilter,
@@ -19,6 +19,7 @@ use crate::{
     components::SectionWithTitle,
     pages::{reviewable_cards, ExprEditor, RenderExpr},
     pop_overlay, set_overlay,
+    utils::handle_card_event_error,
 };
 
 use crate::{
@@ -388,6 +389,7 @@ pub fn CardSelectorRender(
     edit_collection: bool,
     instance_of: Option<CardId>,
     #[props(default = false)] reviewable: bool,
+    #[props(default = false)] update_remote_button: bool,
 ) -> Element {
     info!("render cardselector");
     let filter = filtermemo.cloned().unwrap_or_default();
@@ -407,11 +409,32 @@ pub fn CardSelectorRender(
     let review_title = review_title.unwrap_or_default();
     let review_filter = filter.clone();
 
+    let current_commit = APP.read().inner().provider.cards.current_commit();
+    let latest_commit = APP.read().inner().provider.cards.latest_upstream_commit();
+
+    let mut update_available =
+        use_signal(|| latest_commit != current_commit && latest_commit.is_some());
+
     rsx! {
         div {
             class: "flex flex-row",
                 div {
                 class: "flex flex-col",
+
+                if update_available.cloned() {
+                    button {
+                        class: "{crate::styles::CREATE_BUTTON} px-3 py-2",
+                        onclick: move |_| {
+                            if let Err(err) = APP.read().inner().provider.cards.modify(LedgerEvent::SetUpstream { commit: latest_commit.clone().unwrap()  }) {
+                                handle_card_event_error(err);
+                            } else {
+                                update_available.set(false);
+                            }
+                        },
+                        "update remote 🔃"
+                    }
+
+                }
 
                 if filtermemo.read().is_some() {
                     div {

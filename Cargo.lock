@@ -2644,6 +2644,7 @@ checksum = "bbd2bcb4c963f2ddae06a2efc7e9f3591312473c50c6685e1f298068316e66fe"
 name = "ledgerstore"
 version = "0.1.2"
 dependencies = [
+ "chrono",
  "either",
  "git2",
  "serde",

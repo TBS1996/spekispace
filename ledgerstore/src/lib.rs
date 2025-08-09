@@ -1,3 +1,4 @@
+use chrono::{DateTime, Utc};
 use either::Either;
 use git2::build::CheckoutBuilder;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
@@ -325,6 +326,31 @@ impl<T: LedgerItem> Remote<T> {
         }
     }
 
+    pub fn latest_upstream_commit(&self) -> String {
+        // Fetch the remote main branch (won’t update worktree)
+        let mut remote = self.repo.find_remote("origin").unwrap();
+        remote
+            .fetch(&["refs/heads/main:refs/remotes/origin/main"], None, None)
+            .unwrap();
+
+        // Read the commit ID from the remote-tracking branch
+        let reference = self
+            .repo
+            .find_reference("refs/remotes/origin/main")
+            .unwrap();
+        let oid = reference.target().unwrap();
+
+        oid.to_string()
+    }
+
+    pub fn current_commit_date(&self) -> Option<DateTime<Utc>> {
+        let commit = self.repo.head().ok()?.peel_to_commit().ok()?;
+
+        let timestamp = commit.time().seconds();
+        let naive = DateTime::from_timestamp(timestamp, 0)?;
+        Some(naive)
+    }
+
     pub fn changed_paths(&self, old_commit: Option<&str>, new_commit: &str) -> ChangeSet<PathBuf> {
         // resolve new
         let new_oid = Oid::from_str(new_commit).unwrap();
@@ -583,6 +609,18 @@ impl<T: LedgerItem> Ledger<T> {
         }
 
         selv
+    }
+
+    pub fn current_commit_date(&self) -> Option<DateTime<Utc>> {
+        self.remote.as_ref()?.current_commit_date()
+    }
+
+    pub fn current_commit(&self) -> Option<String> {
+        self.remote.as_ref()?.current_commit()
+    }
+
+    pub fn latest_upstream_commit(&self) -> Option<String> {
+        Some(self.remote.as_ref()?.latest_upstream_commit())
     }
 
     pub fn modify(&self, event: LedgerEvent<T>) -> Result<(), EventError<T>> {
