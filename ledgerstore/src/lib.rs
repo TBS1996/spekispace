@@ -772,6 +772,9 @@ impl<T: LedgerItem> Ledger<T> {
                     .unwrap()
                     .set_commit_clean(&commit)
                     .unwrap();
+
+                let hash = self.entries.save(event);
+                self.set_ledger_hash(hash);
                 return Ok(None);
             }
         };
