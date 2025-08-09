@@ -277,6 +277,7 @@ pub struct Card {
     history: History,
     card_provider: CardProvider,
     recaller: SimpleRecall,
+    is_remote: bool,
 }
 
 impl PartialEq for Card {
@@ -593,8 +594,13 @@ impl Card {
         self.history.lapses_since(day, current_time)
     }
 
+    pub fn is_remote(&self) -> bool {
+        self.is_remote
+    }
+
     pub fn from_parts(
         base: RawCard,
+        is_remote: bool,
         history: History,
         metadata: Metadata,
         card_provider: CardProvider,
@@ -661,6 +667,7 @@ impl Card {
 
         Self {
             namespace: base.namespace,
+            is_remote,
             id,
             frontside,
             base,

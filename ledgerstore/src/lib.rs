@@ -485,6 +485,17 @@ impl<T: LedgerItem> Ledger<T> {
         items
     }
 
+    pub fn load_with_remote_info(&self, key: T::Key) -> Option<(T, bool)> {
+        if let Some(remote) = self.remote.as_ref() {
+            let item = remote.load(key);
+            if item.is_some() {
+                return item.map(|item| (item, true));
+            }
+        }
+
+        self.local.load(key).map(|item| (item, false))
+    }
+
     pub fn load(&self, key: T::Key) -> Option<T> {
         if let Some(remote) = self.remote.as_ref() {
             let item = remote.load(key);

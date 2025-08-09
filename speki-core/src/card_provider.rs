@@ -49,7 +49,7 @@ impl CardProvider {
     }
 
     pub fn load(&self, id: CardId) -> Option<Arc<Card>> {
-        let base = self.providers.cards.load(id)?;
+        let (base, is_remote) = self.providers.cards.load_with_remote_info(id)?;
         let history = match self.providers.reviews.load(id) {
             Some(revs) => revs,
             None => History::new(id),
@@ -64,6 +64,7 @@ impl CardProvider {
 
         let card = Arc::new(Card::from_parts(
             base,
+            is_remote,
             history,
             metadata,
             self.clone(),
