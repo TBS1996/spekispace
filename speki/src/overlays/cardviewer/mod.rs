@@ -15,7 +15,8 @@ use ledgerstore::TheLedgerEvent;
 use omtrent::TimeStamp;
 use speki_core::{
     card::{AttributeId, BackSide, CardId},
-    ledger::{CardAction, CardEvent, MetaAction, MetaEvent}, CardType,
+    ledger::{CardAction, CardEvent, MetaAction, MetaEvent},
+    CardType,
 };
 use tracing::info;
 
@@ -34,9 +35,9 @@ use crate::{
         cardviewer::{
             attributes::{
                 load_attr_editors, load_attr_qa, load_attr_qa_for_class,
-                load_inherited_attr_editors, load_param_answers,
-                load_param_editors, AttrAnswerEditor, AttrAnswers, AttrEditor,
-                AttrQandA, OldAttrAnswerEditor, ParamAnswers, RenderAttrs, RenderInheritedAttrs,
+                load_inherited_attr_editors, load_param_answers, load_param_editors,
+                AttrAnswerEditor, AttrAnswers, AttrEditor, AttrQandA, OldAttrAnswerEditor,
+                ParamAnswers, RenderAttrs, RenderInheritedAttrs,
             },
             metadata::{DisplayMetadata, MetadataEditor},
         },
@@ -449,13 +450,13 @@ fn InputElements(
                     }
                 }
 
-                RenderAttrs { attrs: params, inherited: false, card: card_id, is_param: true }
+                RenderAttrs { attrs: params, card: card_id, is_param: true }
 
                 if has_inherited_params {
                     RenderInheritedAttrs { attrs: inherited_params, card: card_id, is_param: true }
                 }
 
-                RenderAttrs { attrs, inherited: false, card: card_id }
+                RenderAttrs { attrs, card: card_id }
                 if has_inherited_attrs {
                     RenderInheritedAttrs { attrs: inherited_attrs, card: card_id }
                 }

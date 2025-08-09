@@ -185,7 +185,6 @@ pub fn RenderInheritedAttrs(
 pub fn RenderAttrs(
     card: Option<CardId>,
     attrs: Signal<Vec<AttrEditor>>,
-    inherited: bool,
     #[props(default = false)] is_param: bool,
 ) -> Element {
     let foobar: Vec<(AttrEditor, bool, &'static str)> = attrs
@@ -199,16 +198,13 @@ pub fn RenderAttrs(
             let cached = APP.read().inner().provider.cards.load_getter(getter);
             let disabled = !cached.is_empty();
 
-            let title = match (is_param, inherited, disabled) {
-                (true, true, _) => "cant delete inherited params",
-                (true, false, true) => "can't delete used params",
-                (true, false, false) => "",
-                (false, true, _) => "can't delete inherited attributes",
-                (false, false, true) => "can't delete used attributes",
-                (false, false, false) => "",
+            let title = match (is_param, disabled) {
+                (true, true) => "can't delete used params",
+                (false, true) => "can't delete used attributes",
+                (_, _) => "",
             };
 
-            (attr, disabled || inherited, title)
+            (attr, disabled, title)
         })
         .collect();
 
@@ -260,7 +256,6 @@ pub fn RenderAttrs(
                             class: "bg-white w-full border border-gray-300 rounded-md p-2 text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent",
                             value: "{pattern}",
                             placeholder: "default question",
-                            disabled: inherited,
                             oninput: move |evt| pattern.set(evt.value()),
                         }
                     }
@@ -269,15 +264,13 @@ pub fn RenderAttrs(
 
                         match ty.cloned() {
                             Some(AttrBackTypeEditor::Boolean) => rsx!{
-                                if !inherited {
-                                    button {
-                                        title: "remove constraint",
-                                        class: "{crate::styles::UPDATE_BUTTON}",
-                                        onclick: move |_| {
-                                            ty.set(None);
-                                        },
-                                        "X"
-                                    }
+                                button {
+                                    title: "remove constraint",
+                                    class: "{crate::styles::UPDATE_BUTTON}",
+                                    onclick: move |_| {
+                                        ty.set(None);
+                                    },
+                                    "X"
                                 }
                                 span {
                                     class: "font-semibold self-center",
@@ -286,7 +279,6 @@ pub fn RenderAttrs(
 
                             },
                             Some(AttrBackTypeEditor::Timestamp) => rsx!{
-                                if !inherited {
                                     button {
                                         title: "remove constraint",
                                         class: "{crate::styles::UPDATE_BUTTON}",
@@ -295,14 +287,12 @@ pub fn RenderAttrs(
                                         },
                                         "X"
                                     }
-                                }
                                 span {
                                     class: "font-semibold self-center",
                                     "timestamp"
                                 }
                             },
                             Some(AttrBackTypeEditor::InstanceOfClass(selected)) => rsx! {
-                                if !inherited {
                                     button {
                                         title: "remove constraint",
                                         class: "{crate::styles::UPDATE_BUTTON}",
@@ -311,8 +301,7 @@ pub fn RenderAttrs(
                                         },
                                         "X"
                                     }
-                                }
-                                ForcedCardRefRender { selected_card: selected, allowed: vec![CardTy::Class], filter: speki_core::set::SetExpr::union_with([DynCard::CardType(speki_core::card::CType::Class)]), disabled: inherited }
+                                ForcedCardRefRender { selected_card: selected, allowed: vec![CardTy::Class], filter: speki_core::set::SetExpr::union_with([DynCard::CardType(speki_core::card::CType::Class)]) }
                             },
                             None => {
 
@@ -331,12 +320,8 @@ pub fn RenderAttrs(
                                 })).with_title("answer must be instance of a given class");
 
 
-                                if !inherited {
-                                    rsx!{
-                                        ActionDropdown { label: "set answer constraint".to_string(), options: vec![timestamp, instance, boolean], title: "hey"  }
-                                    }
-                                } else {
-                                    rsx!{}
+                                rsx!{
+                                    ActionDropdown { label: "set answer constraint".to_string(), options: vec![timestamp, instance, boolean], title: "hey"  }
                                 }
                             },
                         }
@@ -346,29 +331,16 @@ pub fn RenderAttrs(
         }
     };
 
-    let title = match (is_param, inherited) {
-        (true, true) => "Inherited Params",
-        (true, false) => "Params",
-        (false, true) => "Inherited attributes",
-        (false, false) => "Attributes",
-    };
+    let title = if is_param { "Params" } else { "Attributes" };
 
     rsx! {
         div {
-            if inherited {
-                SectionWithTitle {
-                    title: title.to_string(),
-                    tooltip: "attributes inherited from parent classes",
-                    children
-                }
-            } else {
-                SectionWithTitle {
-                    title: title.to_string(),
-                    on_add: move |_| {
-                        attrs.write().push(AttrEditor::new());
-                    },
-                    children
-                }
+            SectionWithTitle {
+                title: title.to_string(),
+                on_add: move |_| {
+                    attrs.write().push(AttrEditor::new());
+                },
+                children
             }
         }
     }
