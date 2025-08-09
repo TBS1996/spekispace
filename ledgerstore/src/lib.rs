@@ -1,4 +1,5 @@
 use either::Either;
+use git2::build::CheckoutBuilder;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use std::fs::{self, hard_link};
 use std::io::Write;
@@ -254,12 +255,12 @@ impl<T: LedgerItem> OverrideLedger<T> {
 
 struct Remote<T: LedgerItem> {
     _url: String,
-    _repo: Repository,
+    repo: Repository,
     path: Arc<PathBuf>,
     _phantom: PhantomData<T>,
 }
 
-use git2::Repository;
+use git2::{ObjectType, Oid, Repository, ResetType};
 
 use crate::read_ledger::ReadLedger;
 
@@ -272,21 +273,62 @@ impl<T: LedgerItem> ReadLedger for Remote<T> {
 }
 
 impl<T: LedgerItem> Remote<T> {
-    fn new(root: &Path, url: String) -> Self {
+    pub fn new(root: &Path, url: String) -> Self {
         let path = root.join("remote");
         fs::create_dir_all(&path).unwrap();
 
-        let repo = match Repository::clone(&url, &path) {
-            Ok(repo) => repo,
-            Err(_) => Repository::open(&path).unwrap(),
+        let repo = match Repository::open(&path) {
+            Ok(r) => {
+                if r.find_remote("origin").is_ok() {
+                    r.remote_set_url("origin", &url).unwrap();
+                } else {
+                    r.remote("origin", &url).unwrap();
+                }
+                r
+            }
+            Err(_) => {
+                let r = Repository::init(&path).unwrap();
+                r.remote("origin", &url).unwrap();
+                r
+            }
         };
 
         Self {
             _url: url,
-            _repo: repo,
+            repo,
             path: Arc::new(path),
             _phantom: PhantomData,
         }
+    }
+
+    /// Checkout a commit in *read-only* style:
+    /// - detached HEAD at `commit`
+    /// - hard reset index + workdir to that commit
+    /// - delete untracked and ignored files
+    pub fn set_commit_clean(&self, commit: &str) -> Result<(), git2::Error> {
+        // Allow full SHA, short SHA, or even a ref like "origin/main"
+        let oid =
+            Oid::from_str(commit).or_else(|_| self.repo.revparse_single(commit).map(|o| o.id()))?;
+
+        let obj = self.repo.find_object(oid, Some(ObjectType::Commit))?;
+
+        // Build a "nuke everything" checkout
+        let mut cb = CheckoutBuilder::new();
+        cb.force() // overwrite local modifications
+            .remove_untracked(true) // delete untracked files (like `git clean -f`)
+            .remove_ignored(true) // delete ignored files too (like `git clean -fdx`)
+            .recreate_missing(true); // ensure missing dirs/files get recreated
+
+        // Go to detached HEAD at the target commit
+        self.repo.set_head_detached(oid)?;
+
+        // Make index + workdir match that commit exactly (like `git reset --hard`)
+        self.repo.reset(&obj, ResetType::Hard, Some(&mut cb))?;
+
+        // Clear any in-progress state (rebases, merges, etc.)
+        let _ = self.repo.cleanup_state();
+
+        Ok(())
     }
 }
 
@@ -522,13 +564,14 @@ impl<T: LedgerItem> Ledger<T> {
             };
 
             match self.modify_it(entry.event, false, false, false).unwrap() {
-                Either::Left(item) => {
+                Some(Either::Left(item)) => {
                     let key = item.item_id();
                     items.insert(key, item);
                 }
-                Either::Right(id) => {
+                Some(Either::Right(id)) => {
                     items.remove(&id);
                 }
+                None => {}
             }
         }
 
@@ -621,14 +664,11 @@ impl<T: LedgerItem> Ledger<T> {
 
     fn _modify(
         &self,
-        event: LedgerEvent<T>,
+        key: T::Key,
+        action: LedgerAction<T>,
         verify: bool,
         cache: bool,
     ) -> Result<ModifyResult<T>, EventError<T>> {
-        let LedgerEvent::ItemAction { id: key, action } = event else {
-            todo!();
-        };
-
         let (old_caches, new_caches, item, is_no_op) = match action.clone() {
             LedgerAction::Modify(action) => {
                 let (old_caches, old_item) = match self.load(key) {
@@ -722,18 +762,28 @@ impl<T: LedgerItem> Ledger<T> {
         save: bool,
         verify: bool,
         cache: bool,
-    ) -> Result<Either<T, T::Key>, EventError<T>> {
-        let res = self._modify(event.clone(), verify, cache)?;
+    ) -> Result<Option<Either<T, T::Key>>, EventError<T>> {
+        let res = match event.clone() {
+            LedgerEvent::ItemAction { id, action } => self._modify(id, action, verify, cache)?,
+            LedgerEvent::SetUpstream { commit } => {
+                self.remote
+                    .as_ref()
+                    .unwrap()
+                    .set_commit_clean(&commit)
+                    .unwrap();
+                return Ok(None);
+            }
+        };
         tracing::debug!("res: {:?}", &res);
         self.run_result(res.clone(), cache).unwrap();
         if save && !res.is_no_op {
             let hash = self.entries.save(event);
             self.set_ledger_hash(hash);
         }
-        Ok(match res.item {
+        Ok(Some(match res.item {
             Some(item) => Either::Left(item),
             None => Either::Right(res.key),
-        })
+        }))
     }
 
     fn remove(&self, key: T::Key) {
