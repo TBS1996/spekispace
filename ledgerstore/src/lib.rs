@@ -758,6 +758,66 @@ impl<T: LedgerItem> Ledger<T> {
         }
     }
 
+    fn set_remote_commit(&self, new_commit: &str) -> Result<(), EventError<T>> {
+        let remote = self.remote.as_ref().unwrap().clone();
+
+        let current_commit = remote.current_commit();
+        let modified = remote.set_commit_clean(new_commit).unwrap();
+
+        let mut new_caches: HashSet<(
+            Either<PropertyCache<T>, ItemRefCache<T>>,
+            <T as LedgerItem>::Key,
+        )> = HashSet::default();
+
+        for item in &modified {
+            let item = remote.load(*item).unwrap();
+            let item = match item.verify(self) {
+                Ok(item) => item,
+                Err(e) => {
+                    remote.set_commit_clean(&current_commit).unwrap();
+                    return Err(e);
+                }
+            };
+            new_caches.extend(item.caches(self));
+        }
+
+        let mut old_caches: HashSet<(
+            Either<PropertyCache<T>, ItemRefCache<T>>,
+            <T as LedgerItem>::Key,
+        )> = HashSet::default();
+
+        remote.set_commit_clean(&current_commit).unwrap();
+
+        for item in &modified {
+            if let Some(item) = remote.load(*item) {
+                old_caches.extend(item.caches(self));
+            }
+        }
+
+        remote.set_commit_clean(&new_commit).unwrap();
+
+        let added_caches = &new_caches - &old_caches;
+        let removed_caches = &old_caches - &new_caches;
+
+        for (cache, key) in added_caches {
+            self.insert_cache(cache, key);
+        }
+
+        for cache in removed_caches {
+            let key: T::Key = cache.1;
+            match cache.0 {
+                CacheKey::Right(ItemRefCache { reftype, id }) => {
+                    self.remove_dependent(id, reftype, key);
+                }
+                CacheKey::Left(PropertyCache { property, value }) => {
+                    self.remove_property(key, property, value);
+                }
+            }
+        }
+
+        Ok(())
+    }
+
     fn _modify(
         &self,
         key: T::Key,
@@ -866,12 +926,7 @@ impl<T: LedgerItem> Ledger<T> {
         let res = match event.clone() {
             LedgerEvent::ItemAction { id, action } => self._modify(id, action, verify, cache)?,
             LedgerEvent::SetUpstream { commit } => {
-                self.remote
-                    .as_ref()
-                    .unwrap()
-                    .set_commit_clean(&commit)
-                    .unwrap();
-
+                self.set_remote_commit(&commit)?;
                 let hash = self.entries.save(event);
                 self.set_ledger_hash(hash);
                 return Ok(None);
