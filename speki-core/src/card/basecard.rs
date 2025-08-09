@@ -798,7 +798,6 @@ impl RawCard {
                 instance,
                 ..
             } => {
-                dbg!(&self);
                 let attr = self.get_attr_rec(ledger.to_owned()).unwrap();
 
                 let instance = ledger.load(instance).unwrap().data.name_fixed_ledger();

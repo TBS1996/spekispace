@@ -42,6 +42,8 @@ struct Cli {
     trace: bool,
     #[arg(long)]
     remote: bool,
+    #[arg(long)]
+    disable_remote: bool,
 }
 
 fn main() {

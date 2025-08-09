@@ -863,11 +863,6 @@ impl<T: LedgerItem> Ledger<T> {
         }
     }
 
-    /// letss seee...
-    /// if item is deleted, we just need to check nothing in local depends on it
-    /// if item is modified, we should get all its dependents in local and verify.
-    /// if item is added, it means nothing would have depended on it already, can assert that indeed nothing depends on it i guess.
-    /// hmm if it's added i guess we don't need to deal with caches, since all its dependents are only in remote state.
     fn set_remote_commit(&self, new_commit: &str) -> Result<(), EventError<T>> {
         let remote = self.remote.as_ref().unwrap().clone();
 
@@ -892,11 +887,6 @@ impl<T: LedgerItem> Ledger<T> {
                 return Err(EventError::ItemNotFound);
             }
         }
-
-        let mut new_caches: HashSet<(
-            Either<PropertyCache<T>, ItemRefCache<T>>,
-            <T as LedgerItem>::Key,
-        )> = HashSet::default();
 
         let mut dependents: HashSet<T::Key> = HashSet::default();
 
@@ -923,51 +913,6 @@ impl<T: LedgerItem> Ledger<T> {
                     return Err(e);
                 }
             };
-        }
-
-        for item in &modified {
-            if let Some(item) = remote.load(*item) {
-                new_caches.extend(item.caches(self));
-            };
-        }
-
-        let mut old_caches: HashSet<(
-            Either<PropertyCache<T>, ItemRefCache<T>>,
-            <T as LedgerItem>::Key,
-        )> = HashSet::default();
-
-        match current_commit {
-            Some(old_commit) => {
-                remote.set_commit_clean(&old_commit).unwrap();
-
-                for item in &modified {
-                    if let Some(item) = remote.load(*item) {
-                        old_caches.extend(item.caches(self));
-                    }
-                }
-
-                remote.set_commit_clean(&new_commit).unwrap();
-            }
-            None => {}
-        }
-
-        let added_caches = &new_caches - &old_caches;
-        let removed_caches = &old_caches - &new_caches;
-
-        for (cache, key) in added_caches {
-            self.insert_cache(cache, key);
-        }
-
-        for cache in removed_caches {
-            let key: T::Key = cache.1;
-            match cache.0 {
-                CacheKey::Right(ItemRefCache { reftype, id }) => {
-                    self.remove_dependent(id, reftype, key);
-                }
-                CacheKey::Left(PropertyCache { property, value }) => {
-                    self.remove_property(key, property, value);
-                }
-            }
         }
 
         Ok(())
@@ -1037,7 +982,9 @@ impl<T: LedgerItem> Ledger<T> {
         } = res;
 
         if is_no_op {
-            debug_assert!(added_caches.is_empty() && removed_caches.is_empty());
+            if !added_caches.is_empty() || !removed_caches.is_empty() {
+                dbg!(key, &item, &added_caches, &removed_caches);
+            }
         }
 
         match item {
