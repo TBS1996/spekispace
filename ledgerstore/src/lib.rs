@@ -260,7 +260,7 @@ struct Remote<T: LedgerItem> {
     _phantom: PhantomData<T>,
 }
 
-use git2::{Oid, Repository, ResetType};
+use git2::{DiffOptions, ObjectType, Oid, Repository, ResetType};
 
 use crate::read_ledger::ReadLedger;
 
@@ -301,6 +301,75 @@ impl<T: LedgerItem> Remote<T> {
         }
     }
 
+    pub fn current_commit(&self) -> String {
+        self.repo
+            .head()
+            .unwrap()
+            .peel_to_commit()
+            .unwrap()
+            .id()
+            .to_string()
+    }
+
+    fn changed_paths(&self, old_commit: &str, new_commit: &str) -> Vec<PathBuf> {
+        let old_oid = Oid::from_str(old_commit).unwrap();
+        let new_oid = Oid::from_str(new_commit).unwrap();
+
+        let old_commit = self
+            .repo
+            .find_object(old_oid, Some(ObjectType::Commit))
+            .unwrap()
+            .into_commit()
+            .unwrap();
+        let new_commit = self
+            .repo
+            .find_object(new_oid, Some(ObjectType::Commit))
+            .unwrap()
+            .into_commit()
+            .unwrap();
+
+        let old_tree = old_commit.tree().unwrap();
+        let new_tree = new_commit.tree().unwrap();
+
+        let diff = self
+            .repo
+            .diff_tree_to_tree(
+                Some(&old_tree),
+                Some(&new_tree),
+                Some(&mut DiffOptions::new()),
+            )
+            .unwrap();
+
+        let mut paths = Vec::new();
+        diff.foreach(
+            &mut |delta, _| {
+                if let Some(path) = delta.new_file().path().or_else(|| delta.old_file().path()) {
+                    paths.push(path.to_path_buf());
+                }
+                true
+            },
+            None,
+            None,
+            None,
+        )
+        .unwrap();
+
+        paths
+    }
+
+    fn modified_items(&self, old_commit: &str, new_commit: &str) -> HashSet<T::Key> {
+        self.changed_paths(old_commit, new_commit)
+            .into_iter()
+            .map(|p| {
+                let filename = p.file_name().unwrap().to_str().unwrap();
+                match filename.parse() {
+                    Ok(key) => key,
+                    Err(_) => panic!(),
+                }
+            })
+            .collect()
+    }
+
     pub fn hard_reset_current(&self) -> Result<(), git2::Error> {
         let head = self.repo.head().unwrap(); // symbolic or detached HEAD
         let obj = head.peel(git2::ObjectType::Commit).unwrap(); // peel to the commit object
@@ -320,11 +389,9 @@ impl<T: LedgerItem> Remote<T> {
         Ok(())
     }
 
-    /// Checkout a commit in *read-only* style:
-    /// - detached HEAD at `commit`
-    /// - hard reset index + workdir to that commit
-    /// - delete untracked and ignored files
-    pub fn set_commit_clean(&self, commit: &str) -> Result<(), git2::Error> {
+    pub fn set_commit_clean(&self, commit: &str) -> Result<HashSet<T::Key>, git2::Error> {
+        let curr_commit = self.current_commit();
+
         {
             let mut remote = self.repo.find_remote("origin").unwrap();
             remote.fetch::<&str>(&[], None, None).unwrap();
@@ -333,7 +400,12 @@ impl<T: LedgerItem> Remote<T> {
         let oid = Oid::from_str(commit).unwrap();
         self.repo.set_head_detached(oid).unwrap();
 
-        self.hard_reset_current()
+        self.hard_reset_current().unwrap();
+        assert_eq!(self.current_commit().as_str(), commit);
+
+        let diffs = self.modified_items(&curr_commit, commit);
+        dbg!(&diffs);
+        Ok(diffs)
     }
 }
 
