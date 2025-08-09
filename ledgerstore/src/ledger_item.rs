@@ -124,7 +124,13 @@ pub trait LedgerItem:
             let dependencies = if selv.0 == current {
                 selv.1.ref_cache()
             } else {
-                ledger.load(current).unwrap().ref_cache()
+                match ledger.load(current) {
+                    Some(item) => item.ref_cache(),
+                    None => {
+                        dbg!(current, visited, visiting, parent);
+                        panic!()
+                    }
+                }
             };
 
             for ItemReference {

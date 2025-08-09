@@ -260,9 +260,26 @@ struct Remote<T: LedgerItem> {
     _phantom: PhantomData<T>,
 }
 
-use git2::{DiffOptions, ObjectType, Oid, Repository, ResetType};
+use git2::{Delta, DiffFindOptions, DiffOptions, ObjectType, Oid, Repository, ResetType};
 
 use crate::read_ledger::ReadLedger;
+
+#[derive(Debug)]
+pub struct ChangeSet<T> {
+    pub added: Vec<T>,
+    pub modified: Vec<T>,
+    pub removed: Vec<T>,
+}
+
+impl<T> Default for ChangeSet<T> {
+    fn default() -> Self {
+        Self {
+            added: Default::default(),
+            modified: Default::default(),
+            removed: Default::default(),
+        }
+    }
+}
 
 impl<T: LedgerItem> ReadLedger for Remote<T> {
     type Item = T;
@@ -301,50 +318,76 @@ impl<T: LedgerItem> Remote<T> {
         }
     }
 
-    pub fn current_commit(&self) -> String {
-        self.repo
-            .head()
-            .unwrap()
-            .peel_to_commit()
-            .unwrap()
-            .id()
-            .to_string()
+    pub fn current_commit(&self) -> Option<String> {
+        match self.repo.head() {
+            Ok(head) => Some(head.peel_to_commit().unwrap().id().to_string()),
+            Err(_) => None,
+        }
     }
 
-    fn changed_paths(&self, old_commit: &str, new_commit: &str) -> Vec<PathBuf> {
-        let old_oid = Oid::from_str(old_commit).unwrap();
+    pub fn changed_paths(&self, old_commit: Option<&str>, new_commit: &str) -> ChangeSet<PathBuf> {
+        // resolve new
         let new_oid = Oid::from_str(new_commit).unwrap();
-
-        let old_commit = self
-            .repo
-            .find_object(old_oid, Some(ObjectType::Commit))
-            .unwrap()
-            .into_commit()
-            .unwrap();
         let new_commit = self
             .repo
             .find_object(new_oid, Some(ObjectType::Commit))
             .unwrap()
             .into_commit()
             .unwrap();
-
-        let old_tree = old_commit.tree().unwrap();
         let new_tree = new_commit.tree().unwrap();
 
-        let diff = self
+        // resolve old (or empty)
+        let old_tree = old_commit.map(|s| {
+            let old_oid = Oid::from_str(s).unwrap();
+            let old_commit = self
+                .repo
+                .find_object(old_oid, Some(ObjectType::Commit))
+                .unwrap()
+                .into_commit()
+                .unwrap();
+            old_commit.tree().unwrap()
+        });
+
+        let mut opts = DiffOptions::new();
+        let mut diff = self
             .repo
-            .diff_tree_to_tree(
-                Some(&old_tree),
-                Some(&new_tree),
-                Some(&mut DiffOptions::new()),
-            )
+            .diff_tree_to_tree(old_tree.as_ref(), Some(&new_tree), Some(&mut opts))
             .unwrap();
 
-        let mut paths = Vec::new();
+        // detect renames/copies
+        let mut find = DiffFindOptions::new();
+        find.renames(true).renames_from_rewrites(true);
+        diff.find_similar(Some(&mut find)).unwrap();
+
+        let mut out = ChangeSet {
+            added: vec![],
+            modified: vec![],
+            removed: vec![],
+        };
+
         diff.foreach(
-            &mut |delta, _| {
-                if let Some(path) = delta.new_file().path().or_else(|| delta.old_file().path()) {
-                    paths.push(path.to_path_buf());
+            &mut |d, _| {
+                match d.status() {
+                    Delta::Added | Delta::Copied => {
+                        let p = d.new_file().path().unwrap().to_path_buf();
+                        out.added.push(p);
+                    }
+                    Delta::Modified | Delta::Typechange => {
+                        let p = d.new_file().path().unwrap().to_path_buf();
+                        out.modified.push(p);
+                    }
+                    Delta::Deleted => {
+                        let p = d.old_file().path().unwrap().to_path_buf();
+                        out.removed.push(p);
+                    }
+                    Delta::Renamed => {
+                        let oldp = d.old_file().path().unwrap().to_path_buf();
+                        let newp = d.new_file().path().unwrap().to_path_buf();
+                        out.removed.push(oldp);
+                        out.added.push(newp);
+                    }
+                    // Untracked/Unmodified/Ignored/Conflicted → skip
+                    _ => {}
                 }
                 true
             },
@@ -354,20 +397,62 @@ impl<T: LedgerItem> Remote<T> {
         )
         .unwrap();
 
-        paths
+        out
     }
 
-    fn modified_items(&self, old_commit: &str, new_commit: &str) -> HashSet<T::Key> {
-        self.changed_paths(old_commit, new_commit)
-            .into_iter()
-            .map(|p| {
-                let filename = p.file_name().unwrap().to_str().unwrap();
+    fn modified_items(&self, old_commit: Option<&str>, new_commit: &str) -> ChangeSet<T::Key> {
+        let mut changed_items: ChangeSet<T::Key> = Default::default();
+
+        let changed_paths = self.changed_paths(old_commit, new_commit);
+
+        for path in changed_paths.added {
+            if path.starts_with("items") {
+                let filename = path.file_name().unwrap().to_str().unwrap();
+                dbg!(&filename);
                 match filename.parse() {
-                    Ok(key) => key,
-                    Err(_) => panic!(),
+                    Ok(key) => {
+                        changed_items.added.push(key);
+                    }
+                    Err(_) => {
+                        dbg!(&filename);
+                        panic!();
+                    }
                 }
-            })
-            .collect()
+            }
+        }
+
+        for path in changed_paths.modified {
+            if path.starts_with("items") {
+                let filename = path.file_name().unwrap().to_str().unwrap();
+                dbg!(&filename);
+                match filename.parse() {
+                    Ok(key) => {
+                        changed_items.modified.push(key);
+                    }
+                    Err(_) => {
+                        dbg!(&filename);
+                        panic!();
+                    }
+                }
+            }
+        }
+        for path in changed_paths.removed {
+            if path.starts_with("items") {
+                let filename = path.file_name().unwrap().to_str().unwrap();
+                dbg!(&filename);
+                match filename.parse() {
+                    Ok(key) => {
+                        changed_items.removed.push(key);
+                    }
+                    Err(_) => {
+                        dbg!(&filename);
+                        panic!();
+                    }
+                }
+            }
+        }
+
+        changed_items
     }
 
     pub fn hard_reset_current(&self) -> Result<(), git2::Error> {
@@ -387,7 +472,25 @@ impl<T: LedgerItem> Remote<T> {
         Ok(())
     }
 
-    pub fn set_commit_clean(&self, commit: &str) -> Result<HashSet<T::Key>, git2::Error> {
+    pub fn reset_to_empty(&self) {
+        let refs = self.repo.references().unwrap();
+        for r in refs {
+            let r = r.unwrap();
+            if let Some(name) = r.name() {
+                if name.starts_with("refs/heads/") || name.starts_with("refs/tags/") {
+                    self.repo.find_reference(name).unwrap().delete().unwrap();
+                }
+            }
+        }
+
+        self.repo.set_head("refs/heads/main").unwrap();
+
+        let mut cb = git2::build::CheckoutBuilder::new();
+        cb.force().remove_untracked(true).remove_ignored(true);
+        self.repo.checkout_head(Some(&mut cb)).unwrap();
+    }
+
+    pub fn set_commit_clean(&self, commit: &str) -> Result<ChangeSet<T::Key>, git2::Error> {
         let curr_commit = self.current_commit();
 
         {
@@ -399,9 +502,9 @@ impl<T: LedgerItem> Remote<T> {
         self.repo.set_head_detached(oid).unwrap();
 
         self.hard_reset_current().unwrap();
-        assert_eq!(self.current_commit().as_str(), commit);
+        assert_eq!(self.current_commit().unwrap().as_str(), commit);
 
-        let diffs = self.modified_items(&curr_commit, commit);
+        let diffs = self.modified_items(curr_commit.as_deref(), commit);
         dbg!(&diffs);
         Ok(diffs)
     }
@@ -744,9 +847,13 @@ impl<T: LedgerItem> Ledger<T> {
     }
 
     fn remove_cache(&self, cache: CacheKey<T>, id: T::Key) {
-        let path = self.local.cache_dir(cache).join(id.to_string());
+        let path = self.local.cache_dir(cache.clone()).join(id.to_string());
         let _res = fs::remove_file(&path);
-        debug_assert!(_res.is_ok());
+
+        if let Err(e) = _res {
+            dbg!(&path, e, cache, id);
+            panic!();
+        }
     }
 
     fn is_remote(&self, key: T::Key) -> bool {
@@ -756,27 +863,72 @@ impl<T: LedgerItem> Ledger<T> {
         }
     }
 
+    /// letss seee...
+    /// if item is deleted, we just need to check nothing in local depends on it
+    /// if item is modified, we should get all its dependents in local and verify.
+    /// if item is added, it means nothing would have depended on it already, can assert that indeed nothing depends on it i guess.
+    /// hmm if it's added i guess we don't need to deal with caches, since all its dependents are only in remote state.
     fn set_remote_commit(&self, new_commit: &str) -> Result<(), EventError<T>> {
         let remote = self.remote.as_ref().unwrap().clone();
 
         let current_commit = remote.current_commit();
-        let modified = remote.set_commit_clean(new_commit).unwrap();
+        let ChangeSet {
+            added: _,
+            modified,
+            removed,
+        } = remote.set_commit_clean(new_commit).unwrap();
+
+        for item in removed {
+            if !self.local.dependents(item).is_empty() {
+                match current_commit {
+                    Some(commit) => {
+                        let _ = remote.set_commit_clean(&commit).unwrap();
+                    }
+                    None => {
+                        remote.reset_to_empty();
+                    }
+                }
+
+                return Err(EventError::ItemNotFound);
+            }
+        }
 
         let mut new_caches: HashSet<(
             Either<PropertyCache<T>, ItemRefCache<T>>,
             <T as LedgerItem>::Key,
         )> = HashSet::default();
 
+        let mut dependents: HashSet<T::Key> = HashSet::default();
+
         for item in &modified {
-            let item = remote.load(*item).unwrap();
-            let item = match item.verify(self) {
+            dependents.extend(self.local.dependents(*item));
+        }
+
+        dbg!(&modified, &dependents);
+
+        for dependent in dependents {
+            let item = self.local.load(dependent).unwrap();
+
+            let _ = match item.verify(self) {
                 Ok(item) => item,
                 Err(e) => {
-                    remote.set_commit_clean(&current_commit).unwrap();
+                    match current_commit {
+                        Some(commit) => {
+                            let _ = remote.set_commit_clean(&commit).unwrap();
+                        }
+                        None => {
+                            remote.reset_to_empty();
+                        }
+                    }
                     return Err(e);
                 }
             };
-            new_caches.extend(item.caches(self));
+        }
+
+        for item in &modified {
+            if let Some(item) = remote.load(*item) {
+                new_caches.extend(item.caches(self));
+            };
         }
 
         let mut old_caches: HashSet<(
@@ -784,15 +936,20 @@ impl<T: LedgerItem> Ledger<T> {
             <T as LedgerItem>::Key,
         )> = HashSet::default();
 
-        remote.set_commit_clean(&current_commit).unwrap();
+        match current_commit {
+            Some(old_commit) => {
+                remote.set_commit_clean(&old_commit).unwrap();
 
-        for item in &modified {
-            if let Some(item) = remote.load(*item) {
-                old_caches.extend(item.caches(self));
+                for item in &modified {
+                    if let Some(item) = remote.load(*item) {
+                        old_caches.extend(item.caches(self));
+                    }
+                }
+
+                remote.set_commit_clean(&new_commit).unwrap();
             }
+            None => {}
         }
-
-        remote.set_commit_clean(&new_commit).unwrap();
 
         let added_caches = &new_caches - &old_caches;
         let removed_caches = &old_caches - &new_caches;

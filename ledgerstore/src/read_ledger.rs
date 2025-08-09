@@ -113,6 +113,22 @@ pub trait ReadLedger {
         self.load_getter_ty(getter)
     }
 
+    fn dependents(
+        &self,
+        key: <Self::Item as LedgerItem>::Key,
+    ) -> HashSet<<Self::Item as LedgerItem>::Key> {
+        let getter = RefGetter {
+            reversed: true,
+            key,
+            ty: None,
+            recursive: false,
+        };
+        self.load_getter_ty(getter)
+            .into_iter()
+            .map(|x| x.1)
+            .collect()
+    }
+
     fn all_dependents(
         &self,
         key: <Self::Item as LedgerItem>::Key,
