@@ -132,27 +132,41 @@ impl<T: LedgerItem> LedgerEntry<T> {
 }
 
 #[derive(Clone, Serialize, Deserialize, Debug, Hash)]
-#[serde(bound(deserialize = "T: LedgerItem + DeserializeOwned,
-                   T::Key: DeserializeOwned"))]
-pub struct TheLedgerEvent<T: LedgerItem> {
-    id: T::Key,
-    action: TheLedgerAction<T>,
+#[serde(untagged)]
+#[serde(bound(
+    serialize = "T: LedgerItem + Serialize,
+                   T::Key: Serialize,
+                   TheLedgerAction<T>: Serialize",
+    deserialize = "T: LedgerItem + DeserializeOwned,
+                   T::Key: DeserializeOwned,
+                   TheLedgerAction<T>: DeserializeOwned",
+))]
+pub enum TheLedgerEvent<T: LedgerItem> {
+    // Matches the old TheLedgerEvent<T> shape 1:1
+    ItemAction {
+        id: T::Key,
+        action: TheLedgerAction<T>,
+    },
+    // New, ID-less event
+    SetUpstream {
+        commit: String,
+    },
 }
 
 impl<T: LedgerItem> TheLedgerEvent<T> {
     pub fn new(id: T::Key, action: TheLedgerAction<T>) -> Self {
-        Self { id, action }
+        Self::ItemAction { id, action }
     }
 
     pub fn new_modify(id: T::Key, action: T::Modifier) -> Self {
-        Self {
+        Self::ItemAction {
             id,
             action: TheLedgerAction::Modify(action),
         }
     }
 
     pub fn new_delete(id: T::Key) -> Self {
-        Self {
+        Self::ItemAction {
             id,
             action: TheLedgerAction::Delete,
         }
@@ -618,8 +632,11 @@ impl<T: LedgerItem> Ledger<T> {
         verify: bool,
         cache: bool,
     ) -> Result<ModifyResult<T>, EventError<T>> {
-        let key = event.id;
-        let (old_caches, new_caches, item, is_no_op) = match event.action.clone() {
+        let TheLedgerEvent::ItemAction { id: key, action } = event else {
+            todo!();
+        };
+
+        let (old_caches, new_caches, item, is_no_op) = match action.clone() {
             TheLedgerAction::Modify(action) => {
                 let (old_caches, old_item) = match self.load(key) {
                     Some(item) if cache => (item.caches(self), item),
