@@ -5,6 +5,7 @@ use std::sync::{
     Arc,
 };
 
+use clap::Parser;
 use dioxus::prelude::*;
 use dioxus_logger::tracing::{info, Level};
 #[cfg(not(feature = "desktop"))]
@@ -29,11 +30,22 @@ pub static ROUTE_CHANGE: AtomicBool = AtomicBool::new(false);
 
 const TAILWIND_CSS: &str = include_str!("../public/tailwind.css");
 
+#[derive(Parser, Debug)]
+struct Cli {
+    #[arg(long)]
+    commit: Option<String>,
+    #[arg(long)]
+    debug_persist: bool,
+    #[arg(long)]
+    debug: bool,
+    #[arg(long)]
+    trace: bool,
+}
+
 fn main() {
     std::env::set_var("GDK_BACKEND", "x11");
 
-    let trace_enabled = std::env::args().any(|arg| arg == "--trace");
-    let log_level = if trace_enabled {
+    let log_level = if Cli::parse().trace {
         Level::DEBUG
     } else {
         Level::INFO
@@ -49,6 +61,17 @@ fn main() {
 #[component]
 pub fn TheApp() -> Element {
     use_context_provider(ReviewPage::new);
+
+    let cli = Cli::parse();
+
+    if let Some(commit) = cli.commit {
+        APP.read()
+            .inner()
+            .provider
+            .cards
+            .modify(ledgerstore::LedgerEvent::SetUpstream { commit })
+            .unwrap();
+    }
 
     rsx! {
         style { dangerous_inner_html: "{TAILWIND_CSS}" }

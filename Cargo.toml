@@ -33,6 +33,7 @@ dioxus = { version = "0.6.1", features = ["router"] }
 deunicode = "1.6.0"
 git2 = "0.20.2"
 dioxus-desktop = "0.6.1"
+clap = { version = "4.5.43", features = ["derive"] }
 
 [profile]
 

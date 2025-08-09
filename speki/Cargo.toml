@@ -26,6 +26,7 @@ dirs.workspace = true
 rayon.workspace = true
 chrono.workspace = true
 tokio.workspace = true
+clap.workspace = true
 
 
 #ledgerstore = "0.1.2"

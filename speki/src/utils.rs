@@ -1,5 +1,6 @@
 use std::{fmt::Debug, sync::Arc};
 
+use clap::Parser;
 use dioxus::prelude::*;
 use ledgerstore::EventError;
 use speki_core::{
@@ -8,21 +9,21 @@ use speki_core::{
     Card, CardRefType,
 };
 
-use crate::{overlays::OverlayEnum, APP};
+use crate::{overlays::OverlayEnum, Cli, APP};
 
 #[derive(Clone)]
 pub struct App(Arc<speki_core::App>);
 
 impl App {
     pub fn new() -> Self {
-        let args: Vec<String> = std::env::args().collect();
+        let cli = Cli::parse();
 
-        let root = if args.get(1).is_some_and(|arg| arg == "debug") {
+        let root = if cli.debug {
             let path = dirs::data_local_dir().unwrap().join("speki_debug");
             // creating a fresh root for debugging
             let _ = std::fs::remove_dir_all(&path);
             path
-        } else if args.get(1).is_some_and(|arg| arg == "debug_persist") {
+        } else if cli.debug_persist {
             dirs::data_local_dir().unwrap().join("speki_debug")
         } else {
             dirs::data_local_dir().unwrap().join("speki")
