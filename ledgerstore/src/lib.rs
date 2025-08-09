@@ -136,46 +136,39 @@ impl<T: LedgerItem> LedgerEntry<T> {
 #[serde(bound(
     serialize = "T: LedgerItem + Serialize,
                    T::Key: Serialize,
-                   TheLedgerAction<T>: Serialize",
+                   LedgerAction<T>: Serialize",
     deserialize = "T: LedgerItem + DeserializeOwned,
                    T::Key: DeserializeOwned,
-                   TheLedgerAction<T>: DeserializeOwned",
+                   LedgerAction<T>: DeserializeOwned",
 ))]
 pub enum LedgerEvent<T: LedgerItem> {
-    // Matches the old TheLedgerEvent<T> shape 1:1
-    ItemAction {
-        id: T::Key,
-        action: TheLedgerAction<T>,
-    },
-    // New, ID-less event
-    SetUpstream {
-        commit: String,
-    },
+    ItemAction { id: T::Key, action: LedgerAction<T> },
+    SetUpstream { commit: String },
 }
 
 impl<T: LedgerItem> LedgerEvent<T> {
-    pub fn new(id: T::Key, action: TheLedgerAction<T>) -> Self {
+    pub fn new(id: T::Key, action: LedgerAction<T>) -> Self {
         Self::ItemAction { id, action }
     }
 
     pub fn new_modify(id: T::Key, action: T::Modifier) -> Self {
         Self::ItemAction {
             id,
-            action: TheLedgerAction::Modify(action),
+            action: LedgerAction::Modify(action),
         }
     }
 
     pub fn new_delete(id: T::Key) -> Self {
         Self::ItemAction {
             id,
-            action: TheLedgerAction::Delete,
+            action: LedgerAction::Delete,
         }
     }
 }
 
 #[derive(Clone, Serialize, Deserialize, Debug, Hash, PartialEq)]
 #[serde(bound(deserialize = "T: LedgerItem + DeserializeOwned"))]
-pub enum TheLedgerAction<T: LedgerItem> {
+pub enum LedgerAction<T: LedgerItem> {
     Create(T),
     Modify(T::Modifier),
     Delete,
@@ -637,7 +630,7 @@ impl<T: LedgerItem> Ledger<T> {
         };
 
         let (old_caches, new_caches, item, is_no_op) = match action.clone() {
-            TheLedgerAction::Modify(action) => {
+            LedgerAction::Modify(action) => {
                 let (old_caches, old_item) = match self.load(key) {
                     Some(item) if cache => (item.caches(self), item),
                     Some(item) => (Default::default(), item),
@@ -649,7 +642,7 @@ impl<T: LedgerItem> Ledger<T> {
                 let new_caches = modified_item.caches(self);
                 (old_caches, new_caches, Some(modified_item), no_op)
             }
-            TheLedgerAction::Create(mut item) => {
+            LedgerAction::Create(mut item) => {
                 if verify {
                     item = item.verify(self)?;
                 }
@@ -660,7 +653,7 @@ impl<T: LedgerItem> Ledger<T> {
                 };
                 (HashSet::default(), caches, Some(item), false)
             }
-            TheLedgerAction::Delete => {
+            LedgerAction::Delete => {
                 let old_item = self.load(key).unwrap();
                 let old_caches = old_item.caches(self);
                 (old_caches, Default::default(), None, false)

@@ -12,7 +12,7 @@ pub mod basecard;
 pub use basecard::*;
 
 use either::Either;
-use ledgerstore::{EventError, RefGetter, TheCacheGetter, TheLedgerAction, TimeProvider};
+use ledgerstore::{EventError, LedgerAction, RefGetter, TheCacheGetter, TimeProvider};
 use nonempty::NonEmpty;
 use serde::Deserializer;
 use serde_json::Value;
@@ -929,7 +929,7 @@ impl Card {
     }
 
     pub fn set_suspend(&mut self, suspend: bool) {
-        let action = TheLedgerAction::Modify(crate::ledger::MetaAction::Suspend(suspend));
+        let action = LedgerAction::Modify(crate::ledger::MetaAction::Suspend(suspend));
         let event = MetaEvent::new(self.id, action);
 
         self.card_provider.providers.metadata.modify(event).unwrap();
