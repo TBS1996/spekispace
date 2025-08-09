@@ -146,12 +146,17 @@ impl Debug for App {
 }
 
 impl App {
-    pub fn new(root: PathBuf) -> Self {
+    pub fn new(root: PathBuf, with_remote: bool) -> Self {
         info!("initialtize app");
 
+        let mut cards: Ledger<RawCard> = Ledger::new(root.clone());
+
+        if with_remote {
+            cards = cards.with_remote("https://github.com/TBS1996/speki_graph".to_string());
+        }
+
         let provider = Provider {
-            cards: Ledger::new(root.clone())
-                .with_remote("https://github.com/TBS1996/speki_graph".to_string()),
+            cards,
             reviews: Ledger::new(root.clone()),
             metadata: Ledger::new(root.clone()),
             time: FsTime,

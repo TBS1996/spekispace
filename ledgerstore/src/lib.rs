@@ -371,8 +371,8 @@ impl<T: LedgerItem> Remote<T> {
     }
 
     pub fn hard_reset_current(&self) -> Result<(), git2::Error> {
-        let head = self.repo.head().unwrap(); // symbolic or detached HEAD
-        let obj = head.peel(git2::ObjectType::Commit).unwrap(); // peel to the commit object
+        let head = self.repo.head()?;
+        let obj = head.peel(git2::ObjectType::Commit)?;
 
         let mut cb = CheckoutBuilder::new();
         cb.force()
@@ -380,10 +380,8 @@ impl<T: LedgerItem> Remote<T> {
             .remove_ignored(true)
             .recreate_missing(true);
 
-        self.repo.checkout_tree(&obj, Some(&mut cb)).unwrap();
-        self.repo
-            .reset(&obj, ResetType::Hard, Some(&mut cb))
-            .unwrap();
+        self.repo.checkout_tree(&obj, Some(&mut cb))?;
+        self.repo.reset(&obj, ResetType::Hard, Some(&mut cb))?;
 
         let _ = self.repo.cleanup_state();
         Ok(())
@@ -543,7 +541,7 @@ impl<T: LedgerItem> Ledger<T> {
 
     pub fn with_remote(mut self, url: String) -> Self {
         let remote = Remote::new(&self.root, url);
-        remote.hard_reset_current().unwrap();
+        let _ = remote.hard_reset_current();
         self.remote = Some(Arc::new(remote));
         self
     }

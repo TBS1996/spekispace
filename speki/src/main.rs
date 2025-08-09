@@ -40,6 +40,8 @@ struct Cli {
     debug: bool,
     #[arg(long)]
     trace: bool,
+    #[arg(long)]
+    remote: bool,
 }
 
 fn main() {

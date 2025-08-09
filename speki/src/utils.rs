@@ -25,11 +25,13 @@ impl App {
             path
         } else if cli.debug_persist {
             dirs::data_local_dir().unwrap().join("speki_debug")
+        } else if cli.remote {
+            dirs::data_local_dir().unwrap().join("speki_remote")
         } else {
             dirs::data_local_dir().unwrap().join("speki")
         };
 
-        Self(Arc::new(speki_core::App::new(root)))
+        Self(Arc::new(speki_core::App::new(root, !cli.remote)))
     }
 
     pub fn inner(&self) -> Arc<speki_core::App> {
