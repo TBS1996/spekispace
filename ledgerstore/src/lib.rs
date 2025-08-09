@@ -663,6 +663,13 @@ impl<T: LedgerItem> Ledger<T> {
         debug_assert!(_res.is_ok());
     }
 
+    fn is_remote(&self, key: T::Key) -> bool {
+        match self.remote.as_ref() {
+            Some(remote) => remote.load(key).is_some(),
+            None => false,
+        }
+    }
+
     fn _modify(
         &self,
         key: T::Key,
@@ -670,6 +677,10 @@ impl<T: LedgerItem> Ledger<T> {
         verify: bool,
         cache: bool,
     ) -> Result<ModifyResult<T>, EventError<T>> {
+        if self.is_remote(key) {
+            return Err(EventError::Remote);
+        }
+
         let (old_caches, new_caches, item, is_no_op) = match action.clone() {
             LedgerAction::Modify(action) => {
                 let (old_caches, old_item) = match self.load(key) {
