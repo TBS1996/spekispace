@@ -306,28 +306,29 @@ impl<T: LedgerItem> Remote<T> {
     /// - hard reset index + workdir to that commit
     /// - delete untracked and ignored files
     pub fn set_commit_clean(&self, commit: &str) -> Result<(), git2::Error> {
-        // Allow full SHA, short SHA, or even a ref like "origin/main"
-        let oid =
-            Oid::from_str(commit).or_else(|_| self.repo.revparse_single(commit).map(|o| o.id()))?;
+        // Fetch everything from origin
+        {
+            let mut remote = self.repo.find_remote("origin")?;
+            remote.fetch::<&str>(&[] /* empty = all refs */, None, None)?;
+        }
 
+        let oid = Oid::from_str(commit)?;
         let obj = self.repo.find_object(oid, Some(ObjectType::Commit))?;
 
-        // Build a "nuke everything" checkout
-        let mut cb = CheckoutBuilder::new();
-        cb.force() // overwrite local modifications
-            .remove_untracked(true) // delete untracked files (like `git clean -f`)
-            .remove_ignored(true) // delete ignored files too (like `git clean -fdx`)
-            .recreate_missing(true); // ensure missing dirs/files get recreated
-
-        // Go to detached HEAD at the target commit
+        // Detach HEAD
         self.repo.set_head_detached(oid)?;
 
-        // Make index + workdir match that commit exactly (like `git reset --hard`)
+        // Hard, clean checkout
+        let mut cb = CheckoutBuilder::new();
+        cb.force()
+            .remove_untracked(true)
+            .remove_ignored(true)
+            .recreate_missing(true);
+
+        self.repo.checkout_tree(&obj, Some(&mut cb))?;
         self.repo.reset(&obj, ResetType::Hard, Some(&mut cb))?;
 
-        // Clear any in-progress state (rebases, merges, etc.)
         let _ = self.repo.cleanup_state();
-
         Ok(())
     }
 }
