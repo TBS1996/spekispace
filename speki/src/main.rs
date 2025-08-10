@@ -1,16 +1,19 @@
 #![allow(non_snake_case)]
 
-use std::sync::{
-    atomic::{AtomicBool, Ordering},
-    Arc,
+use std::{
+    path::PathBuf,
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc,
+    },
 };
 
 use clap::Parser;
 use dioxus::prelude::*;
 use dioxus_logger::tracing::{info, Level};
-#[cfg(not(feature = "desktop"))]
-use firebase::AuthUser;
 use pages::ReviewPage;
+use speki_core::ledger::CardEvent;
+use std::fs;
 
 use crate::{
     overlays::OverlayEnum,
@@ -44,16 +47,16 @@ struct Cli {
     remote: bool,
     #[arg(long)]
     disable_remote: bool,
+    #[arg(long)]
+    import_cards: Option<PathBuf>,
 }
 
 fn main() {
     std::env::set_var("GDK_BACKEND", "x11");
 
-    let log_level = if Cli::parse().trace {
-        Level::DEBUG
-    } else {
-        Level::INFO
-    };
+    let cli = Cli::parse();
+
+    let log_level = if cli.trace { Level::DEBUG } else { Level::INFO };
 
     dioxus_logger::init(log_level).expect("failed to init logger");
 
@@ -67,6 +70,32 @@ pub fn TheApp() -> Element {
     use_context_provider(ReviewPage::new);
 
     let cli = Cli::parse();
+
+    if let Some(path) = cli.import_cards {
+        let mut events: Vec<CardEvent> = vec![];
+        let mut paths: Vec<PathBuf> = vec![];
+
+        for path in std::fs::read_dir(&path).unwrap() {
+            paths.push(path.unwrap().path());
+        }
+
+        paths.sort();
+
+        for path in paths {
+            let s = fs::read_to_string(&path).unwrap();
+            let event: CardEvent = serde_json::from_str(&s).unwrap();
+            events.push(event);
+        }
+
+        let qty = events.len();
+
+        for event in events {
+            APP.read().inner().provider.cards.modify(event).unwrap();
+        }
+
+        println!("ran {} events", qty);
+        std::process::exit(0);
+    }
 
     if let Some(commit) = cli.commit {
         APP.read()
