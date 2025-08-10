@@ -573,7 +573,7 @@ impl Card {
         self.card_provider
             .providers
             .cards
-            .all_dependents(self.id)
+            .dependents_recursive(self.id)
             .into_iter()
             .collect()
     }
@@ -781,7 +781,10 @@ impl Card {
     }
 
     pub fn recursive_dependents(&self) -> HashSet<CardId> {
-        self.card_provider.providers.cards.all_dependents(self.id)
+        self.card_provider
+            .providers
+            .cards
+            .dependents_recursive(self.id)
     }
 
     pub fn recursive_dependencies(&self) -> Vec<CardId> {

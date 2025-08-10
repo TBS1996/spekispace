@@ -80,7 +80,8 @@ pub trait ReadLedger {
         Self::item_keys_from_dir(path)
     }
 
-    fn all_dependencies(
+    #[allow(dead_code)]
+    fn direct_dependencies(
         &self,
         key: <Self::Item as LedgerItem>::Key,
     ) -> HashSet<<Self::Item as LedgerItem>::Key> {
@@ -89,6 +90,23 @@ pub trait ReadLedger {
             key,
             ty: None,
             recursive: false,
+        };
+
+        self.load_getter_ty(getter)
+            .into_iter()
+            .map(|x| x.1)
+            .collect()
+    }
+
+    fn recursive_dependencies(
+        &self,
+        key: <Self::Item as LedgerItem>::Key,
+    ) -> HashSet<<Self::Item as LedgerItem>::Key> {
+        let getter = RefGetter {
+            reversed: false,
+            key,
+            ty: None,
+            recursive: true,
         };
 
         self.load_getter_ty(getter)
@@ -113,7 +131,7 @@ pub trait ReadLedger {
         self.load_getter_ty(getter)
     }
 
-    fn dependents(
+    fn direct_dependents(
         &self,
         key: <Self::Item as LedgerItem>::Key,
     ) -> HashSet<<Self::Item as LedgerItem>::Key> {
@@ -129,7 +147,7 @@ pub trait ReadLedger {
             .collect()
     }
 
-    fn all_dependents(
+    fn recursive_dependents(
         &self,
         key: <Self::Item as LedgerItem>::Key,
     ) -> HashSet<<Self::Item as LedgerItem>::Key> {

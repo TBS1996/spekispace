@@ -43,7 +43,7 @@ impl CardProvider {
 
         self.providers
             .cards
-            .all_dependents(id)
+            .dependents_recursive(id)
             .into_iter()
             .collect()
     }

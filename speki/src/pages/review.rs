@@ -523,7 +523,13 @@ pub fn reviewable_cards(expr: SetExpr, filter: Option<CardFilter>) -> Option<Non
     let card_ids: HashSet<CardId> = cards.iter().map(|card| card.id()).collect();
     let all_recursive_dependencies: HashSet<CardId> = card_ids
         .iter()
-        .map(|id| APP.read().inner().provider.cards.all_dependencies(*id))
+        .map(|id| {
+            APP.read()
+                .inner()
+                .provider
+                .cards
+                .dependencies_recursive(*id)
+        })
         .flatten()
         .collect();
 

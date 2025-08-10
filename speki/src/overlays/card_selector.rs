@@ -490,7 +490,7 @@ pub fn CardSelectorRender(
                                         let card_ids: HashSet<CardId> = cards.iter().map(|card| card.id()).collect();
                                         let mut all_recursive_dependencies: HashSet<CardId> = card_ids
                                             .iter()
-                                            .map(|id| APP.read().inner().provider.cards.all_dependencies(*id))
+                                            .map(|id| APP.read().inner().provider.cards.dependencies_recursive(*id))
                                             .flatten()
                                             .collect();
 

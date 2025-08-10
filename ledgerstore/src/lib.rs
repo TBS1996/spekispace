@@ -192,7 +192,7 @@ impl<T: LedgerItem> LedgerType<T> {
     pub fn dependents(&self, key: T::Key) -> HashSet<T::Key> {
         match self {
             LedgerType::OverRide(ledger) => ledger.dependents(key),
-            LedgerType::Normal(ledger) => ledger.all_dependents(key),
+            LedgerType::Normal(ledger) => ledger.dependents_recursive(key),
         }
     }
 }
@@ -244,7 +244,7 @@ impl<T: LedgerItem> OverrideLedger<T> {
     }
 
     pub fn dependents(&self, key: T::Key) -> HashSet<T::Key> {
-        let mut dependents = self.inner.all_dependents(key);
+        let mut dependents = self.inner.dependents_recursive(key);
 
         if self.new.dependencies().contains(&key) {
             dependents.insert(self.new_id);
@@ -655,19 +655,19 @@ impl<T: LedgerItem> Ledger<T> {
         items
     }
 
-    pub fn all_dependencies(&self, key: T::Key) -> HashSet<T::Key> {
-        let mut items = self.local.all_dependencies(key);
+    pub fn dependencies_recursive(&self, key: T::Key) -> HashSet<T::Key> {
+        let mut items = self.local.recursive_dependencies(key);
         if let Some(remote) = self.remote.as_ref() {
-            items.extend(remote.all_dependencies(key));
+            items.extend(remote.recursive_dependencies(key));
         }
 
         items
     }
 
-    pub fn all_dependents(&self, key: T::Key) -> HashSet<T::Key> {
-        let mut items = self.local.all_dependents(key);
+    pub fn dependents_recursive(&self, key: T::Key) -> HashSet<T::Key> {
+        let mut items = self.local.recursive_dependents(key);
         if let Some(remote) = self.remote.as_ref() {
-            items.extend(remote.all_dependents(key));
+            items.extend(remote.recursive_dependents(key));
         }
         items
     }
@@ -912,7 +912,7 @@ impl<T: LedgerItem> Ledger<T> {
         } = remote.set_commit_clean(new_commit).unwrap();
 
         for item in removed {
-            if !self.local.dependents(item).is_empty() {
+            if !self.local.direct_dependents(item).is_empty() {
                 match current_commit {
                     Some(commit) => {
                         let _ = remote.set_commit_clean(&commit).unwrap();
@@ -929,7 +929,7 @@ impl<T: LedgerItem> Ledger<T> {
         let mut dependents: HashSet<T::Key> = HashSet::default();
 
         for item in &modified {
-            dependents.extend(self.local.dependents(*item));
+            dependents.extend(self.local.direct_dependents(*item));
         }
 
         dbg!(&modified, &dependents);

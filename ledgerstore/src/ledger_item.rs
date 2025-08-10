@@ -259,7 +259,7 @@ pub trait LedgerItem:
     fn dependents(&self, ledger: &LedgerType<Self>) -> HashSet<Self::Key> {
         match ledger {
             LedgerType::OverRide(ledger) => ledger.dependents(self.item_id()),
-            LedgerType::Normal(ledger) => ledger.all_dependents(self.item_id()),
+            LedgerType::Normal(ledger) => ledger.dependents_recursive(self.item_id()),
         }
     }
 
