@@ -1,5 +1,5 @@
 use std::{
-    collections::{BTreeMap, BTreeSet},
+    collections::{BTreeMap, BTreeSet, HashSet},
     fs,
     sync::Arc,
     time::Duration,
@@ -487,38 +487,51 @@ pub fn CardSelectorRender(
                                     if let Ok(expr) = expr2.clone() {
                                         let cards = expr.eval(&APP.read().inner().card_provider);
 
-                                            let mut to_export: Vec<Card> = vec![];
+                                        let card_ids: HashSet<CardId> = cards.iter().map(|card| card.id()).collect();
+                                        let mut all_recursive_dependencies: HashSet<CardId> = card_ids
+                                            .iter()
+                                            .map(|id| APP.read().inner().provider.cards.all_dependencies(*id))
+                                            .flatten()
+                                            .collect();
 
-                                            for card in cards {
-                                                let card = APP.read().inner().load_card(card.id()).unwrap();
-                                                if !card.is_remote() {
-                                                    to_export.push(card);
-                                                }
+                                        all_recursive_dependencies.extend(card_ids);
+
+                                        let mut to_export: Vec<Card> = vec![];
+
+                                        for card in all_recursive_dependencies {
+                                            let card = APP.read().inner().load_card(card).unwrap();
+                                            if !card.is_remote() {
+                                                to_export.push(card);
                                             }
+                                        }
 
-                                            let sorted = Card::transitive_sort(to_export).unwrap();
-                                            let mut events: Vec<CardEvent> = vec![];
+                                        let sorted = Card::transitive_sort(to_export).unwrap();
+                                        let mut events: Vec<CardEvent> = vec![];
 
-                                            for card in sorted {
-                                                events.extend(card.clone_base().into_events());
-                                            }
+                                        for card in sorted {
+                                            events.extend(card.clone_base().into_events());
+                                        }
 
-                                            let Some(folder) = rfd::FileDialog::new()
-                                                .set_directory(dirs::home_dir().unwrap())
-                                                .pick_folder() else {
-                                                    return;
-                                                };
+                                        let Some(folder) = rfd::FileDialog::new()
+                                            .set_directory(dirs::home_dir().unwrap())
+                                            .pick_folder() else {
+                                                return;
+                                            };
 
-                                            fs::create_dir_all(&folder).unwrap();
+                                        fs::create_dir_all(&folder).unwrap();
 
-                                            for (idx, event) in events.into_iter().enumerate() {
-                                                use std::io::Write;
-                                                let s: String = serde_json::to_string_pretty(&event).unwrap();
-                                                let name = format!("{:06}", idx);
-                                                let path = folder.join(name);
-                                                let mut f = fs::File::create(&path).unwrap();
-                                                f.write_all(&mut s.into_bytes()).unwrap();
-                                            }
+                                        let qty = events.len();
+
+                                        for (idx, event) in events.into_iter().enumerate() {
+                                            use std::io::Write;
+                                            let s: String = serde_json::to_string_pretty(&event).unwrap();
+                                            let name = format!("{:06}", idx);
+                                            let path = folder.join(name);
+                                            let mut f = fs::File::create(&path).unwrap();
+                                            f.write_all(&mut s.into_bytes()).unwrap();
+                                        }
+
+                                        OverlayEnum::new_notice(format!("exported {qty} cards")).append();
                                     }
                                 },
                                 "export"
