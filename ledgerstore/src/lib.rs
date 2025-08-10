@@ -326,21 +326,18 @@ impl<T: LedgerItem> Remote<T> {
         }
     }
 
-    pub fn latest_upstream_commit(&self) -> String {
-        // Fetch the remote main branch (won’t update worktree)
-        let mut remote = self.repo.find_remote("origin").unwrap();
+    pub fn latest_upstream_commit(&self) -> Option<String> {
+        let mut remote = self.repo.find_remote("origin").ok()?;
+
         remote
             .fetch(&["refs/heads/main:refs/remotes/origin/main"], None, None)
-            .unwrap();
+            .ok()?;
 
         // Read the commit ID from the remote-tracking branch
-        let reference = self
-            .repo
-            .find_reference("refs/remotes/origin/main")
-            .unwrap();
-        let oid = reference.target().unwrap();
+        let reference = self.repo.find_reference("refs/remotes/origin/main").ok()?;
+        let oid = reference.target()?;
 
-        oid.to_string()
+        Some(oid.to_string())
     }
 
     pub fn current_commit_date(&self) -> Option<DateTime<Utc>> {
@@ -620,7 +617,7 @@ impl<T: LedgerItem> Ledger<T> {
     }
 
     pub fn latest_upstream_commit(&self) -> Option<String> {
-        Some(self.remote.as_ref()?.latest_upstream_commit())
+        self.remote.as_ref()?.latest_upstream_commit()
     }
 
     pub fn modify(&self, event: LedgerEvent<T>) -> Result<(), EventError<T>> {
