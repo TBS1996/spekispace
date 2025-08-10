@@ -788,6 +788,93 @@ pub struct RawCard {
 }
 
 impl RawCard {
+    pub fn into_events(self) -> Vec<CardEvent> {
+        let mut actions: Vec<CardAction> = vec![];
+
+        let Self {
+            id,
+            namespace,
+            data,
+            explicit_dependencies,
+            trivial: _,
+            tags: _,
+            front_audio: _,
+            back_audio: _,
+        } = self;
+
+        actions.push(CardAction::SetNamespace(namespace));
+        for dep in explicit_dependencies {
+            actions.push(CardAction::AddDependency(dep));
+        }
+
+        match data {
+            CardType::Instance {
+                name,
+                back,
+                class,
+                answered_params,
+            } => {
+                let action = CardAction::InstanceType {
+                    front: name,
+                    class: class,
+                };
+
+                actions.push(action);
+                actions.push(CardAction::SetBackside(back));
+                actions.push(CardAction::InsertParamAnswers(answered_params));
+            }
+            CardType::Normal { front, back } => {
+                actions.push(CardAction::NormalType { front, back });
+            }
+            CardType::Unfinished { front } => actions.push(CardAction::UnfinishedType { front }),
+            CardType::Attribute {
+                attribute,
+                back,
+                instance,
+            } => {
+                actions.push(CardAction::AttributeType {
+                    attribute,
+                    back,
+                    instance,
+                });
+            }
+            CardType::Class {
+                name,
+                back,
+                parent_class,
+                default_question: _,
+                attrs,
+                params,
+            } => {
+                actions.push(CardAction::ClassType { front: name });
+                actions.push(CardAction::SetParentClass(parent_class));
+                actions.push(CardAction::SetBackside(back));
+                actions.push(CardAction::InsertAttrs(attrs));
+                actions.push(CardAction::InsertParams(params.into_values().collect()));
+            }
+            CardType::Statement { front } => {
+                actions.push(CardAction::StatementType { front });
+            }
+            CardType::Event {
+                front,
+                start_time,
+                end_time: _,
+                parent_event: _,
+            } => {
+                actions.push(CardAction::EventType { front, start_time });
+            }
+        }
+
+        let mut events: Vec<CardEvent> = vec![];
+
+        for action in actions {
+            let event = CardEvent::new_modify(id, action);
+            events.push(event);
+        }
+
+        events
+    }
+
     pub fn cache_front(&self, ledger: &Ledger<RawCard>) -> String {
         match self.data.clone() {
             CardType::Instance { name, .. } => name.to_raw(),
