@@ -189,6 +189,7 @@ pub fn Overender(overlay: Signal<Option<Arc<OverlayEnum>>>, root: Element) -> El
                                     editor: elm.editor.clone(),
                                     save_hook: elm.save_hook.clone(),
                                     old_card: elm.old_card.clone(),
+                                    show_import: false,
                                 }
                             },
                             OverlayEnum::OverlaySelector(elm) => rsx! {

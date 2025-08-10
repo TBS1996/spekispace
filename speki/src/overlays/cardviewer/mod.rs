@@ -4,7 +4,7 @@ mod metadata;
 
 use std::{
     collections::{BTreeMap, BTreeSet},
-    mem,
+    fs, mem,
     str::FromStr,
     sync::Arc,
 };
@@ -13,10 +13,12 @@ use attributes::{load_param_answers_from_class, ParamAnswerEditor};
 use dioxus::prelude::*;
 use ledgerstore::LedgerEvent;
 use omtrent::TimeStamp;
+use rfd::FileDialog;
 use speki_core::{
     card::{AttributeId, BackSide, CardId},
     ledger::{CardAction, CardEvent, MetaAction, MetaEvent},
-    CardType,
+    set::{Input, SetAction, SetEvent, SetExpr, SetId},
+    Card, CardType,
 };
 use tracing::info;
 
@@ -24,7 +26,7 @@ pub use cardeditor::CardViewer;
 
 use crate::{
     components::{
-        backside::BackPutRender,
+        backside::{BackOpts, BackPutRender},
         card_mastery::MasterySection,
         cardref::{CardRefRender, OtherCardRefRender},
         frontside::FrontPutRender,
@@ -156,6 +158,12 @@ pub fn CardViewerRender(props: CardViewer) -> Element {
 
                         }
                     }
+
+                    div { class: "flex-grow" }
+
+                    if props.show_import {
+                        ImportCards {viewer: props.clone()}
+                    }
                 }
             }
 
@@ -278,6 +286,106 @@ enum _TheEditor {
         inherited_attrs: ReadOnlySignal<Vec<AttrEditor>>,
         inherited_params: ReadOnlySignal<Vec<AttrEditor>>,
     },
+}
+
+#[component]
+pub fn ImportCards(viewer: CardViewer) -> Element {
+    let editor = viewer.editor.clone();
+    rsx! {
+        div {
+            button {
+                class: "{crate::styles::CREATE_BUTTON}",
+                onclick: move |_| {
+                    if let Some(path) = FileDialog::new().pick_file() {
+                        let back_requirement = match editor.front.dropdown.selected.cloned() {
+                            CardTy::Normal => Some(true),
+                            CardTy::Instance => None,
+                            CardTy::Class => None,
+                            CardTy::Unfinished => Some(false),
+                        };
+
+                        let guide = match back_requirement {
+                            Some(true) => "Each row must contain two columns, front and back, tab separated",
+                            Some(false) => "Each row must contain only the frontside",
+                            None => "Each row must have a frontside and an optional backside, tab separated",
+                        };
+
+                        let filename = path.file_stem().unwrap().to_str().unwrap().to_string();
+
+                        let s = match fs::read_to_string(path) {
+                            Ok(s) => s,
+                            Err(_) => {
+                                OverlayEnum::new_notice("file must be valid tsv".to_string()).append();
+                                return;
+                            }
+                        };
+
+                        let mut front_and_back: Vec<(String, Option<String>)> = vec![];
+
+                        for line in s.lines() {
+                            let splits: Vec<&str> = line.split('\t').collect();
+                            let split_qty = splits.len();
+
+                            let is_valid = match back_requirement {
+                                Some(true) => split_qty == 2,
+                                Some(false) => split_qty == 1,
+                                None => split_qty == 1 || split_qty == 2,
+                            };
+
+                            if !is_valid {
+                                let err_msg = format!("Error: {guide}\ninvalid row: {line}");
+                                OverlayEnum::new_notice(err_msg).append();
+                                return;
+                            }
+
+                            let front = splits[0].to_owned();
+                            let back = splits.get(1).map(ToOwned::to_owned).map(ToOwned::to_owned);
+                            front_and_back.push((front, back));
+                        }
+
+                        let mut reps: Vec<CardRep> = vec![];
+
+                        for (front, back) in front_and_back {
+                            let mut editor = editor.clone();
+                            editor.front.text.set(front);
+                            editor.back.dropdown.set(BackOpts::Text);
+                            editor.back.text.set(back.unwrap_or_default());
+                            match editor.into_cardrep() {
+                                Ok(rep) => reps.push(rep),
+                                Err(e) => {
+                                    let err = format!("failed to create card: {e}");
+                                    OverlayEnum::new_notice(err).append();
+                                    return;
+                                },
+                            };
+                        }
+
+                        let set_id = SetId::new_v4();
+                        let event = SetEvent::new_modify(set_id, SetAction::SetName(filename));
+                        APP.read().inner().provider.sets.modify(event).unwrap();
+                        let mut saved_cards: BTreeSet<Input> = Default::default();
+
+                        for rep in reps {
+                            if let Ok(card) = save_cardrep(rep, None) {
+                                saved_cards.insert(Input::Card(card));
+                            }
+                        }
+
+                        let cards_imported =saved_cards.len();
+
+                        let expr = SetExpr::Union(saved_cards);
+                        let event = SetEvent::new_modify(set_id, SetAction::SetExpr(expr));
+                        APP.read().inner().provider.sets.modify(event).unwrap();
+                        viewer.light_reset();
+                        let notice = format!("imported {cards_imported} cards");
+                        OverlayEnum::new_notice(notice).append();
+
+                    }
+                },
+                "Import"
+            }
+        }
+    }
 }
 
 #[component]
@@ -508,6 +616,367 @@ fn InputElements(
     }
 }
 
+fn save_cardrep(rep: CardRep, old_card: Option<Arc<Card>>) -> Result<CardId, ()> {
+    let mut actions: Vec<CardAction> = vec![];
+
+    let CardRep {
+        ty,
+        namespace,
+        deps,
+        answered_attrs,
+        meta,
+    } = rep;
+
+    let id = old_card
+        .clone()
+        .map(|card| card.id())
+        .unwrap_or_else(CardId::new_v4);
+
+    {
+        let event = MetaEvent::new_modify(id, MetaAction::Suspend(meta.suspended.cloned()));
+
+        if let Err(e) = APP.read().inner().provider.metadata.modify(event) {
+            let err = format!("{e:?}");
+            OverlayEnum::new_notice(err).append();
+            return Err(());
+        }
+
+        let event = MetaEvent::new_modify(id, MetaAction::SetTrivial(Some(meta.trivial.cloned())));
+
+        if let Err(e) = APP.read().inner().provider.metadata.modify(event) {
+            let err = format!("{e:?}");
+            OverlayEnum::new_notice(err).append();
+            return Err(());
+        }
+
+        let event = MetaEvent::new_modify(id, MetaAction::SetNeedsWork(meta.needs_work.cloned()));
+
+        if let Err(e) = APP.read().inner().provider.metadata.modify(event) {
+            let err = format!("{e:?}");
+            OverlayEnum::new_notice(err).append();
+            return Err(());
+        }
+    }
+
+    let old_ty = old_card.clone().map(|c| c.clone_base().data);
+
+    let same_type = match &old_ty {
+        Some(old_ty) => mem::discriminant(old_ty) == mem::discriminant(&ty),
+        None => false,
+    };
+
+    match (ty, same_type) {
+        (
+            CardType::Instance {
+                name,
+                back,
+                class,
+                answered_params,
+            },
+            false,
+        ) => {
+            actions.push(CardAction::InstanceType { front: name, class });
+            actions.push(CardAction::SetBackside(back));
+            actions.push(CardAction::InsertParamAnswers(answered_params));
+        }
+        (
+            CardType::Instance {
+                name,
+                back,
+                class,
+                answered_params,
+            },
+            true,
+        ) => {
+            actions.push(CardAction::SetFront(name));
+            actions.push(CardAction::SetBackside(back));
+            actions.push(CardAction::SetInstanceClass(class));
+            actions.push(CardAction::InsertParamAnswers(answered_params));
+        }
+        (CardType::Normal { front, back }, true) => {
+            actions.push(CardAction::SetFront(front));
+            actions.push(CardAction::SetBackside(Some(back)));
+        }
+        (CardType::Normal { front, back }, false) => {
+            actions.push(CardAction::NormalType { front, back });
+        }
+        (CardType::Unfinished { front }, true) => {
+            actions.push(CardAction::SetFront(front));
+        }
+        (CardType::Unfinished { front }, false) => {
+            actions.push(CardAction::UnfinishedType { front });
+        }
+        (
+            CardType::Attribute {
+                attribute,
+                back,
+                instance,
+            },
+            true,
+        ) => {
+            actions.push(CardAction::AttributeType {
+                attribute,
+                back,
+                instance,
+            });
+        }
+        (
+            CardType::Attribute {
+                attribute,
+                back,
+                instance,
+            },
+            false,
+        ) => {
+            actions.push(CardAction::AttributeType {
+                attribute,
+                back,
+                instance,
+            });
+        }
+        (
+            CardType::Class {
+                name,
+                back,
+                parent_class,
+                default_question: _,
+                attrs,
+                params,
+            },
+            true,
+        ) => {
+            actions.push(CardAction::SetFront(name));
+            actions.push(CardAction::SetBackside(back));
+            actions.push(CardAction::SetParentClass(parent_class));
+            actions.push(CardAction::InsertAttrs(attrs));
+            actions.push(CardAction::InsertParams(params.into_values().collect()));
+        }
+        (
+            CardType::Class {
+                name,
+                back,
+                parent_class,
+                default_question: _,
+                attrs,
+                params,
+            },
+            false,
+        ) => {
+            actions.push(CardAction::ClassType { front: name });
+            actions.push(CardAction::SetBackside(back));
+            actions.push(CardAction::SetParentClass(parent_class));
+            actions.push(CardAction::InsertAttrs(attrs));
+            actions.push(CardAction::InsertParams(params.into_values().collect()));
+        }
+        (CardType::Statement { front }, true) => {
+            actions.push(CardAction::SetFront(front));
+        }
+        (CardType::Statement { front }, false) => {
+            actions.push(CardAction::StatementType { front });
+        }
+        (CardType::Event { .. }, _) => {
+            todo!()
+        }
+    }
+
+    actions.push(CardAction::SetNamespace(namespace));
+    actions.push(CardAction::SetTrivial(meta.trivial.cloned()));
+
+    for dep in deps {
+        actions.push(CardAction::AddDependency(dep));
+    }
+
+    for event in actions {
+        let event = CardEvent::new_modify(id, event);
+        if let Err(e) = APP.read().inner().provider.cards.modify(event) {
+            handle_card_event_error(e);
+            return Err(());
+        }
+    }
+
+    for answer in answered_attrs {
+        match answer {
+            AttrQandA::New {
+                attr_id,
+                question: _,
+                answer,
+            } => {
+                if let Some(answer) = answer.cloned() {
+                    match answer {
+                        AttrAnswerEditor::Boolean(boolean) => {
+                            if let Some(boolean) = boolean.cloned() {
+                                let back = BackSide::Bool(boolean);
+                                let action = CardAction::AttributeType {
+                                    attribute: attr_id.id,
+                                    back,
+                                    instance: id,
+                                };
+                                let event = CardEvent::new_modify(CardId::new_v4(), action);
+                                if let Err(e) = APP.read().inner().provider.cards.modify(event) {
+                                    handle_card_event_error(e);
+                                    return Err(());
+                                }
+                            }
+                        }
+                        AttrAnswerEditor::TimeStamp(ts) => {
+                            if let Some(ts) = ts.cloned() {
+                                if let Ok(ts) = TimeStamp::from_str(&ts) {
+                                    let back = BackSide::Time(ts.clone());
+                                    let action = CardAction::AttributeType {
+                                        attribute: attr_id.id,
+                                        back,
+                                        instance: id,
+                                    };
+                                    let event = CardEvent::new_modify(CardId::new_v4(), action);
+                                    if let Err(e) = APP.read().inner().provider.cards.modify(event)
+                                    {
+                                        handle_card_event_error(e);
+                                        return Err(());
+                                    }
+                                }
+                            }
+                        }
+                        AttrAnswerEditor::Any(back_put) => {
+                            if let Some(back) = back_put.to_backside() {
+                                let action = CardAction::AttributeType {
+                                    attribute: attr_id.id,
+                                    back,
+                                    instance: id,
+                                };
+                                let event = CardEvent::new_modify(CardId::new_v4(), action);
+                                if let Err(e) = APP.read().inner().provider.cards.modify(event) {
+                                    handle_card_event_error(e);
+                                    return Err(());
+                                }
+                            }
+                        }
+                        AttrAnswerEditor::Card {
+                            filter: _,
+                            instance_of: _,
+                            selected,
+                        } => {
+                            if let Some(card) = selected.cloned() {
+                                let back = BackSide::Card(card);
+                                let action = CardAction::AttributeType {
+                                    attribute: attr_id.id,
+                                    back,
+                                    instance: id,
+                                };
+                                let event = CardEvent::new_modify(CardId::new_v4(), action);
+                                if let Err(e) = APP.read().inner().provider.cards.modify(event) {
+                                    handle_card_event_error(e);
+                                    return Err(());
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            AttrQandA::Old {
+                id: attr_card_id,
+                question: _,
+                answer,
+                attr_id,
+            } => match answer {
+                OldAttrAnswerEditor::Boolean(boolean) => {
+                    let boolean = boolean.cloned();
+                    let prev_back = APP
+                        .read()
+                        .inner()
+                        .card_provider
+                        .providers
+                        .cards
+                        .load(attr_card_id)
+                        .unwrap()
+                        .ref_backside()
+                        .cloned()
+                        .unwrap();
+                    let back = BackSide::Bool(boolean);
+                    if prev_back != back {
+                        let action = CardAction::SetBackBool(boolean);
+                        let event = CardEvent::new_modify(attr_card_id, action);
+                        if let Err(e) = APP.read().inner().provider.cards.modify(event) {
+                            handle_card_event_error(e);
+                            return Err(());
+                        }
+                    }
+                }
+                OldAttrAnswerEditor::TimeStamp(ts) => {
+                    let prev_back = APP
+                        .read()
+                        .inner()
+                        .card_provider
+                        .providers
+                        .cards
+                        .load(attr_card_id)
+                        .unwrap()
+                        .ref_backside()
+                        .cloned()
+                        .unwrap();
+                    if let Ok(ts) = TimeStamp::from_str(&ts.cloned()) {
+                        let back = BackSide::Time(ts.clone());
+                        if prev_back != back {
+                            let action = CardAction::SetBackTime(ts);
+                            let event = CardEvent::new_modify(attr_card_id, action);
+                            if let Err(e) = APP.read().inner().provider.cards.modify(event) {
+                                handle_card_event_error(e);
+                                return Err(());
+                            }
+                        }
+                    }
+                }
+
+                OldAttrAnswerEditor::Any(back_put) => {
+                    let prev_back = APP
+                        .read()
+                        .inner()
+                        .card_provider
+                        .providers
+                        .cards
+                        .load(attr_card_id)
+                        .unwrap()
+                        .ref_backside()
+                        .cloned()
+                        .unwrap();
+                    if let Some(back) = back_put.to_backside() {
+                        if back != prev_back {
+                            let action = CardAction::AttributeType {
+                                attribute: attr_id,
+                                back,
+                                instance: id,
+                            };
+                            let event = CardEvent::new_modify(attr_card_id, action);
+                            if let Err(e) = APP.read().inner().provider.cards.modify(event) {
+                                handle_card_event_error(e);
+                                return Err(());
+                            }
+                        }
+                    }
+                }
+                OldAttrAnswerEditor::Card {
+                    filter: _,
+                    selected,
+                } => {
+                    let card = selected.cloned();
+                    let back = BackSide::Card(card);
+                    let action = CardAction::AttributeType {
+                        attribute: attr_id,
+                        back,
+                        instance: id,
+                    };
+                    let event = CardEvent::new_modify(attr_card_id, action);
+                    if let Err(e) = APP.read().inner().provider.cards.modify(event) {
+                        handle_card_event_error(e);
+                        return Err(());
+                    }
+                }
+            },
+        }
+    }
+
+    Ok(id)
+}
+
 #[component]
 fn save_button(CardViewer: CardViewer) -> Element {
     let selv = CardViewer.clone();
@@ -544,252 +1013,28 @@ fn save_button(CardViewer: CardViewer) -> Element {
             title:"{title}",
             disabled: !enabled,
             onclick: move |_| {
-                let Ok(CardRep { ty, namespace, deps, answered_attrs, meta }) = selv.editor.clone().into_cardrep() else {
+                let Ok(rep) = CardViewer.editor.clone().into_cardrep() else {
                     return;
                 };
 
-                let selveste = selv.clone();
-                let mut actions: Vec<CardAction> = vec![];
+                match save_cardrep(rep, CardViewer.old_card.clone()) {
+                    Ok(id) => {
+                        let Some(card) = APP.read().inner().card_provider().load(id) else {
+                            dbg!(id);
+                            panic!();
+                        };
 
-                let id = selveste.old_card.clone().map(|card|card.id()).unwrap_or_else(CardId::new_v4);
+                        let inner_card = Arc::unwrap_or_clone(card);
+                        if let Some(hook) = CardViewer.save_hook.clone() {
+                            hook.call(inner_card.id());
+                        } else {
+                            CardViewer.light_reset();
+                            pop_overlay();
+                        }
 
-
-                {
-                    let event = MetaEvent::new_modify(id, MetaAction::Suspend(meta.suspended.cloned()));
-
-                    if let Err(e) = APP.read().inner().provider.metadata.modify(event) {
-                        let err = format!("{e:?}");
-                        OverlayEnum::new_notice(err).append();
-                        return;
-                    }
-
-                    let event = MetaEvent::new_modify(id, MetaAction::SetTrivial(Some(meta.trivial.cloned())));
-
-                    if let Err(e) = APP.read().inner().provider.metadata.modify(event) {
-                        let err = format!("{e:?}");
-                        OverlayEnum::new_notice(err).append();
-                        return;
-                    }
-
-
-                    let event = MetaEvent::new_modify(id, MetaAction::SetNeedsWork(meta.needs_work.cloned()));
-
-                    if let Err(e) = APP.read().inner().provider.metadata.modify(event) {
-                        let err = format!("{e:?}");
-                        OverlayEnum::new_notice(err).append();
-                        return;
-                    }
+                    },
+                    Err(()) => {},
                 }
-
-
-                let old_ty = selv.old_card.clone().map(|c|c.clone_base().data);
-
-                let same_type = match &old_ty {
-                    Some(old_ty) => mem::discriminant(old_ty) == mem::discriminant(&ty),
-                    None => false,
-                };
-
-                match (ty, same_type) {
-                    (CardType::Instance { name, back, class, answered_params }, false) => {
-                        actions.push(CardAction::InstanceType { front: name, class });
-                        actions.push(CardAction::SetBackside(back));
-                        actions.push(CardAction::InsertParamAnswers(answered_params));
-
-                    }
-                    (CardType::Instance { name, back, class, answered_params }, true) => {
-                        actions.push(CardAction::SetFront(name));
-                        actions.push(CardAction::SetBackside(back));
-                        actions.push(CardAction::SetInstanceClass(class));
-                        actions.push(CardAction::InsertParamAnswers(answered_params));
-                    },
-                    (CardType::Normal { front, back }, true) => {
-                        actions.push(CardAction::SetFront(front));
-                        actions.push(CardAction::SetBackside(Some(back)));
-
-                    },
-                    (CardType::Normal { front, back }, false) => {
-                        actions.push(CardAction::NormalType {front, back});
-                    },
-                    (CardType::Unfinished { front }, true) => {
-                        actions.push(CardAction::SetFront(front));
-                    },
-                    (CardType::Unfinished { front }, false) => {
-                        actions.push(CardAction::UnfinishedType {front});
-                    },
-                    (CardType::Attribute { attribute, back, instance }, true) => {
-                        actions.push(CardAction::AttributeType {attribute, back, instance});
-                    }
-                    (CardType::Attribute { attribute, back, instance }, false) => {
-                        actions.push(CardAction::AttributeType {attribute, back, instance});
-                    },
-                    (CardType::Class { name, back, parent_class, default_question: _, attrs, params }, true) => {
-                        actions.push(CardAction::SetFront(name));
-                        actions.push(CardAction::SetBackside(back));
-                        actions.push(CardAction::SetParentClass(parent_class));
-                        actions.push(CardAction::InsertAttrs(attrs));
-                        actions.push(CardAction::InsertParams(params.into_values().collect()));
-                    },
-                    (CardType::Class { name, back, parent_class, default_question: _, attrs, params }, false) => {
-                        actions.push(CardAction::ClassType { front: name });
-                        actions.push(CardAction::SetBackside(back));
-                        actions.push(CardAction::SetParentClass(parent_class));
-                        actions.push(CardAction::InsertAttrs(attrs));
-                        actions.push(CardAction::InsertParams(params.into_values().collect()));
-                    },
-                    (CardType::Statement { front }, true) => {
-                        actions.push(CardAction::SetFront(front));
-                    },
-                    (CardType::Statement { front }, false) => {
-                        actions.push(CardAction::StatementType { front });
-                    },
-                    (CardType::Event {..}, _) => {
-                        todo!()
-                    },
-                }
-
-                actions.push(CardAction::SetNamespace ( namespace));
-                actions.push(CardAction::SetTrivial ( meta.trivial.cloned()));
-
-                for dep in deps {
-                    actions.push(CardAction::AddDependency(dep));
-                }
-
-                for event in actions {
-                    let event = CardEvent::new_modify(id, event);
-                    if let Err(e) = APP.read().inner().provider.cards.modify(event) {
-                        handle_card_event_error(e);
-                        return;
-                    }
-                }
-
-                for answer in answered_attrs {
-                    match answer {
-                        AttrQandA::New { attr_id, question: _, answer } => {
-                            if let Some(answer) = answer.cloned() {
-
-                                match answer {
-                                    AttrAnswerEditor::Boolean(boolean) => {
-                                        if let Some(boolean) = boolean.cloned() {
-                                            let back = BackSide::Bool(boolean);
-                                            let action = CardAction::AttributeType { attribute: attr_id.id, back , instance: id };
-                                            let event = CardEvent::new_modify(CardId::new_v4(), action);
-                                            if let Err(e) = APP.read().inner().provider.cards.modify(event) {
-                                                handle_card_event_error(e);
-                                                return;
-                                            }
-
-                                        }
-                                    },
-                                    AttrAnswerEditor::TimeStamp(ts) => {
-                                        if let Some(ts) = ts.cloned() {
-                                            if let Ok(ts) = TimeStamp::from_str(&ts) {
-                                                let back = BackSide::Time(ts.clone());
-                                                let action = CardAction::AttributeType { attribute: attr_id.id, back , instance: id };
-                                                let event = CardEvent::new_modify(CardId::new_v4(), action);
-                                                if let Err(e) = APP.read().inner().provider.cards.modify(event) {
-                                                    handle_card_event_error(e);
-                                                    return;
-                                                }
-                                            }
-                                        }
-                                    },
-                                    AttrAnswerEditor::Any(back_put) => {
-                                        if let Some(back) = back_put.to_backside() {
-                                            let action = CardAction::AttributeType { attribute: attr_id.id, back , instance: id };
-                                            let event = CardEvent::new_modify(CardId::new_v4(), action);
-                                            if let Err(e) = APP.read().inner().provider.cards.modify(event) {
-                                                handle_card_event_error(e);
-                                                return;
-                                            }
-                                        }
-                                    },
-                                    AttrAnswerEditor::Card { filter: _, instance_of: _, selected } => {
-                                        if let Some(card) = selected.cloned() {
-                                            let back = BackSide::Card(card);
-                                            let action = CardAction::AttributeType { attribute: attr_id.id, back , instance: id };
-                                            let event = CardEvent::new_modify(CardId::new_v4(), action);
-                                            if let Err(e) = APP.read().inner().provider.cards.modify(event) {
-                                                handle_card_event_error(e);
-                                                return;
-                                            }
-                                        }
-                                    },
-                                }
-                            }
-                        },
-                        AttrQandA::Old { id: attr_card_id, question: _, answer, attr_id } => {
-                            match answer {
-                                OldAttrAnswerEditor::Boolean(boolean) => {
-                                    let boolean = boolean.cloned();
-                                    let prev_back = APP.read().inner().card_provider.providers.cards.load(attr_card_id).unwrap().ref_backside().cloned().unwrap();
-                                    let back = BackSide::Bool(boolean);
-                                        if prev_back != back {
-                                            let action = CardAction::SetBackBool(boolean);
-                                            let event = CardEvent::new_modify(attr_card_id, action);
-                                            if let Err(e) = APP.read().inner().provider.cards.modify(event) {
-                                                handle_card_event_error(e);
-                                                return;
-                                            }
-                                        }
-
-                                }
-                                OldAttrAnswerEditor::TimeStamp(ts) => {
-                                    let prev_back = APP.read().inner().card_provider.providers.cards.load(attr_card_id).unwrap().ref_backside().cloned().unwrap();
-                                    if let Ok(ts) = TimeStamp::from_str(&ts.cloned()) {
-                                        let back = BackSide::Time(ts.clone());
-                                        if prev_back != back {
-                                            let action = CardAction::SetBackTime(ts);
-                                            let event = CardEvent::new_modify(attr_card_id, action);
-                                            if let Err(e) = APP.read().inner().provider.cards.modify(event) {
-                                                handle_card_event_error(e);
-                                                return;
-                                            }
-                                        }
-                                    }
-                                },
-
-                                OldAttrAnswerEditor::Any(back_put) => {
-                                    let prev_back = APP.read().inner().card_provider.providers.cards.load(attr_card_id).unwrap().ref_backside().cloned().unwrap();
-                                    if let Some(back) = back_put.to_backside() {
-                                        if back != prev_back {
-                                            let action = CardAction::AttributeType { attribute: attr_id, back , instance: id };
-                                            let event = CardEvent::new_modify(attr_card_id, action);
-                                            if let Err(e) = APP.read().inner().provider.cards.modify(event) {
-                                                handle_card_event_error(e);
-                                                return;
-                                            }
-                                        }
-                                    }
-
-                                },
-                                OldAttrAnswerEditor::Card { filter: _, selected } => {
-                                    let card = selected.cloned();
-                                    let back = BackSide::Card(card);
-                                    let action = CardAction::AttributeType { attribute: attr_id, back , instance: id };
-                                    let event = CardEvent::new_modify(attr_card_id, action);
-                                    if let Err(e) = APP.read().inner().provider.cards.modify(event) {
-                                        handle_card_event_error(e);
-                                        return;
-                                    }
-                                },
-                            }
-                        },
-                    }
-                }
-
-                let Some(card) = APP.read().inner().card_provider().load(id) else {
-                    dbg!(id);
-                    panic!();
-                };
-
-                let inner_card = Arc::unwrap_or_clone(card);
-                if let Some(hook) = selveste.save_hook.clone() {
-                    hook.call(inner_card.id());
-                } else {
-                    selveste.light_reset();
-                    pop_overlay();
-                }
-
             },
             if is_new {
                 "create"

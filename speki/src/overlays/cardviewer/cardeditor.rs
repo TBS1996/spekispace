@@ -13,24 +13,20 @@ use speki_core::{
 };
 
 use crate::{
-    components::{
-        backside::BacksideError,
-        BackPut, CardTy, DropDownMenu, FrontPut,
-    },
+    components::{backside::BacksideError, BackPut, CardTy, DropDownMenu, FrontPut},
     overlays::{
         card_selector::MyClosure,
         cardviewer::{
             attributes::{
-                load_attr_editors, load_attr_qa,
-                load_inherited_attr_editors, load_inherited_param_editors, load_param_answers, AttrAnswerEditor, AttrBackTypeEditor, AttrEditor,
-                AttrQandA, OldAttrAnswerEditor,
+                load_attr_editors, load_attr_qa, load_inherited_attr_editors,
+                load_inherited_param_editors, load_param_answers, AttrAnswerEditor,
+                AttrBackTypeEditor, AttrEditor, AttrQandA, OldAttrAnswerEditor,
             },
             metadata::MetadataEditor,
             CardRep,
         },
     },
-    pop_overlay,
-    APP,
+    pop_overlay, APP,
 };
 
 #[derive(Props, Clone, Debug)]
@@ -38,6 +34,7 @@ pub struct CardViewer {
     pub editor: CardEditor,
     pub save_hook: Option<MyClosure>,
     pub old_card: Option<Arc<Card>>,
+    pub show_import: bool,
 }
 
 impl PartialEq for CardViewer {
@@ -174,6 +171,7 @@ impl CardViewer {
             editor,
             old_card: Some(card.clone()),
             save_hook: None,
+            show_import: false,
         })
     }
 
@@ -228,6 +226,7 @@ impl CardViewer {
             editor,
             old_card: None,
             save_hook: None,
+            show_import: false,
         }
     }
 

@@ -37,6 +37,7 @@ pub fn Add() -> Element {
                         editor: selv.viewer.editor.clone(),
                         save_hook: selv.viewer.save_hook.clone(),
                         old_card: selv.viewer.old_card.clone(),
+                        show_import: true
                 }
             }
         }
