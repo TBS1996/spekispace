@@ -802,11 +802,6 @@ impl RawCard {
             back_audio: _,
         } = self;
 
-        actions.push(CardAction::SetNamespace(namespace));
-        for dep in explicit_dependencies {
-            actions.push(CardAction::AddDependency(dep));
-        }
-
         match data {
             CardType::Instance {
                 name,
@@ -863,6 +858,12 @@ impl RawCard {
             } => {
                 actions.push(CardAction::EventType { front, start_time });
             }
+        }
+
+        actions.push(CardAction::SetNamespace(namespace));
+
+        for dep in explicit_dependencies {
+            actions.push(CardAction::AddDependency(dep));
         }
 
         let mut events: Vec<CardEvent> = vec![];

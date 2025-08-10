@@ -1,5 +1,6 @@
 use std::{
     collections::{BTreeMap, BTreeSet},
+    fs,
     sync::Arc,
     time::Duration,
 };
@@ -9,6 +10,7 @@ use ledgerstore::{LedgerEvent, PropertyCache};
 use speki_core::{
     card::{bigrams, normalize_string, CardId},
     cardfilter::CardFilter,
+    ledger::CardEvent,
     set::SetExpr,
     Card, CardProperty,
 };
@@ -396,6 +398,7 @@ pub fn CardSelectorRender(
     let has_cards = !cards.read().is_empty();
 
     let expr = SetExpr::try_from(collection.clone());
+    let expr2 = expr.clone();
 
     let review_title = if expr.is_err() {
         Some("invalid set")
@@ -411,6 +414,7 @@ pub fn CardSelectorRender(
 
     let current_commit = APP.read().inner().provider.cards.current_commit();
     let latest_commit = APP.read().inner().provider.cards.latest_upstream_commit();
+    let secret_export = search.read().contains("!export!");
 
     let mut update_available =
         use_signal(|| latest_commit != current_commit && latest_commit.is_some());
@@ -473,6 +477,52 @@ pub fn CardSelectorRender(
                                 }
                             },
                             "review"
+                        }
+                        if secret_export {
+                            button {
+                                class: "{crate::styles::READ_BUTTON} w-full",
+                                disabled,
+                                title: review_title,
+                                onclick: move |_| {
+                                    if let Ok(expr) = expr2.clone() {
+                                        let cards = expr.eval(&APP.read().inner().card_provider);
+
+                                            let mut to_export: Vec<Card> = vec![];
+
+                                            for card in cards {
+                                                let card = APP.read().inner().load_card(card.id()).unwrap();
+                                                if !card.is_remote() {
+                                                    to_export.push(card);
+                                                }
+                                            }
+
+                                            let sorted = Card::transitive_sort(to_export).unwrap();
+                                            let mut events: Vec<CardEvent> = vec![];
+
+                                            for card in sorted {
+                                                events.extend(card.clone_base().into_events());
+                                            }
+
+                                            let Some(folder) = rfd::FileDialog::new()
+                                                .set_directory(dirs::home_dir().unwrap())
+                                                .pick_folder() else {
+                                                    return;
+                                                };
+
+                                            fs::create_dir_all(&folder).unwrap();
+
+                                            for (idx, event) in events.into_iter().enumerate() {
+                                                use std::io::Write;
+                                                let s: String = serde_json::to_string_pretty(&event).unwrap();
+                                                let name = format!("{:06}", idx);
+                                                let path = folder.join(name);
+                                                let mut f = fs::File::create(&path).unwrap();
+                                                f.write_all(&mut s.into_bytes()).unwrap();
+                                            }
+                                    }
+                                },
+                                "export"
+                            }
                         }
                     }
                 }

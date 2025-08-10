@@ -1,7 +1,7 @@
 use core::f32;
 use std::{
     cmp::{Ord, Ordering, PartialEq},
-    collections::{BTreeMap, BTreeSet, HashSet},
+    collections::{BTreeMap, BTreeSet, HashSet, VecDeque},
     fmt::Debug,
     ops::Deref,
     sync::Arc,
@@ -324,6 +324,35 @@ impl Card {
         } else {
             self.base.trivial
         }
+    }
+
+    pub fn transitive_sort(list: Vec<Self>) -> Result<Vec<Self>, ()> {
+        let mut q: VecDeque<Self> = list.into_iter().collect();
+        let mut out: Vec<Self> = Vec::with_capacity(q.len());
+
+        let present: HashSet<CardId> = q.iter().map(|c| c.id()).collect();
+        let mut placed: HashSet<CardId> = HashSet::with_capacity(q.len());
+
+        let mut misses = 0usize;
+        while let Some(card) = q.pop_front() {
+            let ok = card
+                .dependencies()
+                .iter()
+                .all(|d| !present.contains(d) || placed.contains(d));
+
+            if ok {
+                placed.insert(card.id());
+                out.push(card);
+                misses = 0;
+            } else {
+                q.push_back(card);
+                misses += 1;
+                if misses >= q.len() {
+                    return Err(());
+                }
+            }
+        }
+        Ok(out)
     }
 
     pub fn display_card(&self, namespace: bool, class: bool) -> EvalText {
