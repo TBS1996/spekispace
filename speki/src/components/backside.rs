@@ -28,7 +28,10 @@ pub struct BackPut {
 }
 
 #[component]
-pub fn ForcedTimestampRender(text: Signal<String>) -> Element {
+pub fn ForcedTimestampRender(
+    text: Signal<String>,
+    #[props(default = false)] disabled: bool,
+) -> Element {
     let mut sig = text.clone();
     let interpreted = omtrent::TimeStamp::from_str(&*sig.read())
         .map(|x| x.to_string())
@@ -41,6 +44,7 @@ pub fn ForcedTimestampRender(text: Signal<String>) -> Element {
                 class: "flex-1 bg-white border border-gray-300 rounded-md p-2 text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent",
                 value: "{sig}",
                 placeholder: "timestamp",
+                disabled,
                 oninput: move |evt| sig.set(evt.value()),
             }
             span {
@@ -52,7 +56,10 @@ pub fn ForcedTimestampRender(text: Signal<String>) -> Element {
 }
 
 #[component]
-pub fn TimestampRender(text: Signal<Option<String>>) -> Element {
+pub fn TimestampRender(
+    text: Signal<Option<String>>,
+    #[props(default = false)] disabled: bool,
+) -> Element {
     let is_editing = text.read().is_some();
     let mut sig = text.clone();
 
@@ -70,6 +77,7 @@ pub fn TimestampRender(text: Signal<Option<String>>) -> Element {
                     class: "flex-1 bg-white border border-gray-300 rounded-md p-2 text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent",
                     value: "{val}",
                     placeholder: "timestamp",
+                    disabled,
                     oninput: move |evt| {
                         sig.set(Some(evt.value()));
                     },
@@ -80,6 +88,7 @@ pub fn TimestampRender(text: Signal<Option<String>>) -> Element {
                 }
                 button {
                     class: "text-red-500 font-bold px-2",
+                    disabled,
                     onclick: move |_| {
                         sig.set(None);
                     },
@@ -94,6 +103,7 @@ pub fn TimestampRender(text: Signal<Option<String>>) -> Element {
 
                 button {
                     class: "text-blue-500 font-semibold px-3 py-2 border rounded-md",
+                    disabled,
                     onclick: move |_| {
                         sig.set(Some(String::new()));
                     },
@@ -105,7 +115,7 @@ pub fn TimestampRender(text: Signal<Option<String>>) -> Element {
 }
 
 #[component]
-pub fn bool_editor(boolean: Signal<bool>) -> Element {
+pub fn bool_editor(boolean: Signal<bool>, #[props(default = false)] disabled: bool) -> Element {
     let selected = boolean.cloned();
 
     rsx! {
@@ -118,6 +128,7 @@ pub fn bool_editor(boolean: Signal<bool>) -> Element {
                 } else {
                     "px-3 py-1 rounded-md border border-gray-300 bg-white hover:bg-gray-100"
                 },
+                disabled,
                 onclick: move |_| {
                     let mut b = boolean.write();
                     *b = true;
@@ -131,6 +142,7 @@ pub fn bool_editor(boolean: Signal<bool>) -> Element {
                 } else {
                     "px-3 py-1 rounded-md border border-gray-300 bg-white hover:bg-gray-100"
                 },
+                disabled,
                 onclick: move |_| {
                     let mut b = boolean.write();
                     *b = false;
@@ -142,7 +154,10 @@ pub fn bool_editor(boolean: Signal<bool>) -> Element {
 }
 
 #[component]
-pub fn opt_bool_editor(boolean: Signal<Option<bool>>) -> Element {
+pub fn opt_bool_editor(
+    boolean: Signal<Option<bool>>,
+    #[props(default = false)] disabled: bool,
+) -> Element {
     let selected = boolean.cloned();
     let yes_selected = selected == Some(true);
     let no_selected = selected == Some(false);
@@ -157,6 +172,7 @@ pub fn opt_bool_editor(boolean: Signal<Option<bool>>) -> Element {
                 } else {
                     "px-3 py-1 rounded-md border border-gray-300 bg-white hover:bg-gray-100"
                 },
+                disabled,
                 onclick: move |_| {
                     let mut b = boolean.write();
                     *b = if *b == Some(true) { None } else { Some(true) };
@@ -170,6 +186,7 @@ pub fn opt_bool_editor(boolean: Signal<Option<bool>>) -> Element {
                 } else {
                     "px-3 py-1 rounded-md border border-gray-300 bg-white hover:bg-gray-100"
                 },
+                disabled,
                 onclick: move |_| {
                     let mut b = boolean.write();
                     *b = if *b == Some(false) { None } else { Some(false) };
@@ -186,6 +203,7 @@ pub fn BackPutRender(
     dropdown: DropDownMenu<BackOpts>,
     ref_card: CardRef,
     boolean: Signal<Option<bool>>,
+    #[props(default = false)] disabled: bool,
 ) -> Element {
     rsx! {
         div {
@@ -200,6 +218,7 @@ pub fn BackPutRender(
                     DropComponent {
                         options: dropdown.options.clone(),
                         selected: dropdown.selected.clone(),
+                        disabled,
                     }
                 }
 
@@ -208,7 +227,7 @@ pub fn BackPutRender(
 
                     match *dropdown.selected.read() {
                         BackOpts::Time => rsx! {
-                            ForcedTimestampRender { text }
+                            ForcedTimestampRender { text, disabled}
                         },
 
                         BackOpts::Bool => {
@@ -227,6 +246,7 @@ pub fn BackPutRender(
                                     value: "{sig}",
                                     placeholder: "back side",
                                     oninput: move |evt| sig.set(evt.value()),
+                                    disabled,
                                     onmouseup: move |e| {
                                         let with_alias = e.modifiers().shift();
                                         let text = text.clone();
@@ -244,6 +264,7 @@ pub fn BackPutRender(
                                 on_deselect: ref_card.on_deselect.clone(),
                                 allowed: ref_card.allowed.clone(),
                                 filter: ref_card.filter.clone(),
+                                disabled,
                             }
                         }
                     }

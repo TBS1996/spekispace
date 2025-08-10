@@ -186,6 +186,7 @@ pub fn RenderAttrs(
     card: Option<CardId>,
     attrs: Signal<Vec<AttrEditor>>,
     #[props(default = false)] is_param: bool,
+    #[props(default = false)] disabled: bool,
 ) -> Element {
     let foobar: Vec<(AttrEditor, bool, &'static str)> = attrs
         .cloned()
@@ -196,7 +197,7 @@ pub fn RenderAttrs(
                 attr.id.to_string(),
             ));
             let cached = APP.read().inner().provider.cards.load_getter(getter);
-            let disabled = !cached.is_empty();
+            let disabled = !cached.is_empty() || disabled;
 
             let title = match (is_param, disabled) {
                 (true, true) => "can't delete used params",
@@ -255,6 +256,7 @@ pub fn RenderAttrs(
                         input {
                             class: "bg-white w-full border border-gray-300 rounded-md p-2 text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent",
                             value: "{pattern}",
+                            disabled,
                             placeholder: "default question",
                             oninput: move |evt| pattern.set(evt.value()),
                         }
@@ -267,6 +269,7 @@ pub fn RenderAttrs(
                                 button {
                                     title: "remove constraint",
                                     class: "{crate::styles::UPDATE_BUTTON}",
+                                    disabled,
                                     onclick: move |_| {
                                         ty.set(None);
                                     },
@@ -282,6 +285,7 @@ pub fn RenderAttrs(
                                     button {
                                         title: "remove constraint",
                                         class: "{crate::styles::UPDATE_BUTTON}",
+                                        disabled,
                                         onclick: move |_| {
                                             ty.set(None);
                                         },
@@ -296,12 +300,13 @@ pub fn RenderAttrs(
                                     button {
                                         title: "remove constraint",
                                         class: "{crate::styles::UPDATE_BUTTON}",
+                                        disabled,
                                         onclick: move |_| {
                                             ty.set(None);
                                         },
                                         "X"
                                     }
-                                ForcedCardRefRender { selected_card: selected, allowed: vec![CardTy::Class], filter: speki_core::set::SetExpr::union_with([DynCard::CardType(speki_core::card::CType::Class)]) }
+                                ForcedCardRefRender { disabled, selected_card: selected, allowed: vec![CardTy::Class], filter: speki_core::set::SetExpr::union_with([DynCard::CardType(speki_core::card::CType::Class)]) }
                             },
                             None => {
 
@@ -321,7 +326,7 @@ pub fn RenderAttrs(
 
 
                                 rsx!{
-                                    ActionDropdown { label: "set answer constraint".to_string(), options: vec![timestamp, instance, boolean], title: "hey"  }
+                                    ActionDropdown { disabled, label: "set answer constraint".to_string(), options: vec![timestamp, instance, boolean], title: "hey"  }
                                 }
                             },
                         }
@@ -335,12 +340,20 @@ pub fn RenderAttrs(
 
     rsx! {
         div {
-            SectionWithTitle {
-                title: title.to_string(),
-                on_add: move |_| {
-                    attrs.write().push(AttrEditor::new());
-                },
-                children
+            if disabled {
+                SectionWithTitle {
+                    title: title.to_string(),
+                    children
+                }
+            } else {
+                SectionWithTitle {
+                    title: title.to_string(),
+                    on_add: move |_| {
+                        attrs.write().push(AttrEditor::new());
+                    },
+                    children
+                }
+
             }
         }
     }
@@ -639,7 +652,10 @@ pub fn load_inherited_attr_editors(card_id: CardId) -> Vec<AttrEditor> {
 }
 
 #[component]
-fn OldAttrAnswerEditorRender(answer: OldAttrAnswerEditor) -> Element {
+fn OldAttrAnswerEditorRender(
+    answer: OldAttrAnswerEditor,
+    #[props(default = false)] disabled: bool,
+) -> Element {
     match answer {
         OldAttrAnswerEditor::Any(answer) => {
             rsx! {
@@ -648,6 +664,7 @@ fn OldAttrAnswerEditorRender(answer: OldAttrAnswerEditor) -> Element {
                     dropdown: answer.dropdown.clone(),
                     ref_card: answer.ref_card.clone(),
                     boolean: answer.boolean.clone(),
+                    disabled,
                 }
             }
         }
@@ -657,24 +674,28 @@ fn OldAttrAnswerEditorRender(answer: OldAttrAnswerEditor) -> Element {
                     selected_card: selected,
                     allowed: vec![CardTy::Instance],
                     filter,
+                    disabled,
                 }
             }
         }
         OldAttrAnswerEditor::TimeStamp(text) => {
             rsx! {
-                ForcedTimestampRender { text }
+                ForcedTimestampRender { text, disabled }
             }
         }
-        OldAttrAnswerEditor::Boolean(boolean) => rsx! {bool_editor { boolean }},
+        OldAttrAnswerEditor::Boolean(boolean) => rsx! {bool_editor { boolean, disabled }},
     }
 }
 
 #[component]
-fn AttrAnswerEditorRender(answer: AttrAnswerEditor) -> Element {
+fn AttrAnswerEditorRender(
+    answer: AttrAnswerEditor,
+    #[props(default = false)] disabled: bool,
+) -> Element {
     match answer {
         AttrAnswerEditor::TimeStamp(text) => {
             rsx! {
-                TimestampRender { text }
+                TimestampRender { text, disabled }
             }
         }
         AttrAnswerEditor::Any(answer) => {
@@ -684,10 +705,11 @@ fn AttrAnswerEditorRender(answer: AttrAnswerEditor) -> Element {
                     dropdown: answer.dropdown.clone(),
                     ref_card: answer.ref_card.clone(),
                     boolean: answer.boolean.clone(),
+                    disabled,
                 }
             }
         }
-        AttrAnswerEditor::Boolean(boolean) => rsx! {opt_bool_editor { boolean }},
+        AttrAnswerEditor::Boolean(boolean) => rsx! {opt_bool_editor { boolean, disabled }},
         AttrAnswerEditor::Card {
             filter,
             selected,
@@ -700,6 +722,7 @@ fn AttrAnswerEditorRender(answer: AttrAnswerEditor) -> Element {
                     allowed: vec![CardTy::Instance],
                     filter,
                     instance_of,
+                    disabled,
                 }
             }
         }
@@ -711,6 +734,7 @@ pub fn ParamAnswers(
     card: Option<CardId>,
     answers: Signal<BTreeMap<AttributeId, ParamAnswerEditor>>,
     class: Signal<Option<CardId>>,
+    #[props(default = false)] disabled: bool,
 ) -> Element {
     rsx! {
         h4 {
@@ -730,12 +754,13 @@ pub fn ParamAnswers(
                             }
                             button {
                                 class: "{crate::styles::DELETE_BUTTON}",
+                                disabled,
                                 onclick: move |_| {
                                     answer.set(None);
                                 },
                                 "X"
                             }
-                            AttrAnswerEditorRender { answer: the_answer }
+                            AttrAnswerEditorRender { answer: the_answer, disabled }
                         }
                     }
                 }
@@ -754,6 +779,7 @@ pub fn ParamAnswers(
 
                             button {
                                 class: "{crate::styles::CREATE_BUTTON}",
+                                disabled,
                                 onclick: move |_| {
                                     match ty {
                                         Some(AttrBackType::TimeStamp) => {
@@ -791,6 +817,7 @@ pub fn AttrAnswers(
     card: Option<CardId>,
     attr_answers: Signal<Vec<AttrQandA>>,
     class: Signal<Option<CardId>>,
+    #[props(default = false)] disabled: bool,
 ) -> Element {
     rsx! {
         h4 {
@@ -812,13 +839,14 @@ pub fn AttrAnswers(
                                     "{question}: "
                                 }
 
-                                OldAttrAnswerEditorRender { answer }
+                                OldAttrAnswerEditorRender { answer, disabled }
 
                                 div {
                                     class: "max-h-32",
                                     DeleteButton {
                                         card_id: id,
                                         show_deps: true,
+                                        disabled,
                                         pop_ol: false,
                                         f: Some(MyClosure::new(move |_card: CardId| {
                                             let inner = class.cloned();
@@ -842,12 +870,13 @@ pub fn AttrAnswers(
                                         }
                                         button {
                                             class: "{crate::styles::DELETE_BUTTON}",
+                                            disabled,
                                             onclick: move |_| {
                                                 answer.set(None);
                                             },
                                             "X"
                                         }
-                                        AttrAnswerEditorRender { answer: the_answer }
+                                        AttrAnswerEditorRender { answer: the_answer, disabled }
                                     }
                                 }
                             }
@@ -866,6 +895,7 @@ pub fn AttrAnswers(
 
                                         button {
                                             class: "{crate::styles::CREATE_BUTTON}",
+                                            disabled,
                                             onclick: move |_| {
                                                 match attr_id.back_type {
                                                     Some(AttrBackType::TimeStamp) => {

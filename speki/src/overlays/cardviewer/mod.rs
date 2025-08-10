@@ -52,7 +52,7 @@ use crate::{
 
 /// The properties of the card itself
 #[component]
-fn CardProperties(viewer: CardViewer) -> Element {
+fn CardProperties(viewer: CardViewer, is_remote: bool) -> Element {
     let old_card: Option<CardId> = viewer.old_card.as_ref().map(|c| c.id());
 
     let ty = viewer.editor.front.dropdown.selected.clone();
@@ -73,9 +73,10 @@ fn CardProperties(viewer: CardViewer) -> Element {
             attr_answers: viewer.editor.attr_answers.clone(),
             fixed_concept: viewer.editor.fixed_concept,
             param_answers: viewer.editor.param_answers.clone(),
+            is_remote,
         }
 
-        RenderDependencies { card_text: viewer.editor.front.text.clone(), card_id: old_card, dependencies: viewer.editor.dependencies.clone()}
+        RenderDependencies { card_text: viewer.editor.front.text.clone(), card_id: old_card, dependencies: viewer.editor.dependencies.clone(), is_remote}
         if let Some(card_id) = old_card {
             RenderDependents { card_id, hidden: false}
         }
@@ -91,6 +92,12 @@ pub fn CardViewerRender(props: CardViewer) -> Element {
 
     let window = use_window();
     let width = use_signal(|| window.inner_size().width);
+
+    let is_remote = props
+        .old_card
+        .as_ref()
+        .map(|c| c.is_remote())
+        .unwrap_or_default();
 
     use_future(move || {
         to_owned![width, window];
@@ -132,37 +139,42 @@ pub fn CardViewerRender(props: CardViewer) -> Element {
 
             div {
                 class: "p-2 box-border {card_class}",
-                CardProperties { viewer: props.clone() }
+                if is_remote {
+                    h3 {"Remote card"}
+                }
+                CardProperties { viewer: props.clone(), is_remote }
 
                 if !wide_screen {
                     DisplayMetadata { metadata: props.editor.metadata.clone()  }
                 }
 
-                div {
-                    class: "flex flex-row mt-4 gap-x-4",
-
-                    save_button { CardViewer: props.clone() }
-
+                if !is_remote {
                     div {
-                        if let Some(card) = props.old_card.clone() {
-                            DeleteButton{card_id: card.id()}
-                        } else {
-                            button {
-                                class: "{crate::styles::GRAY_BUTTON}",
-                                disabled: !clear_enabled,
-                                onclick: move |_| {
-                                    props_for_clear.full_reset();
-                                },
-                                "Clear"
+                        class: "flex flex-row mt-4 gap-x-4",
+
+                        save_button { CardViewer: props.clone() }
+
+                        div {
+                            if let Some(card) = props.old_card.clone() {
+                                DeleteButton{card_id: card.id()}
+                            } else {
+                                button {
+                                    class: "{crate::styles::GRAY_BUTTON}",
+                                    disabled: !clear_enabled,
+                                    onclick: move |_| {
+                                        props_for_clear.full_reset();
+                                    },
+                                    "Clear"
+                                }
+
                             }
-
                         }
-                    }
 
-                    div { class: "flex-grow" }
+                        div { class: "flex-grow" }
 
-                    if props.show_import {
-                        ImportCards {viewer: props.clone()}
+                        if props.show_import {
+                            ImportCards {viewer: props.clone()}
+                        }
                     }
                 }
             }
@@ -200,6 +212,7 @@ fn RenderDependencies(
     card_text: Signal<String>,
     card_id: Option<CardId>,
     dependencies: Signal<Vec<CardId>>,
+    is_remote: bool,
 ) -> Element {
     let name_and_id: Vec<(String, CardId)> = dependencies
         .cloned()
@@ -252,24 +265,32 @@ fn RenderDependencies(
     rsx! {
         div {
             class: "flex flex-col opacity-100 visible w-full h-auto bg-white p-2 shadow-md rounded-md overflow-y-auto",
-            SectionWithTitle {
-                title: "Explicit dependencies".to_string(),
-                on_add: move |_| {
-                    let currcard = card_text.cloned();
-                    let depsig = dependencies.clone();
+            if !is_remote {
+                SectionWithTitle {
+                    title: "Explicit dependencies".to_string(),
+                    on_add: move |_| {
+                        let currcard = card_text.cloned();
+                        let depsig = dependencies.clone();
 
-                    let fun = MyClosure::new(move |card: CardId| {
-                        depsig.clone().write().push(card);
-                    });
+                        let fun = MyClosure::new(move |card: CardId| {
+                            depsig.clone().write().push(card);
+                        });
 
-                    let front = currcard.clone();
-                    let mut props = CardSelector::dependency_picker(fun).with_default_search(front);
-                    if let Some(id)  = card_id {
-                        props = props.with_forbidden_cards(vec![id]);
-                    }
-                    OverlayEnum::CardSelector(props).append();
-                },
-                children
+                        let front = currcard.clone();
+                        let mut props = CardSelector::dependency_picker(fun).with_default_search(front);
+                        if let Some(id)  = card_id {
+                            props = props.with_forbidden_cards(vec![id]);
+                        }
+                        OverlayEnum::CardSelector(props).append();
+                    },
+                    children
+                }
+            } else {
+                SectionWithTitle {
+                    title: "Explicit dependencies".to_string(),
+                    children
+                }
+
             }
         }
     }
@@ -403,6 +424,7 @@ fn InputElements(
     attr_answers: Signal<Vec<AttrQandA>>,
     param_answers: Signal<BTreeMap<AttributeId, ParamAnswerEditor>>,
     fixed_concept: bool,
+    is_remote: bool,
 ) -> Element {
     use_effect(move || match ((front.dropdown.selected)(), concept()) {
         (CardTy::Instance, Some(class)) => {
@@ -518,7 +540,7 @@ fn InputElements(
     dbg!(&attr_answers);
 
     rsx! {
-        FrontPutRender { dropdown: front.dropdown.clone(), text: front.text.clone()}
+        FrontPutRender { dropdown: front.dropdown.clone(), text: front.text.clone(), disabled: is_remote}
 
         match ty {
             CardTy::Unfinished => rsx! {},
@@ -529,6 +551,7 @@ fn InputElements(
                     dropdown: back.dropdown.clone(),
                     ref_card: back.ref_card.clone(),
                     boolean: back.boolean.clone(),
+                    disabled: is_remote,
                 }
             },
             CardTy::Class => rsx! {
@@ -537,6 +560,7 @@ fn InputElements(
                     dropdown: back.dropdown.clone(),
                     ref_card: back.ref_card.clone(),
                     boolean: back.boolean.clone(),
+                    disabled: is_remote,
                 }
 
 
@@ -554,17 +578,17 @@ fn InputElements(
                         selected_card: concept,
                         placeholder: "pick parent class",
                         allowed: vec![CardTy::Class],
-                        disabled: fixed_concept,
+                        disabled: fixed_concept || is_remote,
                     }
                 }
 
-                RenderAttrs { attrs: params, card: card_id, is_param: true }
+                RenderAttrs { attrs: params, card: card_id, is_param: true, disabled: is_remote }
 
                 if has_inherited_params {
                     RenderInheritedAttrs { attrs: inherited_params, card: card_id, is_param: true }
                 }
 
-                RenderAttrs { attrs, card: card_id }
+                RenderAttrs { attrs, card: card_id, disabled: is_remote }
                 if has_inherited_attrs {
                     RenderInheritedAttrs { attrs: inherited_attrs, card: card_id }
                 }
@@ -575,6 +599,7 @@ fn InputElements(
                     dropdown: back.dropdown.clone(),
                     ref_card: back.ref_card.clone(),
                     boolean: back.boolean.clone(),
+                    disabled: is_remote,
                 }
 
                 div {
@@ -591,16 +616,16 @@ fn InputElements(
                         selected_card: concept,
                         placeholder: "pick class of instance",
                         allowed: vec![CardTy::Class],
-                        disabled: fixed_concept,
+                        disabled: fixed_concept || is_remote,
                     }
                 }
 
                 if has_param_answers {
-                    ParamAnswers { card: card_id, answers: param_answers, class: concept  }
+                    ParamAnswers { card: card_id, answers: param_answers, class: concept, disabled: is_remote  }
                 }
 
                 if has_attr_answers {
-                    AttrAnswers { card: card_id, attr_answers, class: concept }
+                    AttrAnswers { card: card_id, attr_answers, class: concept, disabled: is_remote }
                 }
             },
         }
@@ -611,6 +636,7 @@ fn InputElements(
                 selected_card: namespace.clone(),
                 placeholder: "namespace",
                 remove_title: "clear namespace",
+                disabled: is_remote,
             },
         }
     }

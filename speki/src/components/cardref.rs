@@ -88,6 +88,7 @@ pub fn OtherCardRefRender(
     on_select: Option<MyClosure>,
     on_deselect: Option<MyClosure>,
     #[props(default = SetExpr::All)] filter: SetExpr,
+    #[props(default = false)] disabled: bool,
 ) -> Element {
     let is_selected = selected_card.read().is_some();
 
@@ -120,6 +121,7 @@ pub fn OtherCardRefRender(
                         title: "{remove_title}",
                         button {
                             class: "{crate::styles::DELETE_BUTTON}",
+                            disabled,
                             onclick: move |_| {
                                 let on_deselect = on_deselect.clone();
                                 if let Some(card) = selected_card.cloned(){
@@ -138,6 +140,7 @@ pub fn OtherCardRefRender(
                         placeholder: "{placeholder}",
                         value: "{card_display}",
                         readonly: "true",
+                        disabled,
                         onclick: move |_| {
                             let f = on_select.clone();
                             let fun = MyClosure::new(move |card: CardId| {
@@ -162,6 +165,7 @@ pub fn OtherCardRefRender(
                 button {
                     class: "{crate::styles::XS_UPDATE}",
                     style: "width: 96px;",
+                    disabled,
                     onclick: move |_| {
                         let f = on_select.clone();
                         let fun = MyClosure::new(move |card: CardId| {

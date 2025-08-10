@@ -45,6 +45,7 @@ pub fn ActionDropdown(
     options: Vec<DropdownAction>,
     #[props(default = false)] full_width: bool,
     #[props(default = "")] title: &'static str,
+    #[props(default = false)] disabled: bool,
 ) -> Element {
     let mut current_value = use_signal(|| "".to_string());
 
@@ -72,6 +73,7 @@ pub fn ActionDropdown(
                 },
                 value: "{current_value}",
                 title: title,
+                disabled,
                 onchange: move |evt| {
                     let val = evt.value();
                     if let Ok(idx) = val.parse::<usize>() {
@@ -122,6 +124,7 @@ pub fn DropComponent<T: PartialEq + Clone + 'static>(
     options: Vec<T>,
     selected: Signal<T>,
     hook: Option<Callback<T, ()>>,
+    #[props(default = false)] disabled: bool,
 ) -> Element
 where
     T: Serialize + for<'de> Deserialize<'de> + 'static + Clone + Display,
@@ -137,6 +140,7 @@ where
                 class: "appearance-none bg-white w-full border border-gray-300 rounded-md p-2 text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent",
                 style: "background-image: none;",
                 value: "{value}",
+                disabled,
                 onchange: move |evt| {
                     let new_choice: T =  serde_json::from_str(evt.value().as_str()).unwrap();
                     if let Some(hook) = hook{

@@ -19,6 +19,7 @@ pub fn DeleteButton(
     f: Option<MyClosure>,
     class: Option<&'static str>,
     #[props(default = false)] show_deps: bool,
+    #[props(default = false)] disabled: bool,
 ) -> Element {
     let card = APP.read().inner().card_provider.load(card_id);
     //debug_assert!(card.is_some());
@@ -39,7 +40,7 @@ pub fn DeleteButton(
     let has_deps = title.is_some();
     let title = title.unwrap_or_default();
     let pop_ol = pop_ol.unwrap_or(true);
-    let disabled = has_deps && !show_deps;
+    let disabled = has_deps && !show_deps && !disabled;
 
     let class = format!(
         "{} {}",
