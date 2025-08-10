@@ -36,6 +36,7 @@ pub struct ReviewPage {
     filter: FilterEditor,
     sets: Signal<Vec<SetEditor>>,
     cardfilter: Memo<CardFilter>,
+    pub prev_set_state: Option<String>,
 }
 
 fn load_sets() -> Vec<SetEditor> {
@@ -60,22 +61,42 @@ impl ReviewPage {
 
         let sets: Signal<Vec<SetEditor>> = Signal::new_in_scope(load_sets(), ScopeId::APP);
 
+        let prev_set_state = APP
+            .read()
+            .inner()
+            .provider
+            .sets
+            .currently_applied_ledger_hash();
+
         Self {
             filter,
             sets,
             cardfilter,
+            prev_set_state,
         }
     }
 }
 
 #[component]
 pub fn Review() -> Element {
-    let state: ReviewPage = use_context::<ReviewPage>();
+    let mut state: ReviewPage = use_context::<ReviewPage>();
     let editor = state.filter.clone();
     tracing::info!("memo lol: {:?}", &state.cardfilter);
 
     let overlay = OVERLAY.read().get();
     let sets = state.sets.clone();
+
+    let current_set_state = APP
+        .read()
+        .inner()
+        .provider
+        .sets
+        .currently_applied_ledger_hash();
+
+    if state.prev_set_state.as_ref() != current_set_state.as_ref() {
+        state.sets.set(load_sets());
+        state.prev_set_state = current_set_state;
+    }
 
     rsx! {
         Overender {
@@ -788,8 +809,6 @@ fn RenderSets(filter: CardFilter, sets: Signal<Vec<SetEditor>>) -> Element {
         ScopeId::APP.needs_update();
     }
 
-    let the_sets = sets.clone();
-
     rsx! {
         div {
             class: "overflow-y-auto max-h-[80vh] space-y-2 pr-2",
@@ -804,7 +823,6 @@ fn RenderSets(filter: CardFilter, sets: Signal<Vec<SetEditor>>) -> Element {
                     let f: Arc<Box<dyn Fn(String)>> = Arc::new(Box::new(move |s: String| {
                         let event = SetEvent::new_modify(SetId::new_v4(), SetAction::SetName(s));
                         APP.read().inner().provider.sets.modify(event).unwrap();
-                        the_sets.clone().set(load_sets());
                     }));
                     OverlayEnum::new_text_input("name of set".to_string(), f).append();
                 },
