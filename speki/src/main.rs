@@ -51,6 +51,36 @@ struct Cli {
     import_cards: Option<PathBuf>,
 }
 
+#[derive(Clone)]
+pub struct RemoteUpdate {
+    new_remote_commit: Signal<Option<String>>,
+}
+
+impl RemoteUpdate {
+    pub fn new() -> Self {
+        let current_commit = APP.read().inner().provider.cards.current_commit();
+        let latest_commit = APP.read().inner().provider.cards.latest_upstream_commit();
+
+        if latest_commit != current_commit {
+            Self {
+                new_remote_commit: Signal::new_in_scope(latest_commit, ScopeId::APP),
+            }
+        } else {
+            Self {
+                new_remote_commit: Signal::new_in_scope(None, ScopeId::APP),
+            }
+        }
+    }
+
+    pub fn latest_commit(&self) -> Option<String> {
+        self.new_remote_commit.cloned()
+    }
+
+    pub fn clear(&self) {
+        self.new_remote_commit.clone().set(None);
+    }
+}
+
 fn main() {
     std::env::set_var("GDK_BACKEND", "x11");
 
@@ -68,6 +98,7 @@ fn main() {
 #[component]
 pub fn TheApp() -> Element {
     use_context_provider(ReviewPage::new);
+    use_context_provider(RemoteUpdate::new);
 
     let cli = Cli::parse();
 

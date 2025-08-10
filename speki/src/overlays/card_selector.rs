@@ -22,6 +22,7 @@ use crate::{
     pages::{reviewable_cards, ExprEditor, RenderExpr},
     pop_overlay, set_overlay,
     utils::handle_card_event_error,
+    RemoteUpdate,
 };
 
 use crate::{
@@ -412,12 +413,12 @@ pub fn CardSelectorRender(
     let review_title = review_title.unwrap_or_default();
     let review_filter = filter.clone();
 
-    let current_commit = APP.read().inner().provider.cards.current_commit();
-    let latest_commit = APP.read().inner().provider.cards.latest_upstream_commit();
+    //let current_commit: Option<String> = None; //APP.read().inner().provider.cards.current_commit();
+    //let latest_commit: Option<String> = None; // = APP.read().inner().provider.cards.latest_upstream_commit();
+
     let secret_export = search.read().contains("!export!");
 
-    let mut update_available =
-        use_signal(|| latest_commit != current_commit && latest_commit.is_some());
+    let update_available = use_context::<RemoteUpdate>().latest_commit();
 
     rsx! {
         div {
@@ -425,14 +426,14 @@ pub fn CardSelectorRender(
                 div {
                 class: "flex flex-col",
 
-                if update_available.cloned() {
+                if let Some(latest_commit) = update_available.clone() {
                     button {
                         class: "{crate::styles::CREATE_BUTTON} px-3 py-2",
                         onclick: move |_| {
-                            if let Err(err) = APP.read().inner().provider.cards.modify(LedgerEvent::SetUpstream { commit: latest_commit.clone().unwrap()  }) {
+                            if let Err(err) = APP.read().inner().provider.cards.modify(LedgerEvent::SetUpstream { commit: latest_commit.clone() }) {
                                 handle_card_event_error(err);
                             } else {
-                                update_available.set(false);
+                                use_context::<RemoteUpdate>().clear()
                             }
                         },
                         "update remote 🔃"
