@@ -238,7 +238,6 @@ pub fn RenderAttrs(
                                         return;
                                     }
                                     attrs.clone().set(load_attr_editors(card));
-
                                     }
                                 },
                                 None => {

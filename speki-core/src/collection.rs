@@ -70,7 +70,7 @@ impl DynCard {
             DynCard::Instances(id) => {
                 let mut output = vec![];
                 let getter = ledgerstore::TheCacheGetter::ItemRef(RefGetter {
-                    reversed: false,
+                    reversed: true,
                     key: *id,
                     ty: Some(CardRefType::ParentClass),
                     recursive: true,
