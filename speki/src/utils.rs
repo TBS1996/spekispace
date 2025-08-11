@@ -31,10 +31,7 @@ impl App {
             dirs::data_local_dir().unwrap().join("speki")
         };
 
-        Self(Arc::new(speki_core::App::new(
-            root,
-            !cli.remote && !cli.disable_remote,
-        )))
+        Self(Arc::new(speki_core::App::new(root)))
     }
 
     pub fn inner(&self) -> Arc<speki_core::App> {

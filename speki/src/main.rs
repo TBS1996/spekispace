@@ -59,7 +59,12 @@ pub struct RemoteUpdate {
 impl RemoteUpdate {
     pub fn new() -> Self {
         let current_commit = APP.read().inner().provider.cards.current_commit();
-        let latest_commit = APP.read().inner().provider.cards.latest_upstream_commit();
+        let latest_commit = APP
+            .read()
+            .inner()
+            .provider
+            .cards
+            .latest_upstream_commit("https://github.com/tbs1996/speki_graph");
 
         if latest_commit != current_commit {
             Self {
@@ -133,7 +138,10 @@ pub fn TheApp() -> Element {
             .inner()
             .provider
             .cards
-            .modify(ledgerstore::LedgerEvent::SetUpstream { commit })
+            .modify(ledgerstore::LedgerEvent::SetUpstream {
+                commit,
+                upstream_url: "https://github.com/tbs1996/speki_graph".to_string(),
+            })
             .unwrap();
     }
 

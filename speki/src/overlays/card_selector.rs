@@ -430,7 +430,7 @@ pub fn CardSelectorRender(
                     button {
                         class: "{crate::styles::CREATE_BUTTON} px-3 py-2",
                         onclick: move |_| {
-                            if let Err(err) = APP.read().inner().provider.cards.modify(LedgerEvent::SetUpstream { commit: latest_commit.clone() }) {
+                            if let Err(err) = APP.read().inner().provider.cards.modify(LedgerEvent::SetUpstream { commit: latest_commit.clone(), upstream_url: "https://github.com/tbs1996/speki_graph".to_string() }) {
                                 handle_card_event_error(err);
                             } else {
                                 use_context::<RemoteUpdate>().clear()

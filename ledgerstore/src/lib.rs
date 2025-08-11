@@ -144,8 +144,14 @@ impl<T: LedgerItem> LedgerEntry<T> {
                    LedgerAction<T>: DeserializeOwned",
 ))]
 pub enum LedgerEvent<T: LedgerItem> {
-    ItemAction { id: T::Key, action: LedgerAction<T> },
-    SetUpstream { commit: String },
+    ItemAction {
+        id: T::Key,
+        action: LedgerAction<T>,
+    },
+    SetUpstream {
+        commit: String,
+        upstream_url: String,
+    },
 }
 
 impl<T: LedgerItem> LedgerEvent<T> {
@@ -255,7 +261,6 @@ impl<T: LedgerItem> OverrideLedger<T> {
 }
 
 struct Remote<T: LedgerItem> {
-    _url: String,
     repo: Repository,
     path: Arc<PathBuf>,
     _phantom: PhantomData<T>,
@@ -291,28 +296,16 @@ impl<T: LedgerItem> ReadLedger for Remote<T> {
 }
 
 impl<T: LedgerItem> Remote<T> {
-    pub fn new(root: &Path, url: String) -> Self {
+    pub fn new(root: &Path) -> Self {
         let path = root.join("remote");
         fs::create_dir_all(&path).unwrap();
 
         let repo = match Repository::open(&path) {
-            Ok(r) => {
-                if r.find_remote("origin").is_ok() {
-                    r.remote_set_url("origin", &url).unwrap();
-                } else {
-                    r.remote("origin", &url).unwrap();
-                }
-                r
-            }
-            Err(_) => {
-                let r = Repository::init(&path).unwrap();
-                r.remote("origin", &url).unwrap();
-                r
-            }
+            Ok(r) => r,
+            Err(_) => Repository::init(&path).unwrap(),
         };
 
         Self {
-            _url: url,
             repo,
             path: Arc::new(path),
             _phantom: PhantomData,
@@ -326,16 +319,49 @@ impl<T: LedgerItem> Remote<T> {
         }
     }
 
-    pub fn latest_upstream_commit(&self) -> Option<String> {
-        let mut remote = self.repo.find_remote("origin").ok()?;
+    pub fn latest_upstream_commit(&self, url: &str) -> Option<String> {
+        let mut r = self.repo.remote_anonymous(url).ok()?;
+        r.connect(git2::Direction::Fetch).ok()?;
 
-        remote
-            .fetch(&["refs/heads/main:refs/remotes/origin/main"], None, None)
-            .ok()?;
+        let heads = r.list().ok()?;
 
-        // Read the commit ID from the remote-tracking branch
-        let reference = self.repo.find_reference("refs/remotes/origin/main").ok()?;
-        let oid = reference.target()?;
+        let want1 = r
+            .default_branch()
+            .ok()
+            .and_then(|b| b.as_str().map(str::to_owned));
+
+        let want2 = heads.iter().find_map(|h| {
+            if h.name() == "HEAD" {
+                h.symref_target().map(|s| s.to_string())
+            } else {
+                None
+            }
+        });
+
+        let want = want1
+            .or(want2)
+            .or_else(|| Some("refs/heads/main".to_string()));
+
+        let oid = if let Some(ref want) = want {
+            heads.iter().find_map(|h| {
+                if h.name() == want.as_str() {
+                    Some(h.oid())
+                } else {
+                    None
+                }
+            })
+        } else {
+            None
+        }
+        .or_else(|| {
+            heads.iter().find_map(|h| {
+                if h.name() == "refs/heads/master" {
+                    Some(h.oid())
+                } else {
+                    None
+                }
+            })
+        })?;
 
         Some(oid.to_string())
     }
@@ -359,7 +385,6 @@ impl<T: LedgerItem> Remote<T> {
             .unwrap();
         let new_tree = new_commit.tree().unwrap();
 
-        // resolve old (or empty)
         let old_tree = old_commit.map(|s| {
             let old_oid = Oid::from_str(s).unwrap();
             let old_commit = self
@@ -377,7 +402,6 @@ impl<T: LedgerItem> Remote<T> {
             .diff_tree_to_tree(old_tree.as_ref(), Some(&new_tree), Some(&mut opts))
             .unwrap();
 
-        // detect renames/copies
         let mut find = DiffFindOptions::new();
         find.renames(true).renames_from_rewrites(true);
         diff.find_similar(Some(&mut find)).unwrap();
@@ -513,23 +537,42 @@ impl<T: LedgerItem> Remote<T> {
         self.repo.checkout_head(Some(&mut cb)).unwrap();
     }
 
-    pub fn set_commit_clean(&self, commit: &str) -> Result<ChangeSet<T::Key>, git2::Error> {
+    pub fn set_commit_clean(
+        &self,
+        upstream_url: Option<&str>,
+        commit: &str,
+    ) -> Result<ChangeSet<T::Key>, git2::Error> {
         let curr_commit = self.current_commit();
 
-        {
-            let mut remote = self.repo.find_remote("origin").unwrap();
-            remote.fetch::<&str>(&[], None, None).unwrap();
+        if let Some(upstream_url) = upstream_url {
+            self.fetch_heads_anonymous(upstream_url)?;
         }
 
-        let oid = Oid::from_str(commit).unwrap();
-        self.repo.set_head_detached(oid).unwrap();
+        let oid = Oid::from_str(commit)?;
+        let _obj = self.repo.find_object(oid, None)?;
 
-        self.hard_reset_current().unwrap();
-        assert_eq!(self.current_commit().unwrap().as_str(), commit);
+        self.repo.set_head_detached(oid)?;
+        let obj = self.repo.find_object(oid, None)?;
+        self.repo.reset(&obj, ResetType::Hard, None)?;
+
+        debug_assert_eq!(self.current_commit().as_deref(), Some(commit));
 
         let diffs = self.modified_items(curr_commit.as_deref(), commit);
-        dbg!(&diffs);
         Ok(diffs)
+    }
+
+    fn fetch_heads_anonymous(&self, url: &str) -> Result<(), git2::Error> {
+        use git2::AutotagOption;
+        use git2::FetchOptions;
+
+        let mut remote = self.repo.remote_anonymous(url)?;
+
+        let mut opts = FetchOptions::new();
+        opts.download_tags(AutotagOption::None);
+
+        let refspecs = ["+refs/heads/*:refs/remotes/__tmp/*"];
+
+        remote.fetch(&refspecs, Some(&mut opts), None)
     }
 }
 
@@ -564,9 +607,8 @@ pub struct Ledger<T: LedgerItem> {
     dependents: Arc<PathBuf>,
     items: Arc<PathBuf>,
     ledger_hash: Arc<PathBuf>,
-    remote: Option<Arc<Remote<T>>>,
+    remote: Arc<Remote<T>>,
     local: Local<T>,
-    root: Arc<PathBuf>,
 }
 
 impl<T: LedgerItem> Ledger<T> {
@@ -586,6 +628,9 @@ impl<T: LedgerItem> Ledger<T> {
         std::fs::create_dir_all(&dependents).unwrap();
         std::fs::create_dir_all(&items).unwrap();
 
+        let remote = Remote::new(&root);
+        let _ = remote.hard_reset_current();
+
         let selv = Self {
             properties: Arc::new(properties),
             dependencies: Arc::new(dependencies),
@@ -593,8 +638,7 @@ impl<T: LedgerItem> Ledger<T> {
             items: Arc::new(items.clone()),
             ledger_hash: Arc::new(ledger_hash),
             entries,
-            remote: None,
-            root: Arc::new(root.clone()),
+            remote: Arc::new(remote),
             local: Local {
                 root: Arc::new(root.clone()),
                 _phantom: PhantomData,
@@ -609,15 +653,15 @@ impl<T: LedgerItem> Ledger<T> {
     }
 
     pub fn current_commit_date(&self) -> Option<DateTime<Utc>> {
-        self.remote.as_ref()?.current_commit_date()
+        self.remote.current_commit_date()
     }
 
     pub fn current_commit(&self) -> Option<String> {
-        self.remote.as_ref()?.current_commit()
+        self.remote.current_commit()
     }
 
-    pub fn latest_upstream_commit(&self) -> Option<String> {
-        self.remote.as_ref()?.latest_upstream_commit()
+    pub fn latest_upstream_commit(&self, upstream: &str) -> Option<String> {
+        self.remote.latest_upstream_commit(upstream)
     }
 
     pub fn modify(&self, event: LedgerEvent<T>) -> Result<(), EventError<T>> {
@@ -627,89 +671,64 @@ impl<T: LedgerItem> Ledger<T> {
 
     pub fn load_ids(&self) -> HashSet<T::Key> {
         let mut ids = self.local.load_ids();
-        if let Some(remote) = self.remote.as_ref() {
-            ids.extend(remote.load_ids());
-        }
+        ids.extend(self.remote.load_ids());
 
         ids
     }
 
     pub fn all_dependents_with_ty(&self, key: T::Key) -> HashSet<(T::RefType, T::Key)> {
         let mut items = self.local.all_dependents_with_ty(key);
-        if let Some(remote) = self.remote.as_ref() {
-            items.extend(remote.all_dependents_with_ty(key));
-        }
+        items.extend(self.remote.all_dependents_with_ty(key));
 
         items
     }
 
     pub fn get_prop_cache(&self, key: PropertyCache<T>) -> HashSet<T::Key> {
         let mut items = self.local.get_prop_cache(key.clone());
-        if let Some(remote) = self.remote.as_ref() {
-            items.extend(remote.get_prop_cache(key));
-        }
+        items.extend(self.remote.get_prop_cache(key));
 
         items
     }
 
     pub fn dependencies_recursive(&self, key: T::Key) -> HashSet<T::Key> {
         let mut items = self.local.recursive_dependencies(key);
-        if let Some(remote) = self.remote.as_ref() {
-            items.extend(remote.recursive_dependencies(key));
-        }
+        items.extend(self.remote.recursive_dependencies(key));
 
         items
     }
 
     pub fn dependents_recursive(&self, key: T::Key) -> HashSet<T::Key> {
         let mut items = self.local.recursive_dependents(key);
-        if let Some(remote) = self.remote.as_ref() {
-            items.extend(remote.recursive_dependents(key));
-        }
+        items.extend(self.remote.recursive_dependents(key));
         items
     }
 
     pub fn load_getter(&self, getter: TheCacheGetter<T>) -> HashSet<T::Key> {
         let mut items = self.local.load_getter(getter.clone());
-        if let Some(remote) = self.remote.as_ref() {
-            items.extend(remote.load_getter(getter));
-        }
+        items.extend(self.remote.load_getter(getter));
         items
-    }
-
-    pub fn with_remote(mut self, url: String) -> Self {
-        let remote = Remote::new(&self.root, url);
-        let _ = remote.hard_reset_current();
-        self.remote = Some(Arc::new(remote));
-        self
     }
 
     pub fn load_all(&self) -> HashSet<T> {
         let mut items = self.local.load_all();
-        if let Some(remote) = self.remote.as_ref() {
-            items.extend(remote.load_all());
-        }
+        items.extend(self.remote.load_all());
 
         items
     }
 
     pub fn load_with_remote_info(&self, key: T::Key) -> Option<(T, bool)> {
-        if let Some(remote) = self.remote.as_ref() {
-            let item = remote.load(key);
-            if item.is_some() {
-                return item.map(|item| (item, true));
-            }
+        let item = self.remote.load(key);
+        if item.is_some() {
+            return item.map(|item| (item, true));
         }
 
         self.local.load(key).map(|item| (item, false))
     }
 
     pub fn load(&self, key: T::Key) -> Option<T> {
-        if let Some(remote) = self.remote.as_ref() {
-            let item = remote.load(key);
-            if item.is_some() {
-                return item;
-            }
+        let item = self.remote.load(key);
+        if item.is_some() {
+            return item;
         }
 
         self.local.load(key)
@@ -720,11 +739,9 @@ impl<T: LedgerItem> Ledger<T> {
     }
 
     fn item_path(&self, key: T::Key) -> PathBuf {
-        if let Some(remote) = self.remote.as_ref() {
-            let p = remote.item_path(key);
-            if p.is_file() {
-                return p;
-            }
+        let p = self.remote.item_path(key);
+        if p.is_file() {
+            return p;
         }
 
         self.local.item_path(key)
@@ -892,30 +909,28 @@ impl<T: LedgerItem> Ledger<T> {
     }
 
     fn is_remote(&self, key: T::Key) -> bool {
-        match self.remote.as_ref() {
-            Some(remote) => remote.load(key).is_some(),
-            None => false,
-        }
+        self.remote.load(key).is_some()
     }
 
-    fn set_remote_commit(&self, new_commit: &str) -> Result<(), EventError<T>> {
-        let remote = self.remote.as_ref().unwrap().clone();
-
-        let current_commit = remote.current_commit();
+    fn set_remote_commit(&self, repo: &str, new_commit: &str) -> Result<(), EventError<T>> {
+        let current_commit = self.remote.current_commit();
         let ChangeSet {
             added: _,
             modified,
             removed,
-        } = remote.set_commit_clean(new_commit).unwrap();
+        } = self
+            .remote
+            .set_commit_clean(Some(repo), new_commit)
+            .unwrap();
 
         for item in removed {
             if !self.local.direct_dependents(item).is_empty() {
                 match current_commit {
                     Some(commit) => {
-                        let _ = remote.set_commit_clean(&commit).unwrap();
+                        let _ = self.remote.set_commit_clean(None, &commit).unwrap();
                     }
                     None => {
-                        remote.reset_to_empty();
+                        self.remote.reset_to_empty();
                     }
                 }
 
@@ -939,10 +954,10 @@ impl<T: LedgerItem> Ledger<T> {
                 Err(e) => {
                     match current_commit {
                         Some(commit) => {
-                            let _ = remote.set_commit_clean(&commit).unwrap();
+                            let _ = self.remote.set_commit_clean(None, &commit).unwrap();
                         }
                         None => {
-                            remote.reset_to_empty();
+                            self.remote.reset_to_empty();
                         }
                     }
                     return Err(e);
@@ -1062,8 +1077,11 @@ impl<T: LedgerItem> Ledger<T> {
     ) -> Result<Option<Either<T, T::Key>>, EventError<T>> {
         let res = match event.clone() {
             LedgerEvent::ItemAction { id, action } => self._modify(id, action, verify, cache)?,
-            LedgerEvent::SetUpstream { commit } => {
-                self.set_remote_commit(&commit)?;
+            LedgerEvent::SetUpstream {
+                commit,
+                upstream_url,
+            } => {
+                self.set_remote_commit(&upstream_url, &commit)?;
                 let hash = self.entries.save(event);
                 self.set_ledger_hash(hash);
                 return Ok(None);
