@@ -12,7 +12,11 @@ use clap::Parser;
 use dioxus::prelude::*;
 use dioxus_logger::tracing::{info, Level};
 use pages::ReviewPage;
-use speki_core::ledger::CardEvent;
+use speki_core::{
+    card::{BackSide, CardId, TextData},
+    ledger::{CardAction, CardEvent},
+    set::{Input, Set, SetAction, SetEvent},
+};
 use std::fs;
 
 use crate::{
@@ -49,6 +53,8 @@ struct Cli {
     disable_remote: bool,
     #[arg(long)]
     import_cards: Option<PathBuf>,
+    #[arg(long, num_args = 2)]
+    add: Option<Vec<String>>,
 }
 
 #[derive(Clone)]
@@ -100,12 +106,60 @@ fn main() {
     dioxus::launch(TheApp);
 }
 
+fn handle_add_card(args: &Vec<String>) {
+    if !args.len() == 2 {
+        std::process::exit(1);
+    }
+
+    let front = &args[0];
+    let back = &args[1];
+
+    let card_id = CardId::new_v4();
+    let event = CardEvent::new_modify(
+        card_id,
+        CardAction::NormalType {
+            front: TextData::from_raw(front),
+            back: BackSide::Text(TextData::from_raw(back)),
+        },
+    );
+
+    match APP.read().inner().provider.cards.modify(event) {
+        Ok(()) => {}
+        Err(e) => {
+            eprintln!("{:?}", e);
+            std::process::exit(1);
+        }
+    }
+
+    if APP
+        .read()
+        .inner()
+        .provider
+        .sets
+        .load(Set::CLI_CARDS)
+        .is_none()
+    {
+        let action = SetAction::SetName("CLI imports".to_string());
+        let event = SetEvent::new_modify(Set::CLI_CARDS, action);
+        APP.read().inner().provider.sets.modify(event).unwrap();
+    }
+
+    let event = SetEvent::new_modify(Set::CLI_CARDS, SetAction::AddInput(Input::Card(card_id)));
+    APP.read().inner().provider.sets.modify(event).unwrap();
+    println!("{}", card_id);
+    std::process::exit(0);
+}
+
 #[component]
 pub fn TheApp() -> Element {
     use_context_provider(ReviewPage::new);
     use_context_provider(RemoteUpdate::new);
 
     let cli = Cli::parse();
+
+    if let Some(args) = cli.add {
+        handle_add_card(&args);
+    }
 
     if let Some(path) = cli.import_cards {
         let mut events: Vec<CardEvent> = vec![];

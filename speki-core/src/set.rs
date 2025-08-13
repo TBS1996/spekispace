@@ -1,6 +1,6 @@
 use std::{collections::BTreeSet, fmt::Display};
 
-use ledgerstore::{LedgerItem, LedgerEvent};
+use ledgerstore::{LedgerEvent, LedgerItem};
 use serde::{Deserialize, Serialize};
 use strum::{Display, EnumDiscriminants, EnumIter, EnumString};
 use uuid::Uuid;
@@ -21,6 +21,7 @@ impl Display for Set {
 pub enum SetAction {
     SetName(String),
     SetExpr(SetExpr),
+    AddInput(Input),
 }
 
 pub type SetEvent = LedgerEvent<Set>;
@@ -38,6 +39,35 @@ impl LedgerItem for Set {
         match event {
             SetAction::SetName(name) => self.name = name,
             SetAction::SetExpr(expr) => self.expr = expr,
+            SetAction::AddInput(input) => {
+                let new_set = match self.expr {
+                    SetExpr::Union(mut set) => {
+                        set.insert(input);
+                        SetExpr::Union(set)
+                    }
+                    SetExpr::Intersection(set) => {
+                        let mut union: BTreeSet<Input> = Default::default();
+                        union.insert(input);
+                        union.insert(Input::Expr(Box::new(SetExpr::Intersection(set))));
+                        SetExpr::Union(union)
+                    }
+                    SetExpr::Difference(diff1, diff2) => {
+                        let mut union: BTreeSet<Input> = Default::default();
+                        union.insert(input);
+                        union.insert(Input::Expr(Box::new(SetExpr::Difference(diff1, diff2))));
+                        SetExpr::Union(union)
+                    }
+                    SetExpr::Complement(cmp) => {
+                        let mut union: BTreeSet<Input> = Default::default();
+                        union.insert(input);
+                        union.insert(Input::Expr(Box::new(SetExpr::Complement(cmp))));
+                        SetExpr::Union(union)
+                    }
+                    SetExpr::All => SetExpr::All,
+                };
+
+                self.expr = new_set;
+            }
         }
 
         Ok(self)
@@ -63,6 +93,11 @@ pub struct Set {
     pub id: SetId,
     pub name: String,
     pub expr: SetExpr,
+}
+
+impl Set {
+    /// Cards created from the CLI with --add flag will go into this set.
+    pub const CLI_CARDS: Uuid = Uuid::from_u128(0xf5c1ef55_ebcd_40a4_9a12_f16e6d44b7a1);
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Hash, Ord, PartialOrd, Eq)]
