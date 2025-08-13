@@ -4,7 +4,7 @@ use std::{
     sync::{Arc, RwLock},
 };
 
-use crate::{load_file_contents, Hashed, LedgerEntry, LedgerHash, LedgerItem, LedgerEvent};
+use crate::{load_file_contents, Hashed, LedgerEntry, LedgerEvent, LedgerHash, LedgerItem};
 
 #[derive(Clone)]
 pub struct BlockChain<T: LedgerItem> {
@@ -80,7 +80,14 @@ impl<T: LedgerItem> BlockChain<T> {
             }
 
             for (_hash, value) in map.into_iter() {
-                let action: LedgerEntry<T> = serde_json::from_slice(&value).unwrap();
+                let action: LedgerEntry<T> = match serde_json::from_slice(&value) {
+                    Ok(action) => action,
+                    Err(e) => {
+                        dbg!(e);
+                        dbg!(value);
+                        panic!();
+                    }
+                };
                 let idx = action.index;
                 foo.push((idx, action));
             }
