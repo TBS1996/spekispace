@@ -15,6 +15,7 @@ use pages::ReviewPage;
 use speki_core::{
     card::{BackSide, CardId, TextData},
     ledger::{CardAction, CardEvent},
+    recall_rate::{Recall, Review as TheReview, ReviewAction, ReviewEvent},
     set::{Input, Set, SetAction, SetEvent},
 };
 use std::fs;
@@ -55,6 +56,14 @@ struct Cli {
     import_cards: Option<PathBuf>,
     #[arg(long, num_args = 2)]
     add: Option<Vec<String>>,
+    #[arg(long)]
+    view_front: Option<CardId>,
+    #[arg(long)]
+    view_back: Option<CardId>,
+    #[arg(long)]
+    card: Option<CardId>,
+    #[arg(long)]
+    grade: Option<char>,
 }
 
 #[derive(Clone)]
@@ -97,7 +106,18 @@ fn main() {
 
     let cli = Cli::parse();
 
-    let log_level = if cli.trace { Level::DEBUG } else { Level::INFO };
+    let headless = cli.add.is_some()
+        || cli.view_back.is_some()
+        || cli.view_front.is_some()
+        || cli.commit.is_some()
+        || cli.import_cards.is_some()
+        || cli.grade.is_some();
+
+    let mut log_level = if cli.trace { Level::DEBUG } else { Level::INFO };
+
+    if headless {
+        log_level = Level::ERROR;
+    }
 
     dioxus_logger::init(log_level).expect("failed to init logger");
 
@@ -159,6 +179,60 @@ pub fn TheApp() -> Element {
 
     if let Some(args) = cli.add {
         handle_add_card(&args);
+    }
+
+    if let Some(id) = cli.view_front {
+        let front = APP
+            .read()
+            .inner()
+            .card_provider
+            .load(id)
+            .map(|c| c.front_side().to_string())
+            .unwrap_or(format!("<card not found>"));
+        println!("{front}");
+        std::process::exit(0);
+    }
+
+    if let Some(id) = cli.view_back {
+        let back = APP
+            .read()
+            .inner()
+            .card_provider
+            .load(id)
+            .map(|c| c.display_backside().to_string())
+            .unwrap_or(format!("<card not found>"));
+        println!("{back}");
+        std::process::exit(0);
+    }
+
+    if let Some(grade) = cli.grade {
+        let recall: Recall = match grade.to_string().parse() {
+            Ok(recall) => recall,
+            Err(_) => {
+                panic!("invalid recall");
+            }
+        };
+
+        let card = match cli.card {
+            Some(card) => card,
+            None => panic!("card must be specified for review"),
+        };
+
+        use ledgerstore::TimeProvider;
+        let current_time = APP.read().inner().provider.time.current_time();
+        let review = TheReview {
+            timestamp: current_time,
+            grade: recall,
+        };
+
+        APP.read()
+            .inner()
+            .provider
+            .reviews
+            .modify(ReviewEvent::new_modify(card, ReviewAction::Insert(review)))
+            .unwrap();
+
+        std::process::exit(0);
     }
 
     if let Some(path) = cli.import_cards {
