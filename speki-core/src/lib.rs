@@ -1,6 +1,5 @@
 use card::{CardId, RawCard};
 use card_provider::CardProvider;
-use cardfilter::CardFilter;
 use dioxus_logger::tracing::info;
 use ledgerstore::Ledger;
 use ledgerstore::TimeProvider;
@@ -197,18 +196,6 @@ impl App {
 
     pub async fn load_cards(&self) -> Vec<CardId> {
         self.card_provider.load_all_card_ids()
-    }
-
-    pub fn cards_filtered(&self, filter: CardFilter) -> Vec<Arc<Card>> {
-        let cards = self.load_all_cards();
-        let mut ids = vec![];
-
-        for card in cards {
-            if filter.filter(card.clone()) {
-                ids.push(card);
-            }
-        }
-        ids
     }
 
     pub fn load_class_cards(&self) -> Vec<Arc<Card>> {

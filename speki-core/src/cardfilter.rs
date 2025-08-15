@@ -1,8 +1,8 @@
-use std::{fmt::Display, sync::Arc};
+use std::{fmt::Display, sync::Arc, time::Duration};
 
 use serde::{Deserialize, Serialize};
 
-use crate::Card;
+use crate::{recall_rate::History, Card};
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub enum FloatFilter {
@@ -98,45 +98,27 @@ impl Display for FloatFilter {
     }
 }
 
-/// Filter for cards.
-/// Only uses the user-data part of cards, like reviews or custom tags.
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Default, Hash)]
-pub struct CardFilter {
+pub struct HistoryFilter {
     pub recall: Option<FloatOp>,
     pub rec_recall: Option<FloatOp>,
     pub stability: Option<FloatOp>,
     pub rec_stability: Option<FloatOp>,
-    pub suspended: Option<bool>,
-    pub needs_work: Option<bool>,
     pub lapses: Option<IntOp>,
 }
 
-impl CardFilter {
-    pub fn filter(&self, card: Arc<Card>) -> bool {
-        let CardFilter {
+impl HistoryFilter {
+    pub fn filter(&self, now: Duration, history: History, dependencies: Vec<History>) -> bool {
+        let Self {
             recall,
             rec_recall,
             stability,
             rec_stability,
-            suspended,
             lapses,
-            needs_work,
         } = self.clone();
 
-        if let Some(flag) = suspended {
-            if flag != card.is_suspended() {
-                return false;
-            }
-        }
-
-        if let Some(flag) = needs_work {
-            if flag != card.needs_work() {
-                return false;
-            }
-        }
-
         if let Some(IntOp { ord, num }) = lapses {
-            let lapses = card.lapses() as u32;
+            let lapses = history.lapses() as u32;
 
             match ord {
                 MyIntOrd::Equal => {
@@ -158,7 +140,7 @@ impl CardFilter {
         }
 
         if let Some(FloatOp { ord, num }) = recall {
-            let recall = card.recall_rate().unwrap_or_default();
+            let recall = history.recall_rate(now).unwrap_or_default();
 
             match ord {
                 MyFloatOrd::Greater => {
@@ -175,7 +157,7 @@ impl CardFilter {
         }
 
         if let Some(FloatOp { ord, num }) = stability {
-            let stability = card.maturity_days().unwrap_or_default();
+            let stability = history.maturity_days(now).unwrap_or_default();
 
             match ord {
                 MyFloatOrd::Greater => {
@@ -191,39 +173,94 @@ impl CardFilter {
             }
         }
 
-        if let Some(FloatOp { ord, num }) = rec_recall {
-            let recall = card.min_rec_recall_rate();
+        if !dependencies.is_empty() {
+            if let Some(FloatOp { ord, num }) = rec_recall {
+                let min_rec_recall: f32 = dependencies
+                    .iter()
+                    .map(|history| history.recall_rate(now).unwrap_or_default())
+                    .fold(1.0, |acc, curr| if acc < curr { acc } else { curr });
 
-            match ord {
-                MyFloatOrd::Greater => {
-                    if recall < num {
-                        return false;
+                match ord {
+                    MyFloatOrd::Greater => {
+                        if min_rec_recall < num {
+                            return false;
+                        }
                     }
-                }
-                MyFloatOrd::Less => {
-                    if recall > num {
-                        return false;
+                    MyFloatOrd::Less => {
+                        if min_rec_recall > num {
+                            return false;
+                        }
                     }
                 }
             }
         }
-        if let Some(FloatOp { ord, num }) = rec_stability {
-            let stability = card.min_rec_stability();
+        if !dependencies.is_empty() {
+            if let Some(FloatOp { ord, num }) = rec_stability {
+                let min_rec_stability: f32 = dependencies
+                    .iter()
+                    .map(|history| history.maturity_days(now).unwrap_or_default())
+                    .fold(f32::MAX, |acc, curr| if acc < curr { acc } else { curr });
 
-            match ord {
-                MyFloatOrd::Greater => {
-                    if stability < num {
-                        return false;
+                match ord {
+                    MyFloatOrd::Greater => {
+                        if min_rec_stability < num {
+                            return false;
+                        }
                     }
-                }
-                MyFloatOrd::Less => {
-                    if stability > num {
-                        return false;
+                    MyFloatOrd::Less => {
+                        if min_rec_stability > num {
+                            return false;
+                        }
                     }
                 }
             }
         }
 
         true
+    }
+}
+
+/// Filter for cards.
+/// Only uses the user-data part of cards, like reviews or custom tags.
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Default, Hash)]
+pub struct CardFilter {
+    pub history: HistoryFilter,
+    pub suspended: Option<bool>,
+    pub needs_work: Option<bool>,
+}
+
+impl CardFilter {
+    pub fn filter(&self, card: Arc<Card>, now: Duration) -> bool {
+        let CardFilter {
+            history,
+            suspended,
+            needs_work,
+        } = self.clone();
+
+        if let Some(flag) = suspended {
+            if flag != card.is_suspended() {
+                return false;
+            }
+        }
+
+        if let Some(flag) = needs_work {
+            if flag != card.needs_work() {
+                return false;
+            }
+        }
+
+        let dependencies: Vec<History> = card
+            .recursive_dependencies()
+            .into_iter()
+            .filter_map(|card| {
+                if card.reviewable() {
+                    Some(card.history().to_owned())
+                } else {
+                    None
+                }
+            })
+            .collect();
+
+        history.filter(now, card.history().to_owned(), dependencies)
     }
 }

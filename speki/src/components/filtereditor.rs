@@ -3,7 +3,7 @@ use std::{fmt::Display, sync::Arc};
 use dioxus::prelude::*;
 use serde::{Deserialize, Serialize};
 use speki_core::cardfilter::{
-    CardFilter, FloatFilter, FloatOp, IntFilter, IntOp, MyFloatOrd, MyIntOrd,
+    CardFilter, FloatFilter, FloatOp, HistoryFilter, IntFilter, IntOp, MyFloatOrd, MyIntOrd,
 };
 use strum::EnumIter;
 use tracing::info;
@@ -37,25 +37,28 @@ impl FilterEditor {
 
 fn default_filter() -> CardFilter {
     CardFilter {
-        recall: Some(FloatOp {
-            num: 0.9,
-            ord: MyFloatOrd::Less,
-        }),
-        rec_recall: Some(FloatOp {
-            num: 0.9,
-            ord: MyFloatOrd::Greater,
-        }),
-        stability: None,
-        rec_stability: Some(FloatOp {
-            num: 10.,
-            ord: MyFloatOrd::Greater,
-        }),
+        history: HistoryFilter {
+            recall: Some(FloatOp {
+                num: 0.9,
+                ord: MyFloatOrd::Less,
+            }),
+            rec_recall: Some(FloatOp {
+                num: 0.9,
+                ord: MyFloatOrd::Greater,
+            }),
+            stability: None,
+            rec_stability: Some(FloatOp {
+                num: 10.,
+                ord: MyFloatOrd::Greater,
+            }),
+
+            lapses: Some(IntOp {
+                num: 4,
+                ord: MyIntOrd::Less,
+            }),
+        },
         suspended: Some(false),
         needs_work: None,
-        lapses: Some(IntOp {
-            num: 4,
-            ord: MyIntOrd::Less,
-        }),
     }
 }
 
@@ -216,11 +219,11 @@ impl FloatEntry {
 impl FilterEditor {
     pub fn new(filter: CardFilter) -> Self {
         let filter_name = Signal::new_in_scope("new filter".to_string(), ScopeId::APP);
-        let rec_recall = FloatEntry::from_numop("rec recall", filter.rec_recall);
-        let recall = FloatEntry::from_numop("recall", filter.recall);
-        let rec_stability = FloatEntry::from_numop("rec stability", filter.rec_stability);
-        let stability = FloatEntry::from_numop("stability", filter.stability);
-        let lapses = IntEntry::from_numop("lapses", filter.lapses);
+        let rec_recall = FloatEntry::from_numop("rec recall", filter.history.rec_recall);
+        let recall = FloatEntry::from_numop("recall", filter.history.recall);
+        let rec_stability = FloatEntry::from_numop("rec stability", filter.history.rec_stability);
+        let stability = FloatEntry::from_numop("stability", filter.history.stability);
+        let lapses = IntEntry::from_numop("lapses", filter.history.lapses);
 
         let suspended = BoolEntry::from_bool("suspended", filter.suspended);
         let needs_work = BoolEntry::from_bool("needs work", filter.needs_work);
@@ -243,12 +246,14 @@ impl FilterEditor {
             info!("cardfilter memo!");
 
             CardFilter {
-                recall: selv.recall.get_value(),
-                rec_recall: selv.rec_recall.get_value(),
-                stability: selv.stability.get_value(),
-                rec_stability: selv.rec_stability.get_value(),
+                history: HistoryFilter {
+                    recall: selv.recall.get_value(),
+                    rec_recall: selv.rec_recall.get_value(),
+                    stability: selv.stability.get_value(),
+                    rec_stability: selv.rec_stability.get_value(),
+                    lapses: selv.lapses.get_value(),
+                },
                 suspended: selv.suspended.get_value(),
-                lapses: selv.lapses.get_value(),
                 needs_work: selv.needs_work.get_value(),
             }
         })
@@ -256,12 +261,14 @@ impl FilterEditor {
 
     pub fn to_filter(&self) -> CardFilter {
         CardFilter {
-            recall: self.recall.get_value(),
-            rec_recall: self.rec_recall.get_value(),
-            stability: self.stability.get_value(),
-            rec_stability: self.rec_stability.get_value(),
+            history: HistoryFilter {
+                recall: self.recall.get_value(),
+                rec_recall: self.rec_recall.get_value(),
+                stability: self.stability.get_value(),
+                rec_stability: self.rec_stability.get_value(),
+                lapses: self.lapses.get_value(),
+            },
             suspended: self.suspended.get_value(),
-            lapses: self.lapses.get_value(),
             needs_work: self.needs_work.get_value(),
         }
     }

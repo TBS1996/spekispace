@@ -9,7 +9,8 @@ use dioxus::prelude::*;
 use ledgerstore::{LedgerEvent, PropertyCache};
 use speki_core::{
     card::{bigrams, normalize_string, CardId},
-    cardfilter::CardFilter,
+    cardfilter::{CardFilter, HistoryFilter},
+    current_time,
     ledger::CardEvent,
     set::SetExpr,
     Card, CardProperty,
@@ -99,12 +100,14 @@ impl CardSelector {
             } else {
                 Memo::new(move || {
                     Some(CardFilter {
-                        recall: editor.recall.get_value(),
-                        rec_recall: editor.rec_recall.get_value(),
-                        stability: editor.stability.get_value(),
-                        rec_stability: editor.rec_stability.get_value(),
+                        history: HistoryFilter {
+                            recall: editor.recall.get_value(),
+                            rec_recall: editor.rec_recall.get_value(),
+                            stability: editor.stability.get_value(),
+                            rec_stability: editor.rec_stability.get_value(),
+                            lapses: editor.lapses.get_value(),
+                        },
                         suspended: editor.suspended.get_value(),
-                        lapses: editor.lapses.get_value(),
                         needs_work: editor.needs_work.get_value(),
                     })
                 })
@@ -205,13 +208,15 @@ impl CardSelector {
                         break;
                     }
 
+                    let now = current_time();
+
                     if allowed_cards.is_empty()
                         || allowed_cards
                             .read()
                             .contains(&CardTy::from_ctype(card.card_type()))
                     {
                         let flag = match filtermemo.cloned() {
-                            Some(filter) => filter.filter(card.clone()),
+                            Some(filter) => filter.filter(card.clone(), now),
                             None => true,
                         };
 

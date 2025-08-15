@@ -787,33 +787,25 @@ impl Card {
             .dependents_recursive(self.id)
     }
 
-    pub fn recursive_dependencies(&self) -> Vec<CardId> {
-        tracing::trace!("getting dependencies of: {}", self.id);
-        let mut deps = vec![];
-        let mut stack = vec![self.id()];
+    pub fn recursive_dependencies(&self) -> BTreeSet<Arc<Card>> {
+        self.recursive_dependencies_ids()
+            .into_iter()
+            .map(|id| self.card_provider.load(id).unwrap())
+            .collect()
+    }
 
-        while let Some(id) = stack.pop() {
-            let Some(card) = self.card_provider.load(id) else {
-                continue;
-            };
-
-            if self.id() != id {
-                deps.push(id);
-            }
-
-            for dep in card.dependencies() {
-                stack.push(dep);
-            }
-        }
-
-        deps
+    pub fn recursive_dependencies_ids(&self) -> HashSet<CardId> {
+        self.card_provider
+            .providers
+            .cards
+            .dependencies_recursive(self.id())
     }
 
     pub fn min_rec_stability(&self) -> f32 {
         tracing::trace!("min rec recall of {}", self.id);
         let mut min_stability: RecallRate = f32::MAX;
 
-        for card in self.recursive_dependencies() {
+        for card in self.recursive_dependencies_ids() {
             let card = self.card_provider.load(card).unwrap();
             if !card.reviewable() {
                 continue;
@@ -829,7 +821,7 @@ impl Card {
         tracing::trace!("min rec recall of {}", self.id);
         let mut min_recall: RecallRate = 1.0;
 
-        for card in self.recursive_dependencies() {
+        for card in self.recursive_dependencies_ids() {
             let card = self.card_provider.load(card).unwrap();
             if !card.is_finished() {
                 return 0.0;

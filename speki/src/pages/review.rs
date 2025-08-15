@@ -13,7 +13,7 @@ use crate::{styles, OVERLAY};
 use dioxus::prelude::*;
 use ledgerstore::LedgerEvent;
 use nonempty::NonEmpty;
-use speki_core::card::CType;
+use speki_core::{card::CType, current_time};
 use speki_core::{
     card::CardId,
     cardfilter::CardFilter,
@@ -553,6 +553,8 @@ pub fn reviewable_cards(expr: SetExpr, filter: Option<CardFilter>) -> Option<Non
         cards_with_deps.insert(card);
     }
 
+    let now = current_time();
+
     let filtered_cards: Vec<Arc<Card>> = cards_with_deps
         .into_iter()
         .collect::<Vec<Arc<Card>>>()
@@ -561,7 +563,7 @@ pub fn reviewable_cards(expr: SetExpr, filter: Option<CardFilter>) -> Option<Non
             card.reviewable()
                 && filter
                     .as_ref()
-                    .map(|filter| filter.filter(card.clone()))
+                    .map(|filter| filter.filter(card.clone(), now))
                     .unwrap_or(true)
         })
         .collect();

@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use ledgerstore::{LedgerItem, LedgerEvent};
+use ledgerstore::{LedgerEvent, LedgerItem};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -15,7 +15,7 @@ impl SimpleRecall {
     }
 }
 
-fn simple_recall_rate(reviews: &History, current_unix: Duration) -> Option<RecallRate> {
+pub fn simple_recall_rate(reviews: &History, current_unix: Duration) -> Option<RecallRate> {
     let days_passed = reviews.time_since_last_review(current_unix)?;
     let stability = stability(reviews)?;
     let randomized_stability =
@@ -58,7 +58,7 @@ fn new_stability(
     }
 }
 
-fn stability(reviews: &History) -> Option<Duration> {
+pub fn stability(reviews: &History) -> Option<Duration> {
     let reviews = reviews.inner();
     if reviews.is_empty() {
         return None;
@@ -96,8 +96,38 @@ impl History {
         &self.reviews
     }
 
+    pub fn maturity_days(&self, time: Duration) -> Option<f32> {
+        self.maturity(time).map(|d| d.as_secs_f32() / 86400.)
+    }
+
+    pub fn maturity(&self, time: Duration) -> Option<Duration> {
+        use gkquad::single::integral;
+
+        if self.recall_rate(time).is_none() {
+            return None;
+        }
+
+        let result = integral(
+            |x: f64| {
+                self.recall_rate(time + Duration::from_secs_f64(x * 86400.))
+                    .unwrap_or_default() as f64
+            },
+            0.0..1000.,
+        )
+        .estimate()
+        .ok()?;
+
+        let dur = Duration::from_secs_f64(result * 86400.);
+
+        Some(dur)
+    }
+
     pub fn last(&self) -> Option<Review> {
         self.reviews.last().cloned()
+    }
+
+    pub fn recall_rate(&self, time: Duration) -> Option<f32> {
+        simple_recall_rate(self, time)
     }
 
     pub fn lapses_since(&self, dur: Duration, current_time: Duration) -> u32 {
