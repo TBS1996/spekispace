@@ -1418,6 +1418,13 @@ impl LedgerItem for RawCard {
             });
         }
 
+        if self.ref_backside().is_some() && !matches!(&self.data, CardType::Unfinished { .. }) {
+            out.insert(PropertyCache {
+                property: CardProperty::Reviewable,
+                value: true.to_string(),
+            });
+        }
+
         match &self.data {
             CardType::Normal { .. } => {}
             CardType::Unfinished { .. } => {}

@@ -87,6 +87,7 @@ pub enum CardProperty {
     AttrId,
     /// mapping of attributeid -> CardId
     Attr,
+    Reviewable,
 }
 
 impl Display for CardProperty {
@@ -104,6 +105,7 @@ impl AsRef<str> for CardProperty {
             CardProperty::AttrId => "attr_id",
             CardProperty::Attr => "attr",
             CardProperty::Trivial => "trivial",
+            CardProperty::Reviewable => "reviewable",
         }
     }
 }
