@@ -69,6 +69,18 @@ pub trait ReadLedger {
         p
     }
 
+    fn has_property(
+        &self,
+        key: <Self::Item as LedgerItem>::Key,
+        property: PropertyCache<Self::Item>,
+    ) -> bool {
+        self.properties_path()
+            .join(property.property.to_string())
+            .join(&property.value)
+            .join(key.to_string())
+            .is_file()
+    }
+
     fn get_prop_cache(
         &self,
         key: PropertyCache<Self::Item>,

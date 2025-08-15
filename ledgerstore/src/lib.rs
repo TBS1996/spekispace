@@ -683,6 +683,14 @@ impl<T: LedgerItem> Ledger<T> {
         items
     }
 
+    pub fn has_property(&self, item: T::Key, property: PropertyCache<T>) -> bool {
+        if self.remote.has_property(item, property.clone()) {
+            true
+        } else {
+            self.local.has_property(item, property)
+        }
+    }
+
     pub fn get_prop_cache(&self, key: PropertyCache<T>) -> HashSet<T::Key> {
         let mut items = self.local.get_prop_cache(key.clone());
         items.extend(self.remote.get_prop_cache(key));
