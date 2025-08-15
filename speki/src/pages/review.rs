@@ -13,7 +13,7 @@ use crate::{styles, OVERLAY};
 use dioxus::prelude::*;
 use ledgerstore::LedgerEvent;
 use nonempty::NonEmpty;
-use speki_core::{card::CType, current_time};
+use speki_core::{card::CType, current_time, CardProperty};
 use speki_core::{
     card::CardId,
     cardfilter::CardFilter,
@@ -560,7 +560,16 @@ pub fn reviewable_cards(expr: SetExpr, filter: Option<CardFilter>) -> Option<Non
         .collect::<Vec<Arc<Card>>>()
         .into_iter()
         .filter(|card| {
-            card.reviewable()
+            let reviewable = !card.trivial()
+                && provider.providers.cards.has_property(
+                    card.id(),
+                    ledgerstore::PropertyCache {
+                        property: CardProperty::Reviewable,
+                        value: true.to_string(),
+                    },
+                );
+
+            reviewable
                 && filter
                     .as_ref()
                     .map(|filter| filter.filter(card.clone(), now))

@@ -319,11 +319,7 @@ impl std::fmt::Display for Card {
 
 impl Card {
     pub fn trivial(&self) -> bool {
-        if let Some(flag) = self.metadata.trivial {
-            flag
-        } else {
-            self.base.trivial
-        }
+        self.base.trivial
     }
 
     pub fn transitive_sort(list: Vec<Self>) -> Result<Vec<Self>, ()> {
