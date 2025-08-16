@@ -599,6 +599,33 @@ impl<T: LedgerItem> ReadLedger for Local<T> {
     }
 }
 
+#[derive(Clone, Debug, Hash)]
+pub struct Node<T: LedgerItem> {
+    id: T::Key,
+    deps: Vec<Self>,
+}
+
+impl<T: LedgerItem> Node<T> {
+    pub fn id(&self) -> T::Key {
+        self.id
+    }
+
+    pub fn direct_dependencies(&self) -> HashSet<T::Key> {
+        self.deps.clone().into_iter().map(|n| n.id()).collect()
+    }
+
+    pub fn all_dependencies(&self) -> HashSet<T::Key> {
+        let mut out: HashSet<T::Key> = Default::default();
+
+        for dep in &self.deps {
+            out.insert(dep.id());
+            out.extend(dep.all_dependencies());
+        }
+
+        out
+    }
+}
+
 #[derive(Clone)]
 pub struct Ledger<T: LedgerItem> {
     entries: BlockChain<T>,
@@ -696,6 +723,16 @@ impl<T: LedgerItem> Ledger<T> {
         items.extend(self.remote.get_prop_cache(key));
 
         items
+    }
+
+    pub fn dependencies_recursive_node(&self, key: T::Key) -> Node<T> {
+        if self.is_remote(key) {
+            self.remote
+                .collect_all_dependents_recursive_struct(key, false)
+        } else {
+            self.local
+                .collect_all_dependents_recursive_struct(key, false)
+        }
     }
 
     pub fn dependencies_recursive(&self, key: T::Key) -> HashSet<T::Key> {

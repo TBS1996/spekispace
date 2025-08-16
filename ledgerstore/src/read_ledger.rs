@@ -6,7 +6,7 @@ use std::vec::Vec;
 use walkdir::WalkDir;
 
 pub type CacheKey<T> = Either<PropertyCache<T>, ItemRefCache<T>>;
-use crate::{ItemRefCache, LedgerItem, PropertyCache, RefGetter, TheCacheGetter};
+use crate::{ItemRefCache, LedgerItem, Node, PropertyCache, RefGetter, TheCacheGetter};
 
 pub trait ReadLedger {
     type Item: LedgerItem;
@@ -318,6 +318,43 @@ pub trait ReadLedger {
                 }
             }
         }
+    }
+
+    fn collect_all_dependents_recursive_struct(
+        &self,
+        key: <Self::Item as LedgerItem>::Key,
+        reversed: bool,
+    ) -> Node<Self::Item> {
+        let dep_dir = match reversed {
+            true => self.root_dependents_dir(key),
+            false => self.root_dependencies_dir(key),
+        };
+
+        let dirs: Vec<PathBuf> = fs::read_dir(&dep_dir)
+            .unwrap()
+            .filter_map(|entry| {
+                let path = entry.unwrap().path();
+                if path.is_dir() {
+                    Some(path)
+                } else {
+                    None
+                }
+            })
+            .collect();
+
+        let mut node: Node<Self::Item> = Node {
+            id: key,
+            deps: vec![],
+        };
+
+        for dir in dirs {
+            for dep_key in Self::item_keys_from_dir(dir) {
+                let dep = self.collect_all_dependents_recursive_struct(dep_key, reversed);
+                node.deps.push(dep);
+            }
+        }
+
+        node
     }
 
     fn collect_all_dependents_recursive_with_ty(

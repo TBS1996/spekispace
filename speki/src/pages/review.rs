@@ -528,7 +528,8 @@ pub fn reviewable_cards(expr: SetExpr, filter: Option<CardFilter>) -> Option<Non
                 .inner()
                 .provider
                 .cards
-                .dependencies_recursive(*id)
+                .dependencies_recursive_node(*id)
+                .all_dependencies()
         })
         .flatten()
         .collect();
