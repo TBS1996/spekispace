@@ -15,3 +15,5 @@ walkdir.workspace = true
 either.workspace = true
 git2.workspace = true
 chrono.workspace = true
+ureq.workspace = true
+semver.workspace = true

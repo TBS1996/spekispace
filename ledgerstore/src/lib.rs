@@ -319,6 +319,29 @@ impl<T: LedgerItem> Remote<T> {
         }
     }
 
+    fn remote_min_version(oid: &str) -> Option<semver::Version> {
+        let url = format!(
+            "https://raw.githubusercontent.com/TBS1996/speki_graph/{}/min_version",
+            oid
+        );
+
+        let agent = ureq::AgentBuilder::new()
+            .timeout(std::time::Duration::from_secs(1))
+            .build();
+
+        let version: semver::Version = agent
+            .get(&url)
+            .call()
+            .ok()?
+            .into_string()
+            .unwrap()
+            .trim()
+            .parse()
+            .unwrap();
+
+        Some(version)
+    }
+
     pub fn latest_upstream_commit(&self, url: &str) -> Option<String> {
         let mut r = self.repo.remote_anonymous(url).ok()?;
         r.connect(git2::Direction::Fetch).ok()?;
@@ -691,8 +714,19 @@ impl<T: LedgerItem> Ledger<T> {
         self.remote.current_commit()
     }
 
-    pub fn latest_upstream_commit(&self, upstream: &str) -> Option<String> {
-        self.remote.latest_upstream_commit(upstream)
+    pub fn latest_upstream_commit(
+        &self,
+        upstream: &str,
+        current_version: semver::Version,
+    ) -> Option<String> {
+        let commit = self.remote.latest_upstream_commit(upstream)?;
+        let remote_min_required_version = dbg!(Remote::<T>::remote_min_version(&commit))?;
+
+        if remote_min_required_version <= current_version {
+            Some(commit)
+        } else {
+            None
+        }
     }
 
     pub fn modify(&self, event: LedgerEvent<T>) -> Result<(), EventError<T>> {

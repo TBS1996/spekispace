@@ -19,6 +19,7 @@ fancy-regex.workspace = true
 either.workspace = true
 strum.workspace = true
 deunicode.workspace = true
+semver.workspace = true
 
 
 omtrent.workspace = true

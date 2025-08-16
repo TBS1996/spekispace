@@ -74,12 +74,13 @@ pub struct RemoteUpdate {
 impl RemoteUpdate {
     pub fn new() -> Self {
         let current_commit = APP.read().inner().provider.cards.current_commit();
+        let curent_version = dbg!(speki_core::current_version());
         let latest_commit = APP
             .read()
             .inner()
             .provider
             .cards
-            .latest_upstream_commit("https://github.com/tbs1996/speki_graph");
+            .latest_upstream_commit("https://github.com/tbs1996/speki_graph", curent_version);
 
         if latest_commit != current_commit {
             Self {

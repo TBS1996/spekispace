@@ -124,6 +124,10 @@ impl TimeProvider for FsTime {
     }
 }
 
+pub fn current_version() -> semver::Version {
+    semver::Version::parse(env!("CARGO_PKG_VERSION")).unwrap()
+}
+
 #[derive(Clone)]
 pub struct Provider {
     pub cards: Ledger<RawCard>,

@@ -35,6 +35,8 @@ git2 = "0.20.2"
 dioxus-desktop = "0.6.1"
 clap = { version = "4.5.43", features = ["derive"] }
 rfd = "0.15.4"
+semver = "1.0.26"
+ureq = "2"
 
 [profile]
 
