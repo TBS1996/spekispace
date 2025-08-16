@@ -555,6 +555,8 @@ pub fn reviewable_cards(expr: SetExpr, filter: Option<CardFilter>) -> Option<Non
 
     let now = current_time();
 
+    let meta_ledger = provider.providers.metadata.clone();
+
     let filtered_cards: Vec<Arc<Card>> = cards_with_deps
         .into_iter()
         .collect::<Vec<Arc<Card>>>()
@@ -572,7 +574,7 @@ pub fn reviewable_cards(expr: SetExpr, filter: Option<CardFilter>) -> Option<Non
             reviewable
                 && filter
                     .as_ref()
-                    .map(|filter| filter.filter(card.clone(), now))
+                    .map(|filter| filter.filter(card.clone(), now, &meta_ledger))
                     .unwrap_or(true)
         })
         .collect();

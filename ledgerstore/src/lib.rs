@@ -733,6 +733,10 @@ impl<T: LedgerItem> Ledger<T> {
         self.local.load(key).map(|item| (item, false))
     }
 
+    pub fn load_or_default(&self, key: T::Key) -> T {
+        self.load(key).unwrap_or_else(|| T::new_default(key))
+    }
+
     pub fn load(&self, key: T::Key) -> Option<T> {
         let item = self.remote.load(key);
         if item.is_some() {

@@ -1,8 +1,9 @@
 use std::{fmt::Display, sync::Arc, time::Duration};
 
+use ledgerstore::Ledger;
 use serde::{Deserialize, Serialize};
 
-use crate::{recall_rate::History, Card};
+use crate::{card::CardId, metadata::Metadata, recall_rate::History, Card};
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub enum FloatFilter {
@@ -98,6 +99,7 @@ impl Display for FloatFilter {
     }
 }
 
+/// Card filter based on review history
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Default, Hash)]
 pub struct HistoryFilter {
     pub recall: Option<FloatOp>,
@@ -108,6 +110,22 @@ pub struct HistoryFilter {
 }
 
 impl HistoryFilter {
+    pub fn is_empty(&self) -> bool {
+        let Self {
+            recall,
+            rec_recall,
+            stability,
+            rec_stability,
+            lapses,
+        } = self;
+
+        recall.is_none()
+            && rec_recall.is_none()
+            && stability.is_none()
+            && rec_stability.is_none()
+            && lapses.is_none()
+    }
+
     pub fn filter(&self, now: Duration, history: History, dependencies: Vec<History>) -> bool {
         let Self {
             recall,
@@ -220,31 +238,56 @@ impl HistoryFilter {
     }
 }
 
-/// Filter for cards.
-/// Only uses the user-data part of cards, like reviews or custom tags.
+/// Card filter based on metadata
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Default, Hash)]
-pub struct CardFilter {
-    pub history: HistoryFilter,
+pub struct MetaFilter {
     pub suspended: Option<bool>,
     pub needs_work: Option<bool>,
 }
 
-impl CardFilter {
-    pub fn filter(&self, card: Arc<Card>, now: Duration) -> bool {
-        let CardFilter {
-            history,
+impl MetaFilter {
+    pub fn is_empty(&self) -> bool {
+        self.suspended.is_none() && self.needs_work.is_none()
+    }
+
+    pub fn filter(&self, card: CardId, ledger: &Ledger<Metadata>) -> bool {
+        let Self {
             suspended,
             needs_work,
         } = self.clone();
 
+        let metadata = ledger.load_or_default(card);
+
         if let Some(flag) = suspended {
-            if flag != card.is_suspended() {
+            if flag != metadata.suspended.is_suspended() {
                 return false;
             }
         }
 
         if let Some(flag) = needs_work {
-            if flag != card.needs_work() {
+            if flag != metadata.needs_work {
+                return false;
+            }
+        }
+
+        true
+    }
+}
+
+/// Filter for cards.
+/// Only uses the user-data part of cards, like reviews or custom tags.
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Default, Hash)]
+pub struct CardFilter {
+    pub history: HistoryFilter,
+    pub meta: MetaFilter,
+}
+
+impl CardFilter {
+    pub fn filter(&self, card: Arc<Card>, now: Duration, meta_ledger: &Ledger<Metadata>) -> bool {
+        let CardFilter { history, meta } = self.clone();
+
+        if !meta.is_empty() {
+            if !meta.filter(card.id(), meta_ledger) {
                 return false;
             }
         }

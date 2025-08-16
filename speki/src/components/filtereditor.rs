@@ -3,7 +3,8 @@ use std::{fmt::Display, sync::Arc};
 use dioxus::prelude::*;
 use serde::{Deserialize, Serialize};
 use speki_core::cardfilter::{
-    CardFilter, FloatFilter, FloatOp, HistoryFilter, IntFilter, IntOp, MyFloatOrd, MyIntOrd,
+    CardFilter, FloatFilter, FloatOp, HistoryFilter, IntFilter, IntOp, MetaFilter, MyFloatOrd,
+    MyIntOrd,
 };
 use strum::EnumIter;
 use tracing::info;
@@ -57,8 +58,10 @@ fn default_filter() -> CardFilter {
                 ord: MyIntOrd::Less,
             }),
         },
-        suspended: Some(false),
-        needs_work: None,
+        meta: MetaFilter {
+            suspended: Some(false),
+            needs_work: None,
+        },
     }
 }
 
@@ -225,8 +228,8 @@ impl FilterEditor {
         let stability = FloatEntry::from_numop("stability", filter.history.stability);
         let lapses = IntEntry::from_numop("lapses", filter.history.lapses);
 
-        let suspended = BoolEntry::from_bool("suspended", filter.suspended);
-        let needs_work = BoolEntry::from_bool("needs work", filter.needs_work);
+        let suspended = BoolEntry::from_bool("suspended", filter.meta.suspended);
+        let needs_work = BoolEntry::from_bool("needs work", filter.meta.needs_work);
 
         Self {
             filter_name,
@@ -253,8 +256,10 @@ impl FilterEditor {
                     rec_stability: selv.rec_stability.get_value(),
                     lapses: selv.lapses.get_value(),
                 },
-                suspended: selv.suspended.get_value(),
-                needs_work: selv.needs_work.get_value(),
+                meta: MetaFilter {
+                    suspended: selv.suspended.get_value(),
+                    needs_work: selv.needs_work.get_value(),
+                },
             }
         })
     }
@@ -268,8 +273,10 @@ impl FilterEditor {
                 rec_stability: self.rec_stability.get_value(),
                 lapses: self.lapses.get_value(),
             },
-            suspended: self.suspended.get_value(),
-            needs_work: self.needs_work.get_value(),
+            meta: MetaFilter {
+                suspended: self.suspended.get_value(),
+                needs_work: self.needs_work.get_value(),
+            },
         }
     }
 }

@@ -9,7 +9,7 @@ use dioxus::prelude::*;
 use ledgerstore::{LedgerEvent, PropertyCache};
 use speki_core::{
     card::{bigrams, normalize_string, CardId},
-    cardfilter::{CardFilter, HistoryFilter},
+    cardfilter::{CardFilter, HistoryFilter, MetaFilter},
     current_time,
     ledger::CardEvent,
     set::SetExpr,
@@ -107,8 +107,10 @@ impl CardSelector {
                             rec_stability: editor.rec_stability.get_value(),
                             lapses: editor.lapses.get_value(),
                         },
-                        suspended: editor.suspended.get_value(),
-                        needs_work: editor.needs_work.get_value(),
+                        meta: MetaFilter {
+                            suspended: editor.suspended.get_value(),
+                            needs_work: editor.needs_work.get_value(),
+                        },
                     })
                 })
             }
@@ -185,6 +187,8 @@ impl CardSelector {
 
                 info!("{} cards sorted", sorted_cards.len());
 
+                let meta_ledger = APP.read().inner().provider.metadata.clone();
+
                 for (matches, card) in sorted_cards {
                     let entry = match cards.get(&card) {
                         Some(card) => card,
@@ -216,7 +220,7 @@ impl CardSelector {
                             .contains(&CardTy::from_ctype(card.card_type()))
                     {
                         let flag = match filtermemo.cloned() {
-                            Some(filter) => filter.filter(card.clone(), now),
+                            Some(filter) => filter.filter(card.clone(), now, &meta_ledger),
                             None => true,
                         };
 
