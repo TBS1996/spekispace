@@ -126,8 +126,16 @@ impl History {
         self.reviews.last().cloned()
     }
 
+    /// Recall rate at a given time.
+    /// includes randomness so reviews are spread out a bit
+    /// otherwise if you do a large number of reviews at same time
+    /// all the reviews will come again at same time.
     pub fn recall_rate(&self, time: Duration) -> Option<f32> {
-        simple_recall_rate(self, time)
+        let factor = self.id.as_u128() % 100; // 0 -> 100
+        let factor = factor as f32 / 100.; // 0. -> 1.0
+        let factor = factor - 0.5; // -0.5 -> 1.5
+
+        simple_recall_rate(self, time).map(|recall| recall * factor)
     }
 
     pub fn lapses_since(&self, dur: Duration, current_time: Duration) -> u32 {
