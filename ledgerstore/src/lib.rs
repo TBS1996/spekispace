@@ -610,6 +610,10 @@ impl<T: LedgerItem> Node<T> {
         self.id
     }
 
+    pub fn deps(&self) -> &Vec<Self> {
+        &self.deps
+    }
+
     pub fn direct_dependencies(&self) -> HashSet<T::Key> {
         self.deps.clone().into_iter().map(|n| n.id()).collect()
     }

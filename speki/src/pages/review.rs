@@ -11,15 +11,17 @@ use crate::{
 };
 use crate::{styles, OVERLAY};
 use dioxus::prelude::*;
-use ledgerstore::LedgerEvent;
+use ledgerstore::{LedgerEvent, Node};
 use nonempty::NonEmpty;
-use speki_core::{card::CType, current_time, CardProperty};
 use speki_core::{
     card::CardId,
-    cardfilter::CardFilter,
+    cardfilter::{CardFilter, RecallState},
     collection::{DynCard, MaybeCard},
     set::{Input, Set, SetAction, SetEvent, SetExpr, SetExprDiscriminants, SetId},
-    Card,
+};
+use speki_core::{
+    card::{CType, RawCard},
+    current_time,
 };
 use std::{
     cmp::Ordering,
@@ -521,73 +523,40 @@ pub fn reviewable_cards(expr: SetExpr, filter: Option<CardFilter>) -> Option<Non
     let cards = expr.eval(&provider);
 
     let card_ids: HashSet<CardId> = cards.iter().map(|card| card.id()).collect();
-    let all_recursive_dependencies: HashSet<CardId> = card_ids
-        .iter()
-        .map(|id| {
-            APP.read()
-                .inner()
-                .provider
-                .cards
-                .dependencies_recursive_node(*id)
-                .all_dependencies()
-        })
-        .flatten()
-        .collect();
+    let mut nodes: Vec<Node<RawCard>> = Vec::with_capacity(card_ids.len());
 
-    let mut cards_with_deps: BTreeSet<Arc<Card>> = Default::default();
-
-    for (idx, card) in cards.into_iter().enumerate() {
-        if idx % 50 == 0 {
-            dbg!(idx);
-        }
-
-        let card = match card {
-            MaybeCard::Card(card) => card,
-            MaybeCard::Id(id) => provider.load(id).unwrap(),
-        };
-
-        cards_with_deps.insert(card);
+    for id in &card_ids {
+        let node = provider.providers.cards.dependencies_recursive_node(*id);
+        nodes.push(node);
     }
 
-    for card in all_recursive_dependencies {
-        let card = provider.load(card).unwrap();
-        cards_with_deps.insert(card);
+    let mut recalls: BTreeMap<CardId, RecallState> = Default::default();
+    let hisledge = provider.providers.reviews.clone();
+    let card_ledger = provider.providers.cards.clone();
+    let time = current_time();
+
+    for node in nodes {
+        RecallState::eval_card(&node, &mut recalls, &hisledge, &card_ledger, time);
     }
-
-    let now = current_time();
-
-    let meta_ledger = provider.providers.metadata.clone();
-
-    let filtered_cards: Vec<Arc<Card>> = cards_with_deps
-        .into_iter()
-        .collect::<Vec<Arc<Card>>>()
-        .into_iter()
-        .filter(|card| {
-            let reviewable = !card.trivial()
-                && provider.providers.cards.has_property(
-                    card.id(),
-                    ledgerstore::PropertyCache {
-                        property: CardProperty::Reviewable,
-                        value: true.to_string(),
-                    },
-                );
-
-            reviewable
-                && filter
-                    .as_ref()
-                    .map(|filter| filter.filter(card.clone(), now, &meta_ledger))
-                    .unwrap_or(true)
-        })
-        .collect();
 
     let mut seen_cards: Vec<CardId> = vec![];
     let mut unseen_cards: Vec<CardId> = vec![];
+    let meta_ledger = provider.providers.metadata.clone();
 
-    for card in filtered_cards {
-        if card.history().is_empty() {
-            unseen_cards.push(card.id());
-        } else {
-            seen_cards.push(card.id());
+    for (id, recstate) in recalls {
+        let reviewable = recstate.reviewable;
+
+        if reviewable
+            && filter
+                .as_ref()
+                .map(|filter| filter.filter(id, recstate, &meta_ledger))
+                .unwrap_or(true)
+        {
+            if recstate.pending {
+                unseen_cards.push(id);
+            } else {
+                seen_cards.push(id);
+            }
         }
     }
 

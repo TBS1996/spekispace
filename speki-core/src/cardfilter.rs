@@ -1,9 +1,14 @@
-use std::{fmt::Display, sync::Arc, time::Duration};
+use std::{collections::BTreeMap, fmt::Display, sync::Arc, time::Duration};
 
-use ledgerstore::Ledger;
+use ledgerstore::{Ledger, Node};
 use serde::{Deserialize, Serialize};
 
-use crate::{card::CardId, metadata::Metadata, recall_rate::History, Card};
+use crate::{
+    card::{CardId, RawCard},
+    metadata::Metadata,
+    recall_rate::History,
+    Card, CardProperty,
+};
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub enum FloatFilter {
@@ -126,7 +131,7 @@ impl HistoryFilter {
             && lapses.is_none()
     }
 
-    pub fn filter(&self, now: Duration, history: History, dependencies: Vec<History>) -> bool {
+    pub fn filter_old(&self, now: Duration, history: History, dependencies: Vec<History>) -> bool {
         let Self {
             recall,
             rec_recall,
@@ -236,6 +241,108 @@ impl HistoryFilter {
 
         true
     }
+
+    pub fn filter(&self, state: RecallState) -> bool {
+        let Self {
+            recall,
+            rec_recall,
+            stability,
+            rec_stability,
+            lapses,
+        } = self.clone();
+
+        if let Some(IntOp { ord, num }) = lapses {
+            let lapses = state.lapses;
+
+            match ord {
+                MyIntOrd::Equal => {
+                    if lapses != num {
+                        return false;
+                    }
+                }
+                MyIntOrd::Greater => {
+                    if lapses < num {
+                        return false;
+                    }
+                }
+                MyIntOrd::Less => {
+                    if lapses > num {
+                        return false;
+                    }
+                }
+            }
+        }
+
+        if let Some(FloatOp { ord, num }) = recall {
+            let recall = state.recall;
+
+            match ord {
+                MyFloatOrd::Greater => {
+                    if recall < num {
+                        return false;
+                    }
+                }
+                MyFloatOrd::Less => {
+                    if recall > num {
+                        return false;
+                    }
+                }
+            }
+        }
+
+        if let Some(FloatOp { ord, num }) = stability {
+            let stability = state.stability_days;
+
+            match ord {
+                MyFloatOrd::Greater => {
+                    if stability < num {
+                        return false;
+                    }
+                }
+                MyFloatOrd::Less => {
+                    if stability > num {
+                        return false;
+                    }
+                }
+            }
+        }
+
+        if let Some(min_rec_recall) = state.min_rec_recall {
+            if let Some(FloatOp { ord, num }) = rec_recall {
+                match ord {
+                    MyFloatOrd::Greater => {
+                        if min_rec_recall < num {
+                            return false;
+                        }
+                    }
+                    MyFloatOrd::Less => {
+                        if min_rec_recall > num {
+                            return false;
+                        }
+                    }
+                }
+            }
+        }
+
+        if let Some(min_rec_stab) = state.min_rec_stability_days {
+            if let Some(FloatOp { ord, num }) = rec_stability {
+                match ord {
+                    MyFloatOrd::Greater => {
+                        if min_rec_stab < num {
+                            return false;
+                        }
+                    }
+                    MyFloatOrd::Less => {
+                        if min_rec_stab > num {
+                            return false;
+                        }
+                    }
+                }
+            }
+        }
+
+        true
+    }
 }
 
 /// Card filter based on metadata
@@ -283,11 +390,28 @@ pub struct CardFilter {
 }
 
 impl CardFilter {
-    pub fn filter(&self, card: Arc<Card>, now: Duration, meta_ledger: &Ledger<Metadata>) -> bool {
+    pub fn filter(
+        &self,
+        card: CardId,
+        recall: RecallState,
+        meta_ledger: &Ledger<Metadata>,
+    ) -> bool {
         let CardFilter { history, meta } = self.clone();
 
         if !meta.is_empty() {
-            if !meta.filter(card.id(), meta_ledger) {
+            if !meta.filter(card, meta_ledger) {
+                return false;
+            }
+        }
+
+        history.filter(recall)
+    }
+
+    pub fn filter_old(&self, card: Arc<Card>, now: Duration, ledger: &Ledger<Metadata>) -> bool {
+        let CardFilter { history, meta } = self.clone();
+
+        if !meta.is_empty() {
+            if !meta.filter(card.id(), ledger) {
                 return false;
             }
         }
@@ -304,6 +428,91 @@ impl CardFilter {
             })
             .collect();
 
-        history.filter(now, card.history().to_owned(), dependencies)
+        history.filter_old(now, card.history().to_owned(), dependencies)
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct RecallState {
+    recall: f32,
+    stability_days: f32,
+    min_rec_recall: Option<f32>,
+    min_rec_stability_days: Option<f32>,
+    lapses: u32,
+    pub pending: bool,
+    pub reviewable: bool,
+}
+
+impl RecallState {
+    pub fn eval_card(
+        card: &Node<RawCard>,
+        all: &mut BTreeMap<CardId, RecallState>,
+        ledger: &Ledger<History>,
+        card_ledger: &Ledger<RawCard>,
+        time: Duration,
+    ) -> Self {
+        if let Some(state) = all.get(&card.id()) {
+            return *state;
+        }
+
+        let history = ledger.load_or_default(card.id());
+        let recall = history.recall_rate(time).unwrap_or_default();
+        let stability = history.maturity_days(time).unwrap_or_default();
+
+        let reviewable = card_ledger.has_property(
+            card.id(),
+            ledgerstore::PropertyCache {
+                property: CardProperty::Reviewable,
+                value: true.to_string(),
+            },
+        );
+
+        let mut this = Self {
+            recall,
+            stability_days: stability,
+            min_rec_recall: None,
+            min_rec_stability_days: None,
+            lapses: history.lapses(),
+            pending: history.is_empty(),
+            reviewable,
+        };
+
+        for dep in card.deps() {
+            let recstate = Self::eval_card(dep, all, ledger, card_ledger, time);
+
+            let min_recall = match (recstate.reviewable, recstate.min_rec_recall) {
+                (true, Some(sub)) => Some(sub.min(recstate.recall)),
+                (true, None) => Some(recstate.recall),
+                (false, Some(sub)) => Some(sub),
+                (false, None) => None,
+            };
+
+            let min_stab = match (recstate.reviewable, recstate.min_rec_stability_days) {
+                (true, Some(sub)) => Some(sub.min(recstate.stability_days)),
+                (true, None) => Some(recstate.stability_days),
+                (false, Some(sub)) => Some(sub),
+                (false, None) => None,
+            };
+
+            let this_rec = this.min_rec_recall.unwrap_or(1.0);
+
+            if let Some(min_recall) = min_recall {
+                if min_recall < this_rec {
+                    this.min_rec_recall = Some(min_recall);
+                }
+            }
+
+            let this_stab = this.min_rec_stability_days.unwrap_or(f32::MAX);
+
+            if let Some(min_stab) = min_stab {
+                if min_stab < this_stab {
+                    this.min_rec_stability_days = Some(min_stab);
+                }
+            }
+        }
+
+        all.insert(card.id(), this);
+
+        this
     }
 }

@@ -220,7 +220,7 @@ impl CardSelector {
                             .contains(&CardTy::from_ctype(card.card_type()))
                     {
                         let flag = match filtermemo.cloned() {
-                            Some(filter) => filter.filter(card.clone(), now, &meta_ledger),
+                            Some(filter) => filter.filter_old(card.clone(), now, &meta_ledger),
                             None => true,
                         };
 
