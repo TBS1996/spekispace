@@ -14,7 +14,7 @@ pub use dropdown::DropDownMenu;
 pub use filtereditor::*;
 pub use frontside::{CardTy, FrontPut};
 use speki_core::{card::CardId, collection::DynCard, set::SetExpr, CardRefType};
-pub use toggle::{NeedsWork, Toggle};
+pub use toggle::Toggle;
 
 use dioxus::prelude::*;
 
