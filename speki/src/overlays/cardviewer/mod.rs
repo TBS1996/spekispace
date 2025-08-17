@@ -15,7 +15,8 @@ use ledgerstore::LedgerEvent;
 use omtrent::TimeStamp;
 use rfd::FileDialog;
 use speki_core::{
-    card::{AttributeId, BackSide, CardId},
+    card::{AttributeId, BackSide, CType, CardId},
+    collection::DynCard,
     ledger::{CardAction, CardEvent, MetaAction, MetaEvent},
     set::{Input, SetAction, SetEvent, SetExpr, SetId},
     Card, CardType,
@@ -578,6 +579,7 @@ fn InputElements(
                         selected_card: concept,
                         placeholder: "pick parent class",
                         allowed: vec![CardTy::Class],
+                        filter: SetExpr::union_with([DynCard::CardType(CType::Class)]),
                         disabled: fixed_concept || is_remote,
                     }
                 }
@@ -616,6 +618,7 @@ fn InputElements(
                         selected_card: concept,
                         placeholder: "pick class of instance",
                         allowed: vec![CardTy::Class],
+                        filter: SetExpr::union_with([DynCard::CardType(CType::Class)]),
                         disabled: fixed_concept || is_remote,
                     }
                 }
