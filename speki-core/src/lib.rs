@@ -6,6 +6,7 @@ use ledgerstore::TimeProvider;
 use metadata::Metadata;
 use recall_rate::History;
 use set::Set;
+use std::collections::HashMap;
 use std::fmt::Display;
 use std::path::PathBuf;
 use std::{fmt::Debug, sync::Arc, time::Duration};
@@ -147,6 +148,35 @@ pub struct App {
 impl Debug for App {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "app!")
+    }
+}
+
+pub fn recall_algorithm_accuracy(ledger: &Ledger<History>) {
+    let histories = ledger.load_all();
+
+    let mut buckets: HashMap<u32, (u32, u32)> = Default::default();
+
+    for history in histories {
+        for (rate, recalled) in history.rate_vs_result() {
+            let bucket = ((rate * 10.0).floor() as u32).min(9);
+            let entry = buckets.entry(bucket).or_default();
+            if recalled {
+                entry.0 += 1; // success
+            } else {
+                entry.1 += 1; // fail
+            }
+        }
+    }
+
+    let mut keys: Vec<_> = buckets.keys().cloned().collect();
+    keys.sort();
+    for bucket in keys {
+        let (success, fail) = buckets[&bucket];
+        let total = success + fail;
+        let lower = bucket * 10;
+        let upper = lower + 10;
+        let acc = success as f32 / total as f32;
+        println!("{lower}%-{upper}%: n={total}, success={acc:.2}");
     }
 }
 

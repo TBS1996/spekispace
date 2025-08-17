@@ -11,26 +11,14 @@ pub struct SimpleRecall;
 
 impl SimpleRecall {
     pub fn recall_rate(&self, reviews: &History, current_unix: Duration) -> Option<RecallRate> {
-        simple_recall_rate(reviews, current_unix)
+        simple_recall_rate(&reviews.reviews, current_unix)
     }
 }
 
-pub fn simple_recall_rate(reviews: &History, current_unix: Duration) -> Option<RecallRate> {
-    let days_passed = reviews.time_since_last_review(current_unix)?;
+pub fn simple_recall_rate(reviews: &[Review], current_unix: Duration) -> Option<RecallRate> {
+    let days_passed = current_unix - reviews.last()?.timestamp;
     let stability = stability(reviews)?;
-    let randomized_stability =
-        randomize_factor(stability.as_secs_f32(), reviews.last().unwrap().timestamp);
-    let stability = Duration::from_secs_f32(randomized_stability);
     Some(calculate_recall_rate(&days_passed, &stability))
-}
-
-/// Randomizes the flashcard factor with a factor of 0.5 to 1.4 to avoid clustering of reviews
-fn randomize_factor(factor: f32, prev_review_timestamp: Duration) -> f32 {
-    let rand = prev_review_timestamp.as_secs();
-    let rand = rand % 10; // random number from 0 to 9
-    let rand = rand as f32 / 10.; // random number from 0.0 to 0.9
-    let rand = rand + 0.5; // random number from 0.5 to 1.4
-    factor * rand
 }
 
 fn new_stability(
@@ -58,8 +46,7 @@ fn new_stability(
     }
 }
 
-pub fn stability(reviews: &History) -> Option<Duration> {
-    let reviews = reviews.inner();
+pub fn stability(reviews: &[Review]) -> Option<Duration> {
     if reviews.is_empty() {
         return None;
     }
@@ -94,6 +81,24 @@ pub struct History {
 impl History {
     pub fn inner(&self) -> &Vec<Review> {
         &self.reviews
+    }
+
+    pub fn rate_vs_result(&self) -> Vec<(f32, bool)> {
+        let mut out = vec![];
+
+        let mut reviews: Vec<Review> = vec![];
+
+        for review in &self.reviews {
+            if !reviews.is_empty() {
+                let rate = simple_recall_rate(&reviews, review.timestamp).unwrap();
+                let recalled = review.is_success();
+                out.push((rate, recalled));
+            }
+
+            reviews.push(review.clone());
+        }
+
+        out
     }
 
     pub fn maturity_days(&self, time: Duration) -> Option<f32> {
@@ -136,7 +141,7 @@ impl History {
         let _factor = 1.8 - factor; // 0.8 -> 1.8
         let factor = 1.0;
 
-        simple_recall_rate(self, time).map(|recall| recall * factor)
+        simple_recall_rate(&self.reviews, time).map(|recall| recall * factor)
     }
 
     pub fn lapses_since(&self, dur: Duration, current_time: Duration) -> u32 {
