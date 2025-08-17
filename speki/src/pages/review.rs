@@ -539,8 +539,6 @@ pub fn reviewable_cards(expr: SetExpr, filter: Option<CardFilter>) -> Option<Non
         RecallState::eval_card(&node, &mut recalls, &hisledge, &card_ledger, time);
     }
 
-    dbg!(&recalls);
-
     let mut seen_cards: Vec<CardId> = vec![];
     let mut unseen_cards: Vec<CardId> = vec![];
     let meta_ledger = provider.providers.metadata.clone();

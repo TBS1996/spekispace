@@ -133,8 +133,7 @@ impl History {
     pub fn recall_rate(&self, time: Duration) -> Option<f32> {
         let factor = self.id.as_u128() % 100; // 0 -> 100
         let factor = factor as f32 / 100.; // 0. -> 1.0
-        let _factor = factor - 0.5; // -0.5 -> 1.5
-        let factor = 1.0;
+        let factor = 1.8 - factor; // 0.8 -> 1.8
 
         simple_recall_rate(self, time).map(|recall| recall * factor)
     }
