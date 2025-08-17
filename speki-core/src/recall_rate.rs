@@ -6,12 +6,22 @@ use uuid::Uuid;
 
 use crate::card::{CardId, RecallRate};
 
+pub trait Recaller {
+    fn eval(&self, id: CardId, reviews: &[Review], time: Duration) -> Option<f32>;
+}
+
+impl Recaller for SimpleRecall {
+    fn eval(&self, _id: CardId, reviews: &[Review], time: Duration) -> Option<f32> {
+        self.recall_rate(reviews, time)
+    }
+}
+
 #[derive(Clone, Copy)]
 pub struct SimpleRecall;
 
 impl SimpleRecall {
-    pub fn recall_rate(&self, reviews: &History, current_unix: Duration) -> Option<RecallRate> {
-        simple_recall_rate(&reviews.reviews, current_unix)
+    pub fn recall_rate(&self, reviews: &[Review], current_unix: Duration) -> Option<RecallRate> {
+        simple_recall_rate(&reviews, current_unix)
     }
 }
 
@@ -67,6 +77,10 @@ pub fn stability(reviews: &[Review]) -> Option<Duration> {
 }
 
 fn calculate_recall_rate(days_passed: &Duration, stability: &Duration) -> RecallRate {
+    if stability.is_zero() {
+        return 0.0;
+    };
+
     let base: f32 = 0.9;
     let ratio = days_passed.as_secs_f32() / stability.as_secs_f32();
     (base.ln() * ratio).exp()
@@ -83,14 +97,14 @@ impl History {
         &self.reviews
     }
 
-    pub fn rate_vs_result(&self) -> Vec<(f32, bool)> {
+    pub fn rate_vs_result(&self, algo: impl Recaller) -> Vec<(f32, bool)> {
         let mut out = vec![];
 
         let mut reviews: Vec<Review> = vec![];
 
         for review in &self.reviews {
             if !reviews.is_empty() {
-                let rate = simple_recall_rate(&reviews, review.timestamp).unwrap();
+                let rate = algo.eval(self.id, &reviews, review.timestamp).unwrap();
                 let recalled = review.is_success();
                 out.push((rate, recalled));
             }

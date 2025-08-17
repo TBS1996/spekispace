@@ -58,6 +58,8 @@ impl AsRef<str> for CardRefType {
 
 use std::str::FromStr;
 
+use crate::recall_rate::Recaller;
+
 impl FromStr for CardRefType {
     type Err = ();
 
@@ -151,13 +153,57 @@ impl Debug for App {
     }
 }
 
+pub fn mean_rest(pairs: &[(f32, bool)]) -> f32 {
+    let mut n = 0usize;
+    let mut s = 0.0f32;
+    for &(p, y) in pairs {
+        if !p.is_finite() {
+            continue;
+        }
+        let p = p.clamp(0.0, 1.0);
+        s += if y { 1.0 - p } else { p };
+        n += 1;
+    }
+    if n == 0 {
+        return f32::NAN;
+    }
+    s / n as f32
+}
+
+pub fn mean_error_accuracy(ledger: &Ledger<History>, algo: impl Recaller) -> f32 {
+    let mut pairs = Vec::new();
+    let mut bad = 0usize;
+    for h in ledger.load_all() {
+        let mut seen = Vec::new();
+        for r in &h.reviews {
+            if !seen.is_empty() {
+                if let Some(p) = algo.eval(Default::default(), &seen, r.timestamp) {
+                    if p.is_finite() {
+                        pairs.push((p, r.is_success()));
+                    } else {
+                        dbg!(&seen);
+                        dbg!(&p);
+                        bad += 1;
+                    }
+                }
+            }
+            seen.push(r.clone());
+        }
+    }
+    let m = mean_rest(&pairs);
+    if bad > 0 {
+        eprintln!("mean_error_accuracy: skipped {bad} non-finite predictions");
+    }
+    m
+}
+
 pub fn recall_algorithm_accuracy(ledger: &Ledger<History>) {
     let histories = ledger.load_all();
 
     let mut buckets: HashMap<u32, (u32, u32)> = Default::default();
 
     for history in histories {
-        for (rate, recalled) in history.rate_vs_result() {
+        for (rate, recalled) in history.rate_vs_result(SimpleRecall) {
             let bucket = ((rate * 10.0).floor() as u32).min(9);
             let entry = buckets.entry(bucket).or_default();
             if recalled {

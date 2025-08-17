@@ -863,7 +863,7 @@ impl Card {
     }
 
     pub fn recall_rate_at(&self, current_unix: Duration) -> Option<RecallRate> {
-        SimpleRecall.recall_rate(&self.history, current_unix)
+        SimpleRecall.recall_rate(&self.history.reviews, current_unix)
     }
 
     /// Full history includes all the successful reviews of cards that are dependent on this card.
@@ -891,14 +891,9 @@ impl Card {
         history
     }
 
-    pub fn full_recall_rate(&self) -> Option<RecallRate> {
-        let now = self.current_time();
-        self.recaller.recall_rate(&self.full_history(), now)
-    }
-
     pub fn recall_rate(&self) -> Option<RecallRate> {
         let now = self.current_time();
-        self.recaller.recall_rate(&self.history, now)
+        self.recaller.recall_rate(&self.history.reviews, now)
     }
 
     pub fn maturity_days(&self) -> Option<f32> {

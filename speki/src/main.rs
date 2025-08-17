@@ -15,8 +15,10 @@ use pages::ReviewPage;
 use speki_core::{
     card::{BackSide, CardId, TextData},
     ledger::{CardAction, CardEvent},
+    mean_error_accuracy,
     recall_rate::{Recall, Review as TheReview, ReviewAction, ReviewEvent},
     set::{Input, Set, SetAction, SetEvent},
+    SimpleRecall,
 };
 use std::fs;
 
@@ -64,6 +66,8 @@ struct Cli {
     card: Option<CardId>,
     #[arg(long)]
     grade: Option<char>,
+    #[arg(long)]
+    analyze: bool,
 }
 
 #[derive(Clone)]
@@ -177,6 +181,15 @@ pub fn TheApp() -> Element {
     use_context_provider(RemoteUpdate::new);
 
     let cli = Cli::parse();
+
+    if cli.analyze {
+        println!("starting analyze algo");
+
+        let ledger = APP.read().inner().provider.reviews.clone();
+        let res = mean_error_accuracy(&ledger, SimpleRecall);
+        println!("mean error: {res}");
+        std::process::exit(0);
+    }
 
     if let Some(args) = cli.add {
         handle_add_card(&args);
