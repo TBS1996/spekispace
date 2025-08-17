@@ -252,8 +252,6 @@ pub fn CardRefRender(
                         props = props.with_instance_of(class);
                     }
 
-                    dbg!(&props, &instance_of);
-
                     OverlayEnum::CardSelector(props).append();
                 },
             }

@@ -60,7 +60,7 @@ impl MaybeEntry {
 
 type OnCardSelected = (MyClosure, bool); // if true, close the overlay
 
-#[derive(Props, Clone, Debug)]
+#[derive(Props, Clone)]
 pub struct CardSelector {
     pub title: Option<String>,
     pub search: Signal<String>,

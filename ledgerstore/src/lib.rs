@@ -82,7 +82,7 @@ impl<T: LedgerItem> ItemRefCache<T> {
 pub enum EventError<T: LedgerItem> {
     Cycle(Vec<(T::Key, T::RefType)>),
     Invariant(T::Error),
-    ItemNotFound,
+    ItemNotFound(T::Key),
     DeletingWithDependencies,
     Remote,
 }
@@ -1021,7 +1021,7 @@ impl<T: LedgerItem> Ledger<T> {
                     }
                 }
 
-                return Err(EventError::ItemNotFound);
+                return Err(EventError::ItemNotFound(item));
             }
         }
 
