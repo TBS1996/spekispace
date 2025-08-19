@@ -68,6 +68,8 @@ struct Cli {
     grade: Option<char>,
     #[arg(long)]
     analyze: bool,
+    #[arg(long)]
+    find_duplicates: bool,
 }
 
 #[derive(Clone)]
@@ -181,6 +183,20 @@ pub fn TheApp() -> Element {
     use_context_provider(RemoteUpdate::new);
 
     let cli = Cli::parse();
+
+    if cli.find_duplicates {
+        let duplicates = speki_core::duplicates(&APP.read().inner().card_provider);
+        if duplicates.is_empty() {
+            info!("no duplicates!");
+        } else {
+            info!("duplicates:");
+            for card in duplicates {
+                println!("{}", card);
+            }
+        }
+
+        std::process::exit(0);
+    }
 
     if cli.analyze {
         println!("starting analyze algo");

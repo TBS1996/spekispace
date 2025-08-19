@@ -7,6 +7,7 @@ use metadata::Metadata;
 use recall_rate::History;
 use set::Set;
 use std::collections::HashMap;
+use std::collections::HashSet;
 use std::fmt::Display;
 use std::path::PathBuf;
 use std::{fmt::Debug, sync::Arc, time::Duration};
@@ -125,6 +126,30 @@ impl TimeProvider for FsTime {
                 .as_secs(),
         )
     }
+}
+
+pub fn duplicates(provider: &CardProvider) -> HashSet<String> {
+    info!("finding duplicates!");
+    let mut cards: Vec<String> = provider
+        .load_all()
+        .into_iter()
+        .map(|c| c.display_card(true, true).to_lowercase())
+        .collect();
+
+    cards.sort();
+
+    let mut duplicates: HashSet<String> = Default::default();
+
+    let mut prev = String::new();
+    for card in cards.into_iter() {
+        if &card == &prev {
+            duplicates.insert(card.clone());
+        }
+
+        prev = card;
+    }
+
+    duplicates
 }
 
 pub fn current_version() -> semver::Version {
