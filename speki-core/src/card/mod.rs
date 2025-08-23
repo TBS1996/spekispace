@@ -23,7 +23,7 @@ use crate::{
     card_provider::CardProvider,
     ledger::{CardAction, CardEvent, MetaEvent},
     metadata::Metadata,
-    recall_rate::{History, Recall, Review, ReviewAction, ReviewEvent, SimpleRecall},
+    recall_rate::{ml::Trained, History, Recall, Review, ReviewAction, ReviewEvent, SimpleRecall},
     CardRefType, FsTime,
 };
 
@@ -276,7 +276,7 @@ pub struct Card {
     metadata: Metadata,
     history: History,
     card_provider: CardProvider,
-    recaller: SimpleRecall,
+    recaller: Trained,
     is_remote: bool,
 }
 
@@ -629,7 +629,7 @@ impl Card {
         history: History,
         metadata: Metadata,
         card_provider: CardProvider,
-        recaller: SimpleRecall,
+        recaller: Trained,
         front_audio: Option<Audio>,
         back_audio: Option<Audio>,
     ) -> Self {
@@ -893,7 +893,9 @@ impl Card {
 
     pub fn recall_rate(&self) -> Option<RecallRate> {
         let now = self.current_time();
-        self.recaller.recall_rate(&self.history.reviews, now)
+        self.recaller
+            .recall_rate(&self.history.reviews, now)
+            .map(|x| x as RecallRate)
     }
 
     pub fn maturity_days(&self) -> Option<f32> {

@@ -1,6 +1,9 @@
 use crate::{
-    audio::Audio, card::CardId, metadata::Metadata, recall_rate::History, Card, FsTime, Provider,
-    SimpleRecall,
+    audio::Audio,
+    card::CardId,
+    metadata::Metadata,
+    recall_rate::{ml::Trained, History},
+    Card, FsTime, Provider,
 };
 use dioxus_logger::tracing::{info, trace};
 use std::{collections::BTreeSet, fmt::Debug, sync::Arc};
@@ -9,7 +12,7 @@ use std::{collections::BTreeSet, fmt::Debug, sync::Arc};
 pub struct CardProvider {
     pub providers: Provider,
     time_provider: FsTime,
-    recaller: SimpleRecall,
+    recaller: Trained,
 }
 
 impl Debug for CardProvider {
@@ -80,7 +83,7 @@ impl CardProvider {
         self.time_provider.clone()
     }
 
-    pub fn new(provider: Provider, time_provider: FsTime, recaller: SimpleRecall) -> Self {
+    pub fn new(provider: Provider, time_provider: FsTime, recaller: Trained) -> Self {
         Self {
             time_provider,
             recaller,

@@ -15,8 +15,8 @@ use pages::ReviewPage;
 use speki_core::{
     card::{BackSide, CardId, TextData},
     ledger::{CardAction, CardEvent},
-    mean_error_accuracy,
-    recall_rate::{Recall, Review as TheReview, ReviewAction, ReviewEvent},
+    log_loss_accuracy,
+    recall_rate::{ml::Trained, Recall, Review as TheReview, ReviewAction, ReviewEvent},
     set::{Input, Set, SetAction, SetEvent},
     SimpleRecall,
 };
@@ -199,11 +199,24 @@ pub fn TheApp() -> Element {
     }
 
     if cli.analyze {
-        println!("starting analyze algo");
-
         let ledger = APP.read().inner().provider.reviews.clone();
-        let res = mean_error_accuracy(&ledger, SimpleRecall);
-        println!("mean error: {res}");
+        let mut histories = ledger.load_all();
+
+        histories.retain(|h| h.id.as_u128() % 100 < 80);
+
+        let trained = Trained::new(histories);
+
+        println!("starting default analyze algo");
+        let res = log_loss_accuracy(&ledger, SimpleRecall);
+        println!("old log loss error: {res}");
+
+        println!("starting ML algo");
+        let res = log_loss_accuracy(&ledger, trained);
+        println!("trained log loss error: {res}");
+
+        let res = log_loss_accuracy(&ledger, Trained::from_static());
+        println!("cached log loss error: {res}");
+
         std::process::exit(0);
     }
 

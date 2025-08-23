@@ -1,10 +1,15 @@
+pub mod ml;
+
 use std::time::Duration;
 
 use ledgerstore::{LedgerEvent, LedgerItem};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::card::{CardId, RecallRate};
+use crate::{
+    card::{CardId, RecallRate},
+    recall_rate::ml::Trained,
+};
 
 pub trait Recaller {
     fn eval(&self, id: CardId, reviews: &[Review], time: Duration) -> Option<f32>;
@@ -13,6 +18,12 @@ pub trait Recaller {
 impl Recaller for SimpleRecall {
     fn eval(&self, _id: CardId, reviews: &[Review], time: Duration) -> Option<f32> {
         self.recall_rate(reviews, time)
+    }
+}
+
+impl Recaller for Trained {
+    fn eval(&self, _id: CardId, reviews: &[Review], time: Duration) -> Option<f32> {
+        self.recall_rate(reviews, time).map(|x| x as f32)
     }
 }
 

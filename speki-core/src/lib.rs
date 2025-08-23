@@ -59,6 +59,7 @@ impl AsRef<str> for CardRefType {
 
 use std::str::FromStr;
 
+use crate::recall_rate::ml::Trained;
 use crate::recall_rate::Recaller;
 
 impl FromStr for CardRefType {
@@ -195,31 +196,56 @@ pub fn mean_rest(pairs: &[(f32, bool)]) -> f32 {
     s / n as f32
 }
 
-pub fn mean_error_accuracy(ledger: &Ledger<History>, algo: impl Recaller) -> f32 {
+pub fn log_loss_accuracy(ledger: &Ledger<History>, algo: impl Recaller) -> f32 {
     let mut pairs = Vec::new();
     let mut bad = 0usize;
+    let mut skipped = 0usize;
+
     for h in ledger.load_all() {
         let mut seen = Vec::new();
         for r in &h.reviews {
             if !seen.is_empty() {
                 if let Some(p) = algo.eval(Default::default(), &seen, r.timestamp) {
                     if p.is_finite() {
-                        pairs.push((p, r.is_success()));
+                        pairs.push((p as f64, r.is_success()));
                     } else {
-                        dbg!(&seen);
-                        dbg!(&p);
                         bad += 1;
                     }
+                } else {
+                    skipped += 1;
                 }
             }
             seen.push(r.clone());
         }
     }
-    let m = mean_rest(&pairs);
+
+    let n = pairs.len() as f64;
+    if n == 0.0 {
+        eprintln!("mean_error_accuracy: no valid predictions");
+        return f32::NAN;
+    }
+
+    let mut logloss: f64 = 0.0;
+
+    for (p, y) in pairs {
+        let y = if y { 1.0 } else { 0.0 };
+        let eps = 1e-15;
+        if y == 1.0 {
+            logloss += -(p.max(eps)).ln();
+        } else {
+            logloss += -(1.0 - p).max(eps).ln();
+        }
+    }
+
+    logloss /= n;
+
     if bad > 0 {
         eprintln!("mean_error_accuracy: skipped {bad} non-finite predictions");
     }
-    m
+
+    println!("skipped: {skipped}");
+
+    logloss as f32
 }
 
 pub fn recall_algorithm_accuracy(ledger: &Ledger<History>) {
@@ -227,8 +253,10 @@ pub fn recall_algorithm_accuracy(ledger: &Ledger<History>) {
 
     let mut buckets: HashMap<u32, (u32, u32)> = Default::default();
 
+    let recaller = Trained::from_static();
+
     for history in histories {
-        for (rate, recalled) in history.rate_vs_result(SimpleRecall) {
+        for (rate, recalled) in history.rate_vs_result(recaller.clone()) {
             let bucket = ((rate * 10.0).floor() as u32).min(9);
             let entry = buckets.entry(bucket).or_default();
             if recalled {
@@ -265,7 +293,7 @@ impl App {
             sets: Ledger::new(root),
         };
 
-        let card_provider = CardProvider::new(provider.clone(), FsTime, SimpleRecall);
+        let card_provider = CardProvider::new(provider.clone(), FsTime, Trained::from_static());
 
         Self {
             provider,
