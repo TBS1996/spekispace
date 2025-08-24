@@ -69,6 +69,10 @@ pub trait ReadLedger {
         p
     }
 
+    fn has_item(&self, key: <Self::Item as LedgerItem>::Key) -> bool {
+        self.item_path(key).is_file()
+    }
+
     fn has_property(
         &self,
         key: <Self::Item as LedgerItem>::Key,

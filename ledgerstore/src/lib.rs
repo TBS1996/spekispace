@@ -729,6 +729,14 @@ impl<T: LedgerItem> Ledger<T> {
         }
     }
 
+    pub fn has_item(&self, key: T::Key) -> bool {
+        if self.remote.has_item(key) {
+            true
+        } else {
+            self.local.has_item(key)
+        }
+    }
+
     pub fn modify(&self, event: LedgerEvent<T>) -> Result<(), EventError<T>> {
         self.modify_it(event, true, true, true)?;
         Ok(())

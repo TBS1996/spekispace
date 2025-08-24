@@ -1,4 +1,4 @@
-use std::{collections::HashSet, time::Duration};
+use std::time::Duration;
 
 use ledgerstore::Ledger;
 
@@ -60,11 +60,11 @@ pub struct AllResults {
 }
 
 impl AllResults {
-    pub fn new(histories: HashSet<History>) -> Self {
+    pub fn new(histories: &Vec<History>) -> Self {
         let mut obs: Vec<Observation> = vec![];
 
         for history in histories {
-            obs.extend(Observation::new(history));
+            obs.extend(Observation::new(history.clone()));
         }
 
         let mut selv = Self::default();
@@ -399,7 +399,7 @@ impl Trained {
         }
     }
 
-    pub fn new(histories: HashSet<History>) -> Self {
+    pub fn new(histories: &Vec<History>) -> Self {
         let res = AllResults::new(histories);
         train_all(&res, 0.2, 800, 1e-4)
     }

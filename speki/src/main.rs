@@ -16,7 +16,7 @@ use speki_core::{
     card::{BackSide, CardId, TextData},
     ledger::{CardAction, CardEvent},
     log_loss_accuracy,
-    recall_rate::{ml::Trained, Recall, Review as TheReview, ReviewAction, ReviewEvent},
+    recall_rate::{ml::Trained, History, Recall, Review as TheReview, ReviewAction, ReviewEvent},
     set::{Input, Set, SetAction, SetEvent},
     SimpleRecall,
 };
@@ -200,21 +200,37 @@ pub fn TheApp() -> Element {
 
     if cli.analyze {
         let ledger = APP.read().inner().provider.reviews.clone();
-        let mut histories = ledger.load_all();
+        let card_ledger = APP.read().inner().provider.cards.clone();
+        let histories = ledger.load_all();
 
-        histories.retain(|h| h.id.as_u128() % 100 < 80);
+        let mut training_data: Vec<History> = vec![];
+        let mut eval_data: Vec<History> = vec![];
 
-        let trained = Trained::new(histories);
+        for mut history in histories {
+            if !card_ledger.has_item(history.id) {
+                continue;
+            };
+
+            history.reviews.dedup();
+
+            if history.id.as_u128() % 100 < 80 {
+                training_data.push(history);
+            } else {
+                eval_data.push(history);
+            }
+        }
+
+        let trained = Trained::new(&training_data);
 
         println!("starting default analyze algo");
-        let res = log_loss_accuracy(&ledger, SimpleRecall);
+        let res = log_loss_accuracy(&eval_data, SimpleRecall);
         println!("old log loss error: {res}");
 
         println!("starting ML algo");
-        let res = log_loss_accuracy(&ledger, trained);
+        let res = log_loss_accuracy(&eval_data, trained.clone());
         println!("trained log loss error: {res}");
 
-        let res = log_loss_accuracy(&ledger, Trained::from_static());
+        let res = log_loss_accuracy(&eval_data, Trained::from_static());
         println!("cached log loss error: {res}");
 
         std::process::exit(0);

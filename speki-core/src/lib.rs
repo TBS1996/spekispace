@@ -196,16 +196,16 @@ pub fn mean_rest(pairs: &[(f32, bool)]) -> f32 {
     s / n as f32
 }
 
-pub fn log_loss_accuracy(ledger: &Ledger<History>, algo: impl Recaller) -> f32 {
+pub fn log_loss_accuracy(histories: &Vec<History>, algo: impl Recaller) -> f32 {
     let mut pairs = Vec::new();
     let mut bad = 0usize;
     let mut skipped = 0usize;
 
-    for h in ledger.load_all() {
+    for h in histories {
         let mut seen = Vec::new();
         for r in &h.reviews {
             if !seen.is_empty() {
-                if let Some(p) = algo.eval(Default::default(), &seen, r.timestamp) {
+                if let Some(p) = algo.eval(h.id, &seen, r.timestamp) {
                     if p.is_finite() {
                         pairs.push((p as f64, r.is_success()));
                     } else {
@@ -218,6 +218,8 @@ pub fn log_loss_accuracy(ledger: &Ledger<History>, algo: impl Recaller) -> f32 {
             seen.push(r.clone());
         }
     }
+
+    println!("skipped: {skipped}");
 
     let n = pairs.len() as f64;
     if n == 0.0 {
