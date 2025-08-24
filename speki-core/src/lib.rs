@@ -184,66 +184,94 @@ impl Debug for App {
     }
 }
 
-// helper: build log-spaced x values in DAYS (dense near "now")
-fn log_spaced_days(start_min: f64, end_days: f64, step: f64) -> Vec<f64> {
-    let mut xs = Vec::new();
-    let mut d = start_min / (24.0 * 60.0); // minutes -> days
-    while d <= end_days {
-        xs.push(d);
-        d *= step;
+pub fn log_spaced(start: Duration, end: Duration, resolution: Duration) -> Vec<Duration> {
+    assert!(end >= start, "end before start");
+    let mut out = Vec::new();
+    out.push(start);
+    if end == start {
+        return out;
     }
-    xs
+
+    let step = if resolution.is_zero() {
+        Duration::from_nanos(1)
+    } else {
+        resolution
+    };
+    let mut t = start + step;
+
+    while t <= end {
+        out.push(t);
+        t += step;
+    }
+    if *out.last().unwrap_or(&start) < end {
+        out.push(end);
+    }
+    out
 }
 
-// Generic plotting helper: pass a function f(dt_days) -> probability
-fn plot_recall<F>(title: &str, f: F, start: f64, end: f64)
-where
-    F: Fn(f64) -> f64,
+fn plot_recall<F>(
+    title: &str,
+    f: F,
+    start: Duration,
+    end: Duration,
+    resolution: Duration,
+    x_unit: Duration,
+) where
+    F: Fn(Duration) -> f64,
 {
-    let xs = log_spaced_days(start, end, 1.15); // 1 minute .. ~10 years
-    let pts: Vec<(f32, f32)> = xs.into_iter().map(|d| (d as f32, f(d) as f32)).collect();
+    let xs = log_spaced(start, end, resolution);
+
+    let unit_secs = x_unit.as_secs_f64().max(1e-9);
+    let xmax = (end - start).as_secs_f64() / unit_secs;
+
+    let pts: Vec<(f32, f32)> = xs
+        .into_iter()
+        .map(|abs_t| {
+            let x_units = (abs_t - start).as_secs_f64() / unit_secs;
+            (x_units as f32, f(abs_t) as f32)
+        })
+        .collect();
 
     println!("\n{title}");
-
-    Chart::new_with_y_range(360, 30, 0.0, end as f32, 0.0, 1.0)
+    Chart::new_with_y_range(1000, 60, 0.0, xmax as f32, 0.0, 1.0)
         .lineplot(&Shape::Lines(&pts))
         .display();
+}
+
+fn plot_card_recall_over_future(
+    recaller: &impl Recaller,
+    card_id: CardId,
+    seen_reviews: &[Review],
+) {
+    let resolution = Duration::from_secs(3600);
+    let x_unit = Duration::from_secs(3600);
+    let start = seen_reviews.first().unwrap().timestamp;
+    let horizon = Duration::from_secs(86400 * 10);
+
+    plot_recall(
+        "Recall vs time (future)",
+        |abs_t| recaller.eval(card_id, seen_reviews, abs_t).unwrap_or(0.0) as f64,
+        start,
+        start + horizon,
+        resolution,
+        x_unit,
+    );
 }
 
 pub fn plot_the_recall(card: Arc<Card>) {
     let recaller = Trained::from_static();
     let id = card.id();
     let reviews = card.history().reviews.clone();
-    let now = reviews
-        .first()
-        .map(|x| x.timestamp)
-        .unwrap_or(current_time());
-    plot_card_recall_over_future(&recaller, id, &reviews, now);
-    plot_card_recall_over_future(&SimpleRecall, id, &reviews, now);
+
+    plot_card_recall_over_future(&recaller, id, &reviews);
+    plot_card_recall_over_future(&SimpleRecall, id, &reviews);
+
     let avg = AvgRecall {
         trained: recaller,
         simple: SimpleRecall,
         alpha: 0.75,
     };
-    plot_card_recall_over_future(&avg, id, &reviews, now);
-}
-
-// Example glue — adapt names to your types:
-fn plot_card_recall_over_future(
-    recaller: &impl Recaller,
-    card_id: CardId,
-    seen_reviews: &[Review], // all past reviews for the card
-    now: Duration,
-) {
-    plot_recall(
-        "Recall vs time (future)",
-        |dt_days| {
-            let t = now + Duration::from_secs_f64(dt_days * 86_400.0);
-            recaller.eval(card_id, seen_reviews, t).unwrap_or(0.0) as f64
-        },
-        1.0,
-        30.,
-    );
+    plot_card_recall_over_future(&avg, id, &reviews);
 }
 
 pub fn mean_rest(pairs: &[(f32, bool)]) -> f32 {
