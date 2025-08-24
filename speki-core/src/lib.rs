@@ -63,6 +63,7 @@ impl AsRef<str> for CardRefType {
 use std::str::FromStr;
 
 use crate::recall_rate::ml::Trained;
+use crate::recall_rate::AvgRecall;
 use crate::recall_rate::Recaller;
 use crate::recall_rate::Review;
 
@@ -219,6 +220,11 @@ pub fn plot_the_recall(card: Arc<Card>) {
         .unwrap_or(current_time());
     plot_card_recall_over_future(&recaller, id, &reviews, now);
     plot_card_recall_over_future(&SimpleRecall, id, &reviews, now);
+    let avg = AvgRecall {
+        trained: recaller,
+        simple: SimpleRecall,
+    };
+    plot_card_recall_over_future(&avg, id, &reviews, now);
 }
 
 // Example glue — adapt names to your types:
@@ -355,7 +361,11 @@ impl App {
             sets: Ledger::new(root),
         };
 
-        let card_provider = CardProvider::new(provider.clone(), FsTime, Trained::from_static());
+        let recaller = AvgRecall {
+            trained: Trained::from_static(),
+            simple: SimpleRecall,
+        };
+        let card_provider = CardProvider::new(provider.clone(), FsTime, recaller);
 
         Self {
             provider,

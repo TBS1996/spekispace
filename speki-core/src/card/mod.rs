@@ -23,7 +23,9 @@ use crate::{
     card_provider::CardProvider,
     ledger::{CardAction, CardEvent, MetaEvent},
     metadata::Metadata,
-    recall_rate::{ml::Trained, History, Recall, Review, ReviewAction, ReviewEvent, SimpleRecall},
+    recall_rate::{
+        AvgRecall, History, Recall, Recaller, Review, ReviewAction, ReviewEvent, SimpleRecall,
+    },
     CardRefType, FsTime,
 };
 
@@ -276,7 +278,7 @@ pub struct Card {
     metadata: Metadata,
     history: History,
     card_provider: CardProvider,
-    recaller: Trained,
+    recaller: AvgRecall,
     is_remote: bool,
 }
 
@@ -629,7 +631,7 @@ impl Card {
         history: History,
         metadata: Metadata,
         card_provider: CardProvider,
-        recaller: Trained,
+        recaller: AvgRecall,
         front_audio: Option<Audio>,
         back_audio: Option<Audio>,
     ) -> Self {
@@ -894,7 +896,7 @@ impl Card {
     pub fn recall_rate(&self) -> Option<RecallRate> {
         let now = self.current_time();
         self.recaller
-            .recall_rate(&self.history.reviews, now)
+            .eval(self.id, &self.history.reviews, now)
             .map(|x| x as RecallRate)
     }
 

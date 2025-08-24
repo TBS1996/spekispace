@@ -15,6 +15,20 @@ pub trait Recaller {
     fn eval(&self, id: CardId, reviews: &[Review], time: Duration) -> Option<f32>;
 }
 
+#[derive(Clone)]
+pub struct AvgRecall {
+    pub trained: Trained,
+    pub simple: SimpleRecall,
+}
+
+impl Recaller for AvgRecall {
+    fn eval(&self, id: CardId, reviews: &[Review], time: Duration) -> Option<f32> {
+        let trained = self.trained.eval(id, reviews, time)?;
+        let simple = self.simple.eval(id, reviews, time)?;
+        Some((trained + simple) / 2.)
+    }
+}
+
 impl Recaller for SimpleRecall {
     fn eval(&self, _id: CardId, reviews: &[Review], time: Duration) -> Option<f32> {
         let mut the_reviews: Vec<Review> = vec![];

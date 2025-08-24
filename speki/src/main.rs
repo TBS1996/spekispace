@@ -16,7 +16,9 @@ use speki_core::{
     card::{BackSide, CardId, TextData},
     ledger::{CardAction, CardEvent},
     log_loss_accuracy,
-    recall_rate::{ml::Trained, History, Recall, Review as TheReview, ReviewAction, ReviewEvent},
+    recall_rate::{
+        ml::Trained, AvgRecall, History, Recall, Review as TheReview, ReviewAction, ReviewEvent,
+    },
     set::{Input, Set, SetAction, SetEvent},
     SimpleRecall,
 };
@@ -240,6 +242,13 @@ pub fn TheApp() -> Element {
 
         let res = log_loss_accuracy(&eval_data, Trained::from_static());
         println!("cached log loss error: {res}");
+
+        let avg = AvgRecall {
+            trained: Trained::from_static(),
+            simple: SimpleRecall,
+        };
+        let res = log_loss_accuracy(&eval_data, avg);
+        println!("averager log loss error: {res}");
 
         std::process::exit(0);
     }
