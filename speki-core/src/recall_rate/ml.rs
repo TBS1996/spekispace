@@ -405,7 +405,13 @@ impl Trained {
     }
 
     pub fn recall_rate(&self, history: &[Review], current_time: Duration) -> Option<f64> {
-        let inputs = Self::current_inputs(history, current_time)?;
+        let mut reviews: Vec<Review> = vec![];
+        for review in history {
+            if review.timestamp < current_time {
+                reviews.push(review.clone());
+            }
+        }
+        let inputs = Self::current_inputs(&reviews, current_time)?;
         self.predict_proba(&inputs)
     }
 

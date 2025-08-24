@@ -17,7 +17,14 @@ pub trait Recaller {
 
 impl Recaller for SimpleRecall {
     fn eval(&self, _id: CardId, reviews: &[Review], time: Duration) -> Option<f32> {
-        self.recall_rate(reviews, time)
+        let mut the_reviews: Vec<Review> = vec![];
+        for review in reviews {
+            if review.timestamp < time {
+                the_reviews.push(review.clone());
+            }
+        }
+
+        self.recall_rate(&the_reviews, time)
     }
 }
 

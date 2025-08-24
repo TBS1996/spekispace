@@ -70,6 +70,8 @@ struct Cli {
     analyze: bool,
     #[arg(long)]
     find_duplicates: bool,
+    #[arg(long)]
+    plot: Option<CardId>,
 }
 
 #[derive(Clone)]
@@ -195,6 +197,12 @@ pub fn TheApp() -> Element {
             }
         }
 
+        std::process::exit(0);
+    }
+
+    if let Some(card) = cli.plot {
+        let card = APP.read().inner().card_provider.load(card).unwrap();
+        speki_core::plot_the_recall(card);
         std::process::exit(0);
     }
 

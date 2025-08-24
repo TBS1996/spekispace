@@ -20,6 +20,7 @@ either.workspace = true
 strum.workspace = true
 deunicode.workspace = true
 semver.workspace = true
+textplots.workspace = true
 
 
 omtrent.workspace = true

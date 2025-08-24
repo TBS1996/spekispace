@@ -11,6 +11,9 @@ use std::collections::HashSet;
 use std::fmt::Display;
 use std::path::PathBuf;
 use std::{fmt::Debug, sync::Arc, time::Duration};
+use textplots::Chart;
+use textplots::Plot;
+use textplots::Shape;
 use tracing::trace;
 
 pub mod audio;
@@ -61,6 +64,7 @@ use std::str::FromStr;
 
 use crate::recall_rate::ml::Trained;
 use crate::recall_rate::Recaller;
+use crate::recall_rate::Review;
 
 impl FromStr for CardRefType {
     type Err = ();
@@ -177,6 +181,62 @@ impl Debug for App {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "app!")
     }
+}
+
+// helper: build log-spaced x values in DAYS (dense near "now")
+fn log_spaced_days(start_min: f64, end_days: f64, step: f64) -> Vec<f64> {
+    let mut xs = Vec::new();
+    let mut d = start_min / (24.0 * 60.0); // minutes -> days
+    while d <= end_days {
+        xs.push(d);
+        d *= step;
+    }
+    xs
+}
+
+// Generic plotting helper: pass a function f(dt_days) -> probability
+fn plot_recall<F>(title: &str, f: F, start: f64, end: f64)
+where
+    F: Fn(f64) -> f64,
+{
+    let xs = log_spaced_days(start, end, 1.15); // 1 minute .. ~10 years
+    let pts: Vec<(f32, f32)> = xs.into_iter().map(|d| (d as f32, f(d) as f32)).collect();
+
+    println!("\n{title}");
+
+    Chart::new_with_y_range(360, 30, 0.0, end as f32, 0.0, 1.0)
+        .lineplot(&Shape::Lines(&pts))
+        .display();
+}
+
+pub fn plot_the_recall(card: Arc<Card>) {
+    let recaller = Trained::from_static();
+    let id = card.id();
+    let reviews = card.history().reviews.clone();
+    let now = reviews
+        .first()
+        .map(|x| x.timestamp)
+        .unwrap_or(current_time());
+    plot_card_recall_over_future(&recaller, id, &reviews, now);
+    plot_card_recall_over_future(&SimpleRecall, id, &reviews, now);
+}
+
+// Example glue — adapt names to your types:
+fn plot_card_recall_over_future(
+    recaller: &impl Recaller,
+    card_id: CardId,
+    seen_reviews: &[Review], // all past reviews for the card
+    now: Duration,
+) {
+    plot_recall(
+        "Recall vs time (future)",
+        |dt_days| {
+            let t = now + Duration::from_secs_f64(dt_days * 86_400.0);
+            recaller.eval(card_id, seen_reviews, t).unwrap_or(0.0) as f64
+        },
+        1.0,
+        30.,
+    );
 }
 
 pub fn mean_rest(pairs: &[(f32, bool)]) -> f32 {

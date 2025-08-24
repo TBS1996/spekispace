@@ -37,6 +37,7 @@ clap = { version = "4.5.43", features = ["derive"] }
 rfd = "0.15.4"
 semver = "1.0.26"
 ureq = "2"
+textplots = "0.8.7"
 
 [profile]
 
