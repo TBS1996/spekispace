@@ -213,6 +213,10 @@ pub fn TheApp() -> Element {
         let card_ledger = APP.read().inner().provider.cards.clone();
         let histories = ledger.load_all();
 
+        if true {
+            let mut week: Vec<Vec<Review>> = vec![];
+        }
+
         let mut training_data: Vec<History> = vec![];
         let mut eval_data: Vec<History> = vec![];
 

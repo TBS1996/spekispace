@@ -262,27 +262,90 @@ pub fn mean_rest(pairs: &[(f32, bool)]) -> f32 {
     s / n as f32
 }
 
+struct PredEval {
+    predicted: f64,
+    recalled: bool,
+    elapsed: Duration,
+}
+
+impl PredEval {
+    fn log_loss(&self) -> f64 {
+        let Self {
+            predicted: p,
+            recalled: y,
+            elapsed,
+        } = self;
+        let _ = elapsed;
+        let p = *p;
+        let y = *y;
+
+        let y = if y { 1.0 } else { 0.0 };
+        let eps = 1e-15;
+        if y == 1.0 {
+            -(p.max(eps)).ln()
+        } else {
+            -(1.0 - p).max(eps).ln()
+        }
+    }
+
+    fn log_loss_many(evals: Vec<Self>) -> f32 {
+        let n = evals.len() as f64;
+        if n == 0.0 {
+            eprintln!("mean_error_accuracy: no valid predictions");
+            return f32::NAN;
+        }
+
+        let mut logloss: f64 = 0.0;
+
+        for pred in evals {
+            logloss += pred.log_loss();
+        }
+
+        logloss /= n;
+
+        logloss as f32
+    }
+}
+
+fn get_pairs(history: &History, algo: &impl Recaller) -> (Vec<PredEval>, usize, usize) {
+    let mut pairs = Vec::new();
+    let mut seen = Vec::new();
+    let mut bad = 0usize;
+    let mut skipped = 0usize;
+    let mut prev_ts: Option<Duration> = None;
+    for r in &history.reviews {
+        if !seen.is_empty() {
+            if let Some(p) = algo.eval(history.id, &seen, r.timestamp) {
+                if p.is_finite() {
+                    pairs.push(PredEval {
+                        predicted: p as f64,
+                        recalled: r.is_success(),
+                        elapsed: r.timestamp - prev_ts.unwrap(),
+                    });
+                } else {
+                    bad += 1;
+                }
+            } else {
+                skipped += 1;
+            }
+        }
+        seen.push(r.clone());
+        prev_ts = Some(r.timestamp);
+    }
+
+    (pairs, bad, skipped)
+}
+
 pub fn log_loss_accuracy(histories: &Vec<History>, algo: impl Recaller) -> f32 {
     let mut pairs = Vec::new();
     let mut bad = 0usize;
     let mut skipped = 0usize;
 
     for h in histories {
-        let mut seen = Vec::new();
-        for r in &h.reviews {
-            if !seen.is_empty() {
-                if let Some(p) = algo.eval(h.id, &seen, r.timestamp) {
-                    if p.is_finite() {
-                        pairs.push((p as f64, r.is_success()));
-                    } else {
-                        bad += 1;
-                    }
-                } else {
-                    skipped += 1;
-                }
-            }
-            seen.push(r.clone());
-        }
+        let (_pairs, _bad, _skipped) = get_pairs(h, &algo);
+        pairs.extend(_pairs);
+        bad += _bad;
+        skipped += _skipped;
     }
 
     println!("skipped: {skipped}");
@@ -293,27 +356,13 @@ pub fn log_loss_accuracy(histories: &Vec<History>, algo: impl Recaller) -> f32 {
         return f32::NAN;
     }
 
-    let mut logloss: f64 = 0.0;
-
-    for (p, y) in pairs {
-        let y = if y { 1.0 } else { 0.0 };
-        let eps = 1e-15;
-        if y == 1.0 {
-            logloss += -(p.max(eps)).ln();
-        } else {
-            logloss += -(1.0 - p).max(eps).ln();
-        }
-    }
-
-    logloss /= n;
-
     if bad > 0 {
         eprintln!("mean_error_accuracy: skipped {bad} non-finite predictions");
     }
 
     println!("skipped: {skipped}");
 
-    logloss as f32
+    PredEval::log_loss_many(pairs)
 }
 
 pub fn recall_algorithm_accuracy(ledger: &Ledger<History>) {
