@@ -19,13 +19,15 @@ pub trait Recaller {
 pub struct AvgRecall {
     pub trained: Trained,
     pub simple: SimpleRecall,
+    /// Weight on the ML model. 1.0 = only ML, 0.0 = only SimpleRecall.
+    pub alpha: f32,
 }
 
 impl Recaller for AvgRecall {
     fn eval(&self, id: CardId, reviews: &[Review], time: Duration) -> Option<f32> {
-        let trained = self.trained.eval(id, reviews, time)?;
-        let simple = self.simple.eval(id, reviews, time)?;
-        Some((trained + simple) / 2.)
+        let p_ml = self.trained.eval(id, reviews, time)?;
+        let p_man = self.simple.eval(id, reviews, time)?;
+        Some(self.alpha * p_ml + (1.0 - self.alpha) * p_man)
     }
 }
 

@@ -213,12 +213,9 @@ pub fn TheApp() -> Element {
         let card_ledger = APP.read().inner().provider.cards.clone();
         let histories = ledger.load_all();
 
-        if true {
-            let mut week: Vec<Vec<Review>> = vec![];
-        }
-
         let mut training_data: Vec<History> = vec![];
         let mut eval_data: Vec<History> = vec![];
+        let mut all_data: Vec<History> = vec![];
 
         for mut history in histories {
             if !card_ledger.has_item(history.id) {
@@ -226,6 +223,8 @@ pub fn TheApp() -> Element {
             };
 
             history.reviews.dedup();
+
+            all_data.push(history.clone());
 
             if history.id.as_u128() % 100 < 80 {
                 training_data.push(history);
@@ -235,6 +234,8 @@ pub fn TheApp() -> Element {
         }
 
         let trained = Trained::new(&training_data);
+
+        let eval_data = all_data;
 
         println!("starting default analyze algo");
         let res = log_loss_accuracy(&eval_data, SimpleRecall);
@@ -247,12 +248,17 @@ pub fn TheApp() -> Element {
         let res = log_loss_accuracy(&eval_data, Trained::from_static());
         println!("cached log loss error: {res}");
 
-        let avg = AvgRecall {
-            trained: Trained::from_static(),
-            simple: SimpleRecall,
-        };
-        let res = log_loss_accuracy(&eval_data, avg);
-        println!("averager log loss error: {res}");
+        for alpha in 1..11 {
+            let alpha = alpha as f32 / 10.;
+            dbg!(alpha);
+            let avg = AvgRecall {
+                trained: Trained::from_static(),
+                simple: SimpleRecall,
+                alpha,
+            };
+            let res = log_loss_accuracy(&eval_data, avg);
+            println!("averager log loss error: {res}");
+        }
 
         std::process::exit(0);
     }

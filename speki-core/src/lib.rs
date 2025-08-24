@@ -223,6 +223,7 @@ pub fn plot_the_recall(card: Arc<Card>) {
     let avg = AvgRecall {
         trained: recaller,
         simple: SimpleRecall,
+        alpha: 0.75,
     };
     plot_card_recall_over_future(&avg, id, &reviews, now);
 }
@@ -297,9 +298,68 @@ impl PredEval {
 
         let mut logloss: f64 = 0.0;
 
+        let mut day_n = 0usize;
+        let mut day_logloss = 0f64;
+        let mut week_n = 0usize;
+        let mut week_logloss = 0f64;
+        let mut month_n = 0usize;
+        let mut month_logloss = 0f64;
+        let mut season_n = 0usize;
+        let mut season_logloss = 0f64;
+        let mut halfyear_n = 0usize;
+        let mut halfyear_logloss = 0f64;
+        let mut year_n = 0usize;
+        let mut year_logloss = 0f64;
+        let mut tail_n = 0usize;
+        let mut tail_logloss = 0f64;
+
         for pred in evals {
-            logloss += pred.log_loss();
+            let loss = pred.log_loss();
+            logloss += loss;
+
+            if pred.elapsed < Duration::from_secs(86400) {
+                day_n += 1;
+                day_logloss += loss;
+            } else if pred.elapsed < Duration::from_secs(86400 * 7) {
+                week_n += 1;
+                week_logloss += loss;
+            } else if pred.elapsed < Duration::from_secs(86400 * 30) {
+                month_n += 1;
+                month_logloss += loss;
+            } else if pred.elapsed < Duration::from_secs(86400 * 30 * 3) {
+                season_n += 1;
+                season_logloss += loss;
+            } else if pred.elapsed < Duration::from_secs(86400 * 180) {
+                halfyear_n += 1;
+                halfyear_logloss += loss;
+            } else if pred.elapsed < Duration::from_secs(86400 * 365) {
+                year_n += 1;
+                year_logloss += loss;
+            } else {
+                tail_n += 1;
+                tail_logloss += loss;
+            }
         }
+
+        day_logloss /= day_n as f64;
+        week_logloss /= week_n as f64;
+        month_logloss /= month_n as f64;
+        season_logloss /= season_n as f64;
+        halfyear_logloss /= halfyear_n as f64;
+        year_logloss /= year_n as f64;
+        tail_logloss /= tail_n as f64;
+
+        //dbg!(day_n, week_n, month_n, season_n, halfyear_n, year_n, tail_n);
+
+        dbg!(
+            day_logloss,
+            week_logloss,
+            month_logloss,
+            season_logloss,
+            halfyear_logloss,
+            year_logloss,
+            tail_logloss,
+        );
 
         logloss /= n;
 
@@ -413,6 +473,7 @@ impl App {
         let recaller = AvgRecall {
             trained: Trained::from_static(),
             simple: SimpleRecall,
+            alpha: 0.75,
         };
         let card_provider = CardProvider::new(provider.clone(), FsTime, recaller);
 
