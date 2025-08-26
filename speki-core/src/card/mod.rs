@@ -23,9 +23,7 @@ use crate::{
     card_provider::CardProvider,
     ledger::{CardAction, CardEvent, MetaEvent},
     metadata::Metadata,
-    recall_rate::{
-        AvgRecall, History, Recall, Recaller, Review, ReviewAction, ReviewEvent, SimpleRecall,
-    },
+    recall_rate::{AvgRecall, History, Recall, Recaller, Review, ReviewAction, ReviewEvent},
     CardRefType, FsTime,
 };
 
@@ -865,7 +863,8 @@ impl Card {
     }
 
     pub fn recall_rate_at(&self, current_unix: Duration) -> Option<RecallRate> {
-        SimpleRecall.recall_rate(&self.history.reviews, current_unix)
+        self.recaller
+            .eval(self.id, &self.history.reviews, current_unix)
     }
 
     /// Full history includes all the successful reviews of cards that are dependent on this card.
