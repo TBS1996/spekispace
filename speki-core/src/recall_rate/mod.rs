@@ -50,6 +50,135 @@ impl Recaller for Trained {
     }
 }
 
+/// Stolen from: https://borretti.me/article/implementing-fsrs-in-100-lines
+#[derive(Clone, Copy)]
+pub struct FSRS;
+
+impl FSRS {
+    const C: f32 = -0.5;
+    const F: f32 = 19.0 / 81.0;
+    const FORGOT: f32 = 0.40255;
+    const _HARD: f32 = 1.18385;
+    const GOOD: f32 = 3.173;
+    const EASY: f32 = 15.69105;
+
+    pub const W: [f32; 19] = [
+        0.40255, 1.18385, 3.173, 15.69105, 7.1949, 0.5345, 1.4604, 0.0046, 1.54575, 0.1192,
+        1.01925, 1.9395, 0.11, 0.29605, 2.2698, 0.2315, 2.9898, 0.51655, 0.6621,
+    ];
+
+    fn recall_rate(time: Duration, stability: Duration) -> f32 {
+        (1.0 + Self::F * (time.as_secs_f32() / stability.as_secs_f32())).powf(Self::C)
+    }
+
+    fn s_success(d: f32, stability: Duration, r: f32, g: Recall) -> Duration {
+        let stability = stability.as_secs_f32() / 86400.;
+        let t_d = 11.0 - d;
+        let t_s = stability.powf(-Self::W[9]);
+        let t_r = f32::exp(Self::W[10] * (1.0 - r)) - 1.0;
+        let h = if g == Recall::Some { Self::W[15] } else { 1.0 };
+        let b = if g == Recall::Perfect {
+            Self::W[16]
+        } else {
+            1.0
+        };
+        let c = f32::exp(Self::W[8]);
+        let alpha = 1.0 + t_d * t_s * t_r * h * b * c;
+        Duration::from_secs_f32(stability * alpha * 86400.)
+    }
+
+    fn recall_factor(recall: Recall) -> f32 {
+        match recall {
+            Recall::None => 1.0,
+            Recall::Late => 1.5,
+            Recall::Some => 3.0,
+            Recall::Perfect => 4.0,
+        }
+    }
+
+    fn d_0(g: Recall) -> f32 {
+        let g: f32 = Self::recall_factor(g);
+        Self::clamp_d(Self::W[4] - f32::exp(Self::W[5] * (g - 1.0)) + 1.0)
+    }
+
+    fn clamp_d(d: f32) -> f32 {
+        d.clamp(1.0, 10.0)
+    }
+
+    fn stability(d: f32, stability: Duration, r: f32, g: Recall) -> Duration {
+        if !g.is_success() {
+            Self::s_fail(d, stability, r)
+        } else {
+            Self::s_success(d, stability, r, g)
+        }
+    }
+
+    fn s_fail(d: f32, stability: Duration, r: f32) -> Duration {
+        let stability = stability.as_secs_f32() / 86400.;
+        let d_f = d.powf(-Self::W[12]);
+        let s_f = (stability + 1.0).powf(Self::W[13]) - 1.0;
+        let r_f = f32::exp(Self::W[14] * (1.0 - r));
+        let c_f = Self::W[11];
+        let s_f = d_f * s_f * r_f * c_f;
+        Duration::from_secs_f32(f32::min(s_f, stability) * 86400.)
+    }
+
+    fn s_0(g: Recall) -> Duration {
+        let days = match g {
+            Recall::None => Self::FORGOT,
+            Recall::Late => Self::FORGOT,
+            Recall::Some => Self::GOOD,
+            Recall::Perfect => Self::EASY,
+        };
+
+        Duration::from_secs_f32(days * 86400.)
+    }
+
+    fn difficulty(d: f32, g: Recall) -> f32 {
+        Self::clamp_d(Self::W[7] * Self::d_0(Recall::Perfect) + (1.0 - Self::W[7]) * Self::dp(d, g))
+    }
+
+    fn dp(d: f32, g: Recall) -> f32 {
+        d + Self::delta_d(g) * ((10.0 - d) / 9.0)
+    }
+
+    fn delta_d(g: Recall) -> f32 {
+        let g: f32 = Self::recall_factor(g);
+        -Self::W[6] * (g - 3.0)
+    }
+}
+
+impl Recaller for FSRS {
+    fn eval(&self, _id: CardId, reviews: &[Review], time: Duration) -> Option<f32> {
+        let mut the_reviews: Vec<Review> = vec![];
+        for review in reviews {
+            if review.timestamp < time {
+                the_reviews.push(review.clone());
+            }
+        }
+
+        let reviews = the_reviews;
+
+        let mut iter = reviews.iter();
+
+        let first_review = iter.next()?;
+
+        let mut stability = Self::s_0(first_review.grade);
+        let mut difficulty = Self::d_0(first_review.grade);
+        let mut prev_review = first_review.timestamp;
+
+        for review in iter {
+            let time_passed = review.timestamp - prev_review;
+            let recall = Self::recall_rate(time_passed, stability);
+            stability = Self::stability(difficulty, stability, recall, review.grade);
+            difficulty = Self::difficulty(difficulty, review.grade);
+            prev_review = review.timestamp;
+        }
+
+        Some(Self::recall_rate(time - prev_review, stability))
+    }
+}
+
 #[derive(Clone, Copy)]
 pub struct SimpleRecall;
 
