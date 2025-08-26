@@ -18,6 +18,7 @@ use speki_core::{
     log_loss_accuracy,
     recall_rate::{
         ml::Trained, AvgRecall, History, Recall, Review as TheReview, ReviewAction, ReviewEvent,
+        FSRS,
     },
     set::{Input, Set, SetAction, SetEvent},
     SimpleRecall,
@@ -74,6 +75,8 @@ struct Cli {
     find_duplicates: bool,
     #[arg(long)]
     plot: Option<CardId>,
+    #[arg(long)]
+    maturity: Option<CardId>,
 }
 
 #[derive(Clone)]
@@ -202,6 +205,23 @@ pub fn TheApp() -> Element {
         std::process::exit(0);
     }
 
+    if let Some(card) = cli.maturity {
+        let avg = AvgRecall::default();
+
+        let card = APP.read().inner().card_provider.load(card).unwrap();
+        println!("maturity ml");
+        speki_core::expected_gain(card.clone(), &Trained::from_static());
+
+        println!("maturity fsrs");
+        speki_core::expected_gain(card.clone(), &FSRS);
+
+        println!("maturity avg");
+        speki_core::expected_gain(card.clone(), &avg);
+        println!("maturity simple");
+        speki_core::expected_gain(card.clone(), &SimpleRecall);
+        std::process::exit(0);
+    }
+
     if let Some(card) = cli.plot {
         let card = APP.read().inner().card_provider.load(card).unwrap();
         speki_core::plot_the_recall(card);
@@ -212,6 +232,8 @@ pub fn TheApp() -> Element {
         let ledger = APP.read().inner().provider.reviews.clone();
         let card_ledger = APP.read().inner().provider.cards.clone();
         let histories = ledger.load_all();
+
+        dbg!(histories.len());
 
         let mut training_data: Vec<History> = vec![];
         let mut eval_data: Vec<History> = vec![];
@@ -235,7 +257,7 @@ pub fn TheApp() -> Element {
 
         let trained = Trained::new(&training_data);
 
-        let eval_data = all_data;
+        //let eval_data = all_data;
 
         println!("starting default analyze algo");
         let res = log_loss_accuracy(&eval_data, SimpleRecall);
@@ -248,12 +270,18 @@ pub fn TheApp() -> Element {
         let res = log_loss_accuracy(&eval_data, Trained::from_static());
         println!("cached log loss error: {res}");
 
+        let res = log_loss_accuracy(&eval_data, FSRS);
+        println!("fsrs log loss error: {res}");
+
+        let res = log_loss_accuracy(&eval_data, AvgRecall::default());
+        println!("avg log loss error: {res}");
+
         for alpha in 1..11 {
             let alpha = alpha as f32 / 10.;
             dbg!(alpha);
             let avg = AvgRecall {
                 trained: Trained::from_static(),
-                simple: SimpleRecall,
+                simple: FSRS,
                 alpha,
             };
             let res = log_loss_accuracy(&eval_data, avg);

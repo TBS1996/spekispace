@@ -18,15 +18,32 @@ pub trait Recaller {
 #[derive(Clone)]
 pub struct AvgRecall {
     pub trained: Trained,
-    pub simple: SimpleRecall,
-    /// Weight on the ML model. 1.0 = only ML, 0.0 = only SimpleRecall.
+    pub simple: FSRS,
+    /// Weight on the ML model. 1.0 = only ML, 0.0 = only base
     pub alpha: f32,
+}
+
+impl Default for AvgRecall {
+    fn default() -> Self {
+        Self {
+            trained: Trained::from_static(),
+            simple: FSRS,
+            alpha: 0.75,
+        }
+    }
 }
 
 impl Recaller for AvgRecall {
     fn eval(&self, id: CardId, reviews: &[Review], time: Duration) -> Option<f32> {
-        let p_ml = self.trained.eval(id, reviews, time)?;
-        let p_man = self.simple.eval(id, reviews, time)?;
+        let mut the_reviews: Vec<Review> = vec![];
+        for review in reviews {
+            if review.timestamp < time {
+                the_reviews.push(review.clone());
+            }
+        }
+
+        let p_ml = self.trained.eval(id, &the_reviews, time)?;
+        let p_man = self.simple.eval(id, &the_reviews, time)?;
         Some(self.alpha * p_ml + (1.0 - self.alpha) * p_man)
     }
 }
@@ -392,12 +409,7 @@ pub struct Review {
 
 impl Review {
     pub fn is_success(&self) -> bool {
-        match self.grade {
-            Recall::None => false,
-            Recall::Late => false,
-            Recall::Some => true,
-            Recall::Perfect => true,
-        }
+        self.grade.is_success()
     }
 }
 
@@ -456,6 +468,15 @@ impl Recall {
             Recall::Late => 0.25,
             Recall::Some => 2.,
             Recall::Perfect => 3.,
+        }
+    }
+
+    pub fn is_success(&self) -> bool {
+        match self {
+            Recall::None => false,
+            Recall::Late => false,
+            Recall::Some => true,
+            Recall::Perfect => true,
         }
     }
 

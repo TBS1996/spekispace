@@ -64,8 +64,10 @@ use std::str::FromStr;
 
 use crate::recall_rate::ml::Trained;
 use crate::recall_rate::AvgRecall;
+use crate::recall_rate::Recall;
 use crate::recall_rate::Recaller;
 use crate::recall_rate::Review;
+use crate::recall_rate::FSRS;
 
 impl FromStr for CardRefType {
     type Err = ();
@@ -263,14 +265,15 @@ pub fn plot_the_recall(card: Arc<Card>) {
     let id = card.id();
     let reviews = card.history().reviews.clone();
 
+    println!("ml");
     plot_card_recall_over_future(&recaller, id, &reviews);
+    println!("simple");
     plot_card_recall_over_future(&SimpleRecall, id, &reviews);
+    println!("fsrs");
+    plot_card_recall_over_future(&FSRS, id, &reviews);
 
-    let avg = AvgRecall {
-        trained: recaller,
-        simple: SimpleRecall,
-        alpha: 0.75,
-    };
+    let avg = AvgRecall::default();
+    println!("avg");
     plot_card_recall_over_future(&avg, id, &reviews);
 }
 
@@ -289,6 +292,117 @@ pub fn mean_rest(pairs: &[(f32, bool)]) -> f32 {
         return f32::NAN;
     }
     s / n as f32
+}
+
+struct Point {
+    maturity: Duration,
+    succ_maturity: Duration,
+    fail_maturity: Duration,
+}
+
+impl Point {
+    fn expected_gain_days(&self, recall_rate: f32) -> f32 {
+        let succ = self.succ_maturity.as_secs_f32();
+        let fail = self.fail_maturity.as_secs_f32();
+
+        let expected_maturity = succ * recall_rate + (1.0 - recall_rate) * fail;
+
+        (expected_maturity - self.maturity.as_secs_f32()) / 86400.
+    }
+}
+
+pub fn expected_gain(card: Arc<Card>, recaller: &impl Recaller) {
+    let history = card.history().clone();
+    let reviews = history.reviews;
+    if reviews.is_empty() {
+        println!("(no reviews)");
+        return;
+    }
+
+    let id = card.id();
+    let start = reviews.last().unwrap().timestamp + Duration::from_secs(1);
+
+    // header
+    println!("day  p_recall   Δsucc(d)   Δfail(d)   E[Δ](d)");
+    println!("----------------------------------------------");
+
+    let start_maturity =
+        Card::maturity_inner_simple(id, start, &reviews, recaller, Duration::default()).unwrap();
+
+    dbg!(start_maturity.as_secs_f32() / 86400.);
+
+    for day in 0..=99 {
+        if day % 5 != 0 {
+            //continue;
+        }
+        let secs = 3600 * 24;
+        // absolute timestamp (avoid cumulative-add bug)
+        let time = start + Duration::from_secs(secs * day as u64);
+
+        // probability of success at `time`
+        let p = match recaller.eval(id, &reviews, time) {
+            Some(p) if p.is_finite() => p as f64,
+            _ => {
+                println!("{:>3}    (skipped)", day);
+                continue;
+            }
+        };
+
+        let day_dur = Duration::from_secs(day * secs);
+
+        // maturity if we do nothing until `time`
+        let m_now = Card::maturity_inner_simple(id, time, &reviews, recaller, day_dur).unwrap();
+        let mat_until = start_maturity - m_now;
+
+        // simulate FAIL at `time`
+        let mut failed_reviews = reviews.clone();
+        failed_reviews.push(Review {
+            timestamp: time,
+            grade: Recall::Late,
+        });
+        let the_m_fail =
+            Card::maturity_inner_simple(id, time, &failed_reviews, recaller, day_dur).unwrap();
+        let m_fail = mat_until + the_m_fail;
+
+        // simulate SUCCESS at `time` (use `Some` or `Perfect` per your semantics)
+        let mut success_reviews = reviews.clone();
+        success_reviews.push(Review {
+            timestamp: time,
+            grade: Recall::Some,
+        });
+        let the_m_succ =
+            Card::maturity_inner_simple(id, time, &success_reviews, recaller, day_dur).unwrap();
+        let m_succ = mat_until + the_m_succ;
+
+        // signed deltas in SECONDS (Duration is unsigned, so do it in f64)
+        let sec = |d: Duration| d.as_secs_f64();
+        let d_succ_sec = sec(m_succ) - sec(start_maturity); // typically ≥ 0
+        let d_fail_sec = sec(m_fail) - sec(start_maturity); // typically ≤ 0
+
+        let point = Point {
+            maturity: start_maturity,
+            succ_maturity: m_succ,
+            fail_maturity: m_fail,
+        };
+
+        let estimated = point.expected_gain_days(p as f32);
+
+        // expected delta (in seconds), then convert to days for printing
+        let e_sec = p * d_succ_sec + (1.0 - p) * d_fail_sec;
+        let to_days = |s: f32| s / 86_400.0;
+
+        println!(
+            "{:>3}   {:>7.3}   {:>7.3}   {:>7.3}   {:>7.3} {:>+7.3}",
+            day,
+            p,
+            to_days(m_now.as_secs_f32()),
+            to_days(m_succ.as_secs_f32()),
+            to_days(m_fail.as_secs_f32()),
+            estimated
+        );
+
+        //println!("succ: {}", m_succ.as_secs_f32() / 86400.);
+    }
 }
 
 struct PredEval {
@@ -498,11 +612,7 @@ impl App {
             sets: Ledger::new(root),
         };
 
-        let recaller = AvgRecall {
-            trained: Trained::from_static(),
-            simple: SimpleRecall,
-            alpha: 0.75,
-        };
+        let recaller = AvgRecall::default();
         let card_provider = CardProvider::new(provider.clone(), FsTime, recaller);
 
         Self {
