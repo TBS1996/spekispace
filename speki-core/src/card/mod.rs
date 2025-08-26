@@ -904,27 +904,55 @@ impl Card {
         self.maturity().map(|d| d.as_secs_f32() / 86400.)
     }
 
-    pub fn maturity(&self) -> Option<Duration> {
-        use gkquad::single::integral;
-
-        if self.recall_rate().is_none() {
+    pub fn maturity_inner_simple(
+        id: CardId,
+        time: Duration,
+        reviews: &Vec<Review>,
+        recall: &impl Recaller,
+        sub_horizon: Duration,
+    ) -> Option<Duration> {
+        if reviews.is_empty() {
             return None;
         }
 
+        // Tunables (unchanged)
+        let step = Duration::from_secs(3600); // 1h step
+        let horizon = Duration::from_secs(86_400 * 1000) - sub_horizon; // up to 1000 days
+        let min_tail = Duration::from_secs(86_400 * 90); // no early-stop before 90 days
+        let tiny_p = 1e-6; // “essentially zero”
+        let quiet_steps = 48; // N consecutive tiny steps to stop
+
+        #[inline]
+        fn clamp01(x: f64) -> f64 {
+            if x.is_finite() {
+                x.clamp(0.0, 1.0)
+            } else {
+                0.0
+            }
+        }
+
+        #[inline]
+        fn p_at(id: CardId, t: Duration, reviews: &Vec<Review>, recall: &impl Recaller) -> f64 {
+            clamp01(recall.eval(id, reviews, t).unwrap_or(0.0) as f64)
+        }
+
+        let area_sec =
+            integrate_trapezoid(time, horizon, step, min_tail, quiet_steps, tiny_p, |t| {
+                p_at(id, t, reviews, recall)
+            });
+
+        Some(Duration::from_secs_f64(area_sec))
+    }
+
+    pub fn maturity(&self) -> Option<Duration> {
         let now = self.current_time();
-        let result = integral(
-            |x: f64| {
-                self.recall_rate_at(now + Duration::from_secs_f64(x * 86400.))
-                    .unwrap_or_default() as f64
-            },
-            0.0..1000.,
+        Self::maturity_inner_simple(
+            self.id,
+            now,
+            &self.history.reviews,
+            &self.recaller,
+            Default::default(),
         )
-        .estimate()
-        .ok()?;
-
-        let dur = Duration::from_secs_f64(result * 86400.);
-
-        Some(dur)
     }
 
     pub fn print(&self) -> String {
@@ -987,5 +1015,275 @@ impl Card {
 
     pub fn lapses(&self) -> u32 {
         self.history.lapses()
+    }
+}
+
+pub fn integrate_trapezoid<F>(
+    start: Duration,
+    horizon: Duration,
+    step: Duration,
+    min_tail: Duration,
+    quiet_steps: usize,
+    tiny_threshold: f64,
+    mut f: F,
+) -> f64
+where
+    F: FnMut(Duration) -> f64,
+{
+    let mut elapsed = Duration::ZERO;
+    let mut area_sec = 0.0;
+
+    let mut prev = f(start);
+    let mut quiet_run = 0usize;
+
+    while elapsed < horizon {
+        let remaining = (horizon - elapsed).min(step);
+        let t_next = start + elapsed + remaining;
+        let cur = f(t_next);
+
+        let dt = remaining.as_secs_f64();
+        area_sec += 0.5 * (prev + cur) * dt;
+
+        if elapsed >= min_tail {
+            if cur < tiny_threshold {
+                quiet_run += 1;
+            } else {
+                quiet_run = 0;
+            }
+            if quiet_run >= quiet_steps {
+                break;
+            }
+        }
+
+        elapsed += remaining;
+        prev = cur;
+    }
+
+    area_sec
+}
+
+#[cfg(test)]
+mod tests {
+    use super::integrate_trapezoid;
+    use std::time::Duration;
+
+    const EPS: f64 = 1e-9;
+
+    fn dsecs(s: f64) -> Duration {
+        Duration::from_secs_f64(s)
+    }
+
+    #[test]
+    fn constant_function_exact() {
+        // f(t) = 2 over 100 s → area = 200
+        let start = dsecs(0.0);
+        let horizon = dsecs(100.0);
+        let step = dsecs(1.0);
+        let min_tail = Duration::ZERO;
+        let quiet_steps = usize::MAX; // disable early-stop
+        let tiny = -1.0; // irrelevant
+
+        let area = integrate_trapezoid(start, horizon, step, min_tail, quiet_steps, tiny, |_| 2.0);
+        assert!((area - 200.0).abs() < EPS, "area={}", area);
+    }
+
+    #[test]
+    fn linear_function_exact() {
+        // f(t) = a + b * (t - start), a=1, b=0.1 / s, horizon=10 s
+        // ∫0..10 (1 + 0.1 x) dx = 10 + 0.05 * 100 = 15
+        let start = dsecs(5.0);
+        let horizon = dsecs(10.0);
+        let step = dsecs(1.0);
+        let area = integrate_trapezoid(
+            start,
+            horizon,
+            step,
+            Duration::ZERO,
+            usize::MAX,
+            -1.0,
+            |t| {
+                let x = (t - start).as_secs_f64();
+                1.0 + 0.1 * x
+            },
+        );
+        assert!((area - 15.0).abs() < 1e-9, "area={}", area);
+    }
+
+    #[test]
+    fn quadratic_function_approx() {
+        // f(t) = (t - start)^2 over 0..10 => ∫ x^2 dx = 10^3 / 3 = 333.333...
+        // Trapezoid isn't exact, but with small step it's close.
+        let start = dsecs(0.0);
+        let horizon = dsecs(10.0);
+        let step = dsecs(0.01);
+        let exact = 1000.0f64 / 3.0; // 333.333...
+        let area = integrate_trapezoid(
+            start,
+            horizon,
+            step,
+            Duration::ZERO,
+            usize::MAX,
+            -1.0,
+            |t| {
+                let x = (t - start).as_secs_f64();
+                x * x
+            },
+        );
+        assert!((area - exact).abs() < 1e-2, "area={} exact={}", area, exact);
+    }
+
+    #[test]
+    fn early_stop_triggers() {
+        // f(t) = 1 for first 5 seconds, then 0 afterwards.
+        // Early-stop: after 3 consecutive values < 0.5, with min_tail=0.
+        let start = dsecs(0.0);
+        let horizon = dsecs(100.0);
+        let step = dsecs(1.0);
+
+        let area = integrate_trapezoid(start, horizon, step, Duration::ZERO, 3, 0.5, |t| {
+            let x = (t - start).as_secs_f64();
+            if x <= 5.0 {
+                1.0
+            } else {
+                0.0
+            }
+        });
+
+        // Without early-stop, area would be ~5.5 (last trapezoid across the 5→6 transition).
+        // With quiet_steps=3, we will integrate a couple of extra zero segments, but not the whole horizon.
+        assert!(area > 5.0 && area < 8.0, "area={}", area);
+    }
+
+    #[test]
+    fn no_early_stop_if_min_tail_large() {
+        // Same f as above, but min_tail prevents early-stop.
+        let start = dsecs(0.0);
+        let horizon = dsecs(10.0);
+        let step = dsecs(1.0);
+
+        let area = integrate_trapezoid(start, horizon, step, dsecs(1e9), 3, 0.5, |t| {
+            let x = (t - start).as_secs_f64();
+            if x <= 5.0 {
+                1.0
+            } else {
+                0.0
+            }
+        });
+
+        // We expect full trapezoid integration across the horizon:
+        // segments [0..1]..[4..5] contribute 1 each, [5..6] contributes 0.5, rest are 0.
+        // So area ≈ 5.5 exactly.
+        assert!((area - 5.5).abs() < 1e-9, "area={}", area);
+    }
+
+    #[test]
+    fn horizon_zero_is_zero() {
+        let area = integrate_trapezoid(
+            dsecs(0.0),
+            dsecs(0.0),
+            dsecs(1.0),
+            Duration::ZERO,
+            usize::MAX,
+            -1.0,
+            |_| 42.0,
+        );
+        assert!((area - 0.0).abs() < EPS, "area={}", area);
+    }
+
+    #[test]
+    fn step_invariance_for_linear() {
+        // Linear is exact for any step size
+        let start = dsecs(0.0);
+        let horizon = dsecs(13.0);
+        let f = |t: Duration| 2.0 + 0.25 * t.as_secs_f64();
+
+        let a1 = integrate_trapezoid(
+            start,
+            horizon,
+            dsecs(1.0),
+            Duration::ZERO,
+            usize::MAX,
+            -1.0,
+            f,
+        );
+        let a2 = integrate_trapezoid(
+            start,
+            horizon,
+            dsecs(0.5),
+            Duration::ZERO,
+            usize::MAX,
+            -1.0,
+            f,
+        );
+        let a3 = integrate_trapezoid(
+            start,
+            horizon,
+            dsecs(0.2),
+            Duration::ZERO,
+            usize::MAX,
+            -1.0,
+            f,
+        );
+
+        assert!(
+            (a1 - a2).abs() < 1e-9 && (a2 - a3).abs() < 1e-9,
+            "a1={} a2={} a3={}",
+            a1,
+            a2,
+            a3
+        );
+    }
+
+    #[test]
+    fn linear_non_divisible_horizon() {
+        // ∫_0^10.5 (1 + 0.1x) dx = 16.0125
+        let start = dsecs(0.0);
+        let horizon = dsecs(10.5);
+        let step = dsecs(1.0);
+        let area = integrate_trapezoid(
+            start,
+            horizon,
+            step,
+            Duration::ZERO,
+            usize::MAX,
+            -1.0,
+            |t| 1.0 + 0.1 * (t - start).as_secs_f64(),
+        );
+        assert!((area - 16.0125).abs() < 1e-9, "area={}", area);
+    }
+
+    #[test]
+    fn step_larger_than_horizon() {
+        // f(t)=2 over 0..0.75 -> area = 1.5
+        let area = integrate_trapezoid(
+            dsecs(0.0),
+            dsecs(0.75),
+            dsecs(1.0),
+            Duration::ZERO,
+            usize::MAX,
+            -1.0,
+            |_| 2.0,
+        );
+        assert!((area - 1.5).abs() < 1e-9, "area={}", area);
+    }
+
+    #[test]
+    fn early_stop_threshold_strict() {
+        // cur == tiny_threshold should NOT increment quiet_run
+        let start = dsecs(0.0);
+        let horizon = dsecs(5.0);
+        let step = dsecs(1.0);
+        let tiny = 0.5;
+        let area = integrate_trapezoid(
+            start,
+            horizon,
+            step,
+            Duration::ZERO,
+            1,
+            tiny,
+            |_t| tiny, // always equal to threshold
+        );
+        // No early stop; integrate full horizon: area = 0.5 * (0.5+0.5)*1 * 5 = 2.5
+        assert!((area - 2.5).abs() < 1e-9, "area={}", area);
     }
 }
