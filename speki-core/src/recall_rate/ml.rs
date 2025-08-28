@@ -1,4 +1,4 @@
-use std::time::Duration;
+use std::{ops::Deref, time::Duration};
 
 use ledgerstore::Ledger;
 
@@ -61,10 +61,10 @@ pub struct AllResults {
 
 impl AllResults {
     pub fn new(histories: &Vec<History>) -> Self {
-        let mut obs: Vec<Observation> = vec![];
+        let mut obs: Vec<Observation<Classic>> = vec![];
 
         for history in histories {
-            obs.extend(Observation::new(history.clone()));
+            obs.extend(Observation::<Classic>::new_classic(history.clone()));
         }
 
         let mut selv = Self::default();
@@ -99,25 +99,25 @@ fn bucket_k_from_len(len: usize) -> Option<usize> {
     }
 }
 
-pub struct Observation {
-    inputs: Inputs,
+pub struct Observation<I: Into<RawInputs>> {
+    inputs: I,
     recalled: bool,
 }
 
-impl Observation {
+impl<I: Into<RawInputs>> Observation<I> {
     fn into_raw(self) -> RawObs {
         RawObs {
-            inputs: self.inputs.into_raw(),
+            inputs: self.inputs.into(),
             output: (self.recalled as usize) as f64,
         }
     }
 
-    fn new(history: History) -> Vec<Self> {
+    fn new_classic(history: History) -> Vec<Observation<Classic>> {
         let mut out = vec![];
         let mut revs: Vec<Review> = vec![];
 
         for review in history.reviews {
-            if let Some(inputs) = Inputs::new(&revs, review.timestamp) {
+            if let Some(inputs) = Classic::new(&revs, review.timestamp) {
                 let recalled = review.is_success();
                 out.push(Observation { inputs, recalled });
             }
@@ -128,13 +128,41 @@ impl Observation {
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct RawInputs(Vec<f64>);
+
+impl Iterator for RawInputs {
+    type Item = f64;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        todo!()
+    }
+}
+
+impl Deref for RawInputs {
+    type Target = Vec<f64>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl<'a> IntoIterator for &'a RawInputs {
+    type Item = &'a f64;
+    type IntoIter = std::slice::Iter<'a, f64>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.iter()
+    }
+}
+
 const MAX_K: usize = 7;
 
 pub struct RawObs {
-    inputs: Vec<f64>,
+    inputs: RawInputs,
     output: f64,
 }
-pub struct Inputs {
+pub struct Classic {
     first: Grade,
     inner: Vec<(Delta, Grade)>,
     last: Delta,
@@ -149,18 +177,20 @@ fn recall_to_grade(recall: &Recall) -> Grade {
     }
 }
 
-impl Inputs {
-    fn into_raw(self) -> Vec<f64> {
-        let mut inputs: Vec<f64> = Vec::with_capacity(self.inner.len() * 2 + 2);
-        inputs.push(self.first);
-        for (delta, grade) in self.inner {
+impl From<Classic> for RawInputs {
+    fn from(value: Classic) -> Self {
+        let mut inputs: Vec<f64> = Vec::with_capacity(value.inner.len() * 2 + 2);
+        inputs.push(value.first);
+        for (delta, grade) in value.inner {
             inputs.push(delta);
             inputs.push(grade);
         }
-        inputs.push(self.last);
-        inputs
+        inputs.push(value.last);
+        Self(inputs)
     }
+}
 
+impl Classic {
     pub fn new(reviews: &[Review], now: Duration) -> Option<Self> {
         if reviews.is_empty() {
             return None;
@@ -207,7 +237,7 @@ pub struct Logistic {
 }
 
 impl Logistic {
-    pub fn predict_proba(&self, x: &[f64]) -> f64 {
+    pub fn predict_proba(&self, x: &RawInputs) -> f64 {
         debug_assert_eq!(x.len(), self.w.len());
         let z = self.w.iter().zip(x).map(|(w, xi)| w * xi).sum::<f64>() + self.b;
         sigmoid(z)
@@ -250,7 +280,12 @@ pub fn train_bucket(obs: &[RawObs], lr: f64, epochs: usize, l2: f64) -> Option<L
         for o in obs {
             let y = o.output; // assumed 0.0 or 1.0
             let p = {
-                let z = w.iter().zip(&o.inputs).map(|(wi, xi)| wi * xi).sum::<f64>() + b;
+                let z = w
+                    .iter()
+                    .zip(&o.inputs.0)
+                    .map(|(wi, xi)| wi * xi)
+                    .sum::<f64>()
+                    + b;
                 sigmoid(z)
             };
             let err = p - y; // d(-loglik)/dz
@@ -415,12 +450,12 @@ impl Trained {
         self.predict_proba(&inputs)
     }
 
-    fn current_inputs(history: &[Review], now: Duration) -> Option<Vec<f64>> {
-        let inputs: Inputs = Inputs::new(history, now)?;
-        Some(inputs.into_raw())
+    fn current_inputs(history: &[Review], now: Duration) -> Option<RawInputs> {
+        let inputs: Classic = Classic::new(history, now)?;
+        Some(inputs.into())
     }
 
-    fn predict_proba(&self, x: &[f64]) -> Option<f64> {
+    fn predict_proba(&self, x: &RawInputs) -> Option<f64> {
         match bucket_k_from_len(x.len()) {
             Some(1) => self.one.as_ref().map(|m| m.predict_proba(x)),
             Some(2) => self.two.as_ref().map(|m| m.predict_proba(x)),
@@ -440,8 +475,8 @@ pub fn eval_per_bucket(ledger: &Ledger<History>, trained: &Trained) {
         let mut seen = Vec::new();
         for r in &h.reviews {
             if !seen.is_empty() {
-                if let Some(inputs) = Inputs::new(&seen, r.timestamp) {
-                    let raw = inputs.into_raw();
+                if let Some(inputs) = Classic::new(&seen, r.timestamp) {
+                    let raw = inputs.into();
                     if let Some(p) = trained.predict_proba(&raw) {
                         if p.is_finite() {
                             let y = r.is_success();

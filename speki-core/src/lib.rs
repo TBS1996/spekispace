@@ -388,7 +388,7 @@ pub fn expected_gain(card: Arc<Card>, recaller: &impl Recaller) {
         let estimated = point.expected_gain_days(p as f32);
 
         // expected delta (in seconds), then convert to days for printing
-        let e_sec = p * d_succ_sec + (1.0 - p) * d_fail_sec;
+        let _e_sec = p * d_succ_sec + (1.0 - p) * d_fail_sec;
         let to_days = |s: f32| s / 86_400.0;
 
         println!(
