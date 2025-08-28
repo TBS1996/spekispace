@@ -17,8 +17,8 @@ use speki_core::{
     ledger::{CardAction, CardEvent},
     log_loss_accuracy,
     recall_rate::{
-        ml::Trained, AvgRecall, History, Recall, Review as TheReview, ReviewAction, ReviewEvent,
-        FSRS,
+        ml::classic::Trained, AvgRecall, History, Recall, Review as TheReview, ReviewAction,
+        ReviewEvent, FSRS,
     },
     set::{Input, Set, SetAction, SetEvent},
     SimpleRecall,

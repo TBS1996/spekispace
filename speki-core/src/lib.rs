@@ -62,7 +62,7 @@ impl AsRef<str> for CardRefType {
 
 use std::str::FromStr;
 
-use crate::recall_rate::ml::Trained;
+use crate::recall_rate::ml::classic::Trained;
 use crate::recall_rate::AvgRecall;
 use crate::recall_rate::Recall;
 use crate::recall_rate::Recaller;

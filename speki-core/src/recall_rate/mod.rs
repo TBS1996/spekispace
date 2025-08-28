@@ -8,7 +8,7 @@ use uuid::Uuid;
 
 use crate::{
     card::{CardId, RecallRate},
-    recall_rate::ml::Trained,
+    recall_rate::ml::classic::Trained,
 };
 
 pub trait Recaller {
