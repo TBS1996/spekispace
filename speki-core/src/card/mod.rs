@@ -786,7 +786,13 @@ impl Card {
     pub fn recursive_dependencies(&self) -> BTreeSet<Arc<Card>> {
         self.recursive_dependencies_ids()
             .into_iter()
-            .map(|id| self.card_provider.load(id).unwrap())
+            .map(|id| match self.card_provider.load(id) {
+                Some(card) => card,
+                None => {
+                    dbg!("card not found", id);
+                    panic!();
+                }
+            })
             .collect()
     }
 
