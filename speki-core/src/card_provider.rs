@@ -10,9 +10,9 @@ use crate::{
 use dioxus_logger::tracing::{info, trace};
 use ledgerstore::EventError;
 use std::{
-    collections::{BTreeSet, HashSet},
+    collections::{BTreeSet, HashMap, HashSet},
     fmt::Debug,
-    sync::Arc,
+    sync::{Arc, RwLock},
 };
 
 #[derive(Clone)]
@@ -20,6 +20,7 @@ pub struct CardProvider {
     pub providers: Provider,
     time_provider: FsTime,
     recaller: AvgRecall,
+    cache: Arc<RwLock<HashMap<CardId, Arc<Card>>>>,
 }
 
 impl Debug for CardProvider {
@@ -65,15 +66,55 @@ impl CardProvider {
     }
 
     pub fn modify_metadata(&self, event: MetaEvent) -> Result<(), EventError<Metadata>> {
-        self.providers.metadata.modify(event)
+        let id = event.id();
+
+        self.providers.metadata.modify(event)?;
+
+        if let Some(id) = id {
+            let mut guard = self.cache.write().unwrap();
+            guard.remove(&id);
+
+            for id in self.dependents(id) {
+                guard.remove(&id);
+            }
+        }
+
+        Ok(())
     }
 
     pub fn modify_review(&self, event: ReviewEvent) -> Result<(), EventError<History>> {
-        self.providers.reviews.modify(event)
+        let id = event.id();
+        self.providers.reviews.modify(event)?;
+
+        if let Some(id) = id {
+            let mut guard = self.cache.write().unwrap();
+            guard.remove(&id);
+
+            /*
+            for id in self.dependents(id) {
+                guard.remove(&id);
+            }
+            */
+        }
+
+        Ok(())
     }
 
     pub fn modify_card(&self, event: CardEvent) -> Result<(), EventError<RawCard>> {
-        self.providers.cards.modify(event)
+        let id = event.id();
+
+        self.providers.cards.modify(event)?;
+
+        if let Some(id) = id {
+            let mut guard = self.cache.write().unwrap();
+            guard.remove(&id);
+
+            for id in self.dependents(id) {
+                guard.remove(&id);
+            }
+        }
+
+        Ok(())
     }
 
     pub fn load_all(&self) -> Vec<Arc<Card>> {
@@ -81,8 +122,11 @@ impl CardProvider {
         let mut out: Vec<Arc<Card>> = vec![];
         let ids = self.load_all_card_ids();
 
+        let mut guard = self.cache.write().unwrap();
+
         for id in ids {
             let card = self.load(id).unwrap();
+            guard.insert(id, card.clone());
             out.push(card);
         }
         out
@@ -99,6 +143,10 @@ impl CardProvider {
     }
 
     pub fn load(&self, id: CardId) -> Option<Arc<Card>> {
+        if let Some(card) = self.cache.read().unwrap().get(&id).cloned() {
+            return Some(card);
+        }
+
         let (base, is_remote) = self.providers.cards.load_with_remote_info(id)?;
         let history = match self.providers.reviews.load(id) {
             Some(revs) => revs,
@@ -123,6 +171,8 @@ impl CardProvider {
             back_audio,
         ));
 
+        self.cache.write().unwrap().insert(id, card.clone());
+
         Some(card)
     }
 
@@ -135,6 +185,7 @@ impl CardProvider {
             time_provider,
             recaller,
             providers: provider,
+            cache: Default::default(),
         }
     }
 }

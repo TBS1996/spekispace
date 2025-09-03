@@ -160,6 +160,13 @@ impl<T: LedgerItem> LedgerEvent<T> {
         Self::ItemAction { id, action }
     }
 
+    pub fn id(&self) -> Option<T::Key> {
+        match self {
+            LedgerEvent::ItemAction { id, .. } => Some(*id),
+            LedgerEvent::SetUpstream { .. } => None,
+        }
+    }
+
     pub fn new_modify(id: T::Key, action: T::Modifier) -> Self {
         Self::ItemAction {
             id,
