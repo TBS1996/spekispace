@@ -687,7 +687,7 @@ fn save_cardrep(rep: CardRep, old_card: Option<Arc<Card>>) -> Result<CardId, ()>
         }
     }
 
-    let old_ty = old_card.clone().map(|c| c.clone_base().data);
+    let old_ty = old_card.clone().map(|c| c.clone_base().data.clone());
 
     let same_type = match &old_ty {
         Some(old_ty) => mem::discriminant(old_ty) == mem::discriminant(&ty),

@@ -1,6 +1,7 @@
 use serde::{de::DeserializeOwned, Serialize};
 use std::fmt::Display;
 use std::str::FromStr;
+use std::sync::Arc;
 use std::vec::Vec;
 use std::{
     collections::{HashMap, HashSet},
@@ -222,17 +223,17 @@ pub trait LedgerItem:
         out
     }
 
-    fn recursive_dependents(&self, ledger: &LedgerType<Self>) -> HashSet<Self>
+    fn recursive_dependents(&self, ledger: &LedgerType<Self>) -> HashSet<Arc<Self>>
     where
         Self: Sized,
     {
-        let mut out: HashSet<Self> = HashSet::new();
+        let mut out: HashSet<Arc<Self>> = HashSet::new();
         let mut visited: HashSet<Self::Key> = HashSet::new();
 
         fn visit<T: LedgerItem>(
             key: T::Key,
             ledger: &LedgerType<T>,
-            out: &mut HashSet<T>,
+            out: &mut HashSet<Arc<T>>,
             visited: &mut HashSet<T::Key>,
         ) where
             T: Sized,

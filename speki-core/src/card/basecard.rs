@@ -620,7 +620,7 @@ impl CardType {
     }
 
     fn class_stuff(&self, class: CardId, provider: &CardProvider) -> String {
-        let mut class_name = match provider.providers.cards.load(class).unwrap().data {
+        let mut class_name = match provider.providers.cards.load(class).unwrap().data.clone() {
             CardType::Class { name, .. } => name,
             other => {
                 dbg!(class);
@@ -971,7 +971,7 @@ impl RawCard {
             return None;
         };
 
-        let mut card: Self = ledger.load(*instance).unwrap();
+        let mut card: Arc<Self> = ledger.load(*instance).unwrap();
 
         while let Some(parent) = card.parent_class() {
             card = ledger.load(parent).unwrap();
@@ -1109,9 +1109,9 @@ fn instance_is_of_type(instance: CardId, ty: CardId, ledger: &LedgerType<RawCard
         .is_some()
 }
 
-fn get_parent_classes(class: CardId, ledger: &LedgerType<RawCard>) -> Vec<RawCard> {
+fn get_parent_classes(class: CardId, ledger: &LedgerType<RawCard>) -> Vec<Arc<RawCard>> {
     let class = ledger.load(class).unwrap();
-    let mut classes: Vec<RawCard> = vec![class.clone()];
+    let mut classes: Vec<Arc<RawCard>> = vec![class.clone()];
     assert!(class.data.is_class());
     let mut parent_class = class.parent_class();
 
@@ -1128,8 +1128,8 @@ fn get_parent_classes(class: CardId, ledger: &LedgerType<RawCard>) -> Vec<RawCar
 fn get_attributes(class: CardId, ledger: &LedgerType<RawCard>) -> Vec<Attrv2> {
     let mut out: Vec<Attrv2> = vec![];
     for class in get_parent_classes(class, ledger) {
-        if let CardType::Class { attrs, .. } = class.data {
-            out.extend(attrs);
+        if let CardType::Class { attrs, .. } = &class.data {
+            out.extend(attrs.clone());
         } else {
             panic!()
         }
@@ -1152,7 +1152,7 @@ impl LedgerItem for RawCard {
                 class,
                 answered_params,
             } => {
-                let mut class: Option<RawCard> = Some(ledger.load(*class).unwrap());
+                let mut class: Option<Arc<RawCard>> = Some(ledger.load(*class).unwrap());
                 let mut recursive_params: BTreeMap<AttributeId, Attrv2> = Default::default();
 
                 while let Some(the_class) = class.clone() {
@@ -1160,14 +1160,14 @@ impl LedgerItem for RawCard {
                         params,
                         parent_class,
                         ..
-                    } = the_class.data
+                    } = &the_class.data
                     else {
                         return Err(CardError::InstanceOfNonClass);
                     };
 
-                    recursive_params.extend(params);
+                    recursive_params.extend(params.clone());
                     match parent_class {
-                        Some(parent_class) => class = Some(ledger.load(parent_class).unwrap()),
+                        Some(parent_class) => class = Some(ledger.load(*parent_class).unwrap()),
                         None => class = None,
                     }
                 }
@@ -1196,7 +1196,7 @@ impl LedgerItem for RawCard {
                     back,
                     class,
                     answered_params: _,
-                } = ledger.load(*instance).unwrap().data
+                } = ledger.load(*instance).unwrap().data.clone()
                 else {
                     return Err(CardError::InstanceOfNonClass);
                 };

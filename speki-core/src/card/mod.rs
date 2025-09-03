@@ -272,9 +272,9 @@ pub struct Card {
     name: EvalText,
     frontside: EvalText,
     backside: EvalText,
-    base: RawCard,
-    metadata: Metadata,
-    history: History,
+    base: Arc<RawCard>,
+    metadata: Arc<Metadata>,
+    history: Arc<History>,
     card_provider: CardProvider,
     recaller: AvgRecall,
     is_remote: bool,
@@ -463,12 +463,12 @@ impl Card {
         self.is_finished() && !self.trivial() && self.back_side().is_some()
     }
 
-    pub fn clone_base(&self) -> RawCard {
+    pub fn clone_base(&self) -> Arc<RawCard> {
         self.base.clone()
     }
 
     pub fn attributes_on_class(&self) -> Option<Vec<Attrv2>> {
-        if let CardType::Class { attrs, .. } = self.base.clone().data {
+        if let CardType::Class { attrs, .. } = self.base.data.clone() {
             return Some(attrs.into_iter().collect());
         } else {
             None
@@ -484,8 +484,8 @@ impl Card {
 
         for class in self.parent_classes() {
             let card = self.card_provider.providers.cards.load(class).unwrap();
-            if let CardType::Class { attrs, .. } = card.data {
-                output.extend(attrs);
+            if let CardType::Class { attrs, .. } = &card.data {
+                output.extend(attrs.clone());
             }
         }
 
@@ -624,10 +624,10 @@ impl Card {
     }
 
     pub fn from_parts(
-        base: RawCard,
+        base: Arc<RawCard>,
         is_remote: bool,
-        history: History,
-        metadata: Metadata,
+        history: Arc<History>,
+        metadata: Arc<Metadata>,
         card_provider: CardProvider,
         recaller: AvgRecall,
         front_audio: Option<Audio>,
@@ -756,20 +756,12 @@ impl Card {
         }
     }
 
-    pub async fn set_ref(mut self, reff: CardId) -> Result<Card, EventError<RawCard>> {
-        let backside = BackSide::Card(reff);
-        self.base = self.base.set_backside(backside);
-        let action = CardAction::SetBackRef(reff);
-        let event = CardEvent::new_modify(self.id, action);
-        self.card_provider.providers.cards.modify(event).unwrap();
-        Ok(self)
-    }
-
     pub fn add_dependency(&mut self, dependency: CardId) -> Result<(), EventError<RawCard>> {
-        self.base.explicit_dependencies.insert(dependency);
         let action = CardAction::AddDependency(dependency);
         let event = CardEvent::new_modify(self.id, action);
-        self.card_provider.providers.cards.modify(event)
+        self.card_provider.providers.cards.modify(event)?;
+        *self = Arc::unwrap_or_clone(self.card_provider.load(self.id).unwrap());
+        Ok(())
     }
 
     pub fn back_side(&self) -> Option<&BackSide> {
@@ -873,31 +865,6 @@ impl Card {
             .eval(self.id, &self.history.reviews, current_unix)
     }
 
-    /// Full history includes all the successful reviews of cards that are dependent on this card.
-    /// the idea is, if you can successfully recall a dependent card, then implicitly you know this card too.
-    /// It does not include unsuccesful reviews of dependents because you may have failed to realize that card either due to the card itself or another dependency.
-    pub fn full_history(&self) -> History {
-        let mut reviews: Vec<Review> = vec![];
-        for dep in self.dependents_ids() {
-            let Some(history) = self.card_provider.providers.reviews.load(dep) else {
-                continue;
-            };
-
-            for review in history.inner() {
-                if review.is_success() {
-                    reviews.push(review.to_owned());
-                }
-            }
-        }
-
-        reviews.sort_by_key(|r| r.timestamp);
-
-        let mut history = self.history.clone();
-
-        history.insert_many(reviews);
-        history
-    }
-
     pub fn recall_rate(&self) -> Option<RecallRate> {
         let now = self.current_time();
         self.recaller
@@ -992,8 +959,7 @@ impl Card {
         let event = MetaEvent::new(self.id, action);
 
         self.card_provider.providers.metadata.modify(event).unwrap();
-
-        self.metadata.suspended = suspend.into();
+        *self = Arc::unwrap_or_clone(self.card_provider.load(self.id).unwrap());
     }
 
     pub fn time_since_last_review(&self) -> Option<Duration> {

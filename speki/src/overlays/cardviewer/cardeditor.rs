@@ -140,14 +140,14 @@ impl CardViewer {
                 ScopeId(3),
             );
 
-            let metadata = MetadataEditor::from(
+            let metadata = MetadataEditor::from(Arc::unwrap_or_clone(
                 APP.read()
                     .inner()
                     .provider
                     .metadata
                     .load(card.id())
                     .unwrap_or_default(),
-            );
+            ));
 
             CardEditor {
                 front,

@@ -6,6 +6,7 @@ use std::fs::{self, hard_link};
 use std::io::Write;
 use std::marker::PhantomData;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::AtomicBool;
 use std::vec::Vec;
 use std::{
     collections::{HashMap, HashSet},
@@ -188,7 +189,7 @@ pub enum LedgerType<T: LedgerItem> {
 }
 
 impl<T: LedgerItem> LedgerType<T> {
-    pub fn load(&self, key: T::Key) -> Option<T> {
+    pub fn load(&self, key: T::Key) -> Option<Arc<T>> {
         match self {
             LedgerType::OverRide(ledger) => ledger.load(key),
             LedgerType::Normal(ledger) => ledger.load(key),
@@ -222,7 +223,7 @@ impl<T: LedgerItem> From<OverrideLedger<T>> for LedgerType<T> {
 #[derive(Clone)]
 pub struct OverrideLedger<T: LedgerItem> {
     inner: Ledger<T>,
-    new: T,
+    new: Arc<T>,
     new_id: T::Key,
 }
 
@@ -232,12 +233,12 @@ impl<T: LedgerItem> OverrideLedger<T> {
 
         Self {
             inner: inner.clone(),
-            new,
+            new: Arc::new(new),
             new_id,
         }
     }
 
-    pub fn load(&self, key: T::Key) -> Option<T> {
+    pub fn load(&self, key: T::Key) -> Option<Arc<T>> {
         if self.new_id == key {
             Some(self.new.clone())
         } else {
@@ -602,7 +603,7 @@ impl<T: LedgerItem> Remote<T> {
 #[derive(Debug, Clone)]
 struct ModifyResult<T: LedgerItem> {
     key: T::Key,
-    item: Option<T>,
+    item: Option<Arc<T>>,
     added_caches: HashSet<(CacheKey<T>, T::Key)>,
     removed_caches: HashSet<(CacheKey<T>, T::Key)>,
     is_no_op: bool,
@@ -663,6 +664,8 @@ pub struct Ledger<T: LedgerItem> {
     ledger_hash: Arc<PathBuf>,
     remote: Arc<Remote<T>>,
     local: Local<T>,
+    cache: Arc<RwLock<HashMap<T::Key, Arc<T>>>>,
+    full_cache: Arc<AtomicBool>,
 }
 
 impl<T: LedgerItem> Ledger<T> {
@@ -693,6 +696,8 @@ impl<T: LedgerItem> Ledger<T> {
             ledger_hash: Arc::new(ledger_hash),
             entries,
             remote: Arc::new(remote),
+            cache: Default::default(),
+            full_cache: Arc::new(AtomicBool::new(false)),
             local: Local {
                 root: Arc::new(root.clone()),
                 _phantom: PhantomData,
@@ -801,32 +806,56 @@ impl<T: LedgerItem> Ledger<T> {
     }
 
     pub fn load_all(&self) -> HashSet<T> {
+        if self.full_cache.load(std::sync::atomic::Ordering::SeqCst) {
+            return self
+                .cache
+                .read()
+                .unwrap()
+                .values()
+                .map(|v| Arc::unwrap_or_clone(v.clone()))
+                .collect();
+        }
+
         let mut items = self.local.load_all();
         items.extend(self.remote.load_all());
+
+        let mut cache_guard = self.cache.write().unwrap();
+
+        for item in items.clone() {
+            cache_guard.insert(item.item_id(), Arc::new(item));
+        }
+
+        self.full_cache
+            .store(true, std::sync::atomic::Ordering::SeqCst);
 
         items
     }
 
-    pub fn load_with_remote_info(&self, key: T::Key) -> Option<(T, bool)> {
-        let item = self.remote.load(key);
-        if item.is_some() {
-            return item.map(|item| (item, true));
-        }
+    pub fn load_with_remote_info(&self, key: T::Key) -> Option<(Arc<T>, bool)> {
+        let is_remote = self.is_remote(key);
+        let item = self.load(key)?;
 
-        self.local.load(key).map(|item| (item, false))
+        Some((item, is_remote))
     }
 
-    pub fn load_or_default(&self, key: T::Key) -> T {
-        self.load(key).unwrap_or_else(|| T::new_default(key))
+    pub fn load_or_default(&self, key: T::Key) -> Arc<T> {
+        self.load(key)
+            .unwrap_or_else(|| Arc::new(T::new_default(key)))
     }
 
-    pub fn load(&self, key: T::Key) -> Option<T> {
-        let item = self.remote.load(key);
-        if item.is_some() {
-            return item;
+    pub fn load(&self, key: T::Key) -> Option<Arc<T>> {
+        if let Some(item) = self.cache.read().unwrap().get(&key).cloned() {
+            return Some(item);
         }
 
-        self.local.load(key)
+        match self.remote.load(key).or_else(|| self.local.load(key)) {
+            Some(item) => {
+                let item = Arc::new(item);
+                self.cache.write().unwrap().insert(key, item.clone());
+                Some(item)
+            }
+            None => None,
+        }
     }
 
     pub fn currently_applied_ledger_hash(&self) -> Option<LedgerHash> {
@@ -893,7 +922,7 @@ impl<T: LedgerItem> Ledger<T> {
         fs::create_dir(&*self.dependencies).unwrap();
         fs::create_dir(&*self.dependents).unwrap();
 
-        let mut items: HashMap<T::Key, T> = HashMap::default();
+        let mut items: HashMap<T::Key, Arc<T>> = HashMap::default();
 
         for (idx, entry) in self.entries.chain().into_iter().enumerate() {
             if idx % 50 == 0 {
@@ -936,7 +965,7 @@ impl<T: LedgerItem> Ledger<T> {
         }
     }
 
-    fn apply_caches(&self, items: HashMap<T::Key, T>) {
+    fn apply_caches(&self, items: HashMap<T::Key, Arc<T>>) {
         info!("applying caches");
         let mut the_caches: HashMap<CacheKey<T>, HashSet<T::Key>> = Default::default();
 
@@ -1004,7 +1033,7 @@ impl<T: LedgerItem> Ledger<T> {
     }
 
     fn is_remote(&self, key: T::Key) -> bool {
-        self.remote.load(key).is_some()
+        self.remote.has_item(key)
     }
 
     fn set_remote_commit(&self, repo: &str, new_commit: &str) -> Result<(), EventError<T>> {
@@ -1079,10 +1108,17 @@ impl<T: LedgerItem> Ledger<T> {
                 let (old_caches, old_item) = match self.load(key) {
                     Some(item) if cache => (item.caches(self), item),
                     Some(item) => (Default::default(), item),
-                    None => (Default::default(), T::new_default(key)),
+                    None => (Default::default(), Arc::new(T::new_default(key))),
                 };
                 let old_cloned = old_item.clone();
-                let modified_item = old_item.run_event(action, self, verify)?;
+                let modified_item =
+                    Arc::new(Arc::unwrap_or_clone(old_item).run_event(action, self, verify)?);
+
+                self.cache
+                    .write()
+                    .unwrap()
+                    .insert(key, modified_item.clone());
+
                 let no_op = old_cloned == modified_item;
                 let new_caches = modified_item.caches(self);
                 (old_caches, new_caches, Some(modified_item), no_op)
@@ -1096,9 +1132,16 @@ impl<T: LedgerItem> Ledger<T> {
                 } else {
                     Default::default()
                 };
+
+                let item = Arc::new(item);
+
+                self.cache.write().unwrap().insert(key, item.clone());
+
                 (HashSet::default(), caches, Some(item), false)
             }
             LedgerAction::Delete => {
+                self.cache.write().unwrap().remove(&key);
+
                 let old_item = self.load(key).unwrap();
                 let old_caches = old_item.caches(self);
                 (old_caches, Default::default(), None, false)
@@ -1133,7 +1176,7 @@ impl<T: LedgerItem> Ledger<T> {
         }
 
         match item {
-            Some(item) => self.save(item),
+            Some(item) => self.save(Arc::unwrap_or_clone(item)),
             None => {
                 debug_assert!(added_caches.is_empty());
                 self.remove(key);
@@ -1169,7 +1212,7 @@ impl<T: LedgerItem> Ledger<T> {
         save: bool,
         verify: bool,
         cache: bool,
-    ) -> Result<Option<Either<T, T::Key>>, EventError<T>> {
+    ) -> Result<Option<Either<Arc<T>, T::Key>>, EventError<T>> {
         let res = match event.clone() {
             LedgerEvent::ItemAction { id, action } => self._modify(id, action, verify, cache)?,
             LedgerEvent::SetUpstream {

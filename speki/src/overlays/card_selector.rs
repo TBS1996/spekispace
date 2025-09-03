@@ -519,7 +519,7 @@ pub fn CardSelectorRender(
                                         let mut events: Vec<CardEvent> = vec![];
 
                                         for card in sorted {
-                                            events.extend(card.clone_base().into_events());
+                                            events.extend(Arc::unwrap_or_clone(card.clone_base()).into_events());
                                         }
 
                                         let Some(folder) = rfd::FileDialog::new()

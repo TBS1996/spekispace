@@ -55,11 +55,11 @@ impl CardProvider {
         let (base, is_remote) = self.providers.cards.load_with_remote_info(id)?;
         let history = match self.providers.reviews.load(id) {
             Some(revs) => revs,
-            None => History::new(id),
+            None => Arc::new(History::new(id)),
         };
         let metadata = match self.providers.metadata.load(id) {
             Some(meta) => meta,
-            None => Metadata::new(id),
+            None => Arc::new(Metadata::new(id)),
         };
 
         let front_audio: Option<Audio> = None;
