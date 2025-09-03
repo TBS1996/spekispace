@@ -1,11 +1,15 @@
-use std::{fmt::Debug, sync::Arc};
+use std::{collections::HashSet, fmt::Debug, sync::Arc, time::Duration};
 
 use clap::Parser;
 use dioxus::prelude::*;
-use ledgerstore::EventError;
+use ledgerstore::{EventError, PropertyCache, TheCacheGetter};
 use speki_core::{
     card::{CardId, RawCard},
-    recall_rate::Recall,
+    card_provider::CardProvider,
+    ledger::{CardEvent, MetaEvent},
+    metadata::Metadata,
+    recall_rate::{History, Recall, ReviewEvent},
+    set::{Set, SetEvent, SetId},
     Card, CardRefType,
 };
 
@@ -34,8 +38,97 @@ impl App {
         Self(Arc::new(speki_core::App::new(root)))
     }
 
-    pub fn inner(&self) -> Arc<speki_core::App> {
-        self.0.clone()
+    pub fn modify_history(&self, event: ReviewEvent) -> Result<(), EventError<History>> {
+        self.0.card_provider.modify_review(event)
+    }
+
+    pub fn modify_card(&self, event: CardEvent) -> Result<(), EventError<RawCard>> {
+        self.0.card_provider.modify_card(event)
+    }
+
+    pub fn modify_meta(&self, event: MetaEvent) -> Result<(), EventError<Metadata>> {
+        self.0.card_provider.modify_metadata(event)
+    }
+
+    pub fn modify_set(&self, event: SetEvent) -> Result<(), EventError<Set>> {
+        self.0.card_provider.modify_set(event)
+    }
+
+    pub fn current_time(&self) -> Duration {
+        use ledgerstore::TimeProvider;
+        self.0.time_provider.current_time()
+    }
+
+    pub fn load(&self, id: CardId) -> Option<Arc<Card>> {
+        self.0.card_provider.load(id)
+    }
+
+    pub fn all_dependents_with_ty(&self, key: CardId) -> HashSet<(CardRefType, CardId)> {
+        self.0.provider.cards.all_dependents_with_ty(key)
+    }
+
+    pub fn load_set(&self, id: SetId) -> Option<Arc<Set>> {
+        self.0.provider.sets.load(id)
+    }
+
+    pub fn load_metadata(&self, id: CardId) -> Option<Arc<Metadata>> {
+        self.0.provider.metadata.load(id)
+    }
+
+    pub fn card_exists(&self, id: CardId) -> bool {
+        self.0.provider.cards.has_item(id)
+    }
+
+    pub fn load_all_histories(&self) -> HashSet<History> {
+        self.0.provider.reviews.load_all()
+    }
+
+    pub fn dependencies_recursive(&self, key: CardId) -> HashSet<CardId> {
+        self.0.provider.cards.dependencies_recursive(key)
+    }
+
+    pub fn load_getter(&self, getter: TheCacheGetter<RawCard>) -> HashSet<CardId> {
+        self.0.provider.cards.load_getter(getter)
+    }
+
+    pub fn load_all_sets(&self) -> HashSet<Set> {
+        self.0.provider.sets.load_all()
+    }
+
+    pub fn card_ledger_hash(&self) -> Option<String> {
+        self.0.provider.cards.currently_applied_ledger_hash()
+    }
+    pub fn meta_ledger_hash(&self) -> Option<String> {
+        self.0.provider.metadata.currently_applied_ledger_hash()
+    }
+
+    pub fn set_ledger_hash(&self) -> Option<String> {
+        self.0.provider.sets.currently_applied_ledger_hash()
+    }
+
+    pub fn get_prop_cache(&self, key: PropertyCache<RawCard>) -> HashSet<CardId> {
+        self.0.provider.cards.get_prop_cache(key.clone())
+    }
+
+    pub fn card_provider(&self) -> CardProvider {
+        self.0.card_provider.clone()
+    }
+
+    pub fn duplicates(&self) -> HashSet<String> {
+        self.0.card_provider.duplicates()
+    }
+
+    pub fn current_commit(&self) -> Option<String> {
+        self.0.card_provider.providers.cards.current_commit()
+    }
+
+    pub fn latest_upstream_commit(&self) -> Option<String> {
+        let curent_version = dbg!(speki_core::current_version());
+        self.0
+            .card_provider
+            .providers
+            .cards
+            .latest_upstream_commit("https://github.com/tbs1996/speki_graph", curent_version)
     }
 
     pub fn try_load_card(&self, id: CardId) -> Option<Arc<Card>> {
@@ -50,8 +143,6 @@ impl Debug for App {
 }
 
 pub fn handle_card_event_error(err: EventError<RawCard>) {
-    let provider = APP.read().inner().card_provider.clone();
-
     let text = match err {
         EventError::Cycle(items) => {
             dbg!(&items);
@@ -69,8 +160,8 @@ pub fn handle_card_event_error(err: EventError<RawCard>) {
 
             let mut s = format!("cycle detected!\n");
             for (from, to, ty) in foobar {
-                let from = provider.load(from).unwrap().name().to_string();
-                let to = provider.load(to).unwrap().name().to_string();
+                let from = APP.read().load(from).unwrap().name().to_string();
+                let to = APP.read().load(to).unwrap().name().to_string();
                 use speki_core::CardRefType as TY;
 
                 let line = match ty {

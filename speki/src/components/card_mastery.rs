@@ -2,7 +2,6 @@ use std::time::Duration;
 
 use chrono::{DateTime, Local, TimeZone};
 use dioxus::prelude::*;
-use ledgerstore::TimeProvider;
 use speki_core::recall_rate::{History as MyHistory, Recall};
 
 use crate::{utils::recall_to_emoji, APP};
@@ -10,7 +9,7 @@ use crate::{utils::recall_to_emoji, APP};
 /// Info about the review history/recall/stability of the card
 #[component]
 pub fn MasterySection(history: MyHistory) -> Element {
-    let now = APP.read().inner().time_provider.current_time();
+    let now = APP.read().current_time();
 
     rsx! {
         DisplayHistory { history, now }

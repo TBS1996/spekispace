@@ -104,7 +104,7 @@ pub fn RenderInheritedAttrs(
                 CardProperty::AttrId,
                 attr.id.to_string(),
             ));
-            let cached = APP.read().inner().provider.cards.load_getter(getter);
+            let cached = APP.read().load_getter(getter);
             let disabled = !cached.is_empty();
 
             let title = if is_param {
@@ -196,7 +196,7 @@ pub fn RenderAttrs(
                 CardProperty::AttrId,
                 attr.id.to_string(),
             ));
-            let cached = APP.read().inner().provider.cards.load_getter(getter);
+            let cached = APP.read().load_getter(getter);
             let disabled = !cached.is_empty() || disabled;
 
             let title = match (is_param, disabled) {
@@ -226,14 +226,14 @@ pub fn RenderAttrs(
                                     dbg!();
                                     if is_param {
                                         let event: LedgerEvent<RawCard> = LedgerEvent::new_modify(card, CardAction::RemoveParam(id));
-                                        if let Err(e) = APP.read().inner().provider.cards.modify(event) {
+                                        if let Err(e) = APP.read().modify_card(event) {
                                             handle_card_event_error(e);
                                             return;
                                         }
                                         attrs.clone().set(load_param_editors(card));
                                     } else {
                                     let event: LedgerEvent<RawCard> = LedgerEvent::new_modify(card, CardAction::RemoveAttr(id));
-                                    if let Err(e) = APP.read().inner().provider.cards.modify(event) {
+                                    if let Err(e) = APP.read().modify_card(event) {
                                         handle_card_event_error(e);
                                         return;
                                     }
@@ -494,14 +494,12 @@ pub fn load_attr_qa(card: CardId) -> Vec<AttrQandA> {
 
     let mut attrs: Vec<Attrv2> = curr_card.attributes().unwrap_or_default();
 
-    let provider = APP.read().inner().card_provider.clone();
-
     // all cards that are an attribute card based on a given instance.
     // wait, isnt this all we need? damn..
     let attr_cards_based_on_instance: BTreeSet<Arc<Card>> = card
         .attribute_cards()
         .into_iter()
-        .map(|id| provider.load(id).unwrap())
+        .map(|id| APP.read().load(id).unwrap())
         .collect();
 
     attrs.retain(|attr_id| {
@@ -515,7 +513,7 @@ pub fn load_attr_qa(card: CardId) -> Vec<AttrQandA> {
     for card in attr_cards_based_on_instance {
         let attr_id = card.attr_id().unwrap();
         let instance = card.attribute_instance();
-        let instance = APP.read().inner().card_provider.load(instance).unwrap();
+        let instance = APP.read().load(instance).unwrap();
         let attr = instance.get_attr(attr_id).unwrap();
 
         let answer = match attr.back_type {

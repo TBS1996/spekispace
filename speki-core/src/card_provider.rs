@@ -1,12 +1,19 @@
 use crate::{
     audio::Audio,
-    card::CardId,
+    card::{CardId, RawCard},
+    ledger::{CardEvent, MetaEvent},
     metadata::Metadata,
-    recall_rate::{AvgRecall, History},
+    recall_rate::{AvgRecall, History, ReviewEvent},
+    set::{Set, SetEvent},
     Card, FsTime, Provider,
 };
 use dioxus_logger::tracing::{info, trace};
-use std::{collections::BTreeSet, fmt::Debug, sync::Arc};
+use ledgerstore::EventError;
+use std::{
+    collections::{BTreeSet, HashSet},
+    fmt::Debug,
+    sync::Arc,
+};
 
 #[derive(Clone)]
 pub struct CardProvider {
@@ -27,6 +34,46 @@ impl CardProvider {
     pub fn load_all_card_ids(&self) -> Vec<CardId> {
         info!("x1");
         self.providers.cards.load_ids().into_iter().collect()
+    }
+
+    pub fn duplicates(&self) -> HashSet<String> {
+        info!("finding duplicates!");
+        let mut cards: Vec<String> = self
+            .load_all()
+            .into_iter()
+            .map(|c| c.display_card(true, true).to_lowercase())
+            .collect();
+
+        cards.sort();
+
+        let mut duplicates: HashSet<String> = Default::default();
+
+        let mut prev = String::new();
+        for card in cards.into_iter() {
+            if &card == &prev {
+                duplicates.insert(card.clone());
+            }
+
+            prev = card;
+        }
+
+        duplicates
+    }
+
+    pub fn modify_set(&self, event: SetEvent) -> Result<(), EventError<Set>> {
+        self.providers.sets.modify(event)
+    }
+
+    pub fn modify_metadata(&self, event: MetaEvent) -> Result<(), EventError<Metadata>> {
+        self.providers.metadata.modify(event)
+    }
+
+    pub fn modify_review(&self, event: ReviewEvent) -> Result<(), EventError<History>> {
+        self.providers.reviews.modify(event)
+    }
+
+    pub fn modify_card(&self, event: CardEvent) -> Result<(), EventError<RawCard>> {
+        self.providers.cards.modify(event)
     }
 
     pub fn load_all(&self) -> Vec<Arc<Card>> {

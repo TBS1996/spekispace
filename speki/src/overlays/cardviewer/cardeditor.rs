@@ -141,12 +141,7 @@ impl CardViewer {
             );
 
             let metadata = MetadataEditor::from(Arc::unwrap_or_clone(
-                APP.read()
-                    .inner()
-                    .provider
-                    .metadata
-                    .load(card.id())
-                    .unwrap_or_default(),
+                APP.read().load_metadata(card.id()).unwrap_or_default(),
             ));
 
             CardEditor {

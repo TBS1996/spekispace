@@ -22,18 +22,8 @@ static BROWSE_STATE: GlobalSignal<BrowseState> = Signal::global(BrowseState::new
 pub fn Browse() -> Element {
     let mut browse_state = BROWSE_STATE.cloned();
 
-    let meta_state = APP
-        .read()
-        .inner()
-        .provider
-        .metadata
-        .currently_applied_ledger_hash();
-    let card_state = APP
-        .read()
-        .inner()
-        .provider
-        .cards
-        .currently_applied_ledger_hash();
+    let meta_state = APP.read().meta_ledger_hash();
+    let card_state = APP.read().card_ledger_hash();
     if browse_state.prev_cardstate != card_state || browse_state.prev_metastate != meta_state {
         *BROWSE_STATE.write() = BrowseState::new();
         browse_state = BROWSE_STATE.cloned();
@@ -70,19 +60,9 @@ impl BrowseState {
         info!("creating browse state!");
 
         let browse_page = CardSelector::new(true, vec![]).no_title();
-        let prev_cardstate = APP
-            .read()
-            .inner()
-            .provider
-            .cards
-            .currently_applied_ledger_hash();
+        let prev_cardstate = APP.read().card_ledger_hash();
 
-        let prev_metastate = APP
-            .read()
-            .inner()
-            .provider
-            .metadata
-            .currently_applied_ledger_hash();
+        let prev_metastate = APP.read().meta_ledger_hash();
 
         Self {
             browse_page,

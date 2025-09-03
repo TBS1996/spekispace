@@ -86,14 +86,9 @@ pub struct RemoteUpdate {
 
 impl RemoteUpdate {
     pub fn new() -> Self {
-        let current_commit = APP.read().inner().provider.cards.current_commit();
-        let curent_version = dbg!(speki_core::current_version());
-        let latest_commit = APP
-            .read()
-            .inner()
-            .provider
-            .cards
-            .latest_upstream_commit("https://github.com/tbs1996/speki_graph", curent_version);
+        let current_commit = APP.read().current_commit();
+
+        let latest_commit = APP.read().latest_upstream_commit();
 
         if latest_commit != current_commit {
             Self {
@@ -157,7 +152,7 @@ fn handle_add_card(args: &Vec<String>) {
         },
     );
 
-    match APP.read().inner().provider.cards.modify(event) {
+    match APP.read().modify_card(event) {
         Ok(()) => {}
         Err(e) => {
             eprintln!("{:?}", e);
@@ -165,21 +160,14 @@ fn handle_add_card(args: &Vec<String>) {
         }
     }
 
-    if APP
-        .read()
-        .inner()
-        .provider
-        .sets
-        .load(Set::CLI_CARDS)
-        .is_none()
-    {
+    if APP.read().load_set(Set::CLI_CARDS).is_none() {
         let action = SetAction::SetName("CLI imports".to_string());
         let event = SetEvent::new_modify(Set::CLI_CARDS, action);
-        APP.read().inner().provider.sets.modify(event).unwrap();
+        APP.read().modify_set(event).unwrap();
     }
 
     let event = SetEvent::new_modify(Set::CLI_CARDS, SetAction::AddInput(Input::Card(card_id)));
-    APP.read().inner().provider.sets.modify(event).unwrap();
+    APP.read().modify_set(event).unwrap();
     println!("{}", card_id);
     std::process::exit(0);
 }
@@ -192,7 +180,7 @@ pub fn TheApp() -> Element {
     let cli = Cli::parse();
 
     if cli.find_duplicates {
-        let duplicates = speki_core::duplicates(&APP.read().inner().card_provider);
+        let duplicates = APP.read().duplicates();
         if duplicates.is_empty() {
             info!("no duplicates!");
         } else {
@@ -208,7 +196,7 @@ pub fn TheApp() -> Element {
     if let Some(card) = cli.maturity {
         let avg = AvgRecall::default();
 
-        let card = APP.read().inner().card_provider.load(card).unwrap();
+        let card = APP.read().load(card).unwrap();
         println!("maturity ml");
         speki_core::expected_gain(card.clone(), &Trained::from_static());
 
@@ -223,15 +211,13 @@ pub fn TheApp() -> Element {
     }
 
     if let Some(card) = cli.plot {
-        let card = APP.read().inner().card_provider.load(card).unwrap();
+        let card = APP.read().load(card).unwrap();
         speki_core::plot_the_recall(card);
         std::process::exit(0);
     }
 
     if cli.analyze {
-        let ledger = APP.read().inner().provider.reviews.clone();
-        let card_ledger = APP.read().inner().provider.cards.clone();
-        let histories = ledger.load_all();
+        let histories = APP.read().load_all_histories();
 
         dbg!(histories.len());
 
@@ -240,7 +226,7 @@ pub fn TheApp() -> Element {
         let mut all_data: Vec<History> = vec![];
 
         for mut history in histories {
-            if !card_ledger.has_item(history.id) {
+            if !APP.read().card_exists(history.id) {
                 continue;
             };
 
@@ -298,8 +284,6 @@ pub fn TheApp() -> Element {
     if let Some(id) = cli.view_front {
         let front = APP
             .read()
-            .inner()
-            .card_provider
             .load(id)
             .map(|c| c.front_side().to_string())
             .unwrap_or(format!("<card not found>"));
@@ -310,8 +294,6 @@ pub fn TheApp() -> Element {
     if let Some(id) = cli.view_back {
         let back = APP
             .read()
-            .inner()
-            .card_provider
             .load(id)
             .map(|c| c.display_backside().to_string())
             .unwrap_or(format!("<card not found>"));
@@ -332,18 +314,14 @@ pub fn TheApp() -> Element {
             None => panic!("card must be specified for review"),
         };
 
-        use ledgerstore::TimeProvider;
-        let current_time = APP.read().inner().provider.time.current_time();
+        let current_time = APP.read().current_time();
         let review = TheReview {
             timestamp: current_time,
             grade: recall,
         };
 
         APP.read()
-            .inner()
-            .provider
-            .reviews
-            .modify(ReviewEvent::new_modify(card, ReviewAction::Insert(review)))
+            .modify_history(ReviewEvent::new_modify(card, ReviewAction::Insert(review)))
             .unwrap();
 
         std::process::exit(0);
@@ -368,7 +346,7 @@ pub fn TheApp() -> Element {
         let qty = events.len();
 
         for event in events {
-            APP.read().inner().provider.cards.modify(event).unwrap();
+            APP.read().modify_card(event).unwrap();
         }
 
         println!("ran {} events", qty);
@@ -377,10 +355,7 @@ pub fn TheApp() -> Element {
 
     if let Some(commit) = cli.commit {
         APP.read()
-            .inner()
-            .provider
-            .cards
-            .modify(ledgerstore::LedgerEvent::SetUpstream {
+            .modify_card(ledgerstore::LedgerEvent::SetUpstream {
                 commit,
                 upstream_url: "https://github.com/tbs1996/speki_graph".to_string(),
             })

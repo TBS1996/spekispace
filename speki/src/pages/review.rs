@@ -44,10 +44,7 @@ pub struct ReviewPage {
 fn load_sets() -> Vec<SetEditor> {
     let mut sets: Vec<SetEditor> = APP
         .read()
-        .inner()
-        .provider
-        .sets
-        .load_all()
+        .load_all_sets()
         .into_iter()
         .map(|set| SetEditor::new(&set))
         .collect();
@@ -63,12 +60,7 @@ impl ReviewPage {
 
         let sets: Signal<Vec<SetEditor>> = Signal::new_in_scope(load_sets(), ScopeId::APP);
 
-        let prev_set_state = APP
-            .read()
-            .inner()
-            .provider
-            .sets
-            .currently_applied_ledger_hash();
+        let prev_set_state = APP.read().set_ledger_hash();
 
         Self {
             filter,
@@ -88,12 +80,7 @@ pub fn Review() -> Element {
     let overlay = OVERLAY.read().get();
     let sets = state.sets.clone();
 
-    let current_set_state = APP
-        .read()
-        .inner()
-        .provider
-        .sets
-        .currently_applied_ledger_hash();
+    let current_set_state = APP.read().set_ledger_hash();
 
     if state.prev_set_state.as_ref() != current_set_state.as_ref() {
         state.sets.set(load_sets());
@@ -128,21 +115,17 @@ fn RenderInput(
     input: InputEditor,
     #[props(default = 0)] depth: usize,
 ) -> Element {
-    let ledger = APP.read().inner().provider.sets.clone();
-
     let leaf = match input {
         InputEditor::Card(card) => {
             let name = APP
                 .read()
-                .inner()
-                .card_provider
                 .load(card)
                 .map(|card| card.name().to_string())
                 .unwrap_or("<invalid card>".to_string());
             Some(name)
         }
         InputEditor::Leaf(card) => {
-            let provider = APP.read().inner().card_provider.clone();
+            let provider = APP.read().card_provider();
             Some(card.display(provider))
         }
         _ => None,
@@ -165,7 +148,7 @@ fn RenderInput(
             },
             InputEditor::Reference(id) => {
                 rsx!{
-                    RenderSet { filter, set: SetEditor::new(&ledger.load(id).unwrap()), depth: depth + 1}
+                    RenderSet { filter, set: SetEditor::new(&APP.read().load_set(id).unwrap()), depth: depth + 1}
                 }
             },
             InputEditor::Expr(expr) => {
@@ -374,13 +357,12 @@ fn RenderSet(
         show_edit,
     } = set.clone();
 
-    let ledger = APP.read().inner().provider.sets.clone();
     let filter2 = filter.clone();
 
     let real_set = SetExpr::try_from(expr.cloned());
 
     let (save_button, is_new): (bool, bool) = match real_set.clone() {
-        Ok(set_expr) => match APP.read().inner().provider.sets.load(set.id) {
+        Ok(set_expr) => match APP.read().load_set(set.id) {
             Some(old_set) => (
                 old_set.expr != set_expr || old_set.name != set.name.cloned(),
                 false,
@@ -436,10 +418,10 @@ fn RenderSet(
 
 
                         let event = SetEvent::new_modify(id, SetAction::SetName(name));
-                        ledger.modify(event).unwrap();
+                        APP.read().modify_set(event).unwrap();
 
                         let event = SetEvent::new_modify(id, SetAction::SetExpr(expr));
-                        ledger.modify(event).unwrap();
+                        APP.read().modify_set(event).unwrap();
                         set.name.write();
 
                     },
@@ -502,7 +484,7 @@ fn RenderSet(
                             delete_atomic.set(true);
 
                             if !id.is_nil()  {
-                                APP.read().inner().provider.sets.modify(LedgerEvent::new_delete(id)).unwrap();
+                                APP.read().modify_set(LedgerEvent::new_delete(id)).unwrap();
                             }
                         },
                         "delete"
@@ -519,7 +501,7 @@ fn RenderSet(
 }
 
 pub fn reviewable_cards(expr: SetExpr, filter: Option<CardFilter>) -> Option<NonEmpty<CardId>> {
-    let provider = APP.read().inner().card_provider.clone();
+    let provider = APP.read().card_provider();
     let cards = expr.eval(&provider);
 
     let card_ids: HashSet<CardId> = cards.iter().map(|card| card.id()).collect();
@@ -541,15 +523,15 @@ pub fn reviewable_cards(expr: SetExpr, filter: Option<CardFilter>) -> Option<Non
 
     let mut seen_cards: Vec<CardId> = vec![];
     let mut unseen_cards: Vec<CardId> = vec![];
-    let meta_ledger = provider.providers.metadata.clone();
 
     for (id, recstate) in recalls {
         let reviewable = recstate.reviewable;
+        let metadata = APP.read().load_metadata(id).map(|m| (*m).clone());
 
         if reviewable
             && filter
                 .as_ref()
-                .map(|filter| filter.filter(id, recstate, &meta_ledger))
+                .map(|filter| filter.filter(recstate, metadata))
                 .unwrap_or(true)
         {
             if recstate.pending {
@@ -631,7 +613,7 @@ impl ExprEditor {
 
                 let res = match dbg!(SetExpr::try_from(selv)) {
                     Ok(expr) => {
-                        let provider = APP.read().inner().card_provider.clone();
+                        let provider = APP.read().card_provider();
                         let mut out: BTreeMap<Uuid, Signal<MaybeEntry>> = Default::default();
 
                         for c in expr.eval(&provider) {
@@ -811,7 +793,7 @@ fn RenderSets(filter: CardFilter, sets: Signal<Vec<SetEditor>>) -> Element {
                 onclick: move |_|{
                     let f: Arc<Box<dyn Fn(String)>> = Arc::new(Box::new(move |s: String| {
                         let event = SetEvent::new_modify(SetId::new_v4(), SetAction::SetName(s));
-                        APP.read().inner().provider.sets.modify(event).unwrap();
+                        APP.read().modify_set(event).unwrap();
                     }));
                     OverlayEnum::new_text_input("name of set".to_string(), f).append();
                 },

@@ -252,7 +252,7 @@ fn RenderDependencies(
                         let removed = dependencies.write().remove(idx);
                         if let Some(id) = card_id {
                             let event = LedgerEvent::new_modify(id, CardAction::RemoveDependency(removed));
-                            if let Err(e) = APP.read().inner().provider.cards.modify(event) {
+                            if let Err(e) = APP.read().modify_card(event) {
                                 handle_card_event_error(e);
                             }
                         }
@@ -384,7 +384,7 @@ pub fn ImportCards(viewer: CardViewer) -> Element {
 
                         let set_id = SetId::new_v4();
                         let event = SetEvent::new_modify(set_id, SetAction::SetName(filename));
-                        APP.read().inner().provider.sets.modify(event).unwrap();
+                        APP.read().modify_set(event).unwrap();
                         let mut saved_cards: BTreeSet<Input> = Default::default();
 
                         for rep in reps {
@@ -397,7 +397,7 @@ pub fn ImportCards(viewer: CardViewer) -> Element {
 
                         let expr = SetExpr::Union(saved_cards);
                         let event = SetEvent::new_modify(set_id, SetAction::SetExpr(expr));
-                        APP.read().inner().provider.sets.modify(event).unwrap();
+                        APP.read().modify_set(event).unwrap();
                         viewer.light_reset();
                         let notice = format!("imported {cards_imported} cards");
                         OverlayEnum::new_notice(notice).append();
@@ -664,7 +664,7 @@ fn save_cardrep(rep: CardRep, old_card: Option<Arc<Card>>) -> Result<CardId, ()>
     {
         let event = MetaEvent::new_modify(id, MetaAction::Suspend(meta.suspended.cloned()));
 
-        if let Err(e) = APP.read().inner().provider.metadata.modify(event) {
+        if let Err(e) = APP.read().modify_meta(event) {
             let err = format!("{e:?}");
             OverlayEnum::new_notice(err).append();
             return Err(());
@@ -672,7 +672,7 @@ fn save_cardrep(rep: CardRep, old_card: Option<Arc<Card>>) -> Result<CardId, ()>
 
         let event = MetaEvent::new_modify(id, MetaAction::SetTrivial(Some(meta.trivial.cloned())));
 
-        if let Err(e) = APP.read().inner().provider.metadata.modify(event) {
+        if let Err(e) = APP.read().modify_meta(event) {
             let err = format!("{e:?}");
             OverlayEnum::new_notice(err).append();
             return Err(());
@@ -680,7 +680,7 @@ fn save_cardrep(rep: CardRep, old_card: Option<Arc<Card>>) -> Result<CardId, ()>
 
         let event = MetaEvent::new_modify(id, MetaAction::SetNeedsWork(meta.needs_work.cloned()));
 
-        if let Err(e) = APP.read().inner().provider.metadata.modify(event) {
+        if let Err(e) = APP.read().modify_meta(event) {
             let err = format!("{e:?}");
             OverlayEnum::new_notice(err).append();
             return Err(());
@@ -817,7 +817,7 @@ fn save_cardrep(rep: CardRep, old_card: Option<Arc<Card>>) -> Result<CardId, ()>
 
     for event in actions {
         let event = CardEvent::new_modify(id, event);
-        if let Err(e) = APP.read().inner().provider.cards.modify(event) {
+        if let Err(e) = APP.read().modify_card(event) {
             handle_card_event_error(e);
             return Err(());
         }
@@ -841,7 +841,7 @@ fn save_cardrep(rep: CardRep, old_card: Option<Arc<Card>>) -> Result<CardId, ()>
                                     instance: id,
                                 };
                                 let event = CardEvent::new_modify(CardId::new_v4(), action);
-                                if let Err(e) = APP.read().inner().provider.cards.modify(event) {
+                                if let Err(e) = APP.read().modify_card(event) {
                                     handle_card_event_error(e);
                                     return Err(());
                                 }
@@ -857,8 +857,7 @@ fn save_cardrep(rep: CardRep, old_card: Option<Arc<Card>>) -> Result<CardId, ()>
                                         instance: id,
                                     };
                                     let event = CardEvent::new_modify(CardId::new_v4(), action);
-                                    if let Err(e) = APP.read().inner().provider.cards.modify(event)
-                                    {
+                                    if let Err(e) = APP.read().modify_card(event) {
                                         handle_card_event_error(e);
                                         return Err(());
                                     }
@@ -873,7 +872,7 @@ fn save_cardrep(rep: CardRep, old_card: Option<Arc<Card>>) -> Result<CardId, ()>
                                     instance: id,
                                 };
                                 let event = CardEvent::new_modify(CardId::new_v4(), action);
-                                if let Err(e) = APP.read().inner().provider.cards.modify(event) {
+                                if let Err(e) = APP.read().modify_card(event) {
                                     handle_card_event_error(e);
                                     return Err(());
                                 }
@@ -892,7 +891,7 @@ fn save_cardrep(rep: CardRep, old_card: Option<Arc<Card>>) -> Result<CardId, ()>
                                     instance: id,
                                 };
                                 let event = CardEvent::new_modify(CardId::new_v4(), action);
-                                if let Err(e) = APP.read().inner().provider.cards.modify(event) {
+                                if let Err(e) = APP.read().modify_card(event) {
                                     handle_card_event_error(e);
                                     return Err(());
                                 }
@@ -911,10 +910,6 @@ fn save_cardrep(rep: CardRep, old_card: Option<Arc<Card>>) -> Result<CardId, ()>
                     let boolean = boolean.cloned();
                     let prev_back = APP
                         .read()
-                        .inner()
-                        .card_provider
-                        .providers
-                        .cards
                         .load(attr_card_id)
                         .unwrap()
                         .ref_backside()
@@ -924,7 +919,7 @@ fn save_cardrep(rep: CardRep, old_card: Option<Arc<Card>>) -> Result<CardId, ()>
                     if prev_back != back {
                         let action = CardAction::SetBackBool(boolean);
                         let event = CardEvent::new_modify(attr_card_id, action);
-                        if let Err(e) = APP.read().inner().provider.cards.modify(event) {
+                        if let Err(e) = APP.read().modify_card(event) {
                             handle_card_event_error(e);
                             return Err(());
                         }
@@ -933,21 +928,18 @@ fn save_cardrep(rep: CardRep, old_card: Option<Arc<Card>>) -> Result<CardId, ()>
                 OldAttrAnswerEditor::TimeStamp(ts) => {
                     let prev_back = APP
                         .read()
-                        .inner()
-                        .card_provider
-                        .providers
-                        .cards
                         .load(attr_card_id)
                         .unwrap()
                         .ref_backside()
                         .cloned()
                         .unwrap();
+
                     if let Ok(ts) = TimeStamp::from_str(&ts.cloned()) {
                         let back = BackSide::Time(ts.clone());
                         if prev_back != back {
                             let action = CardAction::SetBackTime(ts);
                             let event = CardEvent::new_modify(attr_card_id, action);
-                            if let Err(e) = APP.read().inner().provider.cards.modify(event) {
+                            if let Err(e) = APP.read().modify_card(event) {
                                 handle_card_event_error(e);
                                 return Err(());
                             }
@@ -958,10 +950,6 @@ fn save_cardrep(rep: CardRep, old_card: Option<Arc<Card>>) -> Result<CardId, ()>
                 OldAttrAnswerEditor::Any(back_put) => {
                     let prev_back = APP
                         .read()
-                        .inner()
-                        .card_provider
-                        .providers
-                        .cards
                         .load(attr_card_id)
                         .unwrap()
                         .ref_backside()
@@ -975,7 +963,7 @@ fn save_cardrep(rep: CardRep, old_card: Option<Arc<Card>>) -> Result<CardId, ()>
                                 instance: id,
                             };
                             let event = CardEvent::new_modify(attr_card_id, action);
-                            if let Err(e) = APP.read().inner().provider.cards.modify(event) {
+                            if let Err(e) = APP.read().modify_card(event) {
                                 handle_card_event_error(e);
                                 return Err(());
                             }
@@ -994,7 +982,7 @@ fn save_cardrep(rep: CardRep, old_card: Option<Arc<Card>>) -> Result<CardId, ()>
                         instance: id,
                     };
                     let event = CardEvent::new_modify(attr_card_id, action);
-                    if let Err(e) = APP.read().inner().provider.cards.modify(event) {
+                    if let Err(e) = APP.read().modify_card(event) {
                         handle_card_event_error(e);
                         return Err(());
                     }
@@ -1048,7 +1036,7 @@ fn save_button(CardViewer: CardViewer) -> Element {
 
                 match save_cardrep(rep, CardViewer.old_card.clone()) {
                     Ok(id) => {
-                        let Some(card) = APP.read().inner().card_provider().load(id) else {
+                        let Some(card) = APP.read().load(id) else {
                             dbg!(id);
                             panic!();
                         };

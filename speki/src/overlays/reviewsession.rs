@@ -109,7 +109,7 @@ pub fn ReviewRender(
     show_backside: Signal<bool>,
     tot: Memo<usize>,
 ) -> Element {
-    let card = match APP.read().inner().card_provider.load(card_id) {
+    let card = match APP.read().load(card_id) {
         Some(card) => card,
         None => {
             queue.write().next();
@@ -429,7 +429,7 @@ fn RenderDependencies(
                             let removed =  wtf.clone().get(idx).cloned().unwrap();
                             let id = card2;
                             let event = LedgerEvent::new_modify(id, CardAction::RemoveDependency(removed.id()));
-                            APP.read().inner().provider.cards.modify(event).unwrap();
+                            APP.read().modify_card(event).unwrap();
                             ScopeId::APP.needs_update();
                         },
                         "X"

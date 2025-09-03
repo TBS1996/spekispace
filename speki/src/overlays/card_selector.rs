@@ -153,16 +153,10 @@ impl CardSelector {
                     let bigrams = bigrams(search.as_ref());
 
                     for bigram in bigrams {
-                        let indices = APP
-                            .read()
-                            .inner()
-                            .card_provider
-                            .providers
-                            .cards
-                            .get_prop_cache(PropertyCache::new(
-                                CardProperty::Bigram,
-                                format!("{}{}", bigram[0], bigram[1]),
-                            ));
+                        let indices = APP.read().get_prop_cache(PropertyCache::new(
+                            CardProperty::Bigram,
+                            format!("{}{}", bigram[0], bigram[1]),
+                        ));
 
                         for id in indices {
                             if cards.contains_key(&id) {
@@ -186,8 +180,6 @@ impl CardSelector {
                 };
 
                 info!("{} cards sorted", sorted_cards.len());
-
-                let meta_ledger = APP.read().inner().provider.metadata.clone();
 
                 for (matches, card) in sorted_cards {
                     let entry = match cards.get(&card) {
@@ -220,7 +212,7 @@ impl CardSelector {
                             .contains(&CardTy::from_ctype(card.card_type()))
                     {
                         let flag = match filtermemo.cloned() {
-                            Some(filter) => filter.filter_old(card.clone(), now, &meta_ledger),
+                            Some(filter) => filter.filter_old(card.clone(), now),
                             None => true,
                         };
 
@@ -439,7 +431,7 @@ pub fn CardSelectorRender(
                     button {
                         class: "{crate::styles::CREATE_BUTTON} px-3 py-2",
                         onclick: move |_| {
-                            if let Err(err) = APP.read().inner().provider.cards.modify(LedgerEvent::SetUpstream { commit: latest_commit.clone(), upstream_url: "https://github.com/tbs1996/speki_graph".to_string() }) {
+                            if let Err(err) = APP.read().modify_card(LedgerEvent::SetUpstream { commit: latest_commit.clone(), upstream_url: "https://github.com/tbs1996/speki_graph".to_string() }) {
                                 handle_card_event_error(err);
                             } else {
                                 use_context::<RemoteUpdate>().clear()
@@ -495,12 +487,12 @@ pub fn CardSelectorRender(
                                 title: review_title,
                                 onclick: move |_| {
                                     if let Ok(expr) = expr2.clone() {
-                                        let cards = expr.eval(&APP.read().inner().card_provider);
+                                        let cards = expr.eval(&APP.read().card_provider());
 
                                         let card_ids: HashSet<CardId> = cards.iter().map(|card| card.id()).collect();
                                         let mut all_recursive_dependencies: HashSet<CardId> = card_ids
                                             .iter()
-                                            .map(|id| APP.read().inner().provider.cards.dependencies_recursive(*id))
+                                            .map(|id| APP.read().dependencies_recursive(*id))
                                             .flatten()
                                             .collect();
 
@@ -509,9 +501,9 @@ pub fn CardSelectorRender(
                                         let mut to_export: Vec<Card> = vec![];
 
                                         for card in all_recursive_dependencies {
-                                            let card = APP.read().inner().load_card(card).unwrap();
+                                            let card = APP.read().load(card).unwrap();
                                             if !card.is_remote() {
-                                                to_export.push(card);
+                                                to_export.push(Arc::unwrap_or_clone(card));
                                             }
                                         }
 

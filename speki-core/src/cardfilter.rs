@@ -357,13 +357,13 @@ impl MetaFilter {
         self.suspended.is_none() && self.needs_work.is_none()
     }
 
-    pub fn filter(&self, card: CardId, ledger: &Ledger<Metadata>) -> bool {
+    pub fn filter(&self, metadata: Option<Metadata>) -> bool {
         let Self {
             suspended,
             needs_work,
         } = self.clone();
 
-        let metadata = ledger.load_or_default(card);
+        let metadata = metadata.unwrap_or_default();
 
         if let Some(flag) = suspended {
             if flag != metadata.suspended.is_suspended() {
@@ -390,16 +390,11 @@ pub struct CardFilter {
 }
 
 impl CardFilter {
-    pub fn filter(
-        &self,
-        card: CardId,
-        recall: RecallState,
-        meta_ledger: &Ledger<Metadata>,
-    ) -> bool {
+    pub fn filter(&self, recall: RecallState, metadata: Option<Metadata>) -> bool {
         let CardFilter { history, meta } = self.clone();
 
         if !meta.is_empty() {
-            if !meta.filter(card, meta_ledger) {
+            if !meta.filter(metadata) {
                 return false;
             }
         }
@@ -407,11 +402,11 @@ impl CardFilter {
         history.filter(recall)
     }
 
-    pub fn filter_old(&self, card: Arc<Card>, now: Duration, ledger: &Ledger<Metadata>) -> bool {
+    pub fn filter_old(&self, card: Arc<Card>, now: Duration) -> bool {
         let CardFilter { history, meta } = self.clone();
 
         if !meta.is_empty() {
-            if !meta.filter(card.id(), ledger) {
+            if !meta.filter(Some(card.metadata())) {
                 return false;
             }
         }

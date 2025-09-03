@@ -56,10 +56,7 @@ pub fn Toggle(
 pub fn NeedsWork(id: CardId) -> Element {
     let signal: Signal<bool> = use_signal(|| {
         APP.read()
-            .inner()
-            .provider
-            .metadata
-            .load(id)
+            .load_metadata(id)
             .map(|meta| meta.needs_work)
             .unwrap_or_default()
     });
@@ -71,10 +68,7 @@ pub fn NeedsWork(id: CardId) -> Element {
             on_toggle: Some(Callback::new(move |new_val: bool| {
                 // Write update
                 APP.read()
-                    .inner()
-                    .provider
-                    .metadata
-                    .modify(MetaEvent::new_modify(
+                    .modify_meta(MetaEvent::new_modify(
                         id,
                         MetaAction::SetNeedsWork(new_val),
                     ))
@@ -83,10 +77,7 @@ pub fn NeedsWork(id: CardId) -> Element {
                 // Re-read confirmed value
                 let refreshed = APP
                     .read()
-                    .inner()
-                    .provider
-                    .metadata
-                    .load(id)
+                    .load_metadata(id)
                     .map(|meta| meta.needs_work)
                     .unwrap_or_default();
 

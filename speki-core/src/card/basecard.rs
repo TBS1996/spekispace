@@ -913,18 +913,6 @@ impl RawCard {
         }
     }
 
-    pub fn ref_mut_backside(&mut self) -> Option<&mut BackSide> {
-        match &mut self.data {
-            CardType::Instance { back, .. } => back.as_mut(),
-            CardType::Normal { back, .. } => Some(back),
-            CardType::Unfinished { .. } => None,
-            CardType::Attribute { back, .. } => Some(back),
-            CardType::Class { back, .. } => back.as_mut(),
-            CardType::Statement { .. } => None,
-            CardType::Event { .. } => None,
-        }
-    }
-
     pub fn ref_backside(&self) -> Option<&BackSide> {
         match &self.data {
             CardType::Instance { back, .. } => back.as_ref(),

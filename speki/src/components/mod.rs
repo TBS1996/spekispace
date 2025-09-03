@@ -38,12 +38,7 @@ pub fn RenderDependents(card_id: CardId, hidden: bool) -> Element {
     let max_limit = 10;
 
     let (deps, qty): (Vec<(String, CardRefType, CardId)>, usize) = {
-        let dep_ids = APP
-            .read()
-            .inner()
-            .provider
-            .cards
-            .all_dependents_with_ty(card_id);
+        let dep_ids = APP.read().all_dependents_with_ty(card_id);
         let qty = dep_ids.len();
 
         if dep_ids.len() > max_limit {

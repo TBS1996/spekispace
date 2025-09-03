@@ -322,6 +322,10 @@ impl Card {
         self.base.trivial
     }
 
+    pub fn ref_backside(&self) -> Option<&BackSide> {
+        self.base.ref_backside()
+    }
+
     pub fn transitive_sort(list: Vec<Self>) -> Result<Vec<Self>, ()> {
         let mut q: VecDeque<Self> = list.into_iter().collect();
         let mut out: Vec<Self> = Vec::with_capacity(q.len());
@@ -349,6 +353,10 @@ impl Card {
             }
         }
         Ok(out)
+    }
+
+    pub fn metadata(&self) -> Metadata {
+        Arc::unwrap_or_clone(self.metadata.clone())
     }
 
     pub fn display_card(&self, namespace: bool, class: bool) -> EvalText {
