@@ -502,7 +502,7 @@ fn RenderSet(
 
 pub fn reviewable_cards(expr: SetExpr, filter: Option<CardFilter>) -> Option<NonEmpty<CardId>> {
     let provider = APP.read().card_provider();
-    let cards = expr.eval(&provider);
+    let cards = provider.eval_expr(&expr);
 
     let card_ids: HashSet<CardId> = cards.iter().map(|card| card.id()).collect();
     let mut nodes: Vec<Node<RawCard>> = Vec::with_capacity(card_ids.len());
@@ -616,7 +616,7 @@ impl ExprEditor {
                         let provider = APP.read().card_provider();
                         let mut out: BTreeMap<Uuid, Signal<MaybeEntry>> = Default::default();
 
-                        for c in expr.eval(&provider) {
+                        for c in provider.eval_expr(&expr) {
                             let id = c.id();
                             let entry = match c {
                                 MaybeCard::Id(id) => MaybeEntry::No(id),

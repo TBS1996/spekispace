@@ -5,11 +5,7 @@ use serde::{Deserialize, Serialize};
 use strum::{Display, EnumDiscriminants, EnumIter, EnumString};
 use uuid::Uuid;
 
-use crate::{
-    card::CardId,
-    card_provider::CardProvider,
-    collection::{DynCard, MaybeCard},
-};
+use crate::{card::CardId, collection::DynCard};
 
 impl Display for Set {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -134,29 +130,6 @@ impl Default for SetExpr {
     }
 }
 
-impl Input {
-    pub fn eval(&self, provider: &CardProvider) -> BTreeSet<MaybeCard> {
-        let res = match self {
-            Input::Leaf(dc) => dc.evaluate(provider.clone()).into_iter().collect(),
-            Input::Reference(id) => provider
-                .providers
-                .sets
-                .load(*id)
-                .unwrap()
-                .expr
-                .eval(provider),
-            Input::Expr(expr) => expr.eval(provider),
-            Input::Card(id) => {
-                let mut set = BTreeSet::default();
-                set.insert(MaybeCard::Id(*id));
-                set
-            }
-        };
-        dbg!("evaluated: {:?}", self);
-        res
-    }
-}
-
 impl SetExpr {
     pub fn universe() -> Self {
         Self::All
@@ -190,53 +163,5 @@ impl SetExpr {
             SetExpr::All => {}
         }
         out
-    }
-
-    pub fn eval(&self, provider: &CardProvider) -> BTreeSet<MaybeCard> {
-        match self {
-            SetExpr::Union(hash_set) => {
-                let mut out: BTreeSet<MaybeCard> = Default::default();
-                for input in hash_set {
-                    out.extend(input.eval(provider));
-                }
-                out
-            }
-            SetExpr::Intersection(hash_set) => {
-                let mut iter = hash_set.into_iter();
-
-                let Some(first) = iter.next() else {
-                    return Default::default();
-                };
-
-                let mut set = first.eval(provider);
-
-                for input in iter {
-                    set = set.intersection(&input.eval(provider)).cloned().collect();
-                }
-
-                set
-            }
-            SetExpr::Difference(input1, input2) => {
-                let set1 = input1.eval(provider);
-                let set2 = input2.eval(provider);
-                set1.difference(&set2).cloned().collect()
-            }
-
-            SetExpr::All => {
-                Self::Complement(Input::Expr(Box::new(Self::Union(Default::default())))) // complement of an empty union is the same as universe.
-                    .eval(provider)
-            }
-
-            SetExpr::Complement(input) => provider
-                .providers
-                .cards
-                .load_ids()
-                .into_iter()
-                .map(|id| MaybeCard::Id(id))
-                .collect::<BTreeSet<MaybeCard>>()
-                .difference(&input.eval(provider))
-                .cloned()
-                .collect(),
-        }
     }
 }

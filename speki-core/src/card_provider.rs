@@ -1,14 +1,15 @@
 use crate::{
     audio::Audio,
     card::{CardId, RawCard},
+    collection::{DynCard, MaybeCard},
     ledger::{CardEvent, MetaEvent},
     metadata::Metadata,
     recall_rate::{AvgRecall, History, ReviewEvent},
-    set::{Set, SetEvent},
-    Card, FsTime, Provider,
+    set::{Input, Set, SetEvent, SetExpr},
+    Card, CardProperty, CardRefType, FsTime, Provider,
 };
 use dioxus_logger::tracing::{info, trace};
-use ledgerstore::EventError;
+use ledgerstore::{EventError, PropertyCache, RefGetter, TheCacheGetter};
 use std::{
     collections::{BTreeSet, HashMap, HashSet},
     fmt::Debug,
@@ -59,6 +60,140 @@ impl CardProvider {
         }
 
         duplicates
+    }
+
+    pub fn eval_dyncard(&self, dyncard: &DynCard) -> Vec<MaybeCard> {
+        match dyncard {
+            DynCard::Instances(id) => {
+                let mut output = vec![];
+                let getter = ledgerstore::TheCacheGetter::ItemRef(RefGetter {
+                    reversed: true,
+                    key: *id,
+                    ty: Some(CardRefType::ParentClass),
+                    recursive: true,
+                });
+                let mut all_classes = dbg!(self.providers.cards.load_getter(getter));
+                all_classes.insert(*id);
+
+                for class in all_classes {
+                    let getter = TheCacheGetter::ItemRef(RefGetter {
+                        reversed: true,
+                        key: class,
+                        ty: Some(CardRefType::ClassOfInstance),
+                        recursive: false,
+                    });
+                    for instance in self.providers.cards.load_getter(getter) {
+                        output.push(MaybeCard::Id(instance));
+                    }
+                }
+
+                output
+            }
+            DynCard::Trivial(flag) => self
+                .providers
+                .cards
+                .get_prop_cache(PropertyCache::new(CardProperty::Trivial, flag.to_string()))
+                .into_iter()
+                .map(|id| MaybeCard::Id(id))
+                .collect(),
+            DynCard::CardType(ty) => self
+                .providers
+                .cards
+                .get_prop_cache(PropertyCache::new(CardProperty::CardType, ty.to_string()))
+                .into_iter()
+                .map(|id| MaybeCard::Id(id))
+                .collect(),
+
+            DynCard::Dependents(id) => match self.load(*id) {
+                Some(card) => card.dependents().into_iter().map(MaybeCard::Card).collect(),
+                None => vec![],
+            },
+
+            DynCard::RecDependents(id) => {
+                dbg!("rec dependents");
+                let ids = match dbg!(self.load(*id)) {
+                    Some(x) => x.recursive_dependents(),
+                    None => return vec![],
+                };
+
+                let mut out = vec![];
+
+                for (idx, id) in ids.into_iter().enumerate() {
+                    if idx % 50 == 0 {
+                        dbg!(idx);
+                    }
+
+                    out.push(MaybeCard::Id(id));
+                }
+                dbg!();
+
+                out
+            }
+        }
+    }
+
+    pub fn eval_input(&self, input: &Input) -> BTreeSet<MaybeCard> {
+        let res = match input {
+            Input::Leaf(dc) => self.eval_dyncard(dc).into_iter().collect(),
+            Input::Reference(id) => self.eval_expr(&self.providers.sets.load(*id).unwrap().expr),
+            Input::Expr(expr) => self.eval_expr(&expr),
+            Input::Card(id) => {
+                let mut set = BTreeSet::default();
+                set.insert(MaybeCard::Id(*id));
+                set
+            }
+        };
+        dbg!("evaluated: {:?}", self);
+        res
+    }
+
+    pub fn eval_expr(&self, expr: &SetExpr) -> BTreeSet<MaybeCard> {
+        match expr {
+            SetExpr::Union(hash_set) => {
+                let mut out: BTreeSet<MaybeCard> = Default::default();
+                for input in hash_set {
+                    out.extend(self.eval_input(input));
+                }
+                out
+            }
+            SetExpr::Intersection(hash_set) => {
+                let mut iter = hash_set.into_iter();
+
+                let Some(first) = iter.next() else {
+                    return Default::default();
+                };
+
+                let mut set = self.eval_input(first);
+
+                for input in iter {
+                    set = set.intersection(&self.eval_input(input)).cloned().collect();
+                }
+
+                set
+            }
+            SetExpr::Difference(input1, input2) => {
+                let set1 = self.eval_input(input1);
+                let set2 = self.eval_input(input2);
+                set1.difference(&set2).cloned().collect()
+            }
+
+            SetExpr::All => {
+                self.eval_expr(&SetExpr::Complement(Input::Expr(Box::new(SetExpr::Union(
+                    Default::default(),
+                ))))) // complement of an empty union is the same as universe.
+            }
+
+            SetExpr::Complement(input) => self
+                .providers
+                .cards
+                .load_ids()
+                .into_iter()
+                .map(|id| MaybeCard::Id(id))
+                .collect::<BTreeSet<MaybeCard>>()
+                .difference(&self.eval_input(input))
+                .cloned()
+                .collect(),
+        }
     }
 
     pub fn modify_set(&self, event: SetEvent) -> Result<(), EventError<Set>> {
