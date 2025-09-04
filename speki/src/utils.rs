@@ -1,4 +1,9 @@
-use std::{collections::HashSet, fmt::Debug, sync::Arc, time::Duration};
+use std::{
+    collections::{BTreeSet, HashSet},
+    fmt::Debug,
+    sync::Arc,
+    time::Duration,
+};
 
 use clap::Parser;
 use dioxus::prelude::*;
@@ -6,10 +11,11 @@ use ledgerstore::{EventError, PropertyCache, TheCacheGetter};
 use speki_core::{
     card::{CardId, RawCard},
     card_provider::CardProvider,
+    collection::{DynCard, MaybeCard},
     ledger::{CardEvent, MetaEvent},
     metadata::Metadata,
     recall_rate::{History, Recall, ReviewEvent},
-    set::{Set, SetEvent, SetId},
+    set::{Input, Set, SetEvent, SetExpr, SetId},
     Card, CardRefType,
 };
 
@@ -112,6 +118,22 @@ impl App {
 
     pub fn card_provider(&self) -> CardProvider {
         self.0.card_provider.clone()
+    }
+
+    pub fn _eval_dyncard(&self, dyncard: &DynCard) -> Vec<MaybeCard> {
+        self.0.card_provider.eval_dyncard(dyncard)
+    }
+
+    pub fn _eval_input(&self, input: &Input) -> BTreeSet<MaybeCard> {
+        self.0.card_provider.eval_input(input)
+    }
+
+    pub fn eval_expr(&self, expr: &SetExpr) -> BTreeSet<MaybeCard> {
+        self.0.card_provider.eval_expr(expr)
+    }
+
+    pub fn display_dyncard(&self, dyncard: &DynCard) -> String {
+        dyncard.display(self.0.card_provider.clone())
     }
 
     pub fn duplicates(&self) -> HashSet<String> {

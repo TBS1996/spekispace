@@ -124,10 +124,7 @@ fn RenderInput(
                 .unwrap_or("<invalid card>".to_string());
             Some(name)
         }
-        InputEditor::Leaf(card) => {
-            let provider = APP.read().card_provider();
-            Some(card.display(provider))
-        }
+        InputEditor::Leaf(card) => Some(APP.read().display_dyncard(&card)),
         _ => None,
     }
     .unwrap_or_default();
@@ -502,7 +499,7 @@ fn RenderSet(
 
 pub fn reviewable_cards(expr: SetExpr, filter: Option<CardFilter>) -> Option<NonEmpty<CardId>> {
     let provider = APP.read().card_provider();
-    let cards = provider.eval_expr(&expr);
+    let cards = APP.read().eval_expr(&expr);
 
     let card_ids: HashSet<CardId> = cards.iter().map(|card| card.id()).collect();
     let mut nodes: Vec<Node<RawCard>> = Vec::with_capacity(card_ids.len());
@@ -613,10 +610,9 @@ impl ExprEditor {
 
                 let res = match dbg!(SetExpr::try_from(selv)) {
                     Ok(expr) => {
-                        let provider = APP.read().card_provider();
                         let mut out: BTreeMap<Uuid, Signal<MaybeEntry>> = Default::default();
 
-                        for c in provider.eval_expr(&expr) {
+                        for c in APP.read().eval_expr(&expr) {
                             let id = c.id();
                             let entry = match c {
                                 MaybeCard::Id(id) => MaybeEntry::No(id),
