@@ -313,7 +313,7 @@ impl Debug for Card {
 
 impl std::fmt::Display for Card {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.print())
+        write!(f, "{}", self.display_card(true, true).to_string())
     }
 }
 

@@ -623,7 +623,7 @@ fn TableRender(cards: Memo<Vec<Arc<Card>>>, on_card_selected: OnCardSelected) ->
     let filtered_cards: Vec<_> = cards
         .cloned()
         .into_iter()
-        .take(1000)
+        .take(500)
         .zip(std::iter::repeat_with(|| Arc::clone(&closure)))
         .map(|(card, closure)| (card.clone(), closure))
         .collect();
@@ -636,10 +636,10 @@ fn TableRender(cards: Memo<Vec<Arc<Card>>>, on_card_selected: OnCardSelected) ->
                 thead {
                     class: "bg-gray-500",
                     tr {
-                        th { class: "border border-gray-300 px-4 py-2 w-2/3", "Front" }
-                        th { class: "border border-gray-300 px-4 py-2 w-1/12", "Recall" }
-                        th { class: "border border-gray-300 px-4 py-2 w-1/12", "Stability" }
                         th { class: "border border-gray-300 px-4 py-2 w-1/24", "Ty" }
+                        th { class: "border border-gray-300 px-4 py-2 w-23/24", "Front" }
+                        //th { class: "border border-gray-300 px-4 py-2 w-1/12", "Recall" }
+                        //th { class: "border border-gray-300 px-4 py-2 w-1/12", "Stability" }
                     }
                 }
                 tbody {
@@ -656,10 +656,10 @@ fn TableRender(cards: Memo<Vec<Arc<Card>>>, on_card_selected: OnCardSelected) ->
                                 }
                             },
 
-                            td { class: "border border-gray-300 px-4 py-2 w-2/3", "{card}" }
-                            td { class: "border border-gray-300 px-4 py-2 w-1/12", "{card.recall_rate().unwrap_or_default():.2}" }
-                            td { class: "border border-gray-300 px-4 py-2 w-1/12", "{maybe_dur(card.maturity())}"}
                             td { class: "border border-gray-300 px-4 py-2 w-1/24", "{card.card_type().short_form()}" }
+                            td { class: "border border-gray-300 px-4 py-2 w-23/24", "{card}" }
+                            //td { class: "border border-gray-300 px-4 py-2 w-1/12", "{card.recall_rate().unwrap_or_default():.2}" }
+                            //td { class: "border border-gray-300 px-4 py-2 w-1/12", "{maybe_dur(card.maturity())}"}
                         }
                     }
                 }
@@ -668,14 +668,14 @@ fn TableRender(cards: Memo<Vec<Arc<Card>>>, on_card_selected: OnCardSelected) ->
     }
 }
 
-fn maybe_dur(dur: Option<Duration>) -> String {
+fn _maybe_dur(dur: Option<Duration>) -> String {
     match dur {
-        Some(dur) => format_dur(dur),
+        Some(dur) => _format_dur(dur),
         None => format!("None"),
     }
 }
 
-fn format_dur(dur: Duration) -> String {
+fn _format_dur(dur: Duration) -> String {
     let secs = dur.as_secs();
 
     let minute = 60;
