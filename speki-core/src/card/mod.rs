@@ -171,6 +171,7 @@ impl DisplayData {
     fn display(&self, provider: &CardProvider, with_namespace: bool, with_class: bool) -> EvalText {
         let mut text = TextData::default();
 
+        // 1) Namespace (leftmost)
         if with_namespace {
             if let Some(ns) = self.namespace.as_ref() {
                 text.push_link(*ns, None);
@@ -178,51 +179,63 @@ impl DisplayData {
             }
         }
 
-        if let Data::Attribute { instance } = &self.data {
-            text.push_link(instance.1, None);
-            text.push_string("[".to_string());
-            text.push_eval(self.name.clone());
-            text.push_string("]".to_string());
-
-            return EvalText::from_textdata(text, provider);
-        }
-
-        text.push_eval(self.name.clone());
-
-        if with_class {
-            text.push_string(" ".to_string());
-
-            match &self.data {
-                Data::Class {
-                    parent_class: Some(parent_class),
-                } => {
-                    text.push_string("(".to_string());
-                    text.push_link(parent_class.1, None);
-                    text.push_string(")".to_string());
+        match &self.data {
+            // 2a) Attribute cards:  <Class>::instance[attribute]
+            Data::Attribute { instance } => {
+                if with_class {
+                    if let Some(class_id) = provider.load(instance.1).unwrap().class() {
+                        text.push_string("<".to_string());
+                        text.push_link(class_id, None);
+                        text.push_string(">::".to_string());
+                    }
                 }
-                Data::Class { parent_class: None } => {}
-                Data::Instance { class, params } => {
-                    text.push_string("(".to_string());
-                    text.push_link(class.1, None);
+                text.push_link(instance.1, None);
+                text.push_string("[".to_string());
+                text.push_eval(self.name.clone());
+                text.push_string("]".to_string());
+            }
 
+            // 2b) Instance cards:   <Class>::instance
+            Data::Instance { class, params } => {
+                if with_class {
+                    text.push_string("<".to_string());
+                    text.push_link(class.1, None);
                     if !params.is_empty() {
                         text.push_string("<".to_string());
-                        for param in params {
+                        for (i, param) in params.iter().enumerate() {
+                            if i > 0 {
+                                text.push_string(", ".to_string());
+                            }
                             text.push_string(param.1.to_string());
-                            text.push_string(", ".to_string());
                         }
-
-                        text.pop();
                         text.push_string(">".to_string());
                     }
-                    text.push_string(")".to_string());
+                    text.push_string(">::".to_string());
                 }
-                Data::Attribute { .. } => {}
-                Data::Statement => {}
-                Data::Normal => {}
-                Data::Unfinished => {}
-                Data::Event => {}
-                Data::Invalid => {}
+                // instance name (you had this in `self.name`)
+                text.push_eval(self.name.clone());
+            }
+
+            // 2c) Class cards:      <Class> (optionally show parent as subtype)
+            Data::Class { parent_class } => {
+                if with_class {
+                    text.push_string("<".to_string());
+                    // class name is `self.name`
+                    text.push_eval(self.name.clone());
+                    text.push_string(">".to_string());
+
+                    if let Some(parent) = parent_class {
+                        text.push_string(" <: ".to_string());
+                        text.push_link(parent.1, None);
+                    }
+                } else {
+                    text.push_eval(self.name.clone());
+                }
+            }
+
+            // 2d) Everything else: just render the name
+            _ => {
+                text.push_eval(self.name.clone());
             }
         }
 
