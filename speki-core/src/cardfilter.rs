@@ -438,6 +438,21 @@ pub struct RecallState {
     pub reviewable: bool,
 }
 
+pub fn randomize_stab(p: f32, id: CardId) -> f32 {
+    if p == 0. {
+        return p;
+    }
+
+    let num = u128::from_be_bytes(*id.as_bytes());
+
+    const N: u128 = 100;
+
+    let r = (num % N) as f32 / (N as f32 - 1.0);
+
+    let factor = 0.5 + r * 1.5;
+    factor * p
+}
+
 pub fn randomize_recall(p: f32, id: CardId) -> f32 {
     if p == 0. {
         return p;
@@ -484,7 +499,7 @@ impl RecallState {
 
         if randomize {
             recall = randomize_recall(recall, card.id());
-            stability = randomize_recall(stability, card.id());
+            stability = randomize_stab(stability, card.id());
         }
 
         let reviewable = card_ledger.has_property(
