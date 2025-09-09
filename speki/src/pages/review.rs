@@ -17,6 +17,7 @@ use speki_core::{
     card::CardId,
     cardfilter::{CardFilter, RecallState},
     collection::{DynCard, MaybeCard},
+    recall_rate::Recaller,
     set::{Input, Set, SetAction, SetEvent, SetExpr, SetExprDiscriminants, SetId},
 };
 use speki_core::{
@@ -514,8 +515,16 @@ pub fn reviewable_cards(expr: SetExpr, filter: Option<CardFilter>) -> Option<Non
     let card_ledger = provider.providers.cards.clone();
     let time = current_time();
 
+    let recaller: Arc<Box<dyn Recaller>> = Arc::new(Box::new(provider.recaller));
     for node in nodes {
-        RecallState::eval_card(&node, &mut recalls, &hisledge, &card_ledger, time);
+        RecallState::eval_card(
+            &node,
+            &mut recalls,
+            &hisledge,
+            &card_ledger,
+            time,
+            recaller.clone(),
+        );
     }
 
     let mut seen_cards: Vec<CardId> = vec![];

@@ -20,7 +20,7 @@ use std::{
 pub struct CardProvider {
     pub providers: Provider,
     time_provider: FsTime,
-    recaller: AvgRecall,
+    pub recaller: AvgRecall,
     cache: Arc<RwLock<HashMap<CardId, Arc<Card>>>>,
 }
 

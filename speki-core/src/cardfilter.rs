@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use crate::{
     card::{CardId, RawCard},
     metadata::Metadata,
-    recall_rate::History,
+    recall_rate::{History, Recaller},
     Card, CardProperty,
 };
 
@@ -438,6 +438,29 @@ pub struct RecallState {
     pub reviewable: bool,
 }
 
+pub fn randomize_recall(p: f32, id: CardId) -> f32 {
+    if p == 0. {
+        return p;
+    }
+
+    debug_assert!((0.0..=1.0).contains(&p));
+    let num = u128::from_be_bytes(*id.as_bytes());
+
+    const N: u128 = 100;
+
+    let r = (num % N) as f32 / (N as f32 - 1.0);
+
+    let factor = 0.5 + r * 1.5;
+
+    if factor <= 1.0 {
+        p * factor
+    } else {
+        let strength = factor - 1.0;
+        let toward1 = 0.5 * strength;
+        p + (1.0 - p) * toward1
+    }
+}
+
 impl RecallState {
     pub fn eval_card(
         card: &Node<RawCard>,
@@ -445,14 +468,24 @@ impl RecallState {
         ledger: &Ledger<History>,
         card_ledger: &Ledger<RawCard>,
         time: Duration,
+        recaller: Arc<Box<dyn Recaller>>,
     ) -> Self {
+        let randomize = true;
+
         if let Some(state) = all.get(&card.id()) {
             return *state;
         }
 
         let history = ledger.load_or_default(card.id());
-        let recall = history.recall_rate(time).unwrap_or_default();
-        let stability = history.maturity_days(time).unwrap_or_default();
+        let mut recall = recaller
+            .eval(card.id(), &history.reviews, time)
+            .unwrap_or_default();
+        let mut stability = history.maturity_days(time).unwrap_or_default();
+
+        if randomize {
+            recall = randomize_recall(recall, card.id());
+            stability = randomize_recall(stability, card.id());
+        }
 
         let reviewable = card_ledger.has_property(
             card.id(),
@@ -473,7 +506,7 @@ impl RecallState {
         };
 
         for dep in card.deps() {
-            let recstate = Self::eval_card(dep, all, ledger, card_ledger, time);
+            let recstate = Self::eval_card(dep, all, ledger, card_ledger, time, recaller.clone());
 
             let min_recall = match (recstate.reviewable, recstate.min_rec_recall) {
                 (true, Some(sub)) => Some(sub.min(recstate.recall)),
