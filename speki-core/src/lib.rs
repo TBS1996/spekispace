@@ -75,18 +75,10 @@ impl Config {
             .flatten()
             .and_then(|s| toml::from_str(&s).ok());
 
-        let config = match config {
-            Some(config) => config,
-            None => {
-                let s: String = toml::to_string_pretty(&Self::default()).unwrap();
-                let mut f = fs::File::create(&path).unwrap();
-                use std::io::Write;
-                f.write_all(s.as_bytes()).unwrap();
-                Self::default()
-            }
-        };
-
-        Arc::new(config)
+        match config {
+            Some(config) => Arc::new(config),
+            None => Arc::new(Self::default()),
+        }
     }
 
     pub fn upstream_url() -> String {
