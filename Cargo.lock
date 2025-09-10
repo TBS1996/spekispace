@@ -4584,6 +4584,7 @@ version = "0.1.10"
 dependencies = [
  "deunicode",
  "dioxus-logger",
+ "dirs 5.0.1",
  "either",
  "fancy-regex",
  "gkquad",

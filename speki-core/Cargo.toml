@@ -21,6 +21,7 @@ strum.workspace = true
 deunicode.workspace = true
 semver.workspace = true
 textplots.workspace = true
+dirs.workspace = true
 
 
 omtrent.workspace = true

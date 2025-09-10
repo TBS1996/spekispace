@@ -5,10 +5,13 @@ use ledgerstore::Ledger;
 use ledgerstore::TimeProvider;
 use metadata::Metadata;
 use recall_rate::History;
+use serde::Deserialize;
+use serde::Serialize;
 use set::Set;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::fmt::Display;
+use std::fs;
 use std::path::PathBuf;
 use std::{fmt::Debug, sync::Arc, time::Duration};
 use textplots::Chart;
@@ -31,6 +34,36 @@ pub use card::{Card, CardType};
 pub use common::current_time;
 pub use omtrent::TimeStamp;
 pub use recall_rate::SimpleRecall;
+
+#[derive(Deserialize, Serialize)]
+pub struct Config {
+    #[serde(default)]
+    randomize: bool,
+}
+
+impl Default for Config {
+    fn default() -> Self {
+        Self { randomize: false }
+    }
+}
+
+impl Config {
+    pub fn load() -> Self {
+        let dir = dirs::config_dir().unwrap().join("speki");
+        fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("config.toml");
+        if path.is_file() {
+            let s = fs::read_to_string(&path).unwrap();
+            toml::from_str(&s).unwrap()
+        } else {
+            let s: String = toml::to_string_pretty(&Self::default()).unwrap();
+            let mut f = fs::File::create(&path).unwrap();
+            use std::io::Write;
+            f.write_all(s.as_bytes()).unwrap();
+            Self::default()
+        }
+    }
+}
 
 /// {from} is a(n) {ty} of {to}
 #[derive(Clone, PartialEq, PartialOrd, Hash, Eq, Debug)]
