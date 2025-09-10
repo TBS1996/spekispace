@@ -1864,9 +1864,6 @@ impl<'de> Deserialize<'de> for BackSide {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, Default)]
-pub struct Config;
-
 #[derive(
     Serialize, Deserialize, Debug, Clone, Default, Copy, Eq, PartialEq, Hash, PartialOrd, Ord,
 )]

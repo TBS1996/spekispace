@@ -7,7 +7,7 @@ use crate::{
     card::{CardId, RawCard},
     metadata::Metadata,
     recall_rate::{History, Recaller},
-    Card, CardProperty,
+    Card, CardProperty, Config,
 };
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
@@ -485,7 +485,7 @@ impl RecallState {
         time: Duration,
         recaller: Arc<Box<dyn Recaller>>,
     ) -> Self {
-        let randomize = true;
+        let randomize = Config::load().randomize;
 
         if let Some(state) = all.get(&card.id()) {
             return *state;

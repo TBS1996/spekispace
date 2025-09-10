@@ -38,7 +38,7 @@ pub use recall_rate::SimpleRecall;
 #[derive(Deserialize, Serialize)]
 pub struct Config {
     #[serde(default)]
-    randomize: bool,
+    pub randomize: bool,
 }
 
 impl Default for Config {
@@ -48,11 +48,11 @@ impl Default for Config {
 }
 
 impl Config {
-    pub fn load() -> Self {
+    pub fn load() -> Arc<Self> {
         let dir = dirs::config_dir().unwrap().join("speki");
         fs::create_dir_all(&dir).unwrap();
         let path = dir.join("config.toml");
-        if path.is_file() {
+        let config: Self = if path.is_file() {
             let s = fs::read_to_string(&path).unwrap();
             toml::from_str(&s).unwrap()
         } else {
@@ -61,7 +61,9 @@ impl Config {
             use std::io::Write;
             f.write_all(s.as_bytes()).unwrap();
             Self::default()
-        }
+        };
+
+        Arc::new(config)
     }
 }
 
