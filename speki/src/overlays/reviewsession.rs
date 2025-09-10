@@ -479,7 +479,7 @@ fn RenderEvalText(eval: EvalText) -> Element {
             class: "text-lg text-gray-700 text-center",
             p {
                 for cmp in eval.components().clone() {
-                    match cmp {
+                    match cmp.data {
                         Either::Left(s) => {
                             rsx! {
                                 span { "{s}" }

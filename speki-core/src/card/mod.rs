@@ -29,14 +29,48 @@ use crate::{
 
 pub type RecallRate = f32;
 
+#[derive(Clone, Debug, PartialEq)]
+pub enum TextStyle {
+    Faint,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct TextComponent {
+    pub data: Either<String, (String, CardId)>,
+    pub style: Option<TextStyle>,
+}
+
+impl TextComponent {
+    pub fn new_link(text: impl Into<String>, id: CardId) -> Self {
+        Self {
+            data: Either::Right((text.into(), id)),
+            style: None,
+        }
+    }
+
+    pub fn new_text(text: impl Into<String>) -> Self {
+        Self {
+            data: Either::Left(text.into()),
+            style: None,
+        }
+    }
+
+    pub fn with_style(self, style: TextStyle) -> Self {
+        Self {
+            style: Some(style),
+            ..self
+        }
+    }
+}
+
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct EvalText {
-    cmps: Vec<Either<String, (String, CardId)>>,
+    cmps: Vec<TextComponent>,
     eval: String,
 }
 
 impl EvalText {
-    pub fn components(&self) -> &Vec<Either<String, (String, CardId)>> {
+    pub fn components(&self) -> &Vec<TextComponent> {
         &self.cmps
     }
 
@@ -63,11 +97,11 @@ impl EvalText {
                 Self {
                     cmps: if hint {
                         vec![
-                            Either::Left("🔗".to_string()),
-                            Either::Right((eval.clone(), *id)),
+                            TextComponent::new_text("🔗".to_string()),
+                            TextComponent::new_link(eval.clone(), *id),
                         ]
                     } else {
-                        vec![Either::Right((eval.clone(), *id))]
+                        vec![TextComponent::new_link(eval.clone(), *id)]
                     },
                     eval,
                 }
@@ -131,16 +165,16 @@ impl EvalText {
 
         for cmp in txt.inner() {
             match cmp {
-                Either::Left(s) => cmps.push(Either::Left(s.to_string())),
+                Either::Left(s) => cmps.push(TextComponent::new_text(s)),
                 Either::Right(TextLink { id, alias }) => match alias {
                     Some(alias) => {
-                        cmps.push(Either::Right((alias.to_string(), *id)));
+                        cmps.push(TextComponent::new_link(alias, *id));
                     }
                     None => {
                         match provider.load(*id) {
                             Some(card) => {
                                 let name = card.name.to_string();
-                                cmps.push(Either::Right((name, *id)));
+                                cmps.push(TextComponent::new_link(name, *id));
                             }
                             None => panic!(),
                         };

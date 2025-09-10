@@ -29,7 +29,7 @@ impl TextData {
         let mut x: Vec<Either<String, TextLink>> = Default::default();
 
         for cmp in eval.components() {
-            match cmp {
+            match &cmp.data {
                 Either::Left(s) => x.push(Either::Left(s.to_owned())),
                 Either::Right((s, id)) => {
                     let link = TextLink {
