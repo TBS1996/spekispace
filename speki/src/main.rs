@@ -21,7 +21,7 @@ use speki_core::{
         ReviewEvent, FSRS,
     },
     set::{Input, Set, SetAction, SetEvent},
-    SimpleRecall,
+    Config, SimpleRecall,
 };
 use std::fs;
 
@@ -354,10 +354,15 @@ pub fn TheApp() -> Element {
     }
 
     if let Some(commit) = cli.commit {
+        let config = Config::load();
+        let upstream_url = format!(
+            "https://github.com/{}/{}",
+            config.remote_github_username, config.remote_github_repo
+        );
         APP.read()
             .modify_card(ledgerstore::LedgerEvent::SetUpstream {
                 commit,
-                upstream_url: "https://github.com/tbs1996/speki_graph".to_string(),
+                upstream_url,
             })
             .unwrap();
     }

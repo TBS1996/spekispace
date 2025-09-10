@@ -13,7 +13,7 @@ use speki_core::{
     current_time,
     ledger::CardEvent,
     set::SetExpr,
-    Card, CardProperty,
+    Card, CardProperty, Config,
 };
 use tracing::info;
 use uuid::Uuid;
@@ -431,7 +431,7 @@ pub fn CardSelectorRender(
                     button {
                         class: "{crate::styles::CREATE_BUTTON} px-3 py-2",
                         onclick: move |_| {
-                            if let Err(err) = APP.read().modify_card(LedgerEvent::SetUpstream { commit: latest_commit.clone(), upstream_url: "https://github.com/tbs1996/speki_graph".to_string() }) {
+                            if let Err(err) = APP.read().modify_card(LedgerEvent::SetUpstream { commit: latest_commit.clone(), upstream_url: Config::upstream_url()}) {
                                 handle_card_event_error(err);
                             } else {
                                 use_context::<RemoteUpdate>().clear()

@@ -327,10 +327,13 @@ impl<T: LedgerItem> Remote<T> {
         }
     }
 
-    fn remote_min_version(oid: &str) -> Option<semver::Version> {
+    fn remote_min_version(
+        oid: &str,
+        github_user: &str,
+        github_repo: &str,
+    ) -> Option<semver::Version> {
         let url = format!(
-            "https://raw.githubusercontent.com/TBS1996/speki_graph/{}/min_version",
-            oid
+            "https://raw.githubusercontent.com/{github_user}/{github_repo}/{oid}/min_version",
         );
 
         let agent = ureq::AgentBuilder::new()
@@ -728,11 +731,18 @@ impl<T: LedgerItem> Ledger<T> {
 
     pub fn latest_upstream_commit(
         &self,
-        upstream: &str,
         current_version: semver::Version,
+        github_user: &str,
+        github_repo: &str,
     ) -> Option<String> {
-        let commit = self.remote.latest_upstream_commit(upstream)?;
-        let remote_min_required_version = dbg!(Remote::<T>::remote_min_version(&commit))?;
+        let upstream = format!("https://github.com/{github_user}/{github_repo}");
+
+        let commit = self.remote.latest_upstream_commit(&upstream)?;
+        let remote_min_required_version = dbg!(Remote::<T>::remote_min_version(
+            &commit,
+            github_user,
+            github_repo
+        ))?;
 
         if remote_min_required_version <= current_version {
             Some(commit)

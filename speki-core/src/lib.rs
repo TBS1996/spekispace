@@ -39,11 +39,27 @@ pub use recall_rate::SimpleRecall;
 pub struct Config {
     #[serde(default)]
     pub randomize: bool,
+    #[serde(default = "default_remote_github_username")]
+    pub remote_github_username: String,
+    #[serde(default = "default_remote_github_repo")]
+    pub remote_github_repo: String,
+}
+
+fn default_remote_github_repo() -> String {
+    "speki_graph".to_string()
+}
+
+fn default_remote_github_username() -> String {
+    "tbs1996".to_string()
 }
 
 impl Default for Config {
     fn default() -> Self {
-        Self { randomize: false }
+        Self {
+            randomize: false,
+            remote_github_repo: default_remote_github_repo(),
+            remote_github_username: default_remote_github_username(),
+        }
     }
 }
 
@@ -52,18 +68,33 @@ impl Config {
         let dir = dirs::config_dir().unwrap().join("speki");
         fs::create_dir_all(&dir).unwrap();
         let path = dir.join("config.toml");
-        let config: Self = if path.is_file() {
-            let s = fs::read_to_string(&path).unwrap();
-            toml::from_str(&s).unwrap()
-        } else {
-            let s: String = toml::to_string_pretty(&Self::default()).unwrap();
-            let mut f = fs::File::create(&path).unwrap();
-            use std::io::Write;
-            f.write_all(s.as_bytes()).unwrap();
-            Self::default()
+
+        let config: Option<Self> = path
+            .is_file()
+            .then(|| fs::read_to_string(&path).ok())
+            .flatten()
+            .and_then(|s| toml::from_str(&s).ok());
+
+        let config = match config {
+            Some(config) => config,
+            None => {
+                let s: String = toml::to_string_pretty(&Self::default()).unwrap();
+                let mut f = fs::File::create(&path).unwrap();
+                use std::io::Write;
+                f.write_all(s.as_bytes()).unwrap();
+                Self::default()
+            }
         };
 
         Arc::new(config)
+    }
+
+    pub fn upstream_url() -> String {
+        let config = Self::load();
+        format!(
+            "https://github.com/{}/{}",
+            config.remote_github_username, config.remote_github_repo
+        )
     }
 }
 

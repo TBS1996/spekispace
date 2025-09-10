@@ -16,7 +16,7 @@ use speki_core::{
     metadata::Metadata,
     recall_rate::{History, Recall, ReviewEvent},
     set::{Input, Set, SetEvent, SetExpr, SetId},
-    Card, CardRefType,
+    Card, CardRefType, Config,
 };
 
 use crate::{overlays::OverlayEnum, Cli, APP};
@@ -146,11 +146,12 @@ impl App {
 
     pub fn latest_upstream_commit(&self) -> Option<String> {
         let curent_version = dbg!(speki_core::current_version());
-        self.0
-            .card_provider
-            .providers
-            .cards
-            .latest_upstream_commit("https://github.com/tbs1996/speki_graph", curent_version)
+        let config = Config::load();
+        self.0.card_provider.providers.cards.latest_upstream_commit(
+            curent_version,
+            &config.remote_github_username,
+            &config.remote_github_repo,
+        )
     }
 
     pub fn try_load_card(&self, id: CardId) -> Option<Arc<Card>> {
