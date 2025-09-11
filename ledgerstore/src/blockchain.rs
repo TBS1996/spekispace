@@ -1,37 +1,39 @@
 use std::{
     collections::HashMap,
+    fs,
     path::{Path, PathBuf},
     sync::{Arc, RwLock},
 };
 
-use crate::{load_file_contents, Hashed, LedgerEntry, LedgerEvent, LedgerHash, LedgerItem};
+use tracing::info;
+
+use crate::{load_file_contents, Hashed, LedgerEntry, LedgerEvent, LedgerItem};
 
 #[derive(Clone)]
 pub struct BlockChain<T: LedgerItem> {
-    cached: Arc<RwLock<Vec<LedgerEntry<T>>>>,
-    index_to_hash: Arc<RwLock<HashMap<LedgerHash, usize>>>,
+    cached: Arc<RwLock<Option<Vec<LedgerEntry<T>>>>>,
     entries_path: Arc<PathBuf>,
 }
 
 impl<T: LedgerItem> BlockChain<T> {
     pub fn new(path: PathBuf) -> Self {
         std::fs::create_dir_all(&path).unwrap();
-        let cached = Self::load_ledger(&path);
-        let mut index_to_hash: HashMap<LedgerHash, usize> = Default::default();
-
-        for entry in &cached {
-            index_to_hash.insert(entry.data_hash(), entry.index);
-        }
 
         Self {
-            cached: Arc::new(RwLock::new(cached)),
-            index_to_hash: Arc::new(RwLock::new(index_to_hash)),
+            cached: Arc::new(RwLock::new(None)),
             entries_path: Arc::new(path),
         }
     }
 
     pub fn chain(&self) -> Vec<LedgerEntry<T>> {
-        self.cached.read().unwrap().clone()
+        info!("fetching chain");
+        if self.cached.read().unwrap().is_some() {
+            return self.cached.read().unwrap().clone().unwrap();
+        }
+
+        let ledger = Self::load_ledger(&self.entries_path);
+        *self.cached.write().unwrap() = Some(ledger.clone());
+        ledger
     }
 
     pub fn current_hash(&self) -> Option<Hashed> {
@@ -39,11 +41,39 @@ impl<T: LedgerItem> BlockChain<T> {
     }
 
     fn current_index(&self) -> usize {
-        self.cached.read().unwrap().len()
+        if self.cached.read().unwrap().is_some() {
+            self.cached.read().unwrap().as_ref().unwrap().len()
+        } else {
+            std::fs::read_dir(self.entries_path.as_path())
+                .unwrap()
+                .count()
+        }
     }
 
     fn current_head(&self) -> Option<LedgerEntry<T>> {
-        self.cached.read().unwrap().last().cloned()
+        if let Some(chain) = self.cached.read().unwrap().as_ref() {
+            return chain.last().cloned();
+        }
+
+        let idx = self.current_index();
+
+        if idx == 0 {
+            return None;
+        }
+
+        let name = format!("{:06}", idx - 1);
+        let path = self.entries_path.join(name);
+
+        let action: LedgerEntry<T> = match serde_json::from_str(&fs::read_to_string(&path).unwrap())
+        {
+            Ok(action) => action,
+            Err(e) => {
+                dbg!(e);
+                panic!();
+            }
+        };
+
+        Some(action)
     }
 
     pub fn save(&self, event: LedgerEvent<T>) -> Hashed {
@@ -51,8 +81,6 @@ impl<T: LedgerItem> BlockChain<T> {
 
         let previous = self.current_head();
         let entry = LedgerEntry::new(previous.as_ref(), event);
-        let index = self.current_index();
-        let ledger_hash = entry.data_hash();
 
         let name = format!("{:06}", self.current_index());
         let path = &self.entries_path.join(name);
@@ -61,16 +89,17 @@ impl<T: LedgerItem> BlockChain<T> {
 
         let serialized = serde_json::to_string_pretty(&entry).unwrap();
         file.write_all(serialized.as_bytes()).unwrap();
-        self.cached.write().unwrap().push(entry);
-        self.index_to_hash
-            .write()
-            .unwrap()
-            .insert(ledger_hash.clone(), index);
+
+        if let Some(vec) = self.cached.write().unwrap().as_mut() {
+            vec.push(entry);
+        }
 
         self.current_hash().unwrap()
     }
 
     fn load_ledger(space: &Path) -> Vec<LedgerEntry<T>> {
+        info!("loading entire ledger to memory");
+
         let mut foo: Vec<(usize, LedgerEntry<T>)> = {
             let map: HashMap<String, Vec<u8>> = load_file_contents(space);
             let mut foo: Vec<(usize, LedgerEntry<T>)> = Default::default();
