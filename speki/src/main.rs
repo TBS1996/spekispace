@@ -178,6 +178,7 @@ pub fn TheApp() -> Element {
     use_context_provider(RemoteUpdate::new);
 
     let cli = Cli::parse();
+    let config = dbg!(Config::load());
 
     if cli.find_duplicates {
         let duplicates = APP.read().duplicates();
@@ -354,7 +355,6 @@ pub fn TheApp() -> Element {
     }
 
     if let Some(commit) = cli.commit {
-        let config = Config::load();
         let upstream_url = format!(
             "https://github.com/{}/{}",
             config.remote_github_username, config.remote_github_repo
