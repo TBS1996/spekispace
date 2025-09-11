@@ -69,15 +69,17 @@ impl Config {
         fs::create_dir_all(&dir).unwrap();
         let path = dir.join("config.toml");
 
-        let config: Option<Self> = path
-            .is_file()
-            .then(|| fs::read_to_string(&path).ok())
-            .flatten()
-            .and_then(|s| toml::from_str(&s).ok());
-
-        match config {
-            Some(config) => Arc::new(config),
-            None => Arc::new(Self::default()),
+        if path.is_file() {
+            let s = fs::read_to_string(&path).unwrap();
+            match toml::from_str::<Self>(&s) {
+                Ok(config) => Arc::new(config),
+                Err(e) => {
+                    dbg!(e);
+                    Arc::new(Self::default())
+                }
+            }
+        } else {
+            Arc::new(Self::default())
         }
     }
 
