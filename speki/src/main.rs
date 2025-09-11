@@ -77,6 +77,8 @@ struct Cli {
     plot: Option<CardId>,
     #[arg(long)]
     maturity: Option<CardId>,
+    #[arg(long)]
+    generate_config: bool,
 }
 
 #[derive(Clone)]
@@ -192,6 +194,16 @@ pub fn TheApp() -> Element {
         }
 
         std::process::exit(0);
+    }
+
+    if cli.generate_config {
+        if Config::path().exists() {
+            eprintln!("error: config already exists.");
+            std::process::exit(1);
+        } else {
+            Config::load().save_to_disk();
+            std::process::exit(0);
+        }
     }
 
     if let Some(card) = cli.maturity {

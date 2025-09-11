@@ -97,10 +97,22 @@ impl Default for Config {
 }
 
 impl Config {
-    pub fn load() -> Arc<Self> {
+    pub fn path() -> PathBuf {
         let dir = dirs::config_dir().unwrap().join("speki");
         fs::create_dir_all(&dir).unwrap();
-        let path = dir.join("config.toml");
+        dir.join("config.toml")
+    }
+
+    pub fn save_to_disk(&self) {
+        use std::io::Write;
+        let path = Self::path();
+        let s = toml::to_string_pretty(self).unwrap();
+        let mut f = fs::File::create(&path).unwrap();
+        f.write_all(s.as_bytes()).unwrap();
+    }
+
+    pub fn load() -> Arc<Self> {
+        let path = Self::path();
 
         if path.is_file() {
             let s = fs::read_to_string(&path).unwrap();
