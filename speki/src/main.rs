@@ -88,19 +88,19 @@ pub struct RemoteUpdate {
 
 impl RemoteUpdate {
     pub fn new() -> Self {
-        let current_commit = APP.read().current_commit();
+        let new_remote_commit: Signal<Option<String>> = Signal::new_in_scope(None, ScopeId::APP);
+        let cloned = new_remote_commit.clone();
 
-        let latest_commit = APP.read().latest_upstream_commit();
+        spawn(async move {
+            let current_commit = APP.read().current_commit();
+            let latest_commit = APP.read().latest_upstream_commit();
 
-        if latest_commit != current_commit {
-            Self {
-                new_remote_commit: Signal::new_in_scope(latest_commit, ScopeId::APP),
+            if latest_commit != current_commit {
+                cloned.clone().set(latest_commit);
             }
-        } else {
-            Self {
-                new_remote_commit: Signal::new_in_scope(None, ScopeId::APP),
-            }
-        }
+        });
+
+        Self { new_remote_commit }
     }
 
     pub fn latest_commit(&self) -> Option<String> {
