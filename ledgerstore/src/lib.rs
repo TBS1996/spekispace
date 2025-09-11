@@ -536,6 +536,7 @@ impl<T: LedgerItem> Remote<T> {
         changed_items
     }
 
+    #[allow(unused)]
     pub fn hard_reset_current(&self) -> Result<(), git2::Error> {
         let head = self.repo.head()?;
         let obj = head.peel(git2::ObjectType::Commit)?;
@@ -696,7 +697,7 @@ impl<T: LedgerItem> Ledger<T> {
         std::fs::create_dir_all(&items).unwrap();
 
         let remote = Remote::new(&root);
-        let _ = remote.hard_reset_current();
+        //let _ = remote.hard_reset_current();
 
         let selv = Self {
             properties: Arc::new(properties),
