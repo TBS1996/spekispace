@@ -43,6 +43,12 @@ pub struct Config {
     pub remote_github_username: String,
     #[serde(default = "default_remote_github_repo")]
     pub remote_github_repo: String,
+    #[serde(default = "default_storage_path")]
+    pub storage_path: PathBuf,
+}
+
+fn default_storage_path() -> PathBuf {
+    dirs::data_local_dir().unwrap().join("speki")
 }
 
 fn default_remote_github_repo() -> String {
@@ -59,6 +65,7 @@ impl Default for Config {
             randomize: false,
             remote_github_repo: default_remote_github_repo(),
             remote_github_username: default_remote_github_username(),
+            storage_path: default_storage_path(),
         }
     }
 }

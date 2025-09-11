@@ -38,7 +38,7 @@ impl App {
         } else if cli.remote {
             dirs::data_local_dir().unwrap().join("speki_remote")
         } else {
-            dirs::data_local_dir().unwrap().join("speki")
+            Config::load().storage_path.clone()
         };
 
         Self(Arc::new(speki_core::App::new(root)))
