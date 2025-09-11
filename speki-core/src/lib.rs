@@ -35,6 +35,29 @@ pub use common::current_time;
 pub use omtrent::TimeStamp;
 pub use recall_rate::SimpleRecall;
 
+#[derive(Default, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum RecallChoice {
+    Average,
+    Simple,
+    FSRS,
+    #[default]
+    Trained,
+}
+
+impl RecallChoice {
+    pub fn get_instance(&self) -> ArcRecall {
+        match self {
+            RecallChoice::Average => Arc::new(Box::new(AvgRecall::default())),
+            RecallChoice::Simple => Arc::new(Box::new(SimpleRecall)),
+            RecallChoice::FSRS => Arc::new(Box::new(FSRS)),
+            RecallChoice::Trained => Arc::new(Box::new(Trained::from_static())),
+        }
+    }
+}
+
+pub type ArcRecall = Arc<Box<dyn Recaller>>;
+
 #[derive(Deserialize, Serialize, Debug)]
 pub struct Config {
     #[serde(default)]
@@ -45,6 +68,8 @@ pub struct Config {
     pub remote_github_repo: String,
     #[serde(default = "default_storage_path")]
     pub storage_path: PathBuf,
+    #[serde(default)]
+    pub recaller: RecallChoice,
 }
 
 fn default_storage_path() -> PathBuf {
@@ -66,6 +91,7 @@ impl Default for Config {
             remote_github_repo: default_remote_github_repo(),
             remote_github_username: default_remote_github_username(),
             storage_path: default_storage_path(),
+            recaller: RecallChoice::default(),
         }
     }
 }
@@ -244,7 +270,7 @@ pub struct App {
     pub provider: Provider,
     pub card_provider: CardProvider,
     pub time_provider: FsTime,
-    pub recaller: SimpleRecall,
+    pub recaller: ArcRecall,
 }
 
 impl Debug for App {
@@ -378,7 +404,7 @@ impl Point {
     }
 }
 
-pub fn expected_gain(card: Arc<Card>, recaller: &impl Recaller) {
+pub fn expected_gain(card: Arc<Card>, recaller: &ArcRecall) {
     let history = card.history().clone();
     let reviews = history.reviews;
     if reviews.is_empty() {
@@ -669,6 +695,7 @@ impl App {
     pub fn new(root: PathBuf) -> Self {
         info!("initialtize app");
 
+        let recaller = Config::load().recaller.get_instance();
         let cards: Ledger<RawCard> = Ledger::new(root.clone());
 
         let provider = Provider {
@@ -679,14 +706,13 @@ impl App {
             sets: Ledger::new(root),
         };
 
-        let recaller = AvgRecall::default();
-        let card_provider = CardProvider::new(provider.clone(), FsTime, recaller);
+        let card_provider = CardProvider::new(provider.clone(), FsTime, recaller.clone());
 
         Self {
             provider,
             card_provider,
             time_provider: FsTime,
-            recaller: SimpleRecall,
+            recaller,
         }
     }
 

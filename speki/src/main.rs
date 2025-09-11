@@ -21,7 +21,7 @@ use speki_core::{
         ReviewEvent, FSRS,
     },
     set::{Input, Set, SetAction, SetEvent},
-    Config, SimpleRecall,
+    Config, RecallChoice, SimpleRecall,
 };
 use std::fs;
 
@@ -195,19 +195,17 @@ pub fn TheApp() -> Element {
     }
 
     if let Some(card) = cli.maturity {
-        let avg = AvgRecall::default();
-
         let card = APP.read().load(card).unwrap();
         println!("maturity ml");
-        speki_core::expected_gain(card.clone(), &Trained::from_static());
+        speki_core::expected_gain(card.clone(), &RecallChoice::Trained.get_instance());
 
         println!("maturity fsrs");
-        speki_core::expected_gain(card.clone(), &FSRS);
+        speki_core::expected_gain(card.clone(), &RecallChoice::FSRS.get_instance());
 
         println!("maturity avg");
-        speki_core::expected_gain(card.clone(), &avg);
+        speki_core::expected_gain(card.clone(), &RecallChoice::Average.get_instance());
         println!("maturity simple");
-        speki_core::expected_gain(card.clone(), &SimpleRecall);
+        speki_core::expected_gain(card.clone(), &RecallChoice::Simple.get_instance());
         std::process::exit(0);
     }
 

@@ -4,9 +4,9 @@ use crate::{
     collection::{DynCard, MaybeCard},
     ledger::{CardEvent, MetaEvent},
     metadata::Metadata,
-    recall_rate::{AvgRecall, History, ReviewEvent},
+    recall_rate::{History, ReviewEvent},
     set::{Input, Set, SetEvent, SetExpr},
-    Card, CardProperty, CardRefType, FsTime, Provider,
+    ArcRecall, Card, CardProperty, CardRefType, FsTime, Provider,
 };
 use dioxus_logger::tracing::{info, trace};
 use ledgerstore::{EventError, PropertyCache, RefGetter, TheCacheGetter};
@@ -20,7 +20,7 @@ use std::{
 pub struct CardProvider {
     pub providers: Provider,
     time_provider: FsTime,
-    pub recaller: AvgRecall,
+    pub recaller: ArcRecall,
     cache: Arc<RwLock<HashMap<CardId, Arc<Card>>>>,
 }
 
@@ -315,7 +315,7 @@ impl CardProvider {
         self.time_provider.clone()
     }
 
-    pub fn new(provider: Provider, time_provider: FsTime, recaller: AvgRecall) -> Self {
+    pub fn new(provider: Provider, time_provider: FsTime, recaller: ArcRecall) -> Self {
         Self {
             time_provider,
             recaller,

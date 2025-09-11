@@ -23,8 +23,8 @@ use crate::{
     card_provider::CardProvider,
     ledger::{CardAction, CardEvent, MetaEvent},
     metadata::Metadata,
-    recall_rate::{AvgRecall, History, Recall, Recaller, Review, ReviewAction, ReviewEvent},
-    CardRefType, FsTime,
+    recall_rate::{History, Recall, Review, ReviewAction, ReviewEvent},
+    ArcRecall, CardRefType, FsTime,
 };
 
 pub type RecallRate = f32;
@@ -323,7 +323,7 @@ pub struct Card {
     metadata: Arc<Metadata>,
     history: Arc<History>,
     card_provider: CardProvider,
-    recaller: AvgRecall,
+    recaller: ArcRecall,
     is_remote: bool,
 }
 
@@ -684,7 +684,7 @@ impl Card {
         history: Arc<History>,
         metadata: Arc<Metadata>,
         card_provider: CardProvider,
-        recaller: AvgRecall,
+        recaller: ArcRecall,
         front_audio: Option<Audio>,
         back_audio: Option<Audio>,
     ) -> Self {
@@ -935,7 +935,7 @@ impl Card {
         id: CardId,
         time: Duration,
         reviews: &Vec<Review>,
-        recall: &impl Recaller,
+        recall: &ArcRecall,
         sub_horizon: Duration,
     ) -> Option<Duration> {
         if reviews.is_empty() {
@@ -959,7 +959,7 @@ impl Card {
         }
 
         #[inline]
-        fn p_at(id: CardId, t: Duration, reviews: &Vec<Review>, recall: &impl Recaller) -> f64 {
+        fn p_at(id: CardId, t: Duration, reviews: &Vec<Review>, recall: &ArcRecall) -> f64 {
             clamp01(recall.eval(id, reviews, t).unwrap_or(0.0) as f64)
         }
 
