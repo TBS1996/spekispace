@@ -280,21 +280,26 @@ pub fn reviewable_cards(
     expr: SetExpr,
     filter: Option<CardFilter>,
 ) -> Option<NonEmpty<CardId>> {
+    info!("getting reviewable cards");
     let cards = provider.eval_expr(&expr);
+    info!("{} cards loaded", cards.len());
 
     let card_ids: HashSet<CardId> = cards.iter().map(|card| card.id()).collect();
     let mut nodes: Vec<Node<RawCard>> = Vec::with_capacity(card_ids.len());
 
+    info!("start collecting nodes");
     for id in &card_ids {
         let node = provider.providers.cards.dependencies_recursive_node(*id);
         nodes.push(node);
     }
+    info!("finished collecting nodes");
 
     let mut recalls: BTreeMap<CardId, RecallState> = Default::default();
     let hisledge = provider.providers.reviews.clone();
     let card_ledger = provider.providers.cards.clone();
     let time = current_time();
 
+    info!("start eval nodes");
     for node in nodes {
         RecallState::eval_card(
             &node,
@@ -305,10 +310,12 @@ pub fn reviewable_cards(
             provider.recaller.clone(),
         );
     }
+    info!("finished eval nodes");
 
     let mut seen_cards: Vec<CardId> = vec![];
     let mut unseen_cards: Vec<CardId> = vec![];
 
+    info!("start filter cards");
     for (id, recstate) in recalls {
         let reviewable = recstate.reviewable;
         let metadata = provider.load_metadata(id).map(|m| (*m).clone());
@@ -326,11 +333,14 @@ pub fn reviewable_cards(
             }
         }
     }
+    info!("finish filter cards");
 
     use rand::prelude::SliceRandom;
 
+    info!("start shuffle cards");
     seen_cards.shuffle(&mut rand::thread_rng());
     unseen_cards.shuffle(&mut rand::thread_rng());
+    info!("finish shuffle cards");
 
     let mut all_cards: Vec<CardId> = Vec::with_capacity(seen_cards.len() + unseen_cards.len());
 

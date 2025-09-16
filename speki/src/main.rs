@@ -119,12 +119,7 @@ fn main() {
 
     let cli = Cli::parse();
 
-    if cli.review {
-        let path = Config::load().storage_path.clone();
-        let app = speki_core::App::new(path);
-        app.review_cli();
-        return;
-    }
+    let mut log_level = if cli.trace { Level::DEBUG } else { Level::INFO };
 
     let headless = cli.add.is_some()
         || cli.view_back.is_some()
@@ -133,13 +128,18 @@ fn main() {
         || cli.import_cards.is_some()
         || cli.grade.is_some();
 
-    let mut log_level = if cli.trace { Level::DEBUG } else { Level::INFO };
-
     if headless {
         log_level = Level::ERROR;
     }
 
     dioxus_logger::init(log_level).expect("failed to init logger");
+
+    if cli.review {
+        let path = Config::load().storage_path.clone();
+        let app = speki_core::App::new(path);
+        app.review_cli();
+        return;
+    }
 
     info!("starting speki");
 
