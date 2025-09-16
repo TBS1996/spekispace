@@ -469,7 +469,15 @@ pub fn load_param_answers_from_class(card: CardId) -> BTreeMap<AttributeId, Para
 pub fn load_param_answers(card: CardId) -> BTreeMap<AttributeId, ParamAnswerEditor> {
     let card = APP.read().try_load_card(card).unwrap();
 
-    let mut params = load_param_answers_from_class(card.class().unwrap());
+    let class = match card.class() {
+        Some(class) => class,
+        None => {
+            tracing::error!("failed to retrieve class of {card}");
+            return Default::default();
+        }
+    };
+
+    let mut params = load_param_answers_from_class(class);
 
     for (id, ans) in card.param_answers() {
         let param = params.get_mut(&id).unwrap();
