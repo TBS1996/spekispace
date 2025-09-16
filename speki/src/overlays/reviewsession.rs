@@ -154,7 +154,7 @@ pub fn ReviewRender(
         };
         queue.clone().write().next();
         show_backside.clone().set(false);
-        let mut card = Arc::unwrap_or_clone(card);
+        let card = Arc::unwrap_or_clone(card);
         card.add_review(recall);
     };
 

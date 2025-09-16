@@ -12,6 +12,7 @@ use speki_core::{
     cardfilter::{CardFilter, HistoryFilter, MetaFilter},
     current_time,
     ledger::CardEvent,
+    reviewable_cards,
     set::SetExpr,
     Card, CardProperty, Config,
 };
@@ -20,7 +21,7 @@ use uuid::Uuid;
 
 use crate::{
     components::SectionWithTitle,
-    pages::{reviewable_cards, ExprEditor, RenderExpr},
+    pages::{ExprEditor, RenderExpr},
     pop_overlay, set_overlay,
     utils::handle_card_event_error,
     RemoteUpdate,
@@ -471,7 +472,7 @@ pub fn CardSelectorRender(
                             title: review_title,
                             onclick: move |_| {
                                 if let Ok(expr) = expr.clone() {
-                                    if let Some(cards) = reviewable_cards(expr, Some(review_filter.clone())) {
+                                    if let Some(cards) = reviewable_cards(APP.read().card_provider(), expr, Some(review_filter.clone())) {
                                         OverlayEnum::new_review(cards).append();
                                     } else {
                                         debug_assert!(false);

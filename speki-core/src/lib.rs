@@ -2,12 +2,15 @@ use card::{CardId, RawCard};
 use card_provider::CardProvider;
 use dioxus_logger::tracing::info;
 use ledgerstore::Ledger;
+use ledgerstore::Node;
 use ledgerstore::TimeProvider;
 use metadata::Metadata;
+use nonempty::NonEmpty;
 use recall_rate::History;
 use serde::Deserialize;
 use serde::Serialize;
 use set::Set;
+use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::fmt::Display;
@@ -167,12 +170,15 @@ impl AsRef<str> for CardRefType {
 
 use std::str::FromStr;
 
+use crate::cardfilter::CardFilter;
+use crate::cardfilter::RecallState;
 use crate::recall_rate::ml::classic::Trained;
 use crate::recall_rate::AvgRecall;
 use crate::recall_rate::Recall;
 use crate::recall_rate::Recaller;
 use crate::recall_rate::Review;
 use crate::recall_rate::FSRS;
+use crate::set::SetExpr;
 
 impl FromStr for CardRefType {
     type Err = ();
@@ -267,6 +273,71 @@ pub fn duplicates(provider: &CardProvider) -> HashSet<String> {
 
 pub fn current_version() -> semver::Version {
     semver::Version::parse(env!("CARGO_PKG_VERSION")).unwrap()
+}
+
+pub fn reviewable_cards(
+    provider: CardProvider,
+    expr: SetExpr,
+    filter: Option<CardFilter>,
+) -> Option<NonEmpty<CardId>> {
+    let cards = provider.eval_expr(&expr);
+
+    let card_ids: HashSet<CardId> = cards.iter().map(|card| card.id()).collect();
+    let mut nodes: Vec<Node<RawCard>> = Vec::with_capacity(card_ids.len());
+
+    for id in &card_ids {
+        let node = provider.providers.cards.dependencies_recursive_node(*id);
+        nodes.push(node);
+    }
+
+    let mut recalls: BTreeMap<CardId, RecallState> = Default::default();
+    let hisledge = provider.providers.reviews.clone();
+    let card_ledger = provider.providers.cards.clone();
+    let time = current_time();
+
+    for node in nodes {
+        RecallState::eval_card(
+            &node,
+            &mut recalls,
+            &hisledge,
+            &card_ledger,
+            time,
+            provider.recaller.clone(),
+        );
+    }
+
+    let mut seen_cards: Vec<CardId> = vec![];
+    let mut unseen_cards: Vec<CardId> = vec![];
+
+    for (id, recstate) in recalls {
+        let reviewable = recstate.reviewable;
+        let metadata = provider.load_metadata(id).map(|m| (*m).clone());
+
+        if reviewable
+            && filter
+                .as_ref()
+                .map(|filter| filter.filter(recstate, metadata))
+                .unwrap_or(true)
+        {
+            if recstate.pending {
+                unseen_cards.push(id);
+            } else {
+                seen_cards.push(id);
+            }
+        }
+    }
+
+    use rand::prelude::SliceRandom;
+
+    seen_cards.shuffle(&mut rand::thread_rng());
+    unseen_cards.shuffle(&mut rand::thread_rng());
+
+    let mut all_cards: Vec<CardId> = Vec::with_capacity(seen_cards.len() + unseen_cards.len());
+
+    all_cards.extend(seen_cards);
+    all_cards.extend(unseen_cards);
+
+    NonEmpty::from_vec(all_cards)
 }
 
 #[derive(Clone)]
@@ -725,6 +796,77 @@ impl App {
             card_provider,
             time_provider: FsTime,
             recaller,
+        }
+    }
+
+    pub fn review_cli(&self) {
+        use std::io::{self, Write};
+        use std::str::FromStr;
+
+        let reviewable = reviewable_cards(
+            self.card_provider.clone(),
+            SetExpr::All,
+            Some(CardFilter::default_filter()),
+        );
+
+        let Some(cards) = reviewable else {
+            println!("nothing to review!");
+            return;
+        };
+
+        let qty = cards.len();
+
+        for (idx, card_id) in cards.into_iter().enumerate() {
+            let card = self.card_provider.load(card_id).unwrap();
+
+            // FRONT
+            print!("\x1b[2J\x1b[H"); // clear + home
+            let front = card.display_card(true, true).to_string();
+            println!("Card {}/{}\n", idx + 1, qty);
+            println!("{front}");
+            io::stdout().flush().ok();
+
+            let mut buf = String::new();
+            buf.clear();
+            if io::stdin().read_line(&mut buf).is_err() {
+                eprintln!("failed to read input");
+                continue;
+            }
+            if buf.trim().eq_ignore_ascii_case("q") {
+                break;
+            }
+
+            // BACK
+            let back = card.display_backside();
+            print!("\x1b[2J\x1b[H");
+            println!("Card {}/{}\n", idx + 1, qty);
+            println!("{front}");
+            println!("\n---");
+            println!("{back}\n");
+            io::stdout().flush().ok();
+
+            // PARSE RECALL (retry until valid or quit)
+            let recall = loop {
+                buf.clear();
+                if io::stdin().read_line(&mut buf).is_err() {
+                    eprintln!("failed to read input, try again:");
+                    continue;
+                }
+                let t = buf.trim();
+                if t.eq_ignore_ascii_case("q") {
+                    return;
+                }
+                match Recall::from_str(t) {
+                    Ok(r) => break r,
+                    Err(_) => {
+                        println!("couldn't parse '{t}'. try again (or 'q' to quit):");
+                        io::stdout().flush().ok();
+                    }
+                }
+            };
+
+            // SAVE REVIEW
+            card.add_review(recall);
         }
     }
 

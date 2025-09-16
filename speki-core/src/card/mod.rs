@@ -638,7 +638,7 @@ impl Card {
         cards
     }
 
-    pub fn add_review(&mut self, recall: Recall) {
+    pub fn add_review(&self, recall: Recall) {
         let action = ReviewAction::Insert(Review {
             grade: recall,
             timestamp: self.current_time(),

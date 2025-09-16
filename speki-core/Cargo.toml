@@ -22,6 +22,7 @@ deunicode.workspace = true
 semver.workspace = true
 textplots.workspace = true
 dirs.workspace = true
+rand.workspace = true
 
 
 omtrent.workspace = true

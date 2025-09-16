@@ -36,7 +36,7 @@ impl FilterEditor {
     }
 }
 
-fn default_filter() -> CardFilter {
+pub fn default_filter() -> CardFilter {
     CardFilter {
         history: HistoryFilter {
             recall: Some(FloatOp {

@@ -11,21 +11,18 @@ use crate::{
 };
 use crate::{styles, OVERLAY};
 use dioxus::prelude::*;
-use ledgerstore::{LedgerEvent, Node};
-use nonempty::NonEmpty;
+use ledgerstore::LedgerEvent;
+use speki_core::card::CType;
 use speki_core::{
     card::CardId,
-    cardfilter::{CardFilter, RecallState},
+    cardfilter::CardFilter,
     collection::{DynCard, MaybeCard},
+    reviewable_cards,
     set::{Input, Set, SetAction, SetEvent, SetExpr, SetExprDiscriminants, SetId},
-};
-use speki_core::{
-    card::{CType, RawCard},
-    current_time,
 };
 use std::{
     cmp::Ordering,
-    collections::{BTreeMap, BTreeSet, HashSet},
+    collections::{BTreeMap, BTreeSet},
     fmt::Debug,
     sync::Arc,
 };
@@ -440,7 +437,7 @@ fn RenderSet(
                         };
 
 
-                        match reviewable_cards(expr, Some(filter2.clone())) {
+                        match reviewable_cards(APP.read().card_provider(), expr, Some(filter2.clone())) {
                             Some(cards) => OverlayEnum::new_review(cards).append(),
                             None => OverlayEnum::new_notice("no cards to review!").append(),
                         }
@@ -495,68 +492,6 @@ fn RenderSet(
             }
         }
     }
-}
-
-pub fn reviewable_cards(expr: SetExpr, filter: Option<CardFilter>) -> Option<NonEmpty<CardId>> {
-    let provider = APP.read().card_provider();
-    let cards = APP.read().eval_expr(&expr);
-
-    let card_ids: HashSet<CardId> = cards.iter().map(|card| card.id()).collect();
-    let mut nodes: Vec<Node<RawCard>> = Vec::with_capacity(card_ids.len());
-
-    for id in &card_ids {
-        let node = provider.providers.cards.dependencies_recursive_node(*id);
-        nodes.push(node);
-    }
-
-    let mut recalls: BTreeMap<CardId, RecallState> = Default::default();
-    let hisledge = provider.providers.reviews.clone();
-    let card_ledger = provider.providers.cards.clone();
-    let time = current_time();
-
-    for node in nodes {
-        RecallState::eval_card(
-            &node,
-            &mut recalls,
-            &hisledge,
-            &card_ledger,
-            time,
-            provider.recaller.clone(),
-        );
-    }
-
-    let mut seen_cards: Vec<CardId> = vec![];
-    let mut unseen_cards: Vec<CardId> = vec![];
-
-    for (id, recstate) in recalls {
-        let reviewable = recstate.reviewable;
-        let metadata = APP.read().load_metadata(id).map(|m| (*m).clone());
-
-        if reviewable
-            && filter
-                .as_ref()
-                .map(|filter| filter.filter(recstate, metadata))
-                .unwrap_or(true)
-        {
-            if recstate.pending {
-                unseen_cards.push(id);
-            } else {
-                seen_cards.push(id);
-            }
-        }
-    }
-
-    use rand::prelude::SliceRandom;
-
-    seen_cards.shuffle(&mut rand::thread_rng());
-    unseen_cards.shuffle(&mut rand::thread_rng());
-
-    let mut all_cards: Vec<CardId> = Vec::with_capacity(seen_cards.len() + unseen_cards.len());
-
-    all_cards.extend(seen_cards);
-    all_cards.extend(unseen_cards);
-
-    NonEmpty::from_vec(all_cards)
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -770,11 +705,7 @@ impl SetEditor {
 
 #[component]
 fn RenderSets(filter: CardFilter, sets: Signal<Vec<SetEditor>>) -> Element {
-    let all_set: SetEditor = SetEditor::new(&Set {
-        id: Uuid::nil(),
-        name: "all cards".to_string(),
-        expr: SetExpr::All,
-    });
+    let all_set: SetEditor = SetEditor::new(&Set::all_cards());
 
     let to_delete = sets.iter().position(|set| set.to_delete.cloned());
 

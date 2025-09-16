@@ -94,6 +94,14 @@ pub struct Set {
 impl Set {
     /// Cards created from the CLI with --add flag will go into this set.
     pub const CLI_CARDS: Uuid = Uuid::from_u128(0xf5c1ef55_ebcd_40a4_9a12_f16e6d44b7a1);
+
+    pub fn all_cards() -> Self {
+        Self {
+            id: Uuid::nil(),
+            name: "all cards".to_string(),
+            expr: SetExpr::All,
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Hash, Ord, PartialOrd, Eq)]

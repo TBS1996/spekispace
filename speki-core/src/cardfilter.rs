@@ -402,6 +402,35 @@ impl CardFilter {
         history.filter(recall)
     }
 
+    pub fn default_filter() -> CardFilter {
+        CardFilter {
+            history: HistoryFilter {
+                recall: Some(FloatOp {
+                    num: 0.9,
+                    ord: MyFloatOrd::Less,
+                }),
+                rec_recall: Some(FloatOp {
+                    num: 0.9,
+                    ord: MyFloatOrd::Greater,
+                }),
+                stability: None,
+                rec_stability: Some(FloatOp {
+                    num: 10.,
+                    ord: MyFloatOrd::Greater,
+                }),
+
+                lapses: Some(IntOp {
+                    num: 4,
+                    ord: MyIntOrd::Less,
+                }),
+            },
+            meta: MetaFilter {
+                suspended: Some(false),
+                needs_work: None,
+            },
+        }
+    }
+
     pub fn filter_old(&self, card: Arc<Card>, now: Duration) -> bool {
         let CardFilter { history, meta } = self.clone();
 

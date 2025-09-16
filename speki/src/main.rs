@@ -79,6 +79,8 @@ struct Cli {
     maturity: Option<CardId>,
     #[arg(long)]
     generate_config: bool,
+    #[arg(long)]
+    review: bool,
 }
 
 #[derive(Clone)]
@@ -116,6 +118,13 @@ fn main() {
     std::env::set_var("GDK_BACKEND", "x11");
 
     let cli = Cli::parse();
+
+    if cli.review {
+        let path = Config::load().storage_path.clone();
+        let app = speki_core::App::new(path);
+        app.review_cli();
+        return;
+    }
 
     let headless = cli.add.is_some()
         || cli.view_back.is_some()

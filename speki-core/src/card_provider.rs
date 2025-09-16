@@ -38,6 +38,10 @@ impl CardProvider {
         self.providers.cards.load_ids().into_iter().collect()
     }
 
+    pub fn load_metadata(&self, id: CardId) -> Option<Arc<Metadata>> {
+        self.providers.metadata.load(id)
+    }
+
     pub fn duplicates(&self) -> HashSet<String> {
         info!("finding duplicates!");
         let mut cards: Vec<String> = self
