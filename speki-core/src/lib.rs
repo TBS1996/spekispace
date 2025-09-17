@@ -172,6 +172,7 @@ use std::str::FromStr;
 
 use crate::cardfilter::CardFilter;
 use crate::cardfilter::RecallState;
+use crate::ledger::CardEvent;
 use crate::recall_rate::ml::classic::Trained;
 use crate::recall_rate::AvgRecall;
 use crate::recall_rate::Recall;
@@ -856,7 +857,7 @@ impl App {
             io::stdout().flush().ok();
 
             // PARSE RECALL (retry until valid or quit)
-            let recall = loop {
+            let recall: Option<_> = loop {
                 buf.clear();
                 if io::stdin().read_line(&mut buf).is_err() {
                     eprintln!("failed to read input, try again:");
@@ -865,9 +866,17 @@ impl App {
                 let t = buf.trim();
                 if t.eq_ignore_ascii_case("q") {
                     return;
+                } else if t.eq_ignore_ascii_case("d") {
+                    match self.provider.cards.modify(CardEvent::new_delete(card_id)) {
+                        Ok(_) => break None,
+                        Err(e) => {
+                            println!("{:?}", e);
+                            continue;
+                        }
+                    }
                 }
                 match Recall::from_str(t) {
-                    Ok(r) => break r,
+                    Ok(r) => break Some(r),
                     Err(_) => {
                         println!("couldn't parse '{t}'. try again (or 'q' to quit):");
                         io::stdout().flush().ok();
@@ -875,8 +884,9 @@ impl App {
                 }
             };
 
-            // SAVE REVIEW
-            card.add_review(recall);
+            if let Some(recall) = recall {
+                card.add_review(recall);
+            }
         }
     }
 
