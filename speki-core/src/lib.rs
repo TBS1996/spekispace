@@ -173,6 +173,8 @@ use std::str::FromStr;
 use crate::cardfilter::CardFilter;
 use crate::cardfilter::RecallState;
 use crate::ledger::CardEvent;
+use crate::ledger::MetaAction;
+use crate::ledger::MetaEvent;
 use crate::recall_rate::ml::classic::Trained;
 use crate::recall_rate::AvgRecall;
 use crate::recall_rate::Recall;
@@ -868,6 +870,18 @@ impl App {
                     return;
                 } else if t.eq_ignore_ascii_case("d") {
                     match self.provider.cards.modify(CardEvent::new_delete(card_id)) {
+                        Ok(_) => break None,
+                        Err(e) => {
+                            println!("{:?}", e);
+                            continue;
+                        }
+                    }
+                } else if t.eq_ignore_ascii_case("s") {
+                    match self
+                        .provider
+                        .metadata
+                        .modify(MetaEvent::new_modify(card_id, MetaAction::Suspend(true)))
+                    {
                         Ok(_) => break None,
                         Err(e) => {
                             println!("{:?}", e);
