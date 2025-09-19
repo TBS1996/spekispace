@@ -278,11 +278,27 @@ pub fn current_version() -> semver::Version {
     semver::Version::parse(env!("CARGO_PKG_VERSION")).unwrap()
 }
 
+pub struct ReviewableCards {
+    pub seen: Vec<CardId>,
+    pub unseen: Vec<CardId>,
+}
+
 pub fn reviewable_cards(
     provider: CardProvider,
     expr: SetExpr,
     filter: Option<CardFilter>,
 ) -> Option<NonEmpty<CardId>> {
+    let ReviewableCards { mut seen, unseen } = the_reviewable_cards(provider, expr, filter);
+    seen.extend(unseen);
+
+    NonEmpty::from_vec(seen)
+}
+
+pub fn the_reviewable_cards(
+    provider: CardProvider,
+    expr: SetExpr,
+    filter: Option<CardFilter>,
+) -> ReviewableCards {
     info!("getting reviewable cards");
     let cards = provider.eval_expr(&expr);
     info!("{} cards loaded", cards.len());
@@ -345,12 +361,10 @@ pub fn reviewable_cards(
     unseen_cards.shuffle(&mut rand::thread_rng());
     info!("finish shuffle cards");
 
-    let mut all_cards: Vec<CardId> = Vec::with_capacity(seen_cards.len() + unseen_cards.len());
-
-    all_cards.extend(seen_cards);
-    all_cards.extend(unseen_cards);
-
-    NonEmpty::from_vec(all_cards)
+    ReviewableCards {
+        seen: seen_cards,
+        unseen: unseen_cards,
+    }
 }
 
 #[derive(Clone)]
@@ -816,13 +830,17 @@ impl App {
         use std::io::{self, Write};
         use std::str::FromStr;
 
-        let reviewable = reviewable_cards(
+        let reviewable = the_reviewable_cards(
             self.card_provider.clone(),
             SetExpr::All,
             Some(CardFilter::default_filter()),
         );
 
-        let Some(cards) = reviewable else {
+        let cards = if !reviewable.seen.is_empty() {
+            reviewable.seen
+        } else if !reviewable.unseen.is_empty() {
+            reviewable.unseen
+        } else {
             println!("nothing to review!");
             return;
         };
