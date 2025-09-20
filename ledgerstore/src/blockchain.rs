@@ -1,5 +1,4 @@
 use std::{
-    collections::HashMap,
     fs,
     path::{Path, PathBuf},
     sync::{Arc, RwLock},
@@ -7,7 +6,7 @@ use std::{
 
 use tracing::info;
 
-use crate::{load_file_contents, Hashed, LedgerEntry, LedgerEvent, LedgerItem};
+use crate::{read_numeric_tree, Hashed, LedgerEntry, LedgerEvent, LedgerItem};
 
 #[derive(Clone)]
 pub struct BlockChain<T: LedgerItem> {
@@ -100,41 +99,22 @@ impl<T: LedgerItem> BlockChain<T> {
     fn load_ledger(space: &Path) -> Vec<LedgerEntry<T>> {
         info!("loading entire ledger to memory");
 
-        let mut foo: Vec<(usize, LedgerEntry<T>)> = {
-            let map: HashMap<String, Vec<u8>> = load_file_contents(space);
-            let mut foo: Vec<(usize, LedgerEntry<T>)> = Default::default();
+        let blobs = read_numeric_tree(space);
+        let mut bar: Vec<LedgerEntry<T>> = Vec::with_capacity(blobs.len());
 
-            if map.is_empty() {
-                return vec![];
-            }
+        for blob in blobs {
+            let action: LedgerEntry<T> = match serde_json::from_slice(&blob) {
+                Ok(action) => action,
+                Err(e) => {
+                    dbg!(e);
+                    dbg!(blob);
+                    panic!();
+                }
+            };
 
-            for (_hash, value) in map.into_iter() {
-                let action: LedgerEntry<T> = match serde_json::from_slice(&value) {
-                    Ok(action) => action,
-                    Err(e) => {
-                        dbg!(e);
-                        dbg!(value);
-                        panic!();
-                    }
-                };
-                let idx = action.index;
-                foo.push((idx, action));
-            }
-
-            foo
-        };
-
-        foo.sort_by_key(|k| k.0);
-
-        let mut output: Vec<LedgerEntry<T>> = vec![];
-        let mut _prev_hash: Option<String> = None;
-
-        for (_, entry) in foo {
-            //assert_eq!(entry.previous.clone(), prev_hash);
-            //_prev_hash = Some(entry.data_hash());
-            output.push(entry);
+            bar.push(action);
         }
 
-        output
+        bar
     }
 }

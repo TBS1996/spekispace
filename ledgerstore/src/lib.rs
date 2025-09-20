@@ -21,10 +21,12 @@ mod blockchain;
 pub mod ledger_cache;
 mod ledger_item;
 mod read_ledger;
-pub type CacheKey<T> = Either<PropertyCache<T>, ItemRefCache<T>>;
 use blockchain::BlockChain;
 
 pub use ledger_item::LedgerItem;
+
+pub type CacheKey<T> = Either<PropertyCache<T>, ItemRefCache<T>>;
+pub type Blob = Vec<u8>;
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, Ord, PartialOrd)]
 pub struct PropertyCache<T: LedgerItem> {
@@ -92,17 +94,43 @@ pub trait TimeProvider {
     fn current_time(&self) -> std::time::Duration;
 }
 
-pub fn load_file_contents(dir: &Path) -> HashMap<String, Vec<u8>> {
-    let mut map = HashMap::new();
-    if let Ok(entries) = fs::read_dir(dir) {
-        for entry in entries.flatten() {
-            if let Ok(content) = fs::read(entry.path()) {
-                let key = entry.file_name().into_string().unwrap();
-                map.insert(key, content);
+/// Loads a directory of numerically indexed files.
+///
+/// Each entry in the path should mark the order of which its contents should be loaded.
+/// Can be either a file or a directory with the same structure within.
+/// So it can work recurively.
+pub fn read_numeric_tree<P: AsRef<Path>>(root: P) -> Vec<Blob> {
+    fn parse_numeric_name(p: &Path) -> Option<u64> {
+        p.file_name()
+            .and_then(|os| os.to_str())
+            .filter(|s| !s.is_empty() && s.chars().all(|c| c.is_ascii_digit()))
+            .and_then(|s| s.parse::<u64>().ok())
+    }
+
+    fn walk(dir: &Path) -> Vec<Vec<u8>> {
+        let mut entries: Vec<(u64, PathBuf)> = fs::read_dir(dir)
+            .unwrap()
+            .filter_map(|res| {
+                let e = res.unwrap();
+                let path = e.path();
+                parse_numeric_name(&path).map(|n| (n, path))
+            })
+            .collect();
+
+        entries.sort_by_key(|(n, _)| *n);
+
+        let mut out = Vec::new();
+        for (_, path) in entries {
+            if path.is_dir() {
+                out.extend(walk(&path));
+            } else {
+                out.push(fs::read(&path).unwrap());
             }
         }
+        out
     }
-    map
+
+    walk(root.as_ref())
 }
 
 pub type ProviderId = Uuid;
