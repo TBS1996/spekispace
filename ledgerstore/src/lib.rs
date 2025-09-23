@@ -641,11 +641,30 @@ impl<T: LedgerItem> Remote<T> {
 
 #[derive(Debug, Clone)]
 struct ModifyResult<T: LedgerItem> {
-    key: T::Key,
-    item: Option<Arc<T>>,
+    item: CardChange<T>,
     added_caches: HashSet<(CacheKey<T>, T::Key)>,
     removed_caches: HashSet<(CacheKey<T>, T::Key)>,
     is_no_op: bool,
+}
+
+#[derive(Debug, Clone)]
+enum CardChange<T: LedgerItem> {
+    Created(Arc<T>),
+    Modified(Arc<T>),
+    Deleted(T::Key),
+    Unchanged(T::Key),
+}
+
+impl<T: LedgerItem> CardChange<T> {
+    #[allow(dead_code)]
+    fn key(&self) -> T::Key {
+        match self {
+            CardChange::Modified(item) => item.item_id(),
+            CardChange::Created(item) => item.item_id(),
+            CardChange::Deleted(key) => *key,
+            CardChange::Unchanged(key) => *key,
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -976,13 +995,14 @@ impl<T: LedgerItem> Ledger<T> {
             };
 
             match self.modify_it(entry.event, false, false, false).unwrap() {
-                Some(Either::Left(item)) => {
+                Some(CardChange::Created(item) | CardChange::Modified(item)) => {
                     let key = item.item_id();
                     items.insert(key, item);
                 }
-                Some(Either::Right(id)) => {
-                    items.remove(&id);
+                Some(CardChange::Deleted(key)) => {
+                    items.remove(&key);
                 }
+                Some(CardChange::Unchanged(_)) => {}
                 None => {}
             }
         }
@@ -1166,8 +1186,15 @@ impl<T: LedgerItem> Ledger<T> {
                     .insert(key, modified_item.clone());
 
                 let no_op = old_cloned == modified_item;
+
+                let item = if no_op {
+                    CardChange::Unchanged(modified_item.item_id())
+                } else {
+                    CardChange::Modified(modified_item.clone())
+                };
+
                 let new_caches = modified_item.caches(self);
-                (old_caches, new_caches, Some(modified_item), no_op)
+                (old_caches, new_caches, item, no_op)
             }
             LedgerAction::Create(mut item) => {
                 if verify {
@@ -1183,14 +1210,19 @@ impl<T: LedgerItem> Ledger<T> {
 
                 self.cache.write().unwrap().insert(key, item.clone());
 
-                (HashSet::default(), caches, Some(item), false)
+                (HashSet::default(), caches, CardChange::Created(item), false)
             }
             LedgerAction::Delete => {
                 self.cache.write().unwrap().remove(&key);
 
                 let old_item = self.load(key).unwrap();
                 let old_caches = old_item.caches(self);
-                (old_caches, Default::default(), None, false)
+                (
+                    old_caches,
+                    Default::default(),
+                    CardChange::Deleted(key),
+                    false,
+                )
             }
         };
 
@@ -1198,7 +1230,6 @@ impl<T: LedgerItem> Ledger<T> {
         let removed_caches = &old_caches - &new_caches;
 
         Ok(ModifyResult {
-            key,
             item,
             added_caches,
             removed_caches,
@@ -1208,7 +1239,6 @@ impl<T: LedgerItem> Ledger<T> {
 
     fn run_result(&self, res: ModifyResult<T>, cache: bool) -> Result<(), EventError<T>> {
         let ModifyResult {
-            key,
             item,
             added_caches,
             removed_caches,
@@ -1217,16 +1247,19 @@ impl<T: LedgerItem> Ledger<T> {
 
         if is_no_op {
             if !added_caches.is_empty() || !removed_caches.is_empty() {
-                dbg!(key, &item, &added_caches, &removed_caches);
+                dbg!(&item, &added_caches, &removed_caches);
             }
         }
 
         match item {
-            Some(item) => self.save(Arc::unwrap_or_clone(item)),
-            None => {
+            CardChange::Created(item) | CardChange::Modified(item) => {
+                self.save(Arc::unwrap_or_clone(item));
+            }
+            CardChange::Deleted(key) => {
                 debug_assert!(added_caches.is_empty());
                 self.remove(key);
             }
+            CardChange::Unchanged(_) => {}
         }
 
         if !cache {
@@ -1258,7 +1291,7 @@ impl<T: LedgerItem> Ledger<T> {
         save: bool,
         verify: bool,
         cache: bool,
-    ) -> Result<Option<Either<Arc<T>, T::Key>>, EventError<T>> {
+    ) -> Result<Option<CardChange<T>>, EventError<T>> {
         let res = match event.clone() {
             LedgerEvent::ItemAction { id, action } => self._modify(id, action, verify, cache)?,
             LedgerEvent::SetUpstream {
@@ -1277,10 +1310,7 @@ impl<T: LedgerItem> Ledger<T> {
             let hash = self.entries.save(event);
             self.set_ledger_hash(hash);
         }
-        Ok(Some(match res.item {
-            Some(item) => Either::Left(item),
-            None => Either::Right(res.key),
-        }))
+        Ok(Some(res.item))
     }
 
     fn remove(&self, key: T::Key) {
