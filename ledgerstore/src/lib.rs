@@ -808,7 +808,7 @@ impl<T: LedgerItem> Ledger<T> {
     }
 
     pub fn modify(&self, event: LedgerEvent<T>) -> Result<(), EventError<T>> {
-        self.modify_it(event, true, true, true)?;
+        self.apply_and_save_entry(event, true, true, true)?;
         Ok(())
     }
 
@@ -994,7 +994,10 @@ impl<T: LedgerItem> Ledger<T> {
                 dbg!(idx);
             };
 
-            match self.modify_it(entry.event, false, false, false).unwrap() {
+            match self
+                .apply_and_save_entry(entry.event, false, false, false)
+                .unwrap()
+            {
                 Some(CardChange::Created(item) | CardChange::Modified(item)) => {
                     let key = item.item_id();
                     items.insert(key, item);
@@ -1285,32 +1288,59 @@ impl<T: LedgerItem> Ledger<T> {
         Ok(())
     }
 
-    fn modify_it(
+    fn apply_and_save_upstream_commit(
+        &self,
+        commit: String,
+        upstream_url: String,
+    ) -> Result<(), EventError<T>> {
+        self.set_remote_commit(&upstream_url, &commit)?;
+        let event = LedgerEvent::SetUpstream {
+            commit,
+            upstream_url,
+        };
+        let hash = self.entries.save(event);
+        self.set_ledger_hash(hash);
+        return Ok(());
+    }
+
+    fn apply_and_save_action(
+        &self,
+        id: T::Key,
+        action: LedgerAction<T>,
+        save: bool,
+        verify: bool,
+        cache: bool,
+    ) -> Result<CardChange<T>, EventError<T>> {
+        let res = self._modify(id, action.clone(), verify, cache)?;
+        tracing::debug!("res: {:?}", &res);
+        self.run_result(res.clone(), cache).unwrap();
+        let event = LedgerEvent::ItemAction { id, action };
+        if save && !res.is_no_op {
+            let hash = self.entries.save(event);
+            self.set_ledger_hash(hash);
+        }
+        Ok(res.item)
+    }
+
+    fn apply_and_save_entry(
         &self,
         event: LedgerEvent<T>,
         save: bool,
         verify: bool,
         cache: bool,
     ) -> Result<Option<CardChange<T>>, EventError<T>> {
-        let res = match event.clone() {
-            LedgerEvent::ItemAction { id, action } => self._modify(id, action, verify, cache)?,
+        match event {
+            LedgerEvent::ItemAction { id, action } => Ok(Some(
+                self.apply_and_save_action(id, action, save, verify, cache)?,
+            )),
             LedgerEvent::SetUpstream {
                 commit,
                 upstream_url,
             } => {
-                self.set_remote_commit(&upstream_url, &commit)?;
-                let hash = self.entries.save(event);
-                self.set_ledger_hash(hash);
-                return Ok(None);
+                self.apply_and_save_upstream_commit(commit, upstream_url)?;
+                Ok(None)
             }
-        };
-        tracing::debug!("res: {:?}", &res);
-        self.run_result(res.clone(), cache).unwrap();
-        if save && !res.is_no_op {
-            let hash = self.entries.save(event);
-            self.set_ledger_hash(hash);
         }
-        Ok(Some(res.item))
     }
 
     fn remove(&self, key: T::Key) {
