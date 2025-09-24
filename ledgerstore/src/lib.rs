@@ -183,7 +183,52 @@ pub enum LedgerEvent<T: LedgerItem> {
     },
 }
 
+struct ItemAction<T: LedgerItem> {
+    id: T::Key,
+    action: LedgerAction<T>,
+}
+
+struct SetUpstream {
+    commit: String,
+    upstream_url: String,
+}
+
+impl<T: LedgerItem> From<ItemAction<T>> for LedgerEvent<T> {
+    fn from(value: ItemAction<T>) -> Self {
+        let ItemAction { id, action } = value;
+
+        Self::ItemAction { id, action }
+    }
+}
+
+impl<T: LedgerItem> From<SetUpstream> for LedgerEvent<T> {
+    fn from(value: SetUpstream) -> Self {
+        let SetUpstream {
+            commit,
+            upstream_url,
+        } = value;
+
+        Self::SetUpstream {
+            commit,
+            upstream_url,
+        }
+    }
+}
+
 impl<T: LedgerItem> LedgerEvent<T> {
+    fn into_parts(self) -> Either<SetUpstream, ItemAction<T>> {
+        match self {
+            LedgerEvent::ItemAction { id, action } => Either::Right(ItemAction { id, action }),
+            LedgerEvent::SetUpstream {
+                commit,
+                upstream_url,
+            } => Either::Left(SetUpstream {
+                commit,
+                upstream_url,
+            }),
+        }
+    }
+
     pub fn new(id: T::Key, action: LedgerAction<T>) -> Self {
         Self::ItemAction { id, action }
     }
@@ -640,7 +685,7 @@ impl<T: LedgerItem> Remote<T> {
 }
 
 #[derive(Debug, Clone)]
-struct ModifyResult<T: LedgerItem> {
+struct ActionEvalResult<T: LedgerItem> {
     item: CardChange<T>,
     added_caches: HashSet<(CacheKey<T>, T::Key)>,
     removed_caches: HashSet<(CacheKey<T>, T::Key)>,
@@ -807,9 +852,36 @@ impl<T: LedgerItem> Ledger<T> {
         }
     }
 
+    /// Insert new ledgerevent and save the state.
+    ///
+    /// Full operation is roughly three steps:
+    ///
+    /// 1. Evaluate event to see what changes it would make to the state.
+    /// 2. Apply evaluation result to state.
+    /// 3. Save entry in list of entries.
     pub fn modify(&self, event: LedgerEvent<T>) -> Result<(), EventError<T>> {
-        self.apply_and_save_entry(event, true, true, true)?;
-        Ok(())
+        match event.into_parts() {
+            Either::Left(set_upstream) => {
+                self.apply_and_save_upstream_commit(set_upstream)?;
+                Ok(())
+            }
+            Either::Right(ItemAction { id, action }) => {
+                let verify = true;
+                let cache = true;
+
+                let evaluation = self.evaluate_action(id, action.clone(), verify, cache)?;
+
+                tracing::debug!("res: {:?}", &evaluation);
+
+                self.apply_evaluation(evaluation.clone(), cache).unwrap();
+
+                if !evaluation.is_no_op {
+                    self.save_event(LedgerEvent::ItemAction { id, action });
+                }
+
+                Ok(())
+            }
+        }
     }
 
     pub fn load_ids(&self) -> HashSet<T::Key> {
@@ -976,6 +1048,16 @@ impl<T: LedgerItem> Ledger<T> {
         Ok(())
     }
 
+    /// Recreates state from list of entries.
+    ///
+    /// Includes two performance boosting tricks.
+    ///
+    /// 1. Only verifies state integrity after all the entries have been applied.
+    /// 2. Only Saves caches after all entries have been applied.
+    ///
+    /// This massively speeds up the rebuilding of state, with the caveat that if state is invalid, you can't see exactly which entry(s)
+    /// caused it to become invalid. It also means that even if the state is valid after all the entries have been applied, it
+    /// could be invalid at some points leading up to the last entry.
     fn apply(&self) {
         fs::remove_dir_all(&*self.items).unwrap();
         fs::remove_dir_all(&*self.properties).unwrap();
@@ -989,25 +1071,37 @@ impl<T: LedgerItem> Ledger<T> {
 
         let mut items: HashMap<T::Key, Arc<T>> = HashMap::default();
 
+        let mut latest_set_upstream: Option<SetUpstream> = None;
+
         for (idx, entry) in self.entries.chain().into_iter().enumerate() {
             if idx % 50 == 0 {
                 dbg!(idx);
             };
 
-            match self
-                .apply_and_save_entry(entry.event, false, false, false)
-                .unwrap()
-            {
-                Some(CardChange::Created(item) | CardChange::Modified(item)) => {
-                    let key = item.item_id();
-                    items.insert(key, item);
+            match entry.event.into_parts() {
+                Either::Left(set_upstream) => {
+                    latest_set_upstream = Some(set_upstream);
                 }
-                Some(CardChange::Deleted(key)) => {
-                    items.remove(&key);
+                Either::Right(ItemAction { id, action }) => {
+                    let evaluation = self.evaluate_action(id, action, false, false).unwrap();
+                    self.apply_evaluation(evaluation.clone(), false).unwrap();
+
+                    match evaluation.item {
+                        CardChange::Created(item) | CardChange::Modified(item) => {
+                            let key = item.item_id();
+                            items.insert(key, item);
+                        }
+                        CardChange::Deleted(key) => {
+                            items.remove(&key);
+                        }
+                        CardChange::Unchanged(_) => {}
+                    }
                 }
-                Some(CardChange::Unchanged(_)) => {}
-                None => {}
             }
+        }
+
+        if let Some(upstream) = latest_set_upstream {
+            self.apply_and_save_upstream_commit(upstream).unwrap();
         }
 
         self.apply_caches(items);
@@ -1105,7 +1199,7 @@ impl<T: LedgerItem> Ledger<T> {
         self.remote.has_item(key)
     }
 
-    fn set_remote_commit(&self, repo: &str, new_commit: &str) -> Result<(), EventError<T>> {
+    fn set_remote_commit(&self, set_upstream: &SetUpstream) -> Result<(), EventError<T>> {
         let current_commit = self.remote.current_commit();
         let ChangeSet {
             added: _,
@@ -1113,7 +1207,7 @@ impl<T: LedgerItem> Ledger<T> {
             removed,
         } = self
             .remote
-            .set_commit_clean(Some(repo), new_commit)
+            .set_commit_clean(Some(&set_upstream.upstream_url), &set_upstream.commit)
             .unwrap();
 
         for item in removed {
@@ -1161,13 +1255,14 @@ impl<T: LedgerItem> Ledger<T> {
         Ok(())
     }
 
-    fn _modify(
+    /// See how a [`LedgerAction`] would change the state, without actually saving the result.
+    fn evaluate_action(
         &self,
         key: T::Key,
         action: LedgerAction<T>,
-        verify: bool,
-        cache: bool,
-    ) -> Result<ModifyResult<T>, EventError<T>> {
+        verify: bool, // if true, check if action will uphold invariants
+        cache: bool,  // if true, return cache modification results.
+    ) -> Result<ActionEvalResult<T>, EventError<T>> {
         if self.is_remote(key) {
             return Err(EventError::Remote);
         }
@@ -1182,11 +1277,6 @@ impl<T: LedgerItem> Ledger<T> {
                 let old_cloned = old_item.clone();
                 let modified_item =
                     Arc::new(Arc::unwrap_or_clone(old_item).run_event(action, self, verify)?);
-
-                self.cache
-                    .write()
-                    .unwrap()
-                    .insert(key, modified_item.clone());
 
                 let no_op = old_cloned == modified_item;
 
@@ -1211,13 +1301,9 @@ impl<T: LedgerItem> Ledger<T> {
 
                 let item = Arc::new(item);
 
-                self.cache.write().unwrap().insert(key, item.clone());
-
                 (HashSet::default(), caches, CardChange::Created(item), false)
             }
             LedgerAction::Delete => {
-                self.cache.write().unwrap().remove(&key);
-
                 let old_item = self.load(key).unwrap();
                 let old_caches = old_item.caches(self);
                 (
@@ -1232,7 +1318,7 @@ impl<T: LedgerItem> Ledger<T> {
         let added_caches = &new_caches - &old_caches;
         let removed_caches = &old_caches - &new_caches;
 
-        Ok(ModifyResult {
+        Ok(ActionEvalResult {
             item,
             added_caches,
             removed_caches,
@@ -1240,8 +1326,8 @@ impl<T: LedgerItem> Ledger<T> {
         })
     }
 
-    fn run_result(&self, res: ModifyResult<T>, cache: bool) -> Result<(), EventError<T>> {
-        let ModifyResult {
+    fn apply_evaluation(&self, res: ActionEvalResult<T>, cache: bool) -> Result<(), EventError<T>> {
+        let ActionEvalResult {
             item,
             added_caches,
             removed_caches,
@@ -1256,9 +1342,15 @@ impl<T: LedgerItem> Ledger<T> {
 
         match item {
             CardChange::Created(item) | CardChange::Modified(item) => {
+                self.cache
+                    .write()
+                    .unwrap()
+                    .insert(item.item_id(), item.clone());
+
                 self.save(Arc::unwrap_or_clone(item));
             }
             CardChange::Deleted(key) => {
+                self.cache.write().unwrap().remove(&key);
                 debug_assert!(added_caches.is_empty());
                 self.remove(key);
             }
@@ -1288,59 +1380,15 @@ impl<T: LedgerItem> Ledger<T> {
         Ok(())
     }
 
-    fn apply_and_save_upstream_commit(
-        &self,
-        commit: String,
-        upstream_url: String,
-    ) -> Result<(), EventError<T>> {
-        self.set_remote_commit(&upstream_url, &commit)?;
-        let event = LedgerEvent::SetUpstream {
-            commit,
-            upstream_url,
-        };
-        let hash = self.entries.save(event);
-        self.set_ledger_hash(hash);
+    fn apply_and_save_upstream_commit(&self, event: SetUpstream) -> Result<(), EventError<T>> {
+        self.set_remote_commit(&event)?;
+        self.save_event(event);
         return Ok(());
     }
 
-    fn apply_and_save_action(
-        &self,
-        id: T::Key,
-        action: LedgerAction<T>,
-        save: bool,
-        verify: bool,
-        cache: bool,
-    ) -> Result<CardChange<T>, EventError<T>> {
-        let res = self._modify(id, action.clone(), verify, cache)?;
-        tracing::debug!("res: {:?}", &res);
-        self.run_result(res.clone(), cache).unwrap();
-        let event = LedgerEvent::ItemAction { id, action };
-        if save && !res.is_no_op {
-            let hash = self.entries.save(event);
-            self.set_ledger_hash(hash);
-        }
-        Ok(res.item)
-    }
-
-    fn apply_and_save_entry(
-        &self,
-        event: LedgerEvent<T>,
-        save: bool,
-        verify: bool,
-        cache: bool,
-    ) -> Result<Option<CardChange<T>>, EventError<T>> {
-        match event {
-            LedgerEvent::ItemAction { id, action } => Ok(Some(
-                self.apply_and_save_action(id, action, save, verify, cache)?,
-            )),
-            LedgerEvent::SetUpstream {
-                commit,
-                upstream_url,
-            } => {
-                self.apply_and_save_upstream_commit(commit, upstream_url)?;
-                Ok(None)
-            }
-        }
+    fn save_event(&self, event: impl Into<LedgerEvent<T>>) {
+        let hash = self.entries.save(event.into());
+        self.set_ledger_hash(hash);
     }
 
     fn remove(&self, key: T::Key) {
