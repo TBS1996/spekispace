@@ -303,24 +303,24 @@ impl<T: LedgerItem> From<OverrideLedger<T>> for LedgerType<T> {
 #[derive(Clone)]
 pub struct OverrideLedger<T: LedgerItem> {
     inner: Ledger<T>,
-    new: Arc<T>,
-    new_id: T::Key,
+    new: HashMap<T::Key, Arc<T>>,
 }
 
 impl<T: LedgerItem> OverrideLedger<T> {
     pub fn new(inner: &Ledger<T>, new: T) -> Self {
         let new_id = new.item_id();
+        let mut map = HashMap::default();
+        map.insert(new_id, Arc::new(new));
 
         Self {
             inner: inner.clone(),
-            new: Arc::new(new),
-            new_id,
+            new: map,
         }
     }
 
     pub fn load(&self, key: T::Key) -> Option<Arc<T>> {
-        if self.new_id == key {
-            Some(self.new.clone())
+        if let Some(val) = self.new.get(&key).cloned() {
+            return Some(val);
         } else {
             self.inner.load(key)
         }
@@ -333,8 +333,10 @@ impl<T: LedgerItem> OverrideLedger<T> {
     pub fn dependents(&self, key: T::Key) -> HashSet<T::Key> {
         let mut dependents = self.inner.dependents_recursive(key);
 
-        if self.new.dependencies().contains(&key) {
-            dependents.insert(self.new_id);
+        for (dep_key, val) in self.new.iter() {
+            if val.dependencies().contains(&key) {
+                dependents.insert(*dep_key);
+            }
         }
 
         dependents
