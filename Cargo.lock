@@ -2748,6 +2748,7 @@ dependencies = [
  "chrono",
  "either",
  "git2",
+ "nonempty",
  "semver",
  "serde",
  "serde_json",

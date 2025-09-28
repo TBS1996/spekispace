@@ -22,6 +22,7 @@ pub mod ledger_cache;
 mod ledger_item;
 mod read_ledger;
 use blockchain::BlockChain;
+pub mod entry_thing;
 
 pub use ledger_item::LedgerItem;
 
@@ -94,45 +95,6 @@ pub trait TimeProvider {
     fn current_time(&self) -> std::time::Duration;
 }
 
-/// Loads a directory of numerically indexed files.
-///
-/// Each entry in the path should mark the order of which its contents should be loaded.
-/// Can be either a file or a directory with the same structure within.
-/// So it can work recurively.
-pub fn read_numeric_tree<P: AsRef<Path>>(root: P) -> Vec<Blob> {
-    fn parse_numeric_name(p: &Path) -> Option<u64> {
-        p.file_name()
-            .and_then(|os| os.to_str())
-            .filter(|s| !s.is_empty() && s.chars().all(|c| c.is_ascii_digit()))
-            .and_then(|s| s.parse::<u64>().ok())
-    }
-
-    fn walk(dir: &Path) -> Vec<Vec<u8>> {
-        let mut entries: Vec<(u64, PathBuf)> = fs::read_dir(dir)
-            .unwrap()
-            .filter_map(|res| {
-                let e = res.unwrap();
-                let path = e.path();
-                parse_numeric_name(&path).map(|n| (n, path))
-            })
-            .collect();
-
-        entries.sort_by_key(|(n, _)| *n);
-
-        let mut out = Vec::new();
-        for (_, path) in entries {
-            if path.is_dir() {
-                out.extend(walk(&path));
-            } else {
-                out.push(fs::read(&path).unwrap());
-            }
-        }
-        out
-    }
-
-    walk(root.as_ref())
-}
-
 pub type ProviderId = Uuid;
 pub type UnixSeconds = u64;
 pub type Hashed = String;
@@ -147,19 +109,6 @@ pub struct LedgerEntry<T: LedgerItem> {
     pub previous: Option<Hashed>,
     pub index: usize,
     pub event: LedgerEvent<T>,
-}
-
-impl<T: LedgerItem> LedgerEntry<T> {
-    pub fn save(&self, path: &Path) {
-        std::fs::create_dir_all(path).unwrap();
-        debug_assert!(path.is_dir());
-
-        let name = format!("{:06}", self.index);
-        let path = path.join(name);
-        let mut file = std::fs::File::create_new(path).unwrap();
-        file.write_all(serde_json::to_string_pretty(&self).unwrap().as_bytes())
-            .unwrap();
-    }
 }
 
 #[derive(Clone, Serialize, Deserialize, Debug, Hash)]
@@ -227,6 +176,10 @@ impl<T: LedgerItem> LedgerEvent<T> {
                 upstream_url,
             }),
         }
+    }
+
+    fn data_hash(&self) -> Hashed {
+        get_hash(self)
     }
 
     pub fn new(id: T::Key, action: LedgerAction<T>) -> Self {
@@ -875,9 +828,8 @@ impl<T: LedgerItem> Ledger<T> {
 
                 tracing::debug!("res: {:?}", &evaluation);
 
-                self.apply_evaluation(evaluation.clone(), cache).unwrap();
-
                 if !evaluation.is_no_op {
+                    self.apply_evaluation(evaluation.clone(), cache).unwrap();
                     self.save_event(LedgerEvent::ItemAction { id, action });
                 }
 
@@ -1080,23 +1032,25 @@ impl<T: LedgerItem> Ledger<T> {
                 dbg!(idx);
             };
 
-            match entry.event.into_parts() {
-                Either::Left(set_upstream) => {
-                    latest_set_upstream = Some(set_upstream);
-                }
-                Either::Right(ItemAction { id, action }) => {
-                    let evaluation = self.evaluate_action(id, action, false, false).unwrap();
-                    self.apply_evaluation(evaluation.clone(), false).unwrap();
+            for event in entry {
+                match event.into_parts() {
+                    Either::Left(set_upstream) => {
+                        latest_set_upstream = Some(set_upstream);
+                    }
+                    Either::Right(ItemAction { id, action }) => {
+                        let evaluation = self.evaluate_action(id, action, false, false).unwrap();
+                        self.apply_evaluation(evaluation.clone(), false).unwrap();
 
-                    match evaluation.item {
-                        CardChange::Created(item) | CardChange::Modified(item) => {
-                            let key = item.item_id();
-                            items.insert(key, item);
+                        match evaluation.item {
+                            CardChange::Created(item) | CardChange::Modified(item) => {
+                                let key = item.item_id();
+                                items.insert(key, item);
+                            }
+                            CardChange::Deleted(key) => {
+                                items.remove(&key);
+                            }
+                            CardChange::Unchanged(_) => {}
                         }
-                        CardChange::Deleted(key) => {
-                            items.remove(&key);
-                        }
-                        CardChange::Unchanged(_) => {}
                     }
                 }
             }
