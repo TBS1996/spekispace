@@ -537,7 +537,16 @@ pub trait ReadLedger {
         if path.is_file() {
             let s = fs::read_to_string(&path);
             match s {
-                Ok(s) => Some(serde_json::from_str(&s).unwrap()),
+                Ok(s) => match serde_json::from_str(&s) {
+                    Ok(val) => Some(val),
+                    Err(e) => {
+                        dbg!(s);
+                        dbg!(e);
+                        dbg!(key);
+                        dbg!(path);
+                        panic!();
+                    }
+                },
                 Err(e) => {
                     dbg!(e);
                     dbg!(key);
