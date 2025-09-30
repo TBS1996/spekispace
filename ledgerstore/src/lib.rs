@@ -137,6 +137,7 @@ struct ItemAction<T: LedgerItem> {
     action: LedgerAction<T>,
 }
 
+#[derive(Clone, Debug)]
 struct SetUpstream {
     commit: String,
     upstream_url: String,
@@ -1035,10 +1036,20 @@ impl<T: LedgerItem> Ledger<T> {
             for event in entry {
                 match event.into_parts() {
                     Either::Left(set_upstream) => {
+                        self.apply_and_save_upstream_commit(set_upstream.clone())
+                            .unwrap();
                         latest_set_upstream = Some(set_upstream);
                     }
                     Either::Right(ItemAction { id, action }) => {
-                        let evaluation = self.evaluate_action(id, action, false, false).unwrap();
+                        let evaluation =
+                            match self.evaluate_action(id, action.clone(), false, false) {
+                                Ok(eval) => eval,
+                                Err(e) => {
+                                    dbg!(e);
+                                    dbg!(id, action);
+                                    panic!();
+                                }
+                            };
                         self.apply_evaluation(evaluation.clone(), false).unwrap();
 
                         match evaluation.item {
