@@ -815,13 +815,10 @@ fn save_cardrep(rep: CardRep, old_card: Option<Arc<Card>>) -> Result<CardId, ()>
         actions.push(CardAction::AddDependency(dep));
     }
 
-    for event in actions {
-        let event = CardEvent::new_modify(id, event);
-        if let Err(e) = APP.read().modify_card(event) {
-            handle_card_event_error(e);
-            return Err(());
-        }
-    }
+    let mut card_events: Vec<CardEvent> = actions
+        .into_iter()
+        .map(|action| CardEvent::new_modify(id, action))
+        .collect();
 
     for answer in answered_attrs {
         match answer {
@@ -841,10 +838,7 @@ fn save_cardrep(rep: CardRep, old_card: Option<Arc<Card>>) -> Result<CardId, ()>
                                     instance: id,
                                 };
                                 let event = CardEvent::new_modify(CardId::new_v4(), action);
-                                if let Err(e) = APP.read().modify_card(event) {
-                                    handle_card_event_error(e);
-                                    return Err(());
-                                }
+                                card_events.push(event);
                             }
                         }
                         AttrAnswerEditor::TimeStamp(ts) => {
@@ -857,10 +851,7 @@ fn save_cardrep(rep: CardRep, old_card: Option<Arc<Card>>) -> Result<CardId, ()>
                                         instance: id,
                                     };
                                     let event = CardEvent::new_modify(CardId::new_v4(), action);
-                                    if let Err(e) = APP.read().modify_card(event) {
-                                        handle_card_event_error(e);
-                                        return Err(());
-                                    }
+                                    card_events.push(event);
                                 }
                             }
                         }
@@ -872,10 +863,7 @@ fn save_cardrep(rep: CardRep, old_card: Option<Arc<Card>>) -> Result<CardId, ()>
                                     instance: id,
                                 };
                                 let event = CardEvent::new_modify(CardId::new_v4(), action);
-                                if let Err(e) = APP.read().modify_card(event) {
-                                    handle_card_event_error(e);
-                                    return Err(());
-                                }
+                                card_events.push(event);
                             }
                         }
                         AttrAnswerEditor::Card {
@@ -891,10 +879,7 @@ fn save_cardrep(rep: CardRep, old_card: Option<Arc<Card>>) -> Result<CardId, ()>
                                     instance: id,
                                 };
                                 let event = CardEvent::new_modify(CardId::new_v4(), action);
-                                if let Err(e) = APP.read().modify_card(event) {
-                                    handle_card_event_error(e);
-                                    return Err(());
-                                }
+                                card_events.push(event);
                             }
                         }
                     }
@@ -919,10 +904,7 @@ fn save_cardrep(rep: CardRep, old_card: Option<Arc<Card>>) -> Result<CardId, ()>
                     if prev_back != back {
                         let action = CardAction::SetBackBool(boolean);
                         let event = CardEvent::new_modify(attr_card_id, action);
-                        if let Err(e) = APP.read().modify_card(event) {
-                            handle_card_event_error(e);
-                            return Err(());
-                        }
+                        card_events.push(event);
                     }
                 }
                 OldAttrAnswerEditor::TimeStamp(ts) => {
@@ -939,10 +921,7 @@ fn save_cardrep(rep: CardRep, old_card: Option<Arc<Card>>) -> Result<CardId, ()>
                         if prev_back != back {
                             let action = CardAction::SetBackTime(ts);
                             let event = CardEvent::new_modify(attr_card_id, action);
-                            if let Err(e) = APP.read().modify_card(event) {
-                                handle_card_event_error(e);
-                                return Err(());
-                            }
+                            card_events.push(event);
                         }
                     }
                 }
@@ -963,10 +942,7 @@ fn save_cardrep(rep: CardRep, old_card: Option<Arc<Card>>) -> Result<CardId, ()>
                                 instance: id,
                             };
                             let event = CardEvent::new_modify(attr_card_id, action);
-                            if let Err(e) = APP.read().modify_card(event) {
-                                handle_card_event_error(e);
-                                return Err(());
-                            }
+                            card_events.push(event);
                         }
                     }
                 }
@@ -982,13 +958,14 @@ fn save_cardrep(rep: CardRep, old_card: Option<Arc<Card>>) -> Result<CardId, ()>
                         instance: id,
                     };
                     let event = CardEvent::new_modify(attr_card_id, action);
-                    if let Err(e) = APP.read().modify_card(event) {
-                        handle_card_event_error(e);
-                        return Err(());
-                    }
+                    card_events.push(event);
                 }
             },
         }
+    }
+
+    if let Err(e) = APP.read().many_modify_card(card_events) {
+        handle_card_event_error(e);
     }
 
     Ok(id)

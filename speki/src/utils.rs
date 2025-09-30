@@ -48,6 +48,10 @@ impl App {
         self.0.card_provider.modify_review(event)
     }
 
+    pub fn many_modify_card(&self, events: Vec<CardEvent>) -> Result<(), EventError<RawCard>> {
+        self.0.card_provider.many_modify_card(events)
+    }
+
     pub fn modify_card(&self, event: CardEvent) -> Result<(), EventError<RawCard>> {
         self.0.card_provider.modify_card(event)
     }

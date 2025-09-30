@@ -12,7 +12,7 @@ use crate::{get_hash, Hashed, LedgerEntry, LedgerEvent, LedgerItem};
 /// Groups are for when logically similar entries. Like if you create and a new object
 /// and the creation represents many actions. You'd want to easily undo all of them
 /// at the same time.
-#[derive(Clone, Hash)]
+#[derive(Clone, Hash, Debug)]
 pub enum EntryThing<T: LedgerItem> {
     Leaf(LedgerEvent<T>),
     Multiple(Box<NonEmpty<Self>>),

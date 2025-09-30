@@ -1,6 +1,7 @@
 use chrono::{DateTime, Utc};
 use either::Either;
 use git2::build::CheckoutBuilder;
+use nonempty::NonEmpty;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use std::fs::{self, hard_link};
 use std::io::Write;
@@ -305,6 +306,7 @@ struct Remote<T: LedgerItem> {
 
 use git2::{Delta, DiffFindOptions, DiffOptions, ObjectType, Oid, Repository, ResetType};
 
+use crate::entry_thing::EntryThing;
 use crate::read_ledger::ReadLedger;
 
 #[derive(Debug)]
@@ -816,26 +818,46 @@ impl<T: LedgerItem> Ledger<T> {
     /// 2. Apply evaluation result to state.
     /// 3. Save entry in list of entries.
     pub fn modify(&self, event: LedgerEvent<T>) -> Result<(), EventError<T>> {
-        match event.into_parts() {
-            Either::Left(set_upstream) => {
-                self.apply_and_save_upstream_commit(set_upstream)?;
-                Ok(())
-            }
-            Either::Right(ItemAction { id, action }) => {
-                let verify = true;
-                let cache = true;
+        self.modify_many(vec![event])
+    }
 
-                let evaluation = self.evaluate_action(id, action.clone(), verify, cache)?;
+    pub fn modify_many(&self, events: Vec<LedgerEvent<T>>) -> Result<(), EventError<T>> {
+        let mut applied_events: Vec<LedgerEvent<T>> = vec![];
 
-                tracing::debug!("res: {:?}", &evaluation);
-
-                if !evaluation.is_no_op {
-                    self.apply_evaluation(evaluation.clone(), cache).unwrap();
-                    self.save_event(LedgerEvent::ItemAction { id, action });
+        for event in events {
+            match event.clone().into_parts() {
+                Either::Left(set_upstream) => {
+                    self.apply_and_save_upstream_commit(set_upstream)?;
+                    applied_events.push(event);
                 }
+                Either::Right(ItemAction { id, action }) => {
+                    let verify = true;
+                    let cache = true;
 
-                Ok(())
+                    let evaluation = self.evaluate_action(id, action.clone(), verify, cache)?;
+
+                    tracing::debug!("res: {:?}", &evaluation);
+
+                    if !evaluation.is_no_op {
+                        self.apply_evaluation(evaluation.clone(), cache).unwrap();
+                        applied_events.push(event);
+                    }
+                }
             }
+        }
+
+        if applied_events.is_empty() {
+            Ok(())
+        } else if applied_events.len() == 1 {
+            let entry = applied_events.remove(0);
+            let entry = EntryThing::new_single(entry);
+            self.entries.save_entry(entry);
+            Ok(())
+        } else {
+            let entries = NonEmpty::from_vec(applied_events).unwrap();
+            let entry = EntryThing::new_multiple(entries);
+            self.entries.save_entry(entry);
+            Ok(())
         }
     }
 

@@ -239,6 +239,21 @@ impl CardProvider {
         Ok(())
     }
 
+    pub fn many_modify_card(&self, events: Vec<CardEvent>) -> Result<(), EventError<RawCard>> {
+        for event in &events {
+            if let Some(id) = event.id() {
+                let mut guard = self.cache.write().unwrap();
+                guard.remove(&id);
+
+                for id in self.dependents(id) {
+                    guard.remove(&id);
+                }
+            }
+        }
+
+        self.providers.cards.modify_many(events)
+    }
+
     pub fn modify_card(&self, event: CardEvent) -> Result<(), EventError<RawCard>> {
         let id = event.id();
 

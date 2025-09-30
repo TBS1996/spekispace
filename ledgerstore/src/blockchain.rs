@@ -7,7 +7,7 @@ use tracing::info;
 
 use crate::{entry_thing::EntryThing, Hashed, LedgerEvent, LedgerItem};
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct BlockChain<T: LedgerItem> {
     cached: Arc<RwLock<Option<Vec<EntryThing<T>>>>>,
     entries_path: Arc<PathBuf>,
@@ -35,7 +35,7 @@ impl<T: LedgerItem> BlockChain<T> {
     }
 
     pub fn current_hash(&self) -> Option<Hashed> {
-        self.current_head().map(|entry| entry.data_hash())
+        dbg!(self.current_head().map(|entry| entry.data_hash()))
     }
 
     fn working_index(&self) -> usize {
@@ -55,13 +55,34 @@ impl<T: LedgerItem> BlockChain<T> {
             }
         }
 
-        let idx = self.working_index();
+        let mut idx = dbg!(self.working_index());
 
         if idx == 0 {
             return None;
         }
 
+        idx -= 1;
+
         EntryThing::load_single(&*self.entries_path, idx).map(|x| x.last_entry().to_owned())
+    }
+
+    pub fn save_entry(&self, entry: EntryThing<T>) -> Hashed {
+        let idx = self.working_index();
+
+        let hash = entry
+            .clone()
+            .save(&self.entries_path, idx)
+            .last()
+            .unwrap()
+            .data_hash();
+
+        self.cached
+            .write()
+            .unwrap()
+            .get_or_insert_default()
+            .push(entry);
+
+        hash
     }
 
     pub fn save(&self, event: LedgerEvent<T>) -> Hashed {
