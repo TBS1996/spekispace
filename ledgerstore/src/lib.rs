@@ -1062,7 +1062,6 @@ impl<T: LedgerItem> Ledger<T> {
 
         let mut items: HashMap<T::Key, Arc<T>> = HashMap::default();
 
-        let mut latest_set_upstream: Option<SetUpstream> = None;
         self.remote.reset_to_first_commit().unwrap();
 
         for (idx, entry) in self.entries.chain().into_iter().enumerate() {
@@ -1073,9 +1072,7 @@ impl<T: LedgerItem> Ledger<T> {
             for event in entry {
                 match event.into_parts() {
                     Either::Left(set_upstream) => {
-                        self.apply_and_save_upstream_commit(set_upstream.clone())
-                            .unwrap();
-                        latest_set_upstream = Some(set_upstream);
+                        self.set_remote_commit(&set_upstream).unwrap();
                     }
                     Either::Right(ItemAction { id, action }) => {
                         let evaluation =
