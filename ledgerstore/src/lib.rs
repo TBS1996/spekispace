@@ -585,6 +585,20 @@ impl<T: LedgerItem> Remote<T> {
         Ok(())
     }
 
+    pub fn reset_to_first_commit(&self) -> Result<(), git2::Error> {
+        // Start at HEAD
+        let mut c = self.repo.head()?.peel_to_commit()?;
+
+        // Walk back to the root (no parents)
+        while c.parent_count() > 0 {
+            c = c.parent(0)?;
+        }
+
+        // Move HEAD and update index + worktree to that commit
+        self.repo.reset(c.as_object(), ResetType::Hard, None)?;
+        Ok(())
+    }
+
     pub fn reset_to_empty(&self) {
         let refs = self.repo.references().unwrap();
         for r in refs {
@@ -1049,6 +1063,7 @@ impl<T: LedgerItem> Ledger<T> {
         let mut items: HashMap<T::Key, Arc<T>> = HashMap::default();
 
         let mut latest_set_upstream: Option<SetUpstream> = None;
+        self.remote.reset_to_first_commit().unwrap();
 
         for (idx, entry) in self.entries.chain().into_iter().enumerate() {
             if idx % 50 == 0 {
@@ -1087,10 +1102,6 @@ impl<T: LedgerItem> Ledger<T> {
                     }
                 }
             }
-        }
-
-        if let Some(upstream) = latest_set_upstream {
-            self.apply_and_save_upstream_commit(upstream).unwrap();
         }
 
         self.apply_caches(items);
