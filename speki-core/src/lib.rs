@@ -173,6 +173,7 @@ use std::str::FromStr;
 use crate::cardfilter::CardFilter;
 use crate::cardfilter::RecallState;
 use crate::ledger::CardEvent;
+use crate::ledger::Event;
 use crate::ledger::MetaAction;
 use crate::ledger::MetaEvent;
 use crate::recall_rate::ml::classic::Trained;
@@ -180,6 +181,7 @@ use crate::recall_rate::AvgRecall;
 use crate::recall_rate::Recall;
 use crate::recall_rate::Recaller;
 use crate::recall_rate::Review;
+use crate::recall_rate::ReviewEvent;
 use crate::recall_rate::FSRS;
 use crate::set::SetExpr;
 
@@ -824,6 +826,24 @@ impl App {
             time_provider: FsTime,
             recaller,
         }
+    }
+
+    pub fn apply_many(&self, events: Vec<Event>) {
+        let mut card_events: Vec<CardEvent> = vec![];
+        let mut review_events: Vec<ReviewEvent> = vec![];
+        let mut meta_events: Vec<MetaEvent> = vec![];
+
+        for event in events {
+            match event {
+                Event::Card(card_event) => card_events.push(card_event),
+                Event::History(review_event) => review_events.push(review_event),
+                Event::Meta(meta_event) => meta_events.push(meta_event),
+            }
+        }
+
+        self.provider.cards.modify_many(card_events).unwrap();
+        self.provider.reviews.modify_many(review_events).unwrap();
+        self.provider.metadata.modify_many(meta_events).unwrap();
     }
 
     pub fn review_cli(&self) {
