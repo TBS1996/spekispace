@@ -16,13 +16,13 @@ use speki_core::{
     metadata::Metadata,
     recall_rate::{History, Recall, ReviewEvent},
     set::{Input, Set, SetEvent, SetExpr, SetId},
-    Card, CardRefType, Config,
+    Card, CardRefType, Config, MyEventError,
 };
 
 use crate::{overlays::OverlayEnum, Cli, APP};
 
 #[derive(Clone)]
-pub struct App(Arc<speki_core::App>);
+pub struct App(pub Arc<speki_core::App>);
 
 impl App {
     pub fn new() -> Self {
@@ -48,6 +48,7 @@ impl App {
         self.0.card_provider.modify_review(event)
     }
 
+    #[allow(dead_code)]
     pub fn many_modify_card(&self, events: Vec<CardEvent>) -> Result<(), EventError<RawCard>> {
         self.0.card_provider.many_modify_card(events)
     }
@@ -56,6 +57,7 @@ impl App {
         self.0.card_provider.modify_card(event)
     }
 
+    #[allow(dead_code)]
     pub fn modify_meta(&self, event: MetaEvent) -> Result<(), EventError<Metadata>> {
         self.0.card_provider.modify_metadata(event)
     }
@@ -169,6 +171,14 @@ impl Debug for App {
     }
 }
 
+pub fn handle_event_error(err: MyEventError) {
+    match err {
+        MyEventError::CardError(e) => handle_card_event_error(e),
+        MyEventError::ReviewError(e) => handle_review_event_error(e),
+        MyEventError::MetaError(e) => handle_meta_event_error(e),
+    }
+}
+
 pub fn handle_card_event_error(err: EventError<RawCard>) {
     let text = match err {
         EventError::Cycle(items) => {
@@ -207,6 +217,38 @@ pub fn handle_card_event_error(err: EventError<RawCard>) {
         EventError::Remote => format!("remote card cannot be modified"),
         EventError::ItemNotFound(card) => format!("card not found: {card}"),
         EventError::DeletingWithDependencies => format!("cannot delete card with dependencies"),
+    };
+
+    OverlayEnum::new_notice(text).append();
+}
+
+pub fn handle_review_event_error(err: EventError<History>) {
+    let text = match err {
+        EventError::Cycle(items) => {
+            unreachable!("reviews have dependencies: {items:?}")
+        }
+        EventError::Invariant(inv) => format!("invariant broken in review: {inv:?}"),
+        EventError::Remote => format!("remote review cannot be modified"),
+        EventError::ItemNotFound(card) => format!("review card not found: {card}"),
+        EventError::DeletingWithDependencies => format!("cannot delete review with dependencies"),
+    };
+
+    OverlayEnum::new_notice(text).append();
+}
+
+pub fn handle_meta_event_error(err: EventError<Metadata>) {
+    let text = match err {
+        EventError::Cycle(items) => {
+            let mut s = format!("cycle detected in metadata!\n");
+            for (id, _) in items {
+                s.push_str(&format!("Cycle involves: {id}\n"));
+            }
+            s
+        }
+        EventError::Invariant(inv) => format!("invariant broken in metadata: {inv:?}"),
+        EventError::Remote => format!("remote metadata cannot be modified"),
+        EventError::ItemNotFound(card) => format!("metadata not found: {card}"),
+        EventError::DeletingWithDependencies => format!("cannot delete metadata with dependencies"),
     };
 
     OverlayEnum::new_notice(text).append();

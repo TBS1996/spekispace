@@ -17,7 +17,8 @@ use rfd::FileDialog;
 use speki_core::{
     card::{AttributeId, BackSide, CType, CardId},
     collection::DynCard,
-    ledger::{CardAction, CardEvent, MetaAction, MetaEvent},
+    ledger::{CardAction, CardEvent, Event, MetaAction, MetaEvent},
+    recall_rate::ReviewEvent,
     set::{Input, SetAction, SetEvent, SetExpr, SetId},
     Card, CardType,
 };
@@ -47,7 +48,7 @@ use crate::{
         OverlayEnum,
     },
     pop_overlay,
-    utils::handle_card_event_error,
+    utils::{handle_card_event_error, handle_event_error},
     APP,
 };
 
@@ -387,10 +388,18 @@ pub fn ImportCards(viewer: CardViewer) -> Element {
                         APP.read().modify_set(event).unwrap();
                         let mut saved_cards: BTreeSet<Input> = Default::default();
 
+                        let mut new_events: Vec<EventResult> = vec![];
+
                         for rep in reps {
-                            if let Ok(card) = save_cardrep(rep, None) {
-                                saved_cards.insert(Input::Card(card));
+                            if let Ok(event_res) = save_cardrep(rep, None) {
+                                saved_cards.insert(Input::Card(event_res.id()));
+                                new_events.push(event_res);
                             }
+                        }
+
+                        let events: Vec<Event> = new_events.into_iter().map(|res|res.into_events()).flatten().collect();
+                        if let Err(e) = APP.read().0.apply_many(events) {
+                            handle_event_error(e);
                         }
 
                         let cards_imported =saved_cards.len();
@@ -645,7 +654,30 @@ fn InputElements(
     }
 }
 
-fn save_cardrep(rep: CardRep, old_card: Option<Arc<Card>>) -> Result<CardId, ()> {
+/// Batch of events modifying a specific card, across different components
+pub struct EventResult {
+    id: CardId,
+    cards: Vec<CardEvent>,
+    meta: Vec<MetaEvent>,
+    reviews: Vec<ReviewEvent>,
+}
+
+impl EventResult {
+    pub fn into_events(self) -> Vec<Event> {
+        self.cards
+            .into_iter()
+            .map(Event::Card)
+            .chain(self.meta.into_iter().map(Event::Meta))
+            .chain(self.reviews.into_iter().map(Event::History))
+            .collect()
+    }
+
+    pub fn id(&self) -> CardId {
+        self.id
+    }
+}
+
+fn save_cardrep(rep: CardRep, old_card: Option<Arc<Card>>) -> Result<EventResult, ()> {
     let mut actions: Vec<CardAction> = vec![];
 
     let CardRep {
@@ -661,30 +693,22 @@ fn save_cardrep(rep: CardRep, old_card: Option<Arc<Card>>) -> Result<CardId, ()>
         .map(|card| card.id())
         .unwrap_or_else(CardId::new_v4);
 
+    let mut out = EventResult {
+        id,
+        cards: Vec::new(),
+        meta: Vec::new(),
+        reviews: Vec::new(),
+    };
+
     {
         let event = MetaEvent::new_modify(id, MetaAction::Suspend(meta.suspended.cloned()));
-
-        if let Err(e) = APP.read().modify_meta(event) {
-            let err = format!("{e:?}");
-            OverlayEnum::new_notice(err).append();
-            return Err(());
-        }
+        out.meta.push(event);
 
         let event = MetaEvent::new_modify(id, MetaAction::SetTrivial(Some(meta.trivial.cloned())));
-
-        if let Err(e) = APP.read().modify_meta(event) {
-            let err = format!("{e:?}");
-            OverlayEnum::new_notice(err).append();
-            return Err(());
-        }
+        out.meta.push(event);
 
         let event = MetaEvent::new_modify(id, MetaAction::SetNeedsWork(meta.needs_work.cloned()));
-
-        if let Err(e) = APP.read().modify_meta(event) {
-            let err = format!("{e:?}");
-            OverlayEnum::new_notice(err).append();
-            return Err(());
-        }
+        out.meta.push(event);
     }
 
     let old_ty = old_card.clone().map(|c| c.clone_base().data.clone());
@@ -964,11 +988,9 @@ fn save_cardrep(rep: CardRep, old_card: Option<Arc<Card>>) -> Result<CardId, ()>
         }
     }
 
-    if let Err(e) = APP.read().many_modify_card(card_events) {
-        handle_card_event_error(e);
-    }
+    out.cards.extend(card_events);
 
-    Ok(id)
+    Ok(out)
 }
 
 #[component]
@@ -1012,7 +1034,14 @@ fn save_button(CardViewer: CardViewer) -> Element {
                 };
 
                 match save_cardrep(rep, CardViewer.old_card.clone()) {
-                    Ok(id) => {
+                    Ok(events) => {
+                        let id = events.id;
+
+                        if let Err(e) = APP.read().0.apply_many(events.into_events()) {
+                            handle_event_error(e);
+                            return;
+                        }
+
                         let Some(card) = APP.read().load(id) else {
                             dbg!(id);
                             panic!();

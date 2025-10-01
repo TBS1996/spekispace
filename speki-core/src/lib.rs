@@ -1,6 +1,7 @@
 use card::{CardId, RawCard};
 use card_provider::CardProvider;
 use dioxus_logger::tracing::info;
+use ledgerstore::EventError;
 use ledgerstore::Ledger;
 use ledgerstore::Node;
 use ledgerstore::TimeProvider;
@@ -803,6 +804,31 @@ pub fn recall_algorithm_accuracy(ledger: &Ledger<History>) {
     }
 }
 
+#[derive(Debug)]
+pub enum MyEventError {
+    CardError(EventError<RawCard>),
+    ReviewError(EventError<History>),
+    MetaError(EventError<Metadata>),
+}
+
+impl From<EventError<RawCard>> for MyEventError {
+    fn from(err: EventError<RawCard>) -> Self {
+        MyEventError::CardError(err)
+    }
+}
+
+impl From<EventError<History>> for MyEventError {
+    fn from(err: EventError<History>) -> Self {
+        MyEventError::ReviewError(err)
+    }
+}
+
+impl From<EventError<Metadata>> for MyEventError {
+    fn from(err: EventError<Metadata>) -> Self {
+        MyEventError::MetaError(err)
+    }
+}
+
 impl App {
     pub fn new(root: PathBuf) -> Self {
         info!("initialtize app");
@@ -828,7 +854,7 @@ impl App {
         }
     }
 
-    pub fn apply_many(&self, events: Vec<Event>) {
+    pub fn apply_many(&self, events: Vec<Event>) -> Result<(), MyEventError> {
         let mut card_events: Vec<CardEvent> = vec![];
         let mut review_events: Vec<ReviewEvent> = vec![];
         let mut meta_events: Vec<MetaEvent> = vec![];
@@ -841,9 +867,17 @@ impl App {
             }
         }
 
-        self.provider.cards.modify_many(card_events).unwrap();
-        self.provider.reviews.modify_many(review_events).unwrap();
-        self.provider.metadata.modify_many(meta_events).unwrap();
+        if let Err(e) = self.provider.cards.modify_many(card_events) {
+            return Err(MyEventError::CardError(e));
+        }
+        if let Err(e) = self.provider.reviews.modify_many(review_events) {
+            return Err(MyEventError::ReviewError(e));
+        }
+        if let Err(e) = self.provider.metadata.modify_many(meta_events) {
+            return Err(MyEventError::MetaError(e));
+        }
+
+        Ok(())
     }
 
     pub fn review_cli(&self) {
