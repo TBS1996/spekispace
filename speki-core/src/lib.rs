@@ -854,6 +854,10 @@ impl App {
         }
     }
 
+    pub fn rebuild_card_state(&self) {
+        self.provider.cards.apply();
+    }
+
     pub fn apply_many(&self, events: Vec<Event>) -> Result<(), MyEventError> {
         let mut card_events: Vec<CardEvent> = vec![];
         let mut review_events: Vec<ReviewEvent> = vec![];

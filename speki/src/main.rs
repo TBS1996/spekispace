@@ -11,9 +11,10 @@ use std::{
 use clap::Parser;
 use dioxus::prelude::*;
 use dioxus_logger::tracing::{info, Level};
+use ledgerstore::Ledger;
 use pages::ReviewPage;
 use speki_core::{
-    card::{BackSide, CardId, TextData},
+    card::{BackSide, CardId, RawCard, TextData},
     ledger::{CardAction, CardEvent},
     log_loss_accuracy,
     recall_rate::{
@@ -81,6 +82,8 @@ struct Cli {
     generate_config: bool,
     #[arg(long)]
     review: bool,
+    #[arg(long)]
+    rebuild_state: bool,
 }
 
 #[derive(Clone)]
@@ -138,6 +141,15 @@ fn main() {
         let path = Config::load().storage_path.clone();
         let app = speki_core::App::new(path);
         app.review_cli();
+        return;
+    } else if cli.rebuild_state {
+        let path = Config::load().storage_path.clone();
+        let cards: Ledger<RawCard> = Ledger::new_no_apply(path);
+
+        use simpletime::timed;
+
+        timed!("rebuilding card state", cards.apply());
+        info!("state rebuilt!");
         return;
     }
 

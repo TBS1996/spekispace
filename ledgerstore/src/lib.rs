@@ -520,7 +520,6 @@ impl<T: LedgerItem> Remote<T> {
         for path in changed_paths.added {
             if path.starts_with("items") {
                 let filename = path.file_name().unwrap().to_str().unwrap();
-                dbg!(&filename);
                 match filename.parse() {
                     Ok(key) => {
                         changed_items.added.push(key);
@@ -536,7 +535,6 @@ impl<T: LedgerItem> Remote<T> {
         for path in changed_paths.modified {
             if path.starts_with("items") {
                 let filename = path.file_name().unwrap().to_str().unwrap();
-                dbg!(&filename);
                 match filename.parse() {
                     Ok(key) => {
                         changed_items.modified.push(key);
@@ -551,7 +549,6 @@ impl<T: LedgerItem> Remote<T> {
         for path in changed_paths.removed {
             if path.starts_with("items") {
                 let filename = path.file_name().unwrap().to_str().unwrap();
-                dbg!(&filename);
                 match filename.parse() {
                     Ok(key) => {
                         changed_items.removed.push(key);
@@ -585,17 +582,17 @@ impl<T: LedgerItem> Remote<T> {
         Ok(())
     }
 
-    pub fn reset_to_first_commit(&self) -> Result<(), git2::Error> {
-        // Start at HEAD
-        let mut c = self.repo.head()?.peel_to_commit()?;
+    pub fn checkout_empty(&self) -> Result<(), git2::Error> {
+        let mut index = self.repo.index().unwrap();
+        index.clear().unwrap();
+        index.write().unwrap(); // save empty index
 
-        // Walk back to the root (no parents)
-        while c.parent_count() > 0 {
-            c = c.parent(0)?;
-        }
+        let mut opts = CheckoutBuilder::new();
+        opts.force().remove_untracked(true).remove_ignored(true);
+        self.repo
+            .checkout_index(Some(&mut index), Some(&mut opts))
+            .unwrap();
 
-        // Move HEAD and update index + worktree to that commit
-        self.repo.reset(c.as_object(), ResetType::Hard, None)?;
         Ok(())
     }
 
@@ -745,6 +742,16 @@ pub struct Ledger<T: LedgerItem> {
 
 impl<T: LedgerItem> Ledger<T> {
     pub fn new(root: PathBuf) -> Self {
+        let selv = Self::new_no_apply(root);
+
+        if selv.entries.current_hash() != selv.currently_applied_ledger_hash() {
+            selv.apply();
+        }
+
+        selv
+    }
+
+    pub fn new_no_apply(root: PathBuf) -> Self {
         let root = root.join(Self::item_name());
         let entries = BlockChain::new(root.join("entries"));
         let root = root.join("state");
@@ -763,7 +770,7 @@ impl<T: LedgerItem> Ledger<T> {
         let remote = Remote::new(&root);
         //let _ = remote.hard_reset_current();
 
-        let selv = Self {
+        Self {
             properties: Arc::new(properties),
             dependencies: Arc::new(dependencies),
             dependents: Arc::new(dependents),
@@ -777,13 +784,7 @@ impl<T: LedgerItem> Ledger<T> {
                 root: Arc::new(root.clone()),
                 _phantom: PhantomData,
             },
-        };
-
-        if selv.entries.current_hash() != selv.currently_applied_ledger_hash() {
-            selv.apply();
         }
-
-        selv
     }
 
     pub fn current_commit_date(&self) -> Option<DateTime<Utc>> {
@@ -1049,7 +1050,7 @@ impl<T: LedgerItem> Ledger<T> {
     /// This massively speeds up the rebuilding of state, with the caveat that if state is invalid, you can't see exactly which entry(s)
     /// caused it to become invalid. It also means that even if the state is valid after all the entries have been applied, it
     /// could be invalid at some points leading up to the last entry.
-    fn apply(&self) {
+    pub fn apply(&self) {
         fs::remove_dir_all(&*self.items).unwrap();
         fs::remove_dir_all(&*self.properties).unwrap();
         fs::remove_dir_all(&*self.dependencies).unwrap();
@@ -1062,7 +1063,9 @@ impl<T: LedgerItem> Ledger<T> {
 
         let mut items: HashMap<T::Key, Arc<T>> = HashMap::default();
 
-        self.remote.reset_to_first_commit().unwrap();
+        self.remote.checkout_empty().unwrap();
+
+        let mut latest_upstream: Option<SetUpstream> = None;
 
         for (idx, entry) in self.entries.chain().into_iter().enumerate() {
             if idx % 50 == 0 {
@@ -1072,7 +1075,7 @@ impl<T: LedgerItem> Ledger<T> {
             for event in entry {
                 match event.into_parts() {
                     Either::Left(set_upstream) => {
-                        self.set_remote_commit(&set_upstream).unwrap();
+                        latest_upstream = Some(set_upstream);
                     }
                     Either::Right(ItemAction { id, action }) => {
                         let evaluation =
@@ -1084,6 +1087,7 @@ impl<T: LedgerItem> Ledger<T> {
                                     panic!();
                                 }
                             };
+
                         self.apply_evaluation(evaluation.clone(), false).unwrap();
 
                         match evaluation.item {
@@ -1099,6 +1103,10 @@ impl<T: LedgerItem> Ledger<T> {
                     }
                 }
             }
+        }
+
+        if let Some(upstream) = latest_upstream {
+            self.set_remote_commit(&upstream).unwrap();
         }
 
         self.apply_caches(items);
@@ -1121,7 +1129,10 @@ impl<T: LedgerItem> Ledger<T> {
             fs::create_dir_all(&dir).unwrap();
             let original = self.item_path(to);
             let link = dir.join(to.to_string());
-            hard_link(original, link).unwrap();
+            if let Err(e) = hard_link(&original, &link) {
+                dbg!(e, original, link);
+                panic!();
+            }
         }
     }
 
@@ -1228,7 +1239,7 @@ impl<T: LedgerItem> Ledger<T> {
             dependents.extend(self.local.direct_dependents(*item));
         }
 
-        dbg!(&modified, &dependents);
+        //dbg!(&modified, &dependents);
 
         for dependent in dependents {
             let item = self.local.load(dependent).unwrap();
@@ -1260,7 +1271,7 @@ impl<T: LedgerItem> Ledger<T> {
         verify: bool, // if true, check if action will uphold invariants
         cache: bool,  // if true, return cache modification results.
     ) -> Result<ActionEvalResult<T>, EventError<T>> {
-        if self.is_remote(key) {
+        if self.is_remote(key) && verify {
             return Err(EventError::Remote);
         }
 
@@ -1333,7 +1344,7 @@ impl<T: LedgerItem> Ledger<T> {
 
         if is_no_op {
             if !added_caches.is_empty() || !removed_caches.is_empty() {
-                dbg!(&item, &added_caches, &removed_caches);
+                //dbg!(&item, &added_caches, &removed_caches);
             }
         }
 
@@ -1396,6 +1407,7 @@ impl<T: LedgerItem> Ledger<T> {
     fn save(&self, item: T) {
         let key = item.item_id();
         let item_path = self.item_path(key);
+
         let serialized = serde_json::to_string_pretty(&item).unwrap();
         let mut f = std::fs::File::create(&item_path).unwrap();
         use std::io::Write;

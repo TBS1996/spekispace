@@ -38,6 +38,7 @@ rfd = "0.15.4"
 semver = "1.0.26"
 ureq = "2"
 textplots = "0.8.7"
+simpletime = "0.1.0"
 
 [profile]
 

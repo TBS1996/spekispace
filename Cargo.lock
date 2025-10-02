@@ -4474,6 +4474,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d66dc143e6b11c1eddc06d5c423cfc97062865baf299914ab64caa38182078fe"
 
 [[package]]
+name = "simpletime"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "15b7f735d044253592a378d20462735fb661d06152a4a9aa1d37f475b2d2f093"
+
+[[package]]
 name = "siphasher"
 version = "0.3.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4592,6 +4598,7 @@ dependencies = [
  "semver",
  "serde",
  "serde_json",
+ "simpletime",
  "speki-core",
  "strum",
  "tokio",

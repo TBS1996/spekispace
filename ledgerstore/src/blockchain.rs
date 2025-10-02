@@ -35,7 +35,7 @@ impl<T: LedgerItem> BlockChain<T> {
     }
 
     pub fn current_hash(&self) -> Option<Hashed> {
-        dbg!(self.current_head().map(|entry| entry.data_hash()))
+        self.current_head().map(|entry| entry.data_hash())
     }
 
     fn working_index(&self) -> usize {
@@ -55,7 +55,7 @@ impl<T: LedgerItem> BlockChain<T> {
             }
         }
 
-        let mut idx = dbg!(self.working_index());
+        let mut idx = self.working_index();
 
         if idx == 0 {
             return None;

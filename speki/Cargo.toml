@@ -29,6 +29,7 @@ tokio.workspace = true
 clap.workspace = true
 rfd.workspace = true
 semver.workspace = true
+simpletime.workspace = true
 
 
 #ledgerstore = "0.1.2"
