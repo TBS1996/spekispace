@@ -1,4 +1,5 @@
 use std::{
+    collections::BTreeMap,
     fs,
     path::{Path, PathBuf},
 };
@@ -72,7 +73,7 @@ impl<T: LedgerItem> EntryThing<T> {
         LedgerEvent<T>: serde::de::DeserializeOwned,
     {
         if path.is_dir() {
-            let children = Self::load_chain(path);
+            let children: Vec<EntryThing<T>> = Self::load_chain(path).into_values().collect();
             let multiple = nonempty::NonEmpty::from_vec(children).unwrap();
             EntryThing::Multiple(Box::new(multiple))
         } else {
@@ -93,7 +94,7 @@ impl<T: LedgerItem> EntryThing<T> {
     ///
     /// - Files become `EntryThing::Leaf`
     /// - Directories become `EntryThing::Multiple`
-    pub fn load_chain(root: impl AsRef<Path>) -> Vec<Self>
+    pub fn load_chain(root: impl AsRef<Path>) -> BTreeMap<usize, Self>
     where
         LedgerEvent<T>: serde::de::DeserializeOwned,
     {
@@ -116,7 +117,7 @@ impl<T: LedgerItem> EntryThing<T> {
 
         entries
             .into_iter()
-            .map(|(_, path)| Self::load_entry(&path))
+            .map(|(idx, path)| (idx as usize, Self::load_entry(&path)))
             .collect()
     }
 

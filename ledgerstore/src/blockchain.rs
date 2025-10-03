@@ -1,4 +1,6 @@
 use std::{
+    collections::BTreeMap,
+    fs, io,
     path::{Path, PathBuf},
     sync::{Arc, RwLock},
 };
@@ -7,9 +9,17 @@ use tracing::info;
 
 use crate::{entry_thing::EntryThing, Hashed, LedgerEvent, LedgerItem};
 
+pub fn max_dir_number(path: impl AsRef<Path>) -> io::Result<Option<usize>> {
+    let max = fs::read_dir(path)?
+        .filter_map(|e| e.ok())
+        .filter_map(|e| e.file_name().to_str()?.parse::<usize>().ok())
+        .max();
+    Ok(max)
+}
+
 #[derive(Clone, Debug)]
 pub struct BlockChain<T: LedgerItem> {
-    cached: Arc<RwLock<Option<Vec<EntryThing<T>>>>>,
+    cached: Arc<RwLock<Option<BTreeMap<usize, EntryThing<T>>>>>,
     entries_path: Arc<PathBuf>,
 }
 
@@ -23,7 +33,7 @@ impl<T: LedgerItem> BlockChain<T> {
         }
     }
 
-    pub fn chain(&self) -> Vec<EntryThing<T>> {
+    pub fn chain(&self) -> BTreeMap<usize, EntryThing<T>> {
         info!("fetching chain");
         if self.cached.read().unwrap().is_some() {
             return self.cached.read().unwrap().clone().unwrap();
@@ -38,19 +48,21 @@ impl<T: LedgerItem> BlockChain<T> {
         self.current_head().map(|entry| entry.data_hash())
     }
 
-    fn working_index(&self) -> usize {
-        if self.cached.read().unwrap().is_some() {
-            self.cached.read().unwrap().as_ref().unwrap().len()
-        } else {
-            std::fs::read_dir(self.entries_path.as_path())
-                .unwrap()
-                .count()
+    fn highest_index(&self) -> Option<usize> {
+        match self.cached.read().unwrap().as_ref() {
+            Some(cached) => cached.iter().next_back().map(|(idx, _)| idx).cloned(),
+            None => max_dir_number(self.entries_path.as_path()).unwrap(),
         }
+    }
+
+    /// The index of the next entry to be added.
+    fn working_index(&self) -> usize {
+        self.highest_index().map(|num| num + 1).unwrap_or(0)
     }
 
     fn current_head(&self) -> Option<LedgerEvent<T>> {
         if let Some(chain) = self.cached.read().unwrap().as_ref() {
-            if let Some(entry) = chain.last() {
+            if let Some((_, entry)) = chain.iter().next_back() {
                 return Some(entry.last_entry().clone());
             }
         }
@@ -80,32 +92,12 @@ impl<T: LedgerItem> BlockChain<T> {
             .write()
             .unwrap()
             .get_or_insert_default()
-            .push(entry);
+            .insert(idx, entry);
 
         hash
     }
 
-    pub fn save(&self, event: LedgerEvent<T>) -> Hashed {
-        let entry = EntryThing::Leaf(event);
-        let idx = self.working_index();
-
-        let hash = entry
-            .clone()
-            .save(&self.entries_path, idx)
-            .last()
-            .unwrap()
-            .data_hash();
-
-        self.cached
-            .write()
-            .unwrap()
-            .get_or_insert_default()
-            .push(entry);
-
-        hash
-    }
-
-    fn load_ledger(space: &Path) -> Vec<EntryThing<T>> {
+    fn load_ledger(space: &Path) -> BTreeMap<usize, EntryThing<T>> {
         info!("loading entire ledger to memory");
         EntryThing::load_chain(space)
     }

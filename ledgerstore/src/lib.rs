@@ -744,7 +744,14 @@ impl<T: LedgerItem> Ledger<T> {
     pub fn new(root: PathBuf) -> Self {
         let selv = Self::new_no_apply(root);
 
-        if selv.entries.current_hash() != selv.currently_applied_ledger_hash() {
+        let current_hash = selv.entries.current_hash();
+        let applied_hash = selv.currently_applied_ledger_hash();
+
+        dbg!(Self::item_name());
+        dbg!(&current_hash);
+        dbg!(&applied_hash);
+
+        if current_hash != applied_hash {
             selv.apply();
         }
 
@@ -1067,7 +1074,7 @@ impl<T: LedgerItem> Ledger<T> {
 
         let mut latest_upstream: Option<SetUpstream> = None;
 
-        for (idx, entry) in self.entries.chain().into_iter().enumerate() {
+        for (idx, entry) in self.entries.chain().into_iter() {
             if idx % 50 == 0 {
                 dbg!(idx);
             };
@@ -1114,6 +1121,7 @@ impl<T: LedgerItem> Ledger<T> {
         self.verify_all().unwrap();
 
         if let Some(hash) = self.entries.current_hash() {
+            info!("{} ledger hash after apply: {}", Self::item_name(), hash);
             self.set_ledger_hash(hash);
         }
     }
@@ -1395,7 +1403,8 @@ impl<T: LedgerItem> Ledger<T> {
     }
 
     fn save_event(&self, event: impl Into<LedgerEvent<T>>) {
-        let hash = self.entries.save(event.into());
+        let entry = EntryThing::Leaf(event.into());
+        let hash = self.entries.save_entry(entry);
         self.set_ledger_hash(hash);
     }
 
