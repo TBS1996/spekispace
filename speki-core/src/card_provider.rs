@@ -9,7 +9,7 @@ use crate::{
     ArcRecall, Card, CardProperty, CardRefType, FsTime, Provider,
 };
 use dioxus_logger::tracing::{info, trace};
-use ledgerstore::{EventError, PropertyCache, RefGetter, TheCacheGetter};
+use ledgerstore::{EventError, Leaf, PropertyCache, RefGetter};
 use std::{
     collections::{BTreeSet, HashMap, HashSet},
     fmt::Debug,
@@ -70,7 +70,7 @@ impl CardProvider {
         match dyncard {
             DynCard::Instances(id) => {
                 let mut output = vec![];
-                let getter = ledgerstore::TheCacheGetter::ItemRef(RefGetter {
+                let getter = Leaf::Reference(RefGetter {
                     reversed: true,
                     key: *id,
                     ty: Some(CardRefType::ParentClass),
@@ -80,7 +80,7 @@ impl CardProvider {
                 all_classes.insert(*id);
 
                 for class in all_classes {
-                    let getter = TheCacheGetter::ItemRef(RefGetter {
+                    let getter = Leaf::Reference(RefGetter {
                         reversed: true,
                         key: class,
                         ty: Some(CardRefType::ClassOfInstance),

@@ -1,6 +1,6 @@
 use std::{cmp::Ordering, sync::Arc};
 
-use ledgerstore::{PropertyCache, RefGetter, TheCacheGetter};
+use ledgerstore::{Leaf, PropertyCache, RefGetter};
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -69,7 +69,7 @@ impl DynCard {
         match self {
             DynCard::Instances(id) => {
                 let mut output = vec![];
-                let getter = ledgerstore::TheCacheGetter::ItemRef(RefGetter {
+                let getter = Leaf::Reference(RefGetter {
                     reversed: true,
                     key: *id,
                     ty: Some(CardRefType::ParentClass),
@@ -79,7 +79,7 @@ impl DynCard {
                 all_classes.insert(*id);
 
                 for class in all_classes {
-                    let getter = TheCacheGetter::ItemRef(RefGetter {
+                    let getter = Leaf::Reference(RefGetter {
                         reversed: true,
                         key: class,
                         ty: Some(CardRefType::ClassOfInstance),

@@ -12,7 +12,7 @@ pub mod basecard;
 pub use basecard::*;
 
 use either::Either;
-use ledgerstore::{EventError, LedgerAction, RefGetter, TheCacheGetter, TimeProvider};
+use ledgerstore::{EventError, Leaf, LedgerAction, RefGetter, TimeProvider};
 use nonempty::NonEmpty;
 use serde::Deserializer;
 use serde_json::Value;
@@ -562,7 +562,7 @@ impl Card {
             _ => panic!(),
         };
 
-        let getter = TheCacheGetter::ItemRef(RefGetter {
+        let getter = Leaf::Reference(RefGetter {
             reversed: false,
             ty: Some(CardRefType::ParentClass),
             key,
@@ -781,7 +781,7 @@ impl Card {
             debug_assert!(false);
         }
 
-        let getter = TheCacheGetter::ItemRef(RefGetter {
+        let getter = Leaf::Reference(RefGetter {
             reversed: true,
             key: self.id,
             ty: Some(CardRefType::InstanceOfAttribute),

@@ -3,6 +3,7 @@ use either::Either;
 use git2::build::CheckoutBuilder;
 use nonempty::NonEmpty;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use std::collections::BTreeSet;
 use std::fs::{self, hard_link};
 use std::io::Write;
 use std::marker::PhantomData;
@@ -56,19 +57,44 @@ impl<T: LedgerItem> ItemReference<T> {
     }
 }
 
-#[derive(Clone)]
+/// Expression tree for getting a set of items.
+#[derive(Debug, Clone)]
+pub enum ItemSet<T: LedgerItem> {
+    /// Adds all the items in all the nodes.
+    Union(BTreeSet<ItemNode<T>>),
+    /// Only the items that are shared in all the nodes.
+    Intersection(BTreeSet<ItemNode<T>>),
+    /// The items that are in the first node but not in the second.
+    Difference(ItemNode<T>, ItemNode<T>),
+    /// All the items in the state, except the ones in the node.
+    Complement(ItemNode<T>),
+    /// All the items in the state.
+    All,
+}
+
+#[derive(Debug, Clone)]
+pub enum ItemNode<T: LedgerItem> {
+    Set(Box<ItemSet<T>>),
+    Leaf(Leaf<T>),
+}
+
+/// A leaf in the expression tree, evaluates to a list of items.
+#[derive(Debug, Clone)]
+pub enum Leaf<T: LedgerItem> {
+    /// A single item.
+    Item(T::Key),
+    /// Items that all share a common property.
+    Property(PropertyCache<T>),
+    /// Items based on how they are referenced by other items.
+    Reference(RefGetter<T>),
+}
+
+#[derive(Debug, Clone)]
 pub struct RefGetter<T: LedgerItem> {
     pub reversed: bool, // whether it fetches links from the item to other items or the way this item being referenced
     pub key: T::Key,    // item in question
     pub ty: Option<T::RefType>, // the way of linking. None means all.
     pub recursive: bool, // recursively get all cards that link
-}
-
-/// Represents a way to fetch an item based on either its properites
-#[derive(Clone)]
-pub enum TheCacheGetter<T: LedgerItem> {
-    ItemRef(RefGetter<T>),
-    Property(PropertyCache<T>),
 }
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, Ord, PartialOrd)]
@@ -938,9 +964,9 @@ impl<T: LedgerItem> Ledger<T> {
         items
     }
 
-    pub fn load_getter(&self, getter: TheCacheGetter<T>) -> HashSet<T::Key> {
-        let mut items = self.local.load_getter(getter.clone());
-        items.extend(self.remote.load_getter(getter));
+    pub fn load_getter(&self, leaf: Leaf<T>) -> HashSet<T::Key> {
+        let mut items = self.local.load_leaf(leaf.clone());
+        items.extend(self.remote.load_leaf(leaf));
         items
     }
 

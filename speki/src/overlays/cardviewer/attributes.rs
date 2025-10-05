@@ -4,7 +4,7 @@ use std::{
 };
 
 use dioxus::prelude::*;
-use ledgerstore::{LedgerEvent, PropertyCache, TheCacheGetter};
+use ledgerstore::{Leaf, LedgerEvent, PropertyCache};
 use speki_core::{
     card::{AttrBackType, AttributeId, Attrv2, BackSide, CType, CardId, ParamAnswer, RawCard},
     collection::DynCard,
@@ -100,7 +100,7 @@ pub fn RenderInheritedAttrs(
         .cloned()
         .into_iter()
         .map(|attr| {
-            let getter = TheCacheGetter::Property(PropertyCache::new(
+            let getter = Leaf::Property(PropertyCache::new(
                 CardProperty::AttrId,
                 attr.id.to_string(),
             ));
@@ -192,7 +192,7 @@ pub fn RenderAttrs(
         .cloned()
         .into_iter()
         .map(|attr| {
-            let getter = TheCacheGetter::Property(PropertyCache::new(
+            let getter = Leaf::Property(PropertyCache::new(
                 CardProperty::AttrId,
                 attr.id.to_string(),
             ));

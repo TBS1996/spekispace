@@ -7,7 +7,7 @@ use std::{
 
 use clap::Parser;
 use dioxus::prelude::*;
-use ledgerstore::{EventError, PropertyCache, TheCacheGetter};
+use ledgerstore::{EventError, Leaf, PropertyCache};
 use speki_core::{
     card::{CardId, RawCard},
     card_provider::CardProvider,
@@ -99,7 +99,7 @@ impl App {
         self.0.provider.cards.dependencies_recursive(key)
     }
 
-    pub fn load_getter(&self, getter: TheCacheGetter<RawCard>) -> HashSet<CardId> {
+    pub fn load_getter(&self, getter: Leaf<RawCard>) -> HashSet<CardId> {
         self.0.provider.cards.load_getter(getter)
     }
 

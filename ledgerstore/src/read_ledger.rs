@@ -6,7 +6,7 @@ use std::vec::Vec;
 use walkdir::WalkDir;
 
 pub type CacheKey<T> = Either<PropertyCache<T>, ItemRefCache<T>>;
-use crate::{ItemRefCache, LedgerItem, Node, PropertyCache, RefGetter, TheCacheGetter};
+use crate::{ItemNode, ItemRefCache, ItemSet, Leaf, LedgerItem, Node, PropertyCache, RefGetter};
 
 pub trait ReadLedger {
     type Item: LedgerItem;
@@ -205,12 +205,55 @@ pub trait ReadLedger {
         out
     }
 
-    fn load_getter(
-        &self,
-        getter: TheCacheGetter<Self::Item>,
-    ) -> HashSet<<Self::Item as LedgerItem>::Key> {
+    fn load_node(&self, node: ItemNode<Self::Item>) -> HashSet<<Self::Item as LedgerItem>::Key> {
+        match node {
+            ItemNode::Set(set) => self.load_set(*set),
+            ItemNode::Leaf(leaf) => self.load_leaf(leaf),
+        }
+    }
+
+    fn load_set(&self, set: ItemSet<Self::Item>) -> HashSet<<Self::Item as LedgerItem>::Key> {
+        match set {
+            ItemSet::Union(nodes) => {
+                let mut out: HashSet<<Self::Item as LedgerItem>::Key> = HashSet::new();
+
+                for node in nodes {
+                    out.extend(self.load_node(node));
+                }
+
+                out
+            }
+            ItemSet::Intersection(nodes) => {
+                let mut iter = nodes.into_iter();
+
+                let mut out = match iter.next() {
+                    Some(items) => self.load_node(items),
+                    None => return Default::default(),
+                };
+
+                for node in iter {
+                    out = out.intersection(&self.load_node(node)).cloned().collect();
+                }
+
+                out
+            }
+            ItemSet::Difference(node_1, node_2) => {
+                let keys_1 = self.load_node(node_1);
+                let keys_2 = self.load_node(node_2);
+                keys_1.difference(&keys_2).cloned().collect()
+            }
+            ItemSet::Complement(node) => self
+                .load_ids()
+                .difference(&self.load_node(node))
+                .cloned()
+                .collect(),
+            ItemSet::All => self.load_ids(),
+        }
+    }
+
+    fn load_leaf(&self, getter: Leaf<Self::Item>) -> HashSet<<Self::Item as LedgerItem>::Key> {
         match getter {
-            TheCacheGetter::ItemRef(RefGetter {
+            Leaf::Reference(RefGetter {
                 recursive: true,
                 reversed,
                 key,
@@ -220,7 +263,7 @@ pub trait ReadLedger {
                 self.collect_all_dependents_recursive(key, ty, &mut out, reversed);
                 out
             }
-            TheCacheGetter::ItemRef(RefGetter {
+            Leaf::Reference(RefGetter {
                 recursive: false,
                 reversed: true,
                 key,
@@ -229,7 +272,7 @@ pub trait ReadLedger {
                 let dir = self.dependents_dir(key, ty);
                 Self::item_keys_from_dir(dir)
             }
-            TheCacheGetter::ItemRef(RefGetter {
+            Leaf::Reference(RefGetter {
                 recursive: false,
                 reversed: true,
                 key,
@@ -238,7 +281,7 @@ pub trait ReadLedger {
                 let dep_dir = self.root_dependents_dir(key);
                 Self::item_keys_from_dir_recursive(dep_dir)
             }
-            TheCacheGetter::ItemRef(RefGetter {
+            Leaf::Reference(RefGetter {
                 recursive: false,
                 reversed: false,
                 key,
@@ -247,7 +290,7 @@ pub trait ReadLedger {
                 let dir = self.root_dependencies_dir(key).join(ty.to_string());
                 Self::item_keys_from_dir(dir)
             }
-            TheCacheGetter::ItemRef(RefGetter {
+            Leaf::Reference(RefGetter {
                 recursive: false,
                 reversed: false,
                 key,
@@ -256,7 +299,12 @@ pub trait ReadLedger {
                 let dir = self.root_dependencies_dir(key);
                 Self::item_keys_from_dir_recursive(dir)
             }
-            TheCacheGetter::Property(prop) => self.get_prop_cache(prop),
+            Leaf::Property(prop) => self.get_prop_cache(prop),
+            Leaf::Item(key) => {
+                let mut set = HashSet::new();
+                set.insert(key);
+                set
+            }
         }
     }
 
