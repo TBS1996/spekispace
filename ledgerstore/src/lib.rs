@@ -847,6 +847,8 @@ impl<T: LedgerItem> Ledger<T> {
         let mut applied_events: Vec<LedgerEvent<T>> = vec![];
 
         for event in events {
+            let hash = event.data_hash();
+
             match event.clone().into_parts() {
                 Either::Left(set_upstream) => {
                     self.apply_and_save_upstream_commit(set_upstream)?;
@@ -861,7 +863,8 @@ impl<T: LedgerItem> Ledger<T> {
                     tracing::debug!("res: {:?}", &evaluation);
 
                     if !evaluation.is_no_op {
-                        self.apply_evaluation(evaluation.clone(), cache).unwrap();
+                        self.apply_evaluation(evaluation.clone(), cache, hash)
+                            .unwrap();
                         applied_events.push(event);
                     }
                 }
@@ -1080,6 +1083,8 @@ impl<T: LedgerItem> Ledger<T> {
             };
 
             for event in entry {
+                let hash = event.data_hash();
+
                 match event.into_parts() {
                     Either::Left(set_upstream) => {
                         latest_upstream = Some(set_upstream);
@@ -1095,7 +1100,8 @@ impl<T: LedgerItem> Ledger<T> {
                                 }
                             };
 
-                        self.apply_evaluation(evaluation.clone(), false).unwrap();
+                        self.apply_evaluation(evaluation.clone(), false, hash)
+                            .unwrap();
 
                         match evaluation.item {
                             CardChange::Created(item) | CardChange::Modified(item) => {
@@ -1342,7 +1348,12 @@ impl<T: LedgerItem> Ledger<T> {
         })
     }
 
-    fn apply_evaluation(&self, res: ActionEvalResult<T>, cache: bool) -> Result<(), EventError<T>> {
+    fn apply_evaluation(
+        &self,
+        res: ActionEvalResult<T>,
+        cache: bool,
+        hash: Hashed,
+    ) -> Result<(), EventError<T>> {
         let ActionEvalResult {
             item,
             added_caches,
@@ -1392,6 +1403,8 @@ impl<T: LedgerItem> Ledger<T> {
                 }
             }
         }
+
+        self.set_ledger_hash(hash);
 
         Ok(())
     }
