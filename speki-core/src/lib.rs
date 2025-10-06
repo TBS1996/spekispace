@@ -303,10 +303,9 @@ pub fn the_reviewable_cards(
     filter: Option<CardFilter>,
 ) -> ReviewableCards {
     info!("getting reviewable cards");
-    let cards = provider.eval_expr(&expr);
-    info!("{} cards loaded", cards.len());
+    let card_ids = provider.eval_expr(&expr);
+    info!("{} cards loaded", card_ids.len());
 
-    let card_ids: HashSet<CardId> = cards.iter().map(|card| card.id()).collect();
     let mut nodes: Vec<Node<RawCard>> = Vec::with_capacity(card_ids.len());
 
     info!("start collecting nodes");

@@ -24,7 +24,7 @@ pub fn DeleteButton(
     let card = APP.read().load(card_id);
     //debug_assert!(card.is_some());
 
-    let dependents = card.map(|c| c.dependents_ids());
+    let dependents = card.map(|c| c.recursive_dependent_ids());
 
     let title: Option<&'static str> = match dependents {
         Some(deps) => {
@@ -54,7 +54,7 @@ pub fn DeleteButton(
             title: "{title}",
             disabled,
             onclick: move |_| {
-                let Some(has_deps) = APP.read().load(card_id).map(|c|!c.dependents_ids().is_empty()) else {
+                let Some(has_deps) = APP.read().load(card_id).map(|c|!c.recursive_dependent_ids().is_empty()) else {
                     return;
                 };
 

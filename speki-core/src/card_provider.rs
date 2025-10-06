@@ -1,7 +1,7 @@
 use crate::{
     audio::Audio,
     card::{CardId, RawCard},
-    collection::{DynCard, MaybeCard},
+    collection::DynCard,
     ledger::{CardEvent, MetaEvent},
     metadata::Metadata,
     recall_rate::{History, ReviewEvent},
@@ -66,7 +66,7 @@ impl CardProvider {
         duplicates
     }
 
-    pub fn eval_dyncard(&self, dyncard: &DynCard) -> Vec<MaybeCard> {
+    pub fn eval_dyncard(&self, dyncard: &DynCard) -> Vec<CardId> {
         match dyncard {
             DynCard::Instances(id) => {
                 let mut output = vec![];
@@ -87,7 +87,7 @@ impl CardProvider {
                         recursive: false,
                     });
                     for instance in self.providers.cards.load_getter(getter) {
-                        output.push(MaybeCard::Id(instance));
+                        output.push(instance);
                     }
                 }
 
@@ -98,52 +98,37 @@ impl CardProvider {
                 .cards
                 .get_prop_cache(PropertyCache::new(CardProperty::Trivial, flag.to_string()))
                 .into_iter()
-                .map(|id| MaybeCard::Id(id))
                 .collect(),
             DynCard::CardType(ty) => self
                 .providers
                 .cards
                 .get_prop_cache(PropertyCache::new(CardProperty::CardType, ty.to_string()))
                 .into_iter()
-                .map(|id| MaybeCard::Id(id))
                 .collect(),
 
             DynCard::Dependents(id) => match self.load(*id) {
-                Some(card) => card.dependents().into_iter().map(MaybeCard::Card).collect(),
-                None => vec![],
+                Some(card) => card.direct_dependent_ids().into_iter().collect(),
+                None => Default::default(),
             },
 
             DynCard::RecDependents(id) => {
                 dbg!("rec dependents");
-                let ids = match dbg!(self.load(*id)) {
-                    Some(x) => x.recursive_dependents(),
+                match dbg!(self.load(*id)) {
+                    Some(x) => x.recursive_dependents().into_iter().collect(),
                     None => return vec![],
-                };
-
-                let mut out = vec![];
-
-                for (idx, id) in ids.into_iter().enumerate() {
-                    if idx % 50 == 0 {
-                        dbg!(idx);
-                    }
-
-                    out.push(MaybeCard::Id(id));
                 }
-                dbg!();
-
-                out
             }
         }
     }
 
-    pub fn eval_input(&self, input: &Input) -> BTreeSet<MaybeCard> {
+    pub fn eval_input(&self, input: &Input) -> BTreeSet<CardId> {
         let res = match input {
             Input::Leaf(dc) => self.eval_dyncard(dc).into_iter().collect(),
             Input::Reference(id) => self.eval_expr(&self.providers.sets.load(*id).unwrap().expr),
             Input::Expr(expr) => self.eval_expr(&expr),
             Input::Card(id) => {
                 let mut set = BTreeSet::default();
-                set.insert(MaybeCard::Id(*id));
+                set.insert(*id);
                 set
             }
         };
@@ -151,10 +136,10 @@ impl CardProvider {
         res
     }
 
-    pub fn eval_expr(&self, expr: &SetExpr) -> BTreeSet<MaybeCard> {
+    pub fn eval_expr(&self, expr: &SetExpr) -> BTreeSet<CardId> {
         match expr {
             SetExpr::Union(hash_set) => {
-                let mut out: BTreeSet<MaybeCard> = Default::default();
+                let mut out: BTreeSet<CardId> = Default::default();
                 for input in hash_set {
                     out.extend(self.eval_input(input));
                 }
@@ -191,10 +176,7 @@ impl CardProvider {
                 .providers
                 .cards
                 .load_ids()
-                .into_iter()
-                .map(|id| MaybeCard::Id(id))
-                .collect::<BTreeSet<MaybeCard>>()
-                .difference(&self.eval_input(input))
+                .difference(&self.eval_input(input).into_iter().collect())
                 .cloned()
                 .collect(),
         }

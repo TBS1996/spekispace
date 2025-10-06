@@ -620,7 +620,16 @@ impl Card {
         self.base.data.fieldless()
     }
 
-    pub fn dependents_ids(&self) -> BTreeSet<CardId> {
+    pub fn direct_dependent_ids(&self) -> BTreeSet<CardId> {
+        self.card_provider
+            .providers
+            .cards
+            .dependents_direct(self.id)
+            .into_iter()
+            .collect()
+    }
+
+    pub fn recursive_dependent_ids(&self) -> BTreeSet<CardId> {
         self.card_provider
             .providers
             .cards

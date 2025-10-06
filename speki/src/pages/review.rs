@@ -546,15 +546,7 @@ impl ExprEditor {
                 let selv = selv.clone();
 
                 let res = match dbg!(SetExpr::try_from(selv)) {
-                    Ok(expr) => {
-                        let mut out: BTreeSet<Uuid> = Default::default();
-
-                        for c in APP.read().eval_expr(&expr) {
-                            let id = c.id();
-                            out.insert(id);
-                        }
-                        out
-                    }
+                    Ok(expr) => APP.read().eval_expr(&expr),
                     Err(_) => Default::default(),
                 };
 

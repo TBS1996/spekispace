@@ -11,11 +11,11 @@ use ledgerstore::{EventError, Leaf, PropertyCache};
 use speki_core::{
     card::{CardId, RawCard},
     card_provider::CardProvider,
-    collection::{DynCard, MaybeCard},
+    collection::DynCard,
     ledger::{CardEvent, MetaEvent},
     metadata::Metadata,
     recall_rate::{History, Recall, ReviewEvent},
-    set::{Input, Set, SetEvent, SetExpr, SetId},
+    set::{Set, SetEvent, SetExpr, SetId},
     Card, CardRefType, Config, MyEventError,
 };
 
@@ -126,15 +126,7 @@ impl App {
         self.0.card_provider.clone()
     }
 
-    pub fn _eval_dyncard(&self, dyncard: &DynCard) -> Vec<MaybeCard> {
-        self.0.card_provider.eval_dyncard(dyncard)
-    }
-
-    pub fn _eval_input(&self, input: &Input) -> BTreeSet<MaybeCard> {
-        self.0.card_provider.eval_input(input)
-    }
-
-    pub fn eval_expr(&self, expr: &SetExpr) -> BTreeSet<MaybeCard> {
+    pub fn eval_expr(&self, expr: &SetExpr) -> BTreeSet<CardId> {
         self.0.card_provider.eval_expr(expr)
     }
 

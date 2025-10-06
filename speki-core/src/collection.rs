@@ -1,40 +1,11 @@
-use std::{cmp::Ordering, sync::Arc};
-
 use ledgerstore::{Leaf, PropertyCache, RefGetter};
 use serde::{Deserialize, Serialize};
 
 use crate::{
     card::{CType, CardId},
     card_provider::CardProvider,
-    Card, CardProperty, CardRefType,
+    CardProperty, CardRefType,
 };
-
-#[derive(Debug, Clone, Eq, PartialEq)]
-pub enum MaybeCard {
-    Id(CardId),
-    Card(Arc<Card>),
-}
-
-impl MaybeCard {
-    pub fn id(&self) -> CardId {
-        match self {
-            Self::Id(id) => *id,
-            Self::Card(ref card) => card.id(),
-        }
-    }
-}
-
-impl Ord for MaybeCard {
-    fn cmp(&self, other: &Self) -> Ordering {
-        self.id().cmp(&other.id())
-    }
-}
-
-impl PartialOrd for MaybeCard {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.cmp(other))
-    }
-}
 
 #[derive(Serialize, Deserialize, Debug, Clone, Eq, PartialEq, Copy, Hash, PartialOrd, Ord)]
 pub enum DynCard {
@@ -65,7 +36,7 @@ impl DynCard {
         }
     }
 
-    pub fn evaluate(&self, provider: CardProvider) -> Vec<MaybeCard> {
+    pub fn evaluate(&self, provider: CardProvider) -> Vec<CardId> {
         match self {
             DynCard::Instances(id) => {
                 let mut output = vec![];
@@ -86,7 +57,7 @@ impl DynCard {
                         recursive: false,
                     });
                     for instance in provider.providers.cards.load_getter(getter) {
-                        output.push(MaybeCard::Id(instance));
+                        output.push(instance);
                     }
                 }
 
@@ -97,40 +68,25 @@ impl DynCard {
                 .cards
                 .get_prop_cache(PropertyCache::new(CardProperty::Trivial, flag.to_string()))
                 .into_iter()
-                .map(|id| MaybeCard::Id(id))
                 .collect(),
             DynCard::CardType(ty) => provider
                 .providers
                 .cards
                 .get_prop_cache(PropertyCache::new(CardProperty::CardType, ty.to_string()))
                 .into_iter()
-                .map(|id| MaybeCard::Id(id))
                 .collect(),
 
             DynCard::Dependents(id) => match provider.load(*id) {
-                Some(card) => card.dependents().into_iter().map(MaybeCard::Card).collect(),
-                None => vec![],
+                Some(card) => card.recursive_dependent_ids().into_iter().collect(),
+                None => Default::default(),
             },
 
             DynCard::RecDependents(id) => {
                 dbg!("rec dependents");
-                let ids = match dbg!(provider.load(*id)) {
-                    Some(x) => x.recursive_dependents(),
-                    None => return vec![],
-                };
-
-                let mut out = vec![];
-
-                for (idx, id) in ids.into_iter().enumerate() {
-                    if idx % 50 == 0 {
-                        dbg!(idx);
-                    }
-
-                    out.push(MaybeCard::Id(id));
+                match dbg!(provider.load(*id)) {
+                    Some(x) => x.recursive_dependents().into_iter().collect(),
+                    None => vec![],
                 }
-                dbg!();
-
-                out
             }
         }
     }

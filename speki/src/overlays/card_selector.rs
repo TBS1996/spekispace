@@ -504,9 +504,8 @@ pub fn CardSelectorRender(
                                 title: review_title,
                                 onclick: move |_| {
                                     if let Ok(expr) = expr2.clone() {
-                                        let cards = &APP.read().eval_expr(&expr);
+                                        let card_ids: HashSet<CardId> = APP.read().eval_expr(&expr).into_iter().collect();
 
-                                        let card_ids: HashSet<CardId> = cards.iter().map(|card| card.id()).collect();
                                         let mut all_recursive_dependencies: HashSet<CardId> = card_ids
                                             .iter()
                                             .map(|id| APP.read().dependencies_recursive(*id))

@@ -958,6 +958,12 @@ impl<T: LedgerItem> Ledger<T> {
         items
     }
 
+    pub fn dependents_direct(&self, key: T::Key) -> HashSet<T::Key> {
+        let mut items = self.local.direct_dependents(key);
+        items.extend(self.remote.direct_dependents(key));
+        items
+    }
+
     pub fn dependents_recursive(&self, key: T::Key) -> HashSet<T::Key> {
         let mut items = self.local.recursive_dependents(key);
         items.extend(self.remote.recursive_dependents(key));
