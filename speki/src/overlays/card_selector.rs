@@ -1,6 +1,7 @@
 use std::{
     collections::{BTreeMap, BTreeSet, HashSet},
     fs,
+    ops::ControlFlow,
     sync::Arc,
     time::Duration,
 };
@@ -23,7 +24,7 @@ use crate::{
     components::SectionWithTitle,
     pages::{ExprEditor, RenderExpr},
     pop_overlay, set_overlay,
-    utils::handle_card_event_error,
+    utils::{handle_card_event_error, App},
     RemoteUpdate,
 };
 
@@ -37,26 +38,6 @@ use super::OverlayEnum;
 
 pub fn overlay_card_viewer() -> MyClosure {
     MyClosure::new(move |card: CardId| OverlayEnum::new_edit_card(card).append())
-}
-
-#[derive(Debug, Clone)]
-pub enum MaybeEntry {
-    Yes(Arc<Card>),
-    No(CardId),
-}
-
-impl MaybeEntry {
-    pub fn entry(&mut self) -> Option<Arc<Card>> {
-        let id = match self {
-            Self::Yes(card) => return Some(card.clone()),
-            Self::No(id) => id,
-        };
-
-        let card = APP.read().try_load_card(*id)?;
-
-        *self = Self::Yes(card.clone());
-        Some(card)
-    }
 }
 
 type OnCardSelected = (MyClosure, bool); // if true, close the overlay
@@ -73,10 +54,94 @@ pub struct CardSelector {
     pub collection: ExprEditor,
     pub edit_collection: bool,
     pub cards: Memo<Vec<Arc<Card>>>,
-    pub col_cards: Memo<BTreeMap<Uuid, Signal<MaybeEntry>>>,
+    pub col_cards: Memo<BTreeSet<Uuid>>,
     pub default_search: Signal<Option<String>>,
     pub forbidden_cards: Signal<BTreeSet<CardId>>,
     pub instance_of: Option<CardId>,
+}
+
+struct CardFilteringState {
+    allowed_cards: Vec<CardTy>,
+    forbidden_cards: BTreeSet<Uuid>,
+    filtered_cards: Vec<(u32, Arc<Card>)>,
+    filter: Option<CardFilter>,
+    app: App,
+    time: Duration,
+}
+
+impl CardFilteringState {
+    fn new(
+        allowed_cards: Vec<CardTy>,
+        forbidden_cards: BTreeSet<Uuid>,
+        filter: Option<CardFilter>,
+    ) -> Self {
+        Self {
+            allowed_cards,
+            forbidden_cards,
+            filtered_cards: Default::default(),
+            filter,
+            app: APP.read().clone(),
+            time: current_time(),
+        }
+    }
+
+    fn evaluate(&self, card: CardId) -> ControlFlow<(), Option<Arc<Card>>> {
+        if self.forbidden_cards.contains(&card) {
+            return ControlFlow::Continue(None);
+        };
+
+        if self.filtered_cards.len() > 100 {
+            return ControlFlow::Break(());
+        }
+
+        let Some(card) = self.app.load(card) else {
+            return ControlFlow::Continue(None);
+        };
+
+        if !self.allowed_cards.is_empty()
+            && !self
+                .allowed_cards
+                .contains(&CardTy::from_ctype(card.card_type()))
+        {
+            return ControlFlow::Continue(None);
+        }
+
+        let flag = match &self.filter {
+            Some(filter) => filter.filter_old(card.clone(), self.time),
+            None => true,
+        };
+
+        if flag {
+            ControlFlow::Continue(Some(card))
+        } else {
+            ControlFlow::Continue(None)
+        }
+    }
+
+    fn evaluate_cards(&self, cards: Vec<(u32, CardId)>) -> Vec<Arc<Card>> {
+        let mut out: Vec<(u32, Arc<Card>)> = vec![];
+
+        for (matches, card) in cards {
+            match self.evaluate(card) {
+                ControlFlow::Continue(Some(card)) => out.push((matches, card)),
+                ControlFlow::Continue(None) => continue,
+                ControlFlow::Break(_) => break,
+            }
+        }
+
+        out.sort_by(|a, b| {
+            let ord_key = b.0.cmp(&a.0);
+            if ord_key == std::cmp::Ordering::Equal {
+                let card_a = &a.1;
+                let card_b = &b.1;
+                card_a.name().len().cmp(&card_b.name().len())
+            } else {
+                ord_key
+            }
+        });
+
+        out.into_iter().map(|x| x.1).collect()
+    }
 }
 
 impl Default for CardSelector {
@@ -141,14 +206,13 @@ impl CardSelector {
                 let search = search.cloned();
 
                 let allowed_cards = allowed_cards.clone();
-                let mut filtered_cards: Vec<(u32, Arc<Card>)> = Default::default();
 
                 let cards = cards.read();
 
                 info!("so many cards! {}", cards.len());
 
                 let sorted_cards: Vec<(u32, CardId)> = if search.chars().count() < 2 {
-                    cards.iter().map(|x| (0, *x.0)).collect()
+                    cards.iter().map(|x| (0, *x)).collect()
                 } else {
                     let mut matching_cards: BTreeMap<Uuid, u32> = BTreeMap::new();
                     let bigrams = bigrams(search.as_ref());
@@ -160,14 +224,14 @@ impl CardSelector {
                         ));
 
                         for id in indices {
-                            if cards.contains_key(&id) {
+                            if cards.contains(&id) {
                                 *matching_cards.entry(id).or_insert(0) += 1;
                             }
                         }
                     }
 
                     if matching_cards.len() < 100 {
-                        for card in cards.keys().take(100) {
+                        for card in cards.iter().take(100) {
                             if !matching_cards.contains_key(card) {
                                 matching_cards.insert(card.to_owned(), 0);
                             }
@@ -182,61 +246,13 @@ impl CardSelector {
 
                 info!("{} cards sorted", sorted_cards.len());
 
-                for (matches, card) in sorted_cards {
-                    let entry = match cards.get(&card) {
-                        Some(card) => card,
-                        None => {
-                            tracing::error!("missing card: {}", card);
-                            continue;
-                        }
-                    };
+                let filter_state = CardFilteringState::new(
+                    allowed_cards.cloned(),
+                    forbidden_cards.cloned(),
+                    filtermemo.cloned(),
+                );
 
-                    #[allow(deprecated)]
-                    let card = match entry.write_silent().entry() {
-                        Some(card) => card,
-                        None => continue,
-                    };
-
-                    if forbidden_cards.read().contains(&card.id()) {
-                        continue;
-                    }
-
-                    if filtered_cards.len() > 100 {
-                        break;
-                    }
-
-                    let now = current_time();
-
-                    if allowed_cards.is_empty()
-                        || allowed_cards
-                            .read()
-                            .contains(&CardTy::from_ctype(card.card_type()))
-                    {
-                        let flag = match filtermemo.cloned() {
-                            Some(filter) => filter.filter_old(card.clone(), now),
-                            None => true,
-                        };
-
-                        if flag {
-                            filtered_cards.push((matches, card));
-                        }
-                    }
-                }
-
-                info!("done filtering :)");
-
-                filtered_cards.sort_by(|a, b| {
-                    let ord_key = b.0.cmp(&a.0);
-                    if ord_key == std::cmp::Ordering::Equal {
-                        let card_a = &a.1;
-                        let card_b = &b.1;
-                        card_a.name().len().cmp(&card_b.name().len())
-                    } else {
-                        ord_key
-                    }
-                });
-
-                filtered_cards.into_iter().map(|x| x.1).collect()
+                filter_state.evaluate_cards(sorted_cards)
             })
         });
 

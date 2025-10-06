@@ -4,7 +4,7 @@ use crate::{
         FilterComp, FilterEditor, SectionWithTitle,
     },
     overlays::{
-        card_selector::{CardSelector, MaybeEntry, MyClosure},
+        card_selector::{CardSelector, MyClosure},
         Overender, OverlayChoice, OverlayEnum, OverlaySelector,
     },
     APP,
@@ -16,16 +16,11 @@ use speki_core::card::CType;
 use speki_core::{
     card::CardId,
     cardfilter::CardFilter,
-    collection::{DynCard, MaybeCard},
+    collection::DynCard,
     reviewable_cards,
     set::{Input, Set, SetAction, SetEvent, SetExpr, SetExprDiscriminants, SetId},
 };
-use std::{
-    cmp::Ordering,
-    collections::{BTreeMap, BTreeSet},
-    fmt::Debug,
-    sync::Arc,
-};
+use std::{cmp::Ordering, collections::BTreeSet, fmt::Debug, sync::Arc};
 use strum::IntoEnumIterator;
 use tracing::info;
 use uuid::Uuid;
@@ -542,7 +537,7 @@ pub struct ExprEditor {
 }
 
 impl ExprEditor {
-    pub fn expanded(&self) -> Memo<BTreeMap<Uuid, Signal<MaybeEntry>>> {
+    pub fn expanded(&self) -> Memo<BTreeSet<Uuid>> {
         info!("lets expand!");
         let selv = self.clone();
         ScopeId::APP.in_runtime(|| {
@@ -552,16 +547,11 @@ impl ExprEditor {
 
                 let res = match dbg!(SetExpr::try_from(selv)) {
                     Ok(expr) => {
-                        let mut out: BTreeMap<Uuid, Signal<MaybeEntry>> = Default::default();
+                        let mut out: BTreeSet<Uuid> = Default::default();
 
                         for c in APP.read().eval_expr(&expr) {
                             let id = c.id();
-                            let entry = match c {
-                                MaybeCard::Id(id) => MaybeEntry::No(id),
-                                MaybeCard::Card(card) => MaybeEntry::Yes(card),
-                            };
-
-                            out.insert(id, Signal::new_in_scope(entry, ScopeId::APP));
+                            out.insert(id);
                         }
                         out
                     }
