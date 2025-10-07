@@ -12,6 +12,7 @@ use crate::{
 use crate::{styles, OVERLAY};
 use dioxus::prelude::*;
 use ledgerstore::LedgerEvent;
+use simpletime::timed;
 use speki_core::card::CType;
 use speki_core::{
     card::CardId,
@@ -546,7 +547,7 @@ impl ExprEditor {
                 let selv = selv.clone();
 
                 let res = match dbg!(SetExpr::try_from(selv)) {
-                    Ok(expr) => APP.read().eval_expr(&expr),
+                    Ok(expr) => timed!(APP.read().eval_expr(&expr)),
                     Err(_) => Default::default(),
                 };
 

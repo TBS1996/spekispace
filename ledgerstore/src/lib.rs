@@ -913,6 +913,10 @@ impl<T: LedgerItem> Ledger<T> {
     }
 
     pub fn load_ids(&self) -> HashSet<T::Key> {
+        if self.full_cache() {
+            return self.cache.read().unwrap().keys().cloned().collect();
+        }
+
         let mut ids = self.local.load_ids();
         ids.extend(self.remote.load_ids());
 
@@ -976,8 +980,12 @@ impl<T: LedgerItem> Ledger<T> {
         items
     }
 
+    fn full_cache(&self) -> bool {
+        self.full_cache.load(std::sync::atomic::Ordering::SeqCst)
+    }
+
     pub fn load_all(&self) -> HashSet<T> {
-        if self.full_cache.load(std::sync::atomic::Ordering::SeqCst) {
+        if self.full_cache() {
             return self
                 .cache
                 .read()
