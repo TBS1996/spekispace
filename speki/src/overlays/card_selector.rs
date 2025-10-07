@@ -8,6 +8,7 @@ use std::{
 
 use dioxus::prelude::*;
 use ledgerstore::{LedgerEvent, PropertyCache};
+use simpletime::timed;
 use speki_core::{
     card::{bigrams, normalize_string, CardId},
     cardfilter::{CardFilter, HistoryFilter, MetaFilter},
@@ -118,18 +119,18 @@ impl CardFilteringState {
         }
     }
 
-    fn evaluate_cards(&self, cards: Vec<(u32, CardId)>) -> Vec<Arc<Card>> {
-        let mut out: Vec<(u32, Arc<Card>)> = vec![];
-
+    fn evaluate_cards(&mut self, cards: Vec<(u32, CardId)>) -> Vec<Arc<Card>> {
         for (matches, card) in cards {
             match self.evaluate(card) {
-                ControlFlow::Continue(Some(card)) => out.push((matches, card)),
+                ControlFlow::Continue(Some(card)) => {
+                    self.filtered_cards.push((matches, card));
+                }
                 ControlFlow::Continue(None) => continue,
                 ControlFlow::Break(_) => break,
             }
         }
 
-        out.sort_by(|a, b| {
+        self.filtered_cards.sort_by(|a, b| {
             let ord_key = b.0.cmp(&a.0);
             if ord_key == std::cmp::Ordering::Equal {
                 let card_a = &a.1;
@@ -140,7 +141,7 @@ impl CardFilteringState {
             }
         });
 
-        out.into_iter().map(|x| x.1).collect()
+        self.filtered_cards.iter().map(|x| x.1.clone()).collect()
     }
 }
 
@@ -246,13 +247,13 @@ impl CardSelector {
 
                 info!("{} cards sorted", sorted_cards.len());
 
-                let filter_state = CardFilteringState::new(
+                let mut filter_state = CardFilteringState::new(
                     allowed_cards.cloned(),
                     forbidden_cards.cloned(),
                     filtermemo.cloned(),
                 );
 
-                filter_state.evaluate_cards(sorted_cards)
+                timed!(filter_state.evaluate_cards(sorted_cards))
             })
         });
 
