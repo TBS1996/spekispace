@@ -414,8 +414,7 @@ fn RenderDependencies(
                     button {
                         class: "mb-1 p-1 bg-gray-100 rounded-md text-left",
                         onclick: move|_|{
-                            let card = card.clone();
-                            match CardViewer::new_from_card(card) {
+                            match CardViewer::new_from_card(card.id()) {
                                 Ok(viewer) => OverlayEnum::CardViewer(viewer).append(),
                                 Err(s) => OverlayEnum::new_notice(s).append(),
                             }
@@ -490,16 +489,9 @@ fn RenderEvalText(eval: EvalText) -> Element {
                                 button {
                                     class: "inline underline text-blue-600 hover:text-blue-800",
                                     onclick: move |_| {
-                                        match APP.read().try_load_card(id) {
-                                            Some(card) => {
-                                                match CardViewer::new_from_card(card) {
-                                                    Ok(viewer) => OverlayEnum::CardViewer(viewer).append(),
-                                                    Err(s) => OverlayEnum::new_notice(s).append(),
-                                                }
-                                            },
-                                            None => {
-                                                OverlayEnum::new_notice("card not found").append();
-                                            },
+                                        match CardViewer::new_from_card(id) {
+                                            Ok(viewer) => OverlayEnum::CardViewer(viewer).append(),
+                                            Err(s) => OverlayEnum::new_notice(s).append(),
                                         }
                                     },
                                     " {s}"

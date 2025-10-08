@@ -237,11 +237,9 @@ fn RenderDependencies(
                 button {
                     class: "mb-1 p-1 bg-gray-100 rounded-md text-left",
                     onclick: move |_| {
-                        if let Some(card) = APP.read().try_load_card(id) {
-                            match CardViewer::new_from_card(card) {
-                                Ok(viewer) => OverlayEnum::CardViewer(viewer).append(),
-                                Err(s) => OverlayEnum::new_notice(s).append(),
-                            }
+                        match CardViewer::new_from_card(id) {
+                            Ok(viewer) => OverlayEnum::CardViewer(viewer).append(),
+                            Err(s) => OverlayEnum::new_notice(s).append(),
                         }
                     },
                     "{name}"

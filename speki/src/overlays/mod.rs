@@ -10,7 +10,7 @@ use crate::{
         card_selector::CardSelector, cardviewer::CardViewer, notice::NoticeRender,
         reviewsession::ReviewState, textinput::TextInputRender,
     },
-    pop_overlay, set_overlay, APP,
+    pop_overlay, set_overlay,
 };
 use card_selector::CardSelectorRender;
 use cardviewer::CardViewerRender;
@@ -93,12 +93,9 @@ impl OverlayEnum {
     }
 
     pub fn new_edit_card(id: CardId) -> Self {
-        match APP.read().try_load_card(id) {
-            Some(card) => match CardViewer::new_from_card(card) {
-                Ok(viewer) => Self::CardViewer(viewer),
-                Err(s) => Self::new_notice(s),
-            },
-            None => Self::new_notice("card not found"),
+        match CardViewer::new_from_card(id) {
+            Ok(viewer) => Self::CardViewer(viewer),
+            Err(s) => Self::new_notice(s),
         }
     }
 

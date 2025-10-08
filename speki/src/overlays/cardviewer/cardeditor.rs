@@ -69,7 +69,12 @@ impl CardViewer {
         self
     }
 
-    pub fn new_from_card(mut card: Arc<Card>) -> Result<Self, String> {
+    pub fn new_from_card(card: CardId) -> Result<Self, String> {
+        let mut card = match APP.read().try_load_card(card) {
+            Some(card) => card,
+            None => return Err("card not found".to_string()),
+        };
+
         if card.is_attribute() {
             let instance = card.attribute_instance();
             card = match APP.read().try_load_card(instance) {

@@ -42,6 +42,7 @@ impl CardProvider {
         self.providers.metadata.load(id)
     }
 
+    /// Finds cards whose display names are the same as another card's display name.
     pub fn duplicates(&self) -> HashSet<String> {
         info!("finding duplicates!");
         let mut cards: Vec<String> = self
