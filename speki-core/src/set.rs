@@ -1,11 +1,14 @@
 use std::{collections::BTreeSet, fmt::Display};
 
-use ledgerstore::{LedgerEvent, LedgerItem};
+use ledgerstore::{ItemNode, ItemSet, Leaf, LedgerEvent, LedgerItem};
 use serde::{Deserialize, Serialize};
 use strum::{Display, EnumDiscriminants, EnumIter, EnumString};
 use uuid::Uuid;
 
-use crate::{card::CardId, collection::DynCard};
+use crate::{
+    card::{CardId, RawCard},
+    collection::DynCard,
+};
 
 impl Display for Set {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -102,6 +105,10 @@ impl Set {
             expr: SetExpr::All,
         }
     }
+
+    pub fn to_itemset(&self) -> ItemSet<RawCard> {
+        self.expr.to_set()
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Hash, Ord, PartialOrd, Eq)]
@@ -110,6 +117,17 @@ pub enum Input {
     Leaf(DynCard),
     Reference(SetId),
     Expr(Box<SetExpr>),
+}
+
+impl Input {
+    pub fn to_node(&self) -> ItemNode<RawCard> {
+        match self {
+            Input::Card(id) => ItemNode::Leaf(Leaf::<RawCard>::Item(*id)),
+            Input::Leaf(dyn_card) => dyn_card.to_node(),
+            Input::Reference(_) => todo!(),
+            Input::Expr(set) => ItemNode::Set(Box::new(set.to_set())),
+        }
+    }
 }
 
 #[derive(
@@ -141,6 +159,24 @@ impl Default for SetExpr {
 impl SetExpr {
     pub fn universe() -> Self {
         Self::All
+    }
+
+    pub fn to_set(&self) -> ItemSet<RawCard> {
+        let set = match self {
+            SetExpr::Union(set) => {
+                ItemSet::Union(set.iter().map(|input| input.to_node()).collect())
+            }
+            SetExpr::Intersection(btree_set) => {
+                ItemSet::Intersection(btree_set.iter().map(|input| input.to_node()).collect())
+            }
+            SetExpr::Difference(input, input1) => {
+                ItemSet::Difference(input.to_node(), input1.to_node())
+            }
+            SetExpr::Complement(input) => ItemSet::Complement(input.to_node()),
+            SetExpr::All => ItemSet::All,
+        };
+
+        set
     }
 
     pub fn union_with(dyns: impl IntoIterator<Item = DynCard>) -> Self {

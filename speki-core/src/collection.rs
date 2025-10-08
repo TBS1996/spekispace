@@ -1,8 +1,8 @@
-use ledgerstore::{Leaf, PropertyCache, RefGetter};
+use ledgerstore::{ItemNode, Leaf, PropertyCache, RefGetter};
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    card::{CType, CardId},
+    card::{CType, CardId, RawCard},
     card_provider::CardProvider,
     CardProperty, CardRefType,
 };
@@ -32,6 +32,58 @@ impl DynCard {
             DynCard::RecDependents(id) => format!("dependents: {}", name(id)),
             DynCard::CardType(ctype) => {
                 format!("card type: {ctype}")
+            }
+        }
+    }
+
+    pub fn to_node(&self) -> ItemNode<RawCard> {
+        match self {
+            DynCard::Instances(id) => {
+                let leaf = Leaf::Reference(RefGetter {
+                    reversed: true,
+                    key: *id,
+                    ty: Some(CardRefType::ParentClass),
+                    recursive: true,
+                });
+
+                ItemNode::Leaf(leaf)
+            }
+            DynCard::Dependents(id) => {
+                let leaf = Leaf::Reference(RefGetter {
+                    reversed: true,
+                    key: *id,
+                    ty: None,
+                    recursive: false,
+                });
+
+                ItemNode::Leaf(leaf)
+            }
+            DynCard::RecDependents(id) => {
+                let leaf = Leaf::Reference(RefGetter {
+                    reversed: true,
+                    key: *id,
+                    ty: None,
+                    recursive: true,
+                });
+
+                ItemNode::Leaf(leaf)
+            }
+            DynCard::CardType(ty) => {
+                let leaf = Leaf::Property(PropertyCache {
+                    property: CardProperty::CardType,
+                    value: ty.to_string(),
+                });
+
+                ItemNode::Leaf(leaf)
+            }
+
+            DynCard::Trivial(flag) => {
+                let leaf = Leaf::Property(PropertyCache {
+                    property: CardProperty::Trivial,
+                    value: flag.to_string(),
+                });
+
+                ItemNode::Leaf(leaf)
             }
         }
     }

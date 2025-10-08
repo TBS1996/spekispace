@@ -137,49 +137,11 @@ impl CardProvider {
     }
 
     pub fn eval_expr(&self, expr: &SetExpr) -> BTreeSet<CardId> {
-        match expr {
-            SetExpr::Union(hash_set) => {
-                let mut out: BTreeSet<CardId> = Default::default();
-                for input in hash_set {
-                    out.extend(self.eval_input(input));
-                }
-                out
-            }
-            SetExpr::Intersection(hash_set) => {
-                let mut iter = hash_set.into_iter();
-
-                let Some(first) = iter.next() else {
-                    return Default::default();
-                };
-
-                let mut set = self.eval_input(first);
-
-                for input in iter {
-                    set = set.intersection(&self.eval_input(input)).cloned().collect();
-                }
-
-                set
-            }
-            SetExpr::Difference(input1, input2) => {
-                let set1 = self.eval_input(input1);
-                let set2 = self.eval_input(input2);
-                set1.difference(&set2).cloned().collect()
-            }
-
-            SetExpr::All => {
-                self.eval_expr(&SetExpr::Complement(Input::Expr(Box::new(SetExpr::Union(
-                    Default::default(),
-                ))))) // complement of an empty union is the same as universe.
-            }
-
-            SetExpr::Complement(input) => self
-                .providers
-                .cards
-                .load_ids()
-                .difference(&self.eval_input(input).into_iter().collect())
-                .cloned()
-                .collect(),
-        }
+        self.providers
+            .cards
+            .load_set(expr.to_set())
+            .into_iter()
+            .collect()
     }
 
     pub fn modify_set(&self, event: SetEvent) -> Result<(), EventError<Set>> {

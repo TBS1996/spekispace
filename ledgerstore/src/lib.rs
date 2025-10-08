@@ -3,7 +3,6 @@ use either::Either;
 use git2::build::CheckoutBuilder;
 use nonempty::NonEmpty;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
-use std::collections::BTreeSet;
 use std::fs::{self, hard_link};
 use std::io::Write;
 use std::marker::PhantomData;
@@ -61,9 +60,9 @@ impl<T: LedgerItem> ItemReference<T> {
 #[derive(Debug, Clone)]
 pub enum ItemSet<T: LedgerItem> {
     /// Adds all the items in all the nodes.
-    Union(BTreeSet<ItemNode<T>>),
+    Union(Vec<ItemNode<T>>),
     /// Only the items that are shared in all the nodes.
-    Intersection(BTreeSet<ItemNode<T>>),
+    Intersection(Vec<ItemNode<T>>),
     /// The items that are in the first node but not in the second.
     Difference(ItemNode<T>, ItemNode<T>),
     /// All the items in the state, except the ones in the node.
@@ -971,6 +970,12 @@ impl<T: LedgerItem> Ledger<T> {
     pub fn dependents_recursive(&self, key: T::Key) -> HashSet<T::Key> {
         let mut items = self.local.recursive_dependents(key);
         items.extend(self.remote.recursive_dependents(key));
+        items
+    }
+
+    pub fn load_set(&self, set: ItemSet<T>) -> HashSet<T::Key> {
+        let mut items = self.local.load_set(set.clone());
+        items.extend(self.remote.load_set(set));
         items
     }
 
