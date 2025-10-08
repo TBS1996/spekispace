@@ -1,13 +1,13 @@
 use std::{
     collections::BTreeMap,
     fs, io,
-    path::{Path, PathBuf},
+    path::Path,
     sync::{Arc, RwLock},
 };
 
 use tracing::info;
 
-use crate::{entry_thing::EntryThing, Hashed, LedgerEvent, LedgerItem};
+use crate::{entry_thing::EntryThing, DiskDirPath, Hashed, LedgerEvent, LedgerItem};
 
 pub fn max_dir_number(path: impl AsRef<Path>) -> io::Result<Option<usize>> {
     let max = fs::read_dir(path)?
@@ -20,13 +20,11 @@ pub fn max_dir_number(path: impl AsRef<Path>) -> io::Result<Option<usize>> {
 #[derive(Clone, Debug)]
 pub struct BlockChain<T: LedgerItem> {
     cached: Arc<RwLock<Option<BTreeMap<usize, EntryThing<T>>>>>,
-    entries_path: Arc<PathBuf>,
+    entries_path: Arc<DiskDirPath>,
 }
 
 impl<T: LedgerItem> BlockChain<T> {
-    pub fn new(path: PathBuf) -> Self {
-        std::fs::create_dir_all(&path).unwrap();
-
+    pub fn new(path: DiskDirPath) -> Self {
         Self {
             cached: Arc::new(RwLock::new(None)),
             entries_path: Arc::new(path),
@@ -75,7 +73,7 @@ impl<T: LedgerItem> BlockChain<T> {
 
         idx -= 1;
 
-        EntryThing::load_single(&*self.entries_path, idx).map(|x| x.last_entry().to_owned())
+        EntryThing::load_single(&**self.entries_path, idx).map(|x| x.last_entry().to_owned())
     }
 
     pub fn save_entry(&self, entry: EntryThing<T>) -> Hashed {

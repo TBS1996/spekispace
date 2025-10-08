@@ -4,8 +4,9 @@ use git2::build::CheckoutBuilder;
 use nonempty::NonEmpty;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use std::fs::{self, hard_link};
-use std::io::Write;
+use std::io::{self, Write};
 use std::marker::PhantomData;
+use std::ops::Deref;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::AtomicBool;
 use std::vec::Vec;
@@ -29,6 +30,32 @@ pub use ledger_item::LedgerItem;
 
 pub type CacheKey<T> = Either<PropertyCache<T>, ItemRefCache<T>>;
 pub type Blob = Vec<u8>;
+
+/// A wrapper around a directory path on disk.
+#[derive(Clone, Debug)]
+pub struct DiskDirPath(PathBuf);
+
+impl DiskDirPath {
+    pub fn new(path: impl AsRef<Path>) -> io::Result<Self> {
+        fs::create_dir_all(&path)?;
+        Ok(Self(path.as_ref().to_path_buf()))
+    }
+
+    /// Clears the contents of the directory.
+    pub fn clear_contents(&self) -> io::Result<()> {
+        fs::remove_dir_all(&self.0)?;
+        fs::create_dir_all(&self.0)?;
+        Ok(())
+    }
+}
+
+impl Deref for DiskDirPath {
+    type Target = PathBuf;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, Ord, PartialOrd)]
 pub struct PropertyCache<T: LedgerItem> {
@@ -325,7 +352,7 @@ impl<T: LedgerItem> OverrideLedger<T> {
 
 struct Remote<T: LedgerItem> {
     repo: Repository,
-    path: Arc<PathBuf>,
+    path: Arc<DiskDirPath>,
     _phantom: PhantomData<T>,
 }
 
@@ -361,12 +388,11 @@ impl<T: LedgerItem> ReadLedger for Remote<T> {
 
 impl<T: LedgerItem> Remote<T> {
     pub fn new(root: &Path) -> Self {
-        let path = root.join("remote");
-        fs::create_dir_all(&path).unwrap();
+        let path = DiskDirPath::new(root.join("remote")).unwrap();
 
-        let repo = match Repository::open(&path) {
+        let repo = match Repository::open(&*path) {
             Ok(r) => r,
-            Err(_) => Repository::init(&path).unwrap(),
+            Err(_) => Repository::init(&*path).unwrap(),
         };
 
         Self {
@@ -754,10 +780,10 @@ impl<T: LedgerItem> Node<T> {
 #[derive(Clone)]
 pub struct Ledger<T: LedgerItem> {
     entries: BlockChain<T>,
-    properties: Arc<PathBuf>,
-    dependencies: Arc<PathBuf>,
-    dependents: Arc<PathBuf>,
-    items: Arc<PathBuf>,
+    properties: Arc<DiskDirPath>,
+    dependencies: Arc<DiskDirPath>,
+    dependents: Arc<DiskDirPath>,
+    items: Arc<DiskDirPath>,
     ledger_hash: Arc<PathBuf>,
     remote: Arc<Remote<T>>,
     local: Local<T>,
@@ -785,19 +811,15 @@ impl<T: LedgerItem> Ledger<T> {
 
     pub fn new_no_apply(root: PathBuf) -> Self {
         let root = root.join(Self::item_name());
-        let entries = BlockChain::new(root.join("entries"));
+        let entries = DiskDirPath::new(root.join("entries")).unwrap();
+        let entries = BlockChain::new(entries);
         let root = root.join("state");
 
-        let properties = root.join("properties");
-        let dependencies = root.join("dependencies");
-        let dependents = root.join("dependents");
-        let items = root.join("items");
+        let properties = DiskDirPath::new(root.join("properties")).unwrap();
+        let dependencies = DiskDirPath::new(root.join("dependencies")).unwrap();
+        let dependents = DiskDirPath::new(root.join("dependents")).unwrap();
+        let items = DiskDirPath::new(root.join("items")).unwrap();
         let ledger_hash = root.join("applied");
-
-        std::fs::create_dir_all(&properties).unwrap();
-        std::fs::create_dir_all(&dependencies).unwrap();
-        std::fs::create_dir_all(&dependents).unwrap();
-        std::fs::create_dir_all(&items).unwrap();
 
         let remote = Remote::new(&root);
         //let _ = remote.hard_reset_current();
@@ -806,7 +828,7 @@ impl<T: LedgerItem> Ledger<T> {
             properties: Arc::new(properties),
             dependencies: Arc::new(dependencies),
             dependents: Arc::new(dependents),
-            items: Arc::new(items.clone()),
+            items: Arc::new(items),
             ledger_hash: Arc::new(ledger_hash),
             entries,
             remote: Arc::new(remote),
@@ -1106,15 +1128,10 @@ impl<T: LedgerItem> Ledger<T> {
     /// caused it to become invalid. It also means that even if the state is valid after all the entries have been applied, it
     /// could be invalid at some points leading up to the last entry.
     pub fn apply(&self) {
-        fs::remove_dir_all(&*self.items).unwrap();
-        fs::remove_dir_all(&*self.properties).unwrap();
-        fs::remove_dir_all(&*self.dependencies).unwrap();
-        fs::remove_dir_all(&*self.dependents).unwrap();
-
-        fs::create_dir(&*self.items).unwrap();
-        fs::create_dir(&*self.properties).unwrap();
-        fs::create_dir(&*self.dependencies).unwrap();
-        fs::create_dir(&*self.dependents).unwrap();
+        self.items.clear_contents().unwrap();
+        self.properties.clear_contents().unwrap();
+        self.dependencies.clear_contents().unwrap();
+        self.dependents.clear_contents().unwrap();
 
         let mut items: HashMap<T::Key, Arc<T>> = HashMap::default();
 

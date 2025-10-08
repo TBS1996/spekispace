@@ -6,7 +6,9 @@ use std::vec::Vec;
 use walkdir::WalkDir;
 
 pub type CacheKey<T> = Either<PropertyCache<T>, ItemRefCache<T>>;
-use crate::{ItemNode, ItemRefCache, ItemSet, Leaf, LedgerItem, Node, PropertyCache, RefGetter};
+use crate::{
+    DiskDirPath, ItemNode, ItemRefCache, ItemSet, Leaf, LedgerItem, Node, PropertyCache, RefGetter,
+};
 
 pub trait ReadLedger {
     type Item: LedgerItem;
@@ -27,7 +29,7 @@ pub trait ReadLedger {
     fn load_ids(&self) -> HashSet<<Self::Item as LedgerItem>::Key> {
         let mut entries: Vec<PathBuf> = vec![];
 
-        for entry in fs::read_dir(self.items_path()).unwrap() {
+        for entry in fs::read_dir(&*self.items_path()).unwrap() {
             let entry = entry.unwrap().path();
             entries.push(entry);
         }
@@ -63,10 +65,9 @@ pub trait ReadLedger {
         }
     }
 
-    fn properties_path(&self) -> PathBuf {
+    fn properties_path(&self) -> DiskDirPath {
         let p = self.root_path().join("properties");
-        fs::create_dir_all(&p).unwrap();
-        p
+        DiskDirPath::new(p).unwrap()
     }
 
     fn has_item(&self, key: <Self::Item as LedgerItem>::Key) -> bool {
@@ -309,15 +310,11 @@ pub trait ReadLedger {
     }
 
     fn root_dependencies_dir(&self, key: <Self::Item as LedgerItem>::Key) -> PathBuf {
-        let p = self.root_path().join("dependencies").join(key.to_string());
-        std::fs::create_dir_all(&p).unwrap();
-        p
+        self.root_path().join("dependencies").join(key.to_string())
     }
 
     fn root_dependents_dir(&self, key: <Self::Item as LedgerItem>::Key) -> PathBuf {
-        let p = self.root_path().join("dependents").join(key.to_string());
-        std::fs::create_dir_all(&p).unwrap();
-        p
+        self.root_path().join("dependents").join(key.to_string())
     }
 
     fn dependents_dir(
@@ -325,15 +322,12 @@ pub trait ReadLedger {
         key: <Self::Item as LedgerItem>::Key,
         ty: <Self::Item as LedgerItem>::RefType,
     ) -> PathBuf {
-        let p = self.root_dependents_dir(key).join(ty.to_string());
-        std::fs::create_dir_all(&p).unwrap();
-        p
+        self.root_dependents_dir(key).join(ty.to_string())
     }
 
-    fn items_path(&self) -> PathBuf {
+    fn items_path(&self) -> DiskDirPath {
         let p = self.root_path().join("items");
-        fs::create_dir_all(&p).unwrap();
-        p
+        DiskDirPath::new(p).unwrap()
     }
 
     fn collect_all_dependents_recursive(
