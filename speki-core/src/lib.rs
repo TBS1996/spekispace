@@ -182,7 +182,6 @@ use crate::recall_rate::AvgRecall;
 use crate::recall_rate::Recall;
 use crate::recall_rate::Recaller;
 use crate::recall_rate::Review;
-use crate::recall_rate::ReviewEvent;
 use crate::recall_rate::FSRS;
 use crate::set::SetExpr;
 
@@ -858,29 +857,7 @@ impl App {
     }
 
     pub fn apply_many(&self, events: Vec<Event>) -> Result<(), MyEventError> {
-        let mut card_events: Vec<CardEvent> = vec![];
-        let mut review_events: Vec<ReviewEvent> = vec![];
-        let mut meta_events: Vec<MetaEvent> = vec![];
-
-        for event in events {
-            match event {
-                Event::Card(card_event) => card_events.push(card_event),
-                Event::History(review_event) => review_events.push(review_event),
-                Event::Meta(meta_event) => meta_events.push(meta_event),
-            }
-        }
-
-        if let Err(e) = self.provider.cards.modify_many(card_events) {
-            return Err(MyEventError::CardError(e));
-        }
-        if let Err(e) = self.provider.reviews.modify_many(review_events) {
-            return Err(MyEventError::ReviewError(e));
-        }
-        if let Err(e) = self.provider.metadata.modify_many(meta_events) {
-            return Err(MyEventError::MetaError(e));
-        }
-
-        Ok(())
+        self.card_provider.many_modify(events)
     }
 
     pub fn review_cli(&self) {

@@ -2,11 +2,11 @@ use crate::{
     audio::Audio,
     card::{CardId, RawCard},
     collection::DynCard,
-    ledger::{CardEvent, MetaEvent},
+    ledger::{CardEvent, Event, MetaEvent},
     metadata::Metadata,
     recall_rate::{History, ReviewEvent},
     set::{Input, Set, SetEvent, SetExpr},
-    ArcRecall, Card, CardProperty, CardRefType, FsTime, Provider,
+    ArcRecall, Card, CardProperty, CardRefType, FsTime, MyEventError, Provider,
 };
 use dioxus_logger::tracing::{info, trace};
 use ledgerstore::{EventError, Leaf, PropertyCache, RefGetter};
@@ -179,6 +179,53 @@ impl CardProvider {
                 guard.remove(&id);
             }
             */
+        }
+
+        Ok(())
+    }
+
+    pub fn many_modify(&self, events: Vec<Event>) -> Result<(), MyEventError> {
+        let mut card_events: Vec<CardEvent> = vec![];
+        let mut review_events: Vec<ReviewEvent> = vec![];
+        let mut meta_events: Vec<MetaEvent> = vec![];
+
+        for event in events {
+            let card_id: Option<CardId> = match event {
+                Event::Card(card_event) => {
+                    let id = card_event.id();
+                    card_events.push(card_event);
+                    id
+                }
+                Event::History(review_event) => {
+                    let id = review_event.id();
+                    review_events.push(review_event);
+                    id
+                }
+                Event::Meta(meta_event) => {
+                    let id = meta_event.id();
+                    meta_events.push(meta_event);
+                    id
+                }
+            };
+
+            if let Some(id) = card_id {
+                let mut guard = self.cache.write().unwrap();
+                guard.remove(&id);
+
+                for id in self.dependents(id) {
+                    guard.remove(&id);
+                }
+            }
+        }
+
+        if let Err(e) = self.providers.cards.modify_many(card_events) {
+            return Err(MyEventError::CardError(e));
+        }
+        if let Err(e) = self.providers.reviews.modify_many(review_events) {
+            return Err(MyEventError::ReviewError(e));
+        }
+        if let Err(e) = self.providers.metadata.modify_many(meta_events) {
+            return Err(MyEventError::MetaError(e));
         }
 
         Ok(())
