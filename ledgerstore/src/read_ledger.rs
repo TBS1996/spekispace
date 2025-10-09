@@ -342,6 +342,10 @@ pub trait ReadLedger {
             false => self.root_dependencies_dir(key),
         };
 
+        if !dep_dir.exists() {
+            return;
+        }
+
         let dirs = match ty.clone() {
             Some(ty) => vec![dep_dir.join(ty.to_string())],
             None => fs::read_dir(&dep_dir)
@@ -417,6 +421,10 @@ pub trait ReadLedger {
             true => self.root_dependents_dir(key),
             false => self.root_dependencies_dir(key),
         };
+
+        if !dep_dir.exists() {
+            return;
+        }
 
         let dirs = match ty.clone() {
             Some(ty) => vec![dep_dir.join(ty.to_string())],

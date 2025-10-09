@@ -109,6 +109,8 @@ pub fn ReviewRender(
     show_backside: Signal<bool>,
     tot: Memo<usize>,
 ) -> Element {
+    info!("Rendering review for card: {}", card_id);
+
     let card = match APP.read().load(card_id) {
         Some(card) => card,
         None => {

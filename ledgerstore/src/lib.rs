@@ -36,9 +36,19 @@ pub type Blob = Vec<u8>;
 pub struct DiskDirPath(PathBuf);
 
 impl DiskDirPath {
+    /// Creates a new directory at the specified path if it does not already exist.
     pub fn new(path: impl AsRef<Path>) -> io::Result<Self> {
         fs::create_dir_all(&path)?;
         Ok(Self(path.as_ref().to_path_buf()))
+    }
+
+    /// Returns Some(DiskDirPath) if the directory exists, otherwise None.
+    pub fn open(path: impl AsRef<Path>) -> Option<Self> {
+        if path.as_ref().is_dir() {
+            Some(Self(path.as_ref().to_path_buf()))
+        } else {
+            None
+        }
     }
 
     /// Clears the contents of the directory.
@@ -1196,12 +1206,22 @@ impl<T: LedgerItem> Ledger<T> {
 
     fn set_dependencies(&self, item: &T) {
         let id = item.item_id();
-        let depencies_dir = self.local.root_dependencies_dir(id);
-        fs::remove_dir_all(&depencies_dir).unwrap();
-        let depencies_dir = self.local.root_dependencies_dir(id); //recreate it
+        let dependencies_dir = self.local.root_dependencies_dir(id);
 
-        for ItemReference { from: _, to, ty } in item.ref_cache() {
-            let dir = depencies_dir.join(ty.to_string());
+        if dependencies_dir.exists() {
+            fs::remove_dir_all(&dependencies_dir).unwrap();
+        }
+
+        let ref_caches = item.ref_cache();
+
+        let dependencies_dir = if !ref_caches.is_empty() {
+            self.local.root_dependencies_dir(id) //recreate it
+        } else {
+            return;
+        };
+
+        for ItemReference { from: _, to, ty } in ref_caches {
+            let dir = dependencies_dir.join(ty.to_string());
             fs::create_dir_all(&dir).unwrap();
             let original = self.item_path(to);
             let link = dir.join(to.to_string());
