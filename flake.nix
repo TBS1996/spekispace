@@ -10,6 +10,23 @@
     inputs.flake-parts.lib.mkFlake {inherit inputs;} {
       systems = import inputs.systems;
 
+      flake.homeManagerModules.speki = { lib, config, ... }:
+      let
+        cfg = config.programs.speki;
+      in {
+        options.programs.speki.testFlag = lib.mkOption {
+          type = lib.types.bool;
+          default = false;
+          description = "A simple test flag for Speki.";
+        };
+
+        config.home.file.".config/speki/nix_test".text =
+          if cfg.testFlag then
+            "Speki test flag is ENABLED ✅"
+          else
+            "Speki test flag is DISABLED ❌";
+      };
+
       perSystem = {
         config,
         self',
