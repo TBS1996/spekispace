@@ -16,7 +16,9 @@ use std::collections::HashMap;
 use std::collections::HashSet;
 use std::fmt::Display;
 use std::fs;
+use std::path::Path;
 use std::path::PathBuf;
+use std::process::Command;
 use std::{fmt::Debug, sync::Arc, time::Duration};
 use textplots::Chart;
 use textplots::Plot;
@@ -63,6 +65,20 @@ impl RecallChoice {
 pub type ArcRecall = Arc<Box<dyn Recaller>>;
 
 #[derive(Deserialize, Serialize, Debug)]
+pub enum BackupStrategy {
+    OnStart,
+    Days(u32),
+}
+
+#[derive(Deserialize, Serialize, Debug)]
+pub struct Backup {
+    username: String,
+    repo: String,
+    branch: Option<String>, // default: main
+    strategy: Option<BackupStrategy>,
+}
+
+#[derive(Deserialize, Serialize, Debug)]
 pub struct Config {
     #[serde(default)]
     pub randomize: bool,
@@ -74,6 +90,7 @@ pub struct Config {
     pub storage_path: PathBuf,
     #[serde(default)]
     pub recaller: RecallChoice,
+    pub backup: Option<Backup>,
 }
 
 fn default_storage_path() -> PathBuf {
@@ -96,6 +113,7 @@ impl Default for Config {
             remote_github_username: default_remote_github_username(),
             storage_path: default_storage_path(),
             recaller: RecallChoice::default(),
+            backup: None,
         }
     }
 }
@@ -827,12 +845,87 @@ impl From<EventError<Metadata>> for MyEventError {
     }
 }
 
+pub fn run_git_backup(path: &Path, cfg: &Backup) -> Result<(), String> {
+    let repo_url = format!("https://github.com/{}/{}.git", cfg.username, cfg.repo);
+
+    let path_str = path.to_str().ok_or_else(|| format!("Invalid path"))?;
+
+    if !path.join(".git").exists() {
+        println!("Initializing repo in {}", path_str);
+        run(path, &["git", "init"])?;
+        run(path, &["git", "remote", "add", "origin", &repo_url])?;
+    } else {
+        let output = Command::new("git")
+            .args(["remote", "get-url", "origin"])
+            .current_dir(path)
+            .output()
+            .unwrap();
+
+        if output.status.success() {
+            let current = String::from_utf8_lossy(&output.stdout)
+                .trim()
+                .to_ascii_lowercase();
+            let repo_url = repo_url.to_ascii_lowercase();
+
+            if current != repo_url {
+                return Err(format!("origin mismatch: {} != {}", current, repo_url));
+            }
+        } else {
+            run(path, &["git", "remote", "add", "origin", &repo_url])?;
+        }
+    }
+
+    run(path, &["git", "add", "-A"])?;
+
+    let status = Command::new("git")
+        .args(["diff", "--cached", "--quiet"])
+        .current_dir(path)
+        .status()
+        .unwrap();
+    if !status.success() {
+        run(path, &["git", "commit", "-m", "Speki backup"])?;
+    }
+
+    let branch = cfg.branch.as_deref().unwrap_or("main");
+
+    run(path, &["git", "branch", "-M", branch])?;
+    run(path, &["git", "push", "-u", "origin", branch])?;
+
+    Ok(())
+}
+
+fn run(path: &Path, args: &[&str]) -> Result<(), String> {
+    println!("$ {}", args.join(" "));
+    let status = Command::new(args[0])
+        .args(&args[1..])
+        .current_dir(path)
+        .status()
+        .unwrap();
+    if !status.success() {
+        return Err(format!("command failed: {:?}", args));
+    }
+    Ok(())
+}
+
 impl App {
     pub fn new(root: PathBuf) -> Self {
         info!("initialtize app");
 
-        let recaller = Config::load().recaller.get_instance();
+        let config = Config::load();
+
+        let recaller = config.recaller.get_instance();
         let cards: Ledger<RawCard> = Ledger::new(root.clone());
+
+        if let Some(backup) = config.backup.as_ref() {
+            match backup.strategy {
+                Some(BackupStrategy::OnStart) => {
+                    let path = config.storage_path.as_path();
+                    let _ = dbg!(run_git_backup(path, backup));
+                }
+                Some(BackupStrategy::Days(_interval)) => {}
+                None => {}
+            }
+        }
 
         let provider = Provider {
             cards,
