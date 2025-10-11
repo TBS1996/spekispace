@@ -17,7 +17,6 @@
         lib,
         pkgs,
         config,
-        self',
         ...
       }: let
         toml = pkgs.formats.toml {};
@@ -27,7 +26,7 @@
           enable = lib.mkEnableOption "Speki app";
           package = lib.mkOption {
             type = lib.types.package;
-            default = self'.packages.default;
+            default = inputs.self.packages.${pkgs.system}.default;
             description = "Speki package to install.";
           };
 
