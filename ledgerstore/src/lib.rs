@@ -368,7 +368,7 @@ struct Remote<T: LedgerItem> {
 
 use git2::{Delta, DiffFindOptions, DiffOptions, ObjectType, Oid, Repository, ResetType};
 
-use crate::entry_thing::EntryThing;
+use crate::entry_thing::EventNode;
 use crate::read_ledger::ReadLedger;
 
 #[derive(Debug)]
@@ -932,12 +932,12 @@ impl<T: LedgerItem> Ledger<T> {
             Ok(())
         } else if applied_events.len() == 1 {
             let entry = applied_events.remove(0);
-            let entry = EntryThing::new_single(entry);
+            let entry = EventNode::new_single(entry);
             self.entries.save_entry(entry);
             Ok(())
         } else {
             let entries = NonEmpty::from_vec(applied_events).unwrap();
-            let entry = EntryThing::new_multiple(entries);
+            let entry = EventNode::new_multiple(entries);
             self.entries.save_entry(entry);
             Ok(())
         }
@@ -1157,7 +1157,7 @@ impl<T: LedgerItem> Ledger<T> {
             for event in entry {
                 let hash = event.data_hash();
 
-                match event.into_parts() {
+                match event.event.into_parts() {
                     Either::Left(set_upstream) => {
                         latest_upstream = Some(set_upstream);
                     }
@@ -1498,7 +1498,7 @@ impl<T: LedgerItem> Ledger<T> {
     }
 
     fn save_event(&self, event: impl Into<LedgerEvent<T>>) {
-        let entry = EntryThing::Leaf(event.into());
+        let entry = EventNode::Leaf(event.into());
         let hash = self.entries.save_entry(entry);
         self.set_ledger_hash(hash);
     }
