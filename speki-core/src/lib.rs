@@ -72,6 +72,8 @@ pub enum BackupStrategy {
 
 #[derive(Deserialize, Serialize, Debug)]
 pub struct Backup {
+    #[serde(default)]
+    enable: bool,
     username: String,
     repo: String,
     branch: Option<String>, // default: main
@@ -917,13 +919,15 @@ impl App {
         let cards: Ledger<RawCard> = Ledger::new(root.clone());
 
         if let Some(backup) = config.backup.as_ref() {
-            match backup.strategy {
-                Some(BackupStrategy::OnStart) => {
-                    let path = config.storage_path.as_path();
-                    let _ = dbg!(run_git_backup(path, backup));
+            if backup.enable {
+                match backup.strategy {
+                    Some(BackupStrategy::OnStart) => {
+                        let path = config.storage_path.as_path();
+                        let _ = dbg!(run_git_backup(path, backup));
+                    }
+                    Some(BackupStrategy::Days(_interval)) => {}
+                    None => {}
                 }
-                Some(BackupStrategy::Days(_interval)) => {}
-                None => {}
             }
         }
 
