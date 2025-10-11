@@ -6,8 +6,6 @@ use std::{collections::BTreeSet, rc::Rc, sync::Arc};
 
 use speki_core::{
     card::{CardId, EvalText},
-    cardfilter::CardFilter,
-    collection::DynCard,
     ledger::CardAction,
     recall_rate::Recall,
     set::{Input, SetExpr},
@@ -93,13 +91,6 @@ fn ReviewButtons(
             }
         }
     }
-}
-
-#[derive(Clone, PartialEq, Debug)]
-pub struct ReviewSession {
-    cards: Vec<DynCard>,
-    filter: CardFilter,
-    thecards: BTreeSet<Arc<Card>>,
 }
 
 #[component]
