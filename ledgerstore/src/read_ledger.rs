@@ -375,10 +375,19 @@ pub trait ReadLedger {
         key: <Self::Item as LedgerItem>::Key,
         reversed: bool,
     ) -> Node<Self::Item> {
+        let mut node: Node<Self::Item> = Node {
+            id: key,
+            deps: vec![],
+        };
+
         let dep_dir = match reversed {
             true => self.root_dependents_dir(key),
             false => self.root_dependencies_dir(key),
         };
+
+        if !dep_dir.exists() {
+            return node;
+        }
 
         let dirs: Vec<PathBuf> = fs::read_dir(&dep_dir)
             .unwrap()
@@ -391,11 +400,6 @@ pub trait ReadLedger {
                 }
             })
             .collect();
-
-        let mut node: Node<Self::Item> = Node {
-            id: key,
-            deps: vec![],
-        };
 
         for dir in dirs {
             for dep_key in Self::item_keys_from_dir(dir) {
