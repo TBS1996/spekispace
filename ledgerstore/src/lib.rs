@@ -242,10 +242,6 @@ impl<T: LedgerItem> LedgerEvent<T> {
         }
     }
 
-    fn data_hash(&self) -> Hashed {
-        get_hash(self)
-    }
-
     pub fn new(id: T::Key, action: LedgerAction<T>) -> Self {
         Self::ItemAction { id, action }
     }
@@ -904,8 +900,6 @@ impl<T: LedgerItem> Ledger<T> {
         let mut applied_events: Vec<LedgerEvent<T>> = vec![];
 
         for event in events {
-            let hash = event.data_hash();
-
             match event.clone().into_parts() {
                 Either::Left(set_upstream) => {
                     self.apply_and_save_upstream_commit(set_upstream)?;
@@ -920,8 +914,7 @@ impl<T: LedgerItem> Ledger<T> {
                     tracing::debug!("res: {:?}", &evaluation);
 
                     if !evaluation.is_no_op {
-                        self.apply_evaluation(evaluation.clone(), cache, hash)
-                            .unwrap();
+                        self.apply_evaluation(evaluation.clone(), cache).unwrap();
                         applied_events.push(event);
                     }
                 }
@@ -932,13 +925,15 @@ impl<T: LedgerItem> Ledger<T> {
             Ok(())
         } else if applied_events.len() == 1 {
             let entry = applied_events.remove(0);
-            let entry = EventNode::new_single(entry);
-            self.entries.save_entry(entry);
+            let entry = EventNode::new_leaf(entry);
+            let hashed = self.entries.save_entry(entry);
+            self.set_ledger_hash(hashed);
             Ok(())
         } else {
             let entries = NonEmpty::from_vec(applied_events).unwrap();
-            let entry = EventNode::new_multiple(entries);
-            self.entries.save_entry(entry);
+            let entry = EventNode::new_branch(entries);
+            let hash = self.entries.save_entry(entry);
+            self.set_ledger_hash(hash);
             Ok(())
         }
     }
@@ -1155,8 +1150,6 @@ impl<T: LedgerItem> Ledger<T> {
             };
 
             for event in entry {
-                let hash = event.data_hash();
-
                 match event.event.into_parts() {
                     Either::Left(set_upstream) => {
                         latest_upstream = Some(set_upstream);
@@ -1172,8 +1165,7 @@ impl<T: LedgerItem> Ledger<T> {
                                 }
                             };
 
-                        self.apply_evaluation(evaluation.clone(), false, hash)
-                            .unwrap();
+                        self.apply_evaluation(evaluation.clone(), false).unwrap();
 
                         match evaluation.item {
                             CardChange::Created(item) | CardChange::Modified(item) => {
@@ -1430,12 +1422,7 @@ impl<T: LedgerItem> Ledger<T> {
         })
     }
 
-    fn apply_evaluation(
-        &self,
-        res: ActionEvalResult<T>,
-        cache: bool,
-        hash: Hashed,
-    ) -> Result<(), EventError<T>> {
+    fn apply_evaluation(&self, res: ActionEvalResult<T>, cache: bool) -> Result<(), EventError<T>> {
         let ActionEvalResult {
             item,
             added_caches,
@@ -1485,8 +1472,6 @@ impl<T: LedgerItem> Ledger<T> {
                 }
             }
         }
-
-        self.set_ledger_hash(hash);
 
         Ok(())
     }
