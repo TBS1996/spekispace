@@ -8,10 +8,7 @@ use std::{
 use tracing::info;
 
 use crate::{
-    entry_thing::{
-        entry::{self, EntryNode},
-        EventNode,
-    },
+    entry_thing::{EntryNode, EventNode},
     DiskDirPath, Hashed, LedgerEntry, LedgerItem,
 };
 
@@ -67,7 +64,7 @@ impl<T: LedgerItem> BlockChain<T> {
     fn current_head(&self) -> Option<LedgerEntry<T>> {
         if let Some(chain) = self.cached.read().unwrap().as_ref() {
             if let Some((_, entry)) = chain.iter().next_back() {
-                return Some(entry.last_entry().clone());
+                return Some(entry.last().clone());
             }
         }
 
@@ -79,7 +76,7 @@ impl<T: LedgerItem> BlockChain<T> {
 
         idx -= 1;
 
-        entry::EntryNode::load_single(&**self.entries_path, idx).map(|x| x.last_entry().to_owned())
+        EntryNode::load_single(&**self.entries_path, idx).map(|x| x.last().to_owned())
     }
 
     pub fn save_entry(&self, entry: EventNode<T>) -> Hashed {
@@ -102,6 +99,6 @@ impl<T: LedgerItem> BlockChain<T> {
 
     fn load_ledger(space: &Path) -> BTreeMap<usize, EntryNode<T>> {
         info!("loading entire ledger to memory");
-        entry::EntryNode::load_chain(space)
+        EntryNode::load_chain(space)
     }
 }

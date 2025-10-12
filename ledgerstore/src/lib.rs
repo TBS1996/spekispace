@@ -25,6 +25,7 @@ mod ledger_item;
 mod read_ledger;
 use blockchain::BlockChain;
 pub mod entry_thing;
+mod node;
 
 pub use ledger_item::LedgerItem;
 
@@ -1149,8 +1150,8 @@ impl<T: LedgerItem> Ledger<T> {
                 dbg!(idx);
             };
 
-            for event in entry {
-                match event.event.into_parts() {
+            for event in &entry {
+                match event.event.clone().into_parts() {
                     Either::Left(set_upstream) => {
                         latest_upstream = Some(set_upstream);
                     }
@@ -1483,7 +1484,7 @@ impl<T: LedgerItem> Ledger<T> {
     }
 
     fn save_event(&self, event: impl Into<LedgerEvent<T>>) {
-        let entry = EventNode::Leaf(event.into());
+        let entry = EventNode::new_leaf(event.into());
         let hash = self.entries.save_entry(entry);
         self.set_ledger_hash(hash);
     }

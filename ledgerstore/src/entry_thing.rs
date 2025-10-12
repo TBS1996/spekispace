@@ -1,186 +1,119 @@
 use std::{
     collections::BTreeMap,
     fs,
+    ops::Deref,
     path::{Path, PathBuf},
 };
 
 use nonempty::NonEmpty;
 
-use crate::{entry_thing::entry::EntryNode, Hashed, LedgerEntry, LedgerEvent, LedgerItem};
+use crate::{
+    node::{Node, NodeIterRef},
+    Hashed, LedgerEntry, LedgerEvent, LedgerItem,
+};
 
-pub mod entry {
-    use super::*;
+#[derive(Clone, Hash, Debug)]
+pub struct EntryNode<T: LedgerItem>(Node<LedgerEntry<T>>);
 
-    #[derive(Clone, Hash, Debug)]
-    pub enum EntryNode<T: LedgerItem> {
-        Leaf(LedgerEntry<T>),
-        Multiple(Box<NonEmpty<Self>>),
+impl<T: LedgerItem> Deref for EntryNode<T> {
+    type Target = Node<LedgerEntry<T>>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+// Borrowed iteration: `for e in &entry_node { ... }`
+impl<'a, T: LedgerItem> IntoIterator for &'a EntryNode<T> {
+    type Item = &'a LedgerEntry<T>;
+    type IntoIter = NodeIterRef<'a, LedgerEntry<T>>;
+    fn into_iter(self) -> Self::IntoIter {
+        (&self.0).into_iter()
+    }
+}
+
+impl<T: LedgerItem> EntryNode<T> {
+    pub fn data_hash(&self) -> Hashed {
+        self.0.last().data_hash()
     }
 
-    impl<T: LedgerItem> EntryNode<T> {
-        pub fn data_hash(&self) -> Hashed {
-            match self {
-                EntryNode::Leaf(event) => event.data_hash(),
-                EntryNode::Multiple(entries) => entries.last().data_hash(),
-            }
-        }
-
-        pub fn last_entry(&self) -> &LedgerEntry<T> {
-            match self {
-                EntryNode::Leaf(event) => event,
-                EntryNode::Multiple(list) => list.last().last_entry(),
-            }
-        }
-
-        fn load_entry(path: &Path) -> Self
-        where
-            LedgerEvent<T>: serde::de::DeserializeOwned,
-        {
-            if path.is_dir() {
-                let children: Vec<Self> = Self::load_chain(path).into_values().collect();
-                let multiple = nonempty::NonEmpty::from_vec(children).unwrap();
-                Self::Multiple(Box::new(multiple))
-            } else {
-                let bytes = std::fs::read(path).unwrap();
-                let entry: LedgerEntry<T> = serde_json::from_slice(&bytes).unwrap();
-                Self::Leaf(entry)
-            }
-        }
-
-        /// Read a numeric directory tree into `EntryThing`s.
-        ///
-        /// - Files become `EntryThing::Leaf`
-        /// - Directories become `EntryThing::Multiple`
-        pub fn load_chain(root: impl AsRef<Path>) -> BTreeMap<usize, Self>
-        where
-            LedgerEvent<T>: serde::de::DeserializeOwned,
-        {
-            let root = root.as_ref();
-
-            let mut entries: Vec<(u64, PathBuf)> = std::fs::read_dir(root)
-                .unwrap()
-                .filter_map(|res| {
-                    let e = res.unwrap();
-                    let path = e.path();
-                    path.file_name()
-                        .and_then(|os| os.to_str())
-                        .filter(|s| !s.is_empty() && s.chars().all(|c| c.is_ascii_digit()))
-                        .and_then(|s| s.parse::<u64>().ok())
-                        .map(|n| (n, path))
-                })
-                .collect();
-
-            entries.sort_by_key(|(n, _)| *n);
-
-            entries
-                .into_iter()
-                .map(|(idx, path)| (idx as usize, Self::load_entry(&path)))
-                .collect()
-        }
-
-        /// Format an index as a zero-padded filename (`000123`).
-        pub fn index_name(index: usize) -> String {
-            format!("{index:06}")
-        }
-
-        /// Load a single entry at a given index inside `root`.
-        ///
-        /// Returns `None` if the file/directory does not exist.
-        pub fn load_single(root: impl AsRef<Path>, index: usize) -> Option<Self>
-        where
-            LedgerEvent<T>: serde::de::DeserializeOwned,
-        {
-            let root = root.as_ref();
-            let path = root.join(Self::index_name(index));
-            if path.exists() {
-                Some(Self::load_entry(&path))
-            } else {
-                None
-            }
+    fn load_entry(path: &Path) -> Self
+    where
+        LedgerEvent<T>: serde::de::DeserializeOwned,
+    {
+        if path.is_dir() {
+            let children: Vec<Self> = Self::load_chain(path).into_values().collect();
+            let multiple = nonempty::NonEmpty::from_vec(children).unwrap();
+            let node_multiple = multiple.map(|entry_node| entry_node.0.clone());
+            Self(Node::Branch(Box::new(node_multiple)))
+        } else {
+            let bytes = std::fs::read(path).unwrap();
+            let entry: LedgerEntry<T> = serde_json::from_slice(&bytes).unwrap();
+            Self(Node::Leaf(entry))
         }
     }
 
-    pub struct EntryNodeIter<T: LedgerItem> {
-        stack: Vec<EntryNode<T>>,
+    /// Read a numeric directory tree into `EntryThing`s.
+    ///
+    /// - Files become `EntryThing::Leaf`
+    /// - Directories become `EntryThing::Multiple`
+    pub fn load_chain(root: impl AsRef<Path>) -> BTreeMap<usize, Self>
+    where
+        LedgerEvent<T>: serde::de::DeserializeOwned,
+    {
+        let root = root.as_ref();
+
+        let mut entries: Vec<(u64, PathBuf)> = std::fs::read_dir(root)
+            .unwrap()
+            .filter_map(|res| {
+                let e = res.unwrap();
+                let path = e.path();
+                path.file_name()
+                    .and_then(|os| os.to_str())
+                    .filter(|s| !s.is_empty() && s.chars().all(|c| c.is_ascii_digit()))
+                    .and_then(|s| s.parse::<u64>().ok())
+                    .map(|n| (n, path))
+            })
+            .collect();
+
+        entries.sort_by_key(|(n, _)| *n);
+
+        entries
+            .into_iter()
+            .map(|(idx, path)| (idx as usize, Self::load_entry(&path)))
+            .collect()
     }
 
-    impl<T: LedgerItem> EntryNodeIter<T> {
-        fn new(root: EntryNode<T>) -> Self {
-            Self { stack: vec![root] }
-        }
+    /// Format an index as a zero-padded filename (`000123`).
+    pub fn index_name(index: usize) -> String {
+        format!("{index:06}")
     }
 
-    impl<T: LedgerItem> Iterator for EntryNodeIter<T> {
-        type Item = LedgerEntry<T>;
-
-        fn next(&mut self) -> Option<Self::Item> {
-            while let Some(node) = self.stack.pop() {
-                match node {
-                    EntryNode::Leaf(ev) => return Some(ev),
-                    EntryNode::Multiple(children) => {
-                        for child in children.into_iter().rev() {
-                            self.stack.push(child);
-                        }
-                    }
-                }
-            }
+    /// Load a single entry at a given index inside `root`.
+    ///
+    /// Returns `None` if the file/directory does not exist.
+    pub fn load_single(root: impl AsRef<Path>, index: usize) -> Option<Self>
+    where
+        LedgerEvent<T>: serde::de::DeserializeOwned,
+    {
+        let root = root.as_ref();
+        let path = root.join(Self::index_name(index));
+        if path.exists() {
+            Some(Self::load_entry(&path))
+        } else {
             None
         }
     }
-
-    impl<T: LedgerItem> IntoIterator for EntryNode<T> {
-        type Item = LedgerEntry<T>;
-        type IntoIter = EntryNodeIter<T>;
-        fn into_iter(self) -> Self::IntoIter {
-            EntryNodeIter::new(self)
-        }
-    }
 }
 
-/// Represents a single entry, which can either be a group of recursive entries or just a singleton.
-///
-/// Groups are for when logically similar entries. Like if you create and a new object
-/// and the creation represents many actions. You'd want to easily undo all of them
-/// at the same time.
 #[derive(Clone, Hash, Debug)]
-pub enum EventNode<T: LedgerItem> {
-    Leaf(LedgerEvent<T>),
-    Multiple(Box<NonEmpty<Self>>),
-}
+pub struct EventNode<T: LedgerItem>(Node<LedgerEvent<T>>);
 
-pub struct EntryIter<T: LedgerItem> {
-    stack: Vec<EventNode<T>>,
-}
+impl<T: LedgerItem> Deref for EventNode<T> {
+    type Target = Node<LedgerEvent<T>>;
 
-impl<T: LedgerItem> EntryIter<T> {
-    fn new(root: EventNode<T>) -> Self {
-        Self { stack: vec![root] }
-    }
-}
-
-impl<T: LedgerItem> Iterator for EntryIter<T> {
-    type Item = LedgerEvent<T>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        while let Some(node) = self.stack.pop() {
-            match node {
-                EventNode::Leaf(ev) => return Some(ev),
-                EventNode::Multiple(children) => {
-                    for child in children.into_iter().rev() {
-                        self.stack.push(child);
-                    }
-                }
-            }
-        }
-        None
-    }
-}
-
-impl<T: LedgerItem> IntoIterator for EventNode<T> {
-    type Item = LedgerEvent<T>;
-    type IntoIter = EntryIter<T>;
-    fn into_iter(self) -> Self::IntoIter {
-        EntryIter::new(self)
+    fn deref(&self) -> &Self::Target {
+        &self.0
     }
 }
 
@@ -190,7 +123,7 @@ impl<T: LedgerItem> EventNode<T> {
         ledger_path: &Path,
         index: usize,
         prev: Option<LedgerEntry<T>>,
-    ) -> entry::EntryNode<T> {
+    ) -> EntryNode<T> {
         use std::io::Write;
 
         fn save_entry<T: LedgerItem>(
@@ -212,7 +145,7 @@ impl<T: LedgerItem> EventNode<T> {
         fn save_entries<T: LedgerItem>(
             dir: &Path,
             index: usize,
-            entries: NonEmpty<EventNode<T>>,
+            entries: NonEmpty<Node<LedgerEvent<T>>>,
             mut prev: Option<LedgerEntry<T>>,
         ) -> EntryNode<T> {
             let mut saved_entries: Vec<EntryNode<T>> = vec![];
@@ -222,36 +155,44 @@ impl<T: LedgerItem> EventNode<T> {
 
             for (idx, entry) in entries.into_iter().enumerate() {
                 match entry {
-                    EventNode::Leaf(event) => {
+                    Node::Leaf(event) => {
                         let entry = save_entry(&path, idx, event, prev.clone());
                         prev = Some(entry.clone());
-                        saved_entries.push(EntryNode::Leaf(entry));
+                        saved_entries.push(EntryNode(Node::Leaf(entry)));
                     }
-                    EventNode::Multiple(entries) => {
+                    Node::Branch(entries) => {
                         let entries = save_entries(&path, idx, *entries, prev.clone());
-                        prev = Some(entries.last_entry().clone());
+                        prev = Some(entries.last().clone());
                         saved_entries.push(entries);
                     }
                 }
             }
-            EntryNode::Multiple(Box::new(NonEmpty::from_vec(saved_entries).unwrap()))
+            EntryNode(Node::Branch(Box::new(
+                NonEmpty::from_vec(
+                    saved_entries
+                        .into_iter()
+                        .map(|entry_node| entry_node.0)
+                        .collect(),
+                )
+                .unwrap(),
+            )))
         }
 
         match self {
-            EventNode::Leaf(event) => {
-                entry::EntryNode::Leaf(save_entry(ledger_path, index, event, prev))
+            EventNode(Node::Leaf(event)) => {
+                EntryNode(Node::Leaf(save_entry(ledger_path, index, event, prev)))
             }
 
-            EventNode::Multiple(entries) => save_entries(ledger_path, index, *entries, prev),
+            EventNode(Node::Branch(entries)) => save_entries(ledger_path, index, *entries, prev),
         }
     }
 
-    pub fn new_single(entry: LedgerEvent<T>) -> Self {
-        Self::Leaf(entry)
+    pub fn new_leaf(entry: LedgerEvent<T>) -> Self {
+        Self(Node::new_leaf(entry))
     }
 
-    pub fn new_multiple(entries: NonEmpty<LedgerEvent<T>>) -> Self {
-        let multiple: NonEmpty<Self> = entries.map(|entry| Self::new_single(entry));
-        Self::Multiple(Box::new(multiple))
+    pub fn new_branch(entries: NonEmpty<LedgerEvent<T>>) -> Self {
+        let multiple: NonEmpty<Node<LedgerEvent<T>>> = entries.map(|entry| Node::new_leaf(entry));
+        Self(Node::new_branch(multiple))
     }
 }
