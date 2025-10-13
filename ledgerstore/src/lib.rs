@@ -95,7 +95,7 @@ impl<T: LedgerItem> ItemReference<T> {
 }
 
 /// Expression tree for getting a set of items.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Hash)]
 #[serde(bound(deserialize = "T: LedgerItem + DeserializeOwned"))]
 pub enum ItemSet<T: LedgerItem> {
     /// Adds all the items in all the nodes.
@@ -110,7 +110,7 @@ pub enum ItemSet<T: LedgerItem> {
     All,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Hash)]
 #[serde(bound(deserialize = "T: LedgerItem + DeserializeOwned"))]
 pub enum ItemNode<T: LedgerItem> {
     Set(Box<ItemSet<T>>),
@@ -118,7 +118,7 @@ pub enum ItemNode<T: LedgerItem> {
 }
 
 /// A leaf in the expression tree, evaluates to a list of items.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Hash)]
 #[serde(bound(deserialize = "T: LedgerItem + DeserializeOwned"))]
 pub enum Leaf<T: LedgerItem> {
     /// A single item.
@@ -129,7 +129,7 @@ pub enum Leaf<T: LedgerItem> {
     Reference(RefGetter<T>),
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Hash)]
 pub struct RefGetter<T: LedgerItem> {
     pub reversed: bool, // whether it fetches links from the item to other items or the way this item being referenced
     pub key: T::Key,    // item in question
