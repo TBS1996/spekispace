@@ -68,7 +68,7 @@ impl Deref for DiskDirPath {
     }
 }
 
-#[derive(Debug, Clone, Hash, Eq, PartialEq, Ord, PartialOrd)]
+#[derive(Debug, Clone, Hash, Eq, PartialEq, Ord, PartialOrd, Serialize)]
 pub struct PropertyCache<T: LedgerItem> {
     pub property: T::PropertyType,
     pub value: String,
@@ -95,7 +95,7 @@ impl<T: LedgerItem> ItemReference<T> {
 }
 
 /// Expression tree for getting a set of items.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub enum ItemSet<T: LedgerItem> {
     /// Adds all the items in all the nodes.
     Union(Vec<ItemNode<T>>),
@@ -109,14 +109,14 @@ pub enum ItemSet<T: LedgerItem> {
     All,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub enum ItemNode<T: LedgerItem> {
     Set(Box<ItemSet<T>>),
     Leaf(Leaf<T>),
 }
 
 /// A leaf in the expression tree, evaluates to a list of items.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub enum Leaf<T: LedgerItem> {
     /// A single item.
     Item(T::Key),
@@ -126,7 +126,7 @@ pub enum Leaf<T: LedgerItem> {
     Reference(RefGetter<T>),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct RefGetter<T: LedgerItem> {
     pub reversed: bool, // whether it fetches links from the item to other items or the way this item being referenced
     pub key: T::Key,    // item in question
