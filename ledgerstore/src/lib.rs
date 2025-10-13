@@ -197,6 +197,9 @@ pub enum LedgerEvent<T: LedgerItem> {
         commit: String,
         upstream_url: String,
     },
+    DeleteSet {
+        set: ItemSet<T>,
+    },
 }
 
 struct ItemAction<T: LedgerItem> {
@@ -233,19 +236,6 @@ impl<T: LedgerItem> From<SetUpstream> for LedgerEvent<T> {
 }
 
 impl<T: LedgerItem> LedgerEvent<T> {
-    fn into_parts(self) -> Either<SetUpstream, ItemAction<T>> {
-        match self {
-            LedgerEvent::ItemAction { id, action } => Either::Right(ItemAction { id, action }),
-            LedgerEvent::SetUpstream {
-                commit,
-                upstream_url,
-            } => Either::Left(SetUpstream {
-                commit,
-                upstream_url,
-            }),
-        }
-    }
-
     pub fn new(id: T::Key, action: LedgerAction<T>) -> Self {
         Self::ItemAction { id, action }
     }
@@ -254,6 +244,7 @@ impl<T: LedgerItem> LedgerEvent<T> {
         match self {
             LedgerEvent::ItemAction { id, .. } => Some(*id),
             LedgerEvent::SetUpstream { .. } => None,
+            LedgerEvent::DeleteSet { .. } => None,
         }
     }
 
@@ -904,12 +895,8 @@ impl<T: LedgerItem> Ledger<T> {
         let mut applied_events: Vec<LedgerEvent<T>> = vec![];
 
         for event in events {
-            match event.clone().into_parts() {
-                Either::Left(set_upstream) => {
-                    self.apply_and_save_upstream_commit(set_upstream)?;
-                    applied_events.push(event);
-                }
-                Either::Right(ItemAction { id, action }) => {
+            match event.clone() {
+                LedgerEvent::ItemAction { id, action } => {
                     let verify = true;
                     let cache = true;
 
@@ -922,6 +909,19 @@ impl<T: LedgerItem> Ledger<T> {
                         applied_events.push(event);
                     }
                 }
+                LedgerEvent::SetUpstream {
+                    commit,
+                    upstream_url,
+                } => {
+                    let set_upstream = SetUpstream {
+                        commit,
+                        upstream_url,
+                    };
+
+                    self.apply_and_save_upstream_commit(set_upstream)?;
+                    applied_events.push(event);
+                }
+                LedgerEvent::DeleteSet { set } => todo!(),
             }
         }
 
@@ -1154,11 +1154,8 @@ impl<T: LedgerItem> Ledger<T> {
             };
 
             for event in &entry {
-                match event.event.clone().into_parts() {
-                    Either::Left(set_upstream) => {
-                        latest_upstream = Some(set_upstream);
-                    }
-                    Either::Right(ItemAction { id, action }) => {
+                match event.event.clone() {
+                    LedgerEvent::ItemAction { id, action } => {
                         let evaluation =
                             match self.evaluate_action(id, action.clone(), false, false) {
                                 Ok(eval) => eval,
@@ -1182,7 +1179,18 @@ impl<T: LedgerItem> Ledger<T> {
                             CardChange::Unchanged(_) => {}
                         }
                     }
-                }
+                    LedgerEvent::SetUpstream {
+                        commit,
+                        upstream_url,
+                    } => {
+                        let set_upstream = SetUpstream {
+                            commit,
+                            upstream_url,
+                        };
+                        latest_upstream = Some(set_upstream);
+                    }
+                    LedgerEvent::DeleteSet { set } => todo!(),
+                };
             }
         }
 
