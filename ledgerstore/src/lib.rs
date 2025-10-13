@@ -68,7 +68,7 @@ impl Deref for DiskDirPath {
     }
 }
 
-#[derive(Debug, Clone, Hash, Eq, PartialEq, Ord, PartialOrd, Serialize)]
+#[derive(Debug, Clone, Hash, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize)]
 pub struct PropertyCache<T: LedgerItem> {
     pub property: T::PropertyType,
     pub value: String,
@@ -116,7 +116,8 @@ pub enum ItemNode<T: LedgerItem> {
 }
 
 /// A leaf in the expression tree, evaluates to a list of items.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(bound(deserialize = "T: LedgerItem + DeserializeOwned"))]
 pub enum Leaf<T: LedgerItem> {
     /// A single item.
     Item(T::Key),
@@ -126,7 +127,7 @@ pub enum Leaf<T: LedgerItem> {
     Reference(RefGetter<T>),
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RefGetter<T: LedgerItem> {
     pub reversed: bool, // whether it fetches links from the item to other items or the way this item being referenced
     pub key: T::Key,    // item in question
