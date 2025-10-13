@@ -714,6 +714,33 @@ struct ActionEvalResult<T: LedgerItem> {
 }
 
 #[derive(Debug, Clone)]
+struct BatchActionEvalResult<T: LedgerItem> {
+    items: Vec<CardChange<T>>,
+    added_caches: HashSet<(CacheKey<T>, T::Key)>,
+    removed_caches: HashSet<(CacheKey<T>, T::Key)>,
+    is_no_op: bool,
+}
+
+impl<T: LedgerItem> BatchActionEvalResult<T> {
+    fn new(res: ActionEvalResult<T>) -> Self {
+        Self {
+            items: vec![res.item],
+            added_caches: res.added_caches,
+            removed_caches: res.removed_caches,
+            is_no_op: res.is_no_op,
+        }
+    }
+
+    fn merge(mut self, res: ActionEvalResult<T>) -> Self {
+        self.items.push(res.item);
+        self.added_caches.extend(res.added_caches);
+        self.removed_caches.extend(res.removed_caches);
+        self.is_no_op &= res.is_no_op;
+        self
+    }
+}
+
+#[derive(Debug, Clone)]
 enum CardChange<T: LedgerItem> {
     Created(Arc<T>),
     Modified(Arc<T>),
@@ -921,7 +948,28 @@ impl<T: LedgerItem> Ledger<T> {
                     self.apply_and_save_upstream_commit(set_upstream)?;
                     applied_events.push(event);
                 }
-                LedgerEvent::DeleteSet { set } => todo!(),
+                LedgerEvent::DeleteSet { set } => {
+                    let mut keys = self.load_set(set).into_iter();
+                    let Some(key) = keys.next() else {
+                        continue;
+                    };
+
+                    let eval_res = self.evaluate_action(key, LedgerAction::Delete, true, true)?;
+                    let mut batch = BatchActionEvalResult::new(eval_res);
+
+                    // todo: handle potential bug here, if an error occurs in this loop
+                    // we will exit the function having modified state without saving any entries
+                    // causing a mismatch between state and entries
+                    for key in keys {
+                        let res = self.evaluate_action(key, LedgerAction::Delete, true, true)?;
+                        batch = batch.merge(res);
+                    }
+
+                    if !batch.is_no_op {
+                        self.apply_batch_evaluation(batch.clone(), true).unwrap();
+                        applied_events.push(event);
+                    }
+                }
             }
         }
 
@@ -1189,7 +1237,9 @@ impl<T: LedgerItem> Ledger<T> {
                         };
                         latest_upstream = Some(set_upstream);
                     }
-                    LedgerEvent::DeleteSet { set } => todo!(),
+                    LedgerEvent::DeleteSet { set } => {
+                        todo!()
+                    }
                 };
             }
         }
@@ -1432,6 +1482,66 @@ impl<T: LedgerItem> Ledger<T> {
             removed_caches,
             is_no_op,
         })
+    }
+
+    fn apply_batch_evaluation(
+        &self,
+        res: BatchActionEvalResult<T>,
+        cache: bool,
+    ) -> Result<(), EventError<T>> {
+        let BatchActionEvalResult {
+            items,
+            added_caches,
+            removed_caches,
+            is_no_op,
+        } = res;
+
+        if is_no_op {
+            if !added_caches.is_empty() || !removed_caches.is_empty() {
+                //dbg!(&item, &added_caches, &removed_caches);
+            }
+        }
+
+        for item in items {
+            match item {
+                CardChange::Created(item) | CardChange::Modified(item) => {
+                    self.cache
+                        .write()
+                        .unwrap()
+                        .insert(item.item_id(), item.clone());
+
+                    self.save(Arc::unwrap_or_clone(item));
+                }
+                CardChange::Deleted(key) => {
+                    self.cache.write().unwrap().remove(&key);
+                    debug_assert!(added_caches.is_empty());
+                    self.remove(key);
+                }
+                CardChange::Unchanged(_) => {}
+            }
+        }
+
+        if !cache {
+            return Ok(());
+        }
+
+        for (cache, key) in added_caches {
+            self.insert_cache(cache, key);
+        }
+
+        for cache in removed_caches {
+            let key: T::Key = cache.1;
+            match cache.0 {
+                CacheKey::Right(ItemRefCache { reftype, id }) => {
+                    self.remove_dependent(id, reftype, key);
+                }
+                CacheKey::Left(PropertyCache { property, value }) => {
+                    self.remove_property(key, property, value);
+                }
+            }
+        }
+
+        Ok(())
     }
 
     fn apply_evaluation(&self, res: ActionEvalResult<T>, cache: bool) -> Result<(), EventError<T>> {
