@@ -95,7 +95,8 @@ impl<T: LedgerItem> ItemReference<T> {
 }
 
 /// Expression tree for getting a set of items.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(bound(deserialize = "T: LedgerItem + DeserializeOwned"))]
 pub enum ItemSet<T: LedgerItem> {
     /// Adds all the items in all the nodes.
     Union(Vec<ItemNode<T>>),
@@ -109,7 +110,8 @@ pub enum ItemSet<T: LedgerItem> {
     All,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(bound(deserialize = "T: LedgerItem + DeserializeOwned"))]
 pub enum ItemNode<T: LedgerItem> {
     Set(Box<ItemSet<T>>),
     Leaf(Leaf<T>),
