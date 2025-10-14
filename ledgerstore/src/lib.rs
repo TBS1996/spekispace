@@ -1238,7 +1238,11 @@ impl<T: LedgerItem> Ledger<T> {
                         latest_upstream = Some(set_upstream);
                     }
                     LedgerEvent::DeleteSet { set } => {
-                        todo!()
+                        for key in self.load_set(set) {
+                            self.evaluate_action(key, LedgerAction::Delete, false, false)
+                                .unwrap();
+                            items.remove(&key);
+                        }
                     }
                 };
             }
