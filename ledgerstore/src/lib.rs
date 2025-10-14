@@ -1008,7 +1008,15 @@ impl<T: LedgerItem> Ledger<T> {
                     applied_events.push(event);
                 }
                 LedgerEvent::DeleteSet { set } => {
-                    let mut keys = self.load_set(set).into_iter();
+                    let dependencies = self.dependents_recursive_set(set.clone());
+
+                    if !dependencies.is_empty() {
+                        return Err(EventError::DeletingWithDependencies(dependencies));
+                    }
+
+                    // Reversed because we must delete dependencies before the dependents.
+                    let mut keys = self.load_set_topologically_sorted(set).into_iter().rev();
+
                     let Some(key) = keys.next() else {
                         continue;
                     };
@@ -1266,6 +1274,8 @@ impl<T: LedgerItem> Ledger<T> {
         self.dependencies.clear_contents().unwrap();
         self.dependents.clear_contents().unwrap();
 
+        let apply_cache = true; //damn, gotta build caches as we go cause the set actions depend on caches ..
+
         let mut items: HashMap<T::Key, Arc<T>> = HashMap::default();
 
         self.remote.checkout_empty().unwrap();
@@ -1281,7 +1291,7 @@ impl<T: LedgerItem> Ledger<T> {
                 match event.event.clone() {
                     LedgerEvent::ItemAction { id, action } => {
                         let evaluation =
-                            match self.evaluate_action(id, action.clone(), false, false) {
+                            match self.evaluate_action(id, action.clone(), false, apply_cache) {
                                 Ok(eval) => eval,
                                 Err(e) => {
                                     dbg!(e);
@@ -1290,7 +1300,8 @@ impl<T: LedgerItem> Ledger<T> {
                                 }
                             };
 
-                        self.apply_evaluation(evaluation.clone(), false).unwrap();
+                        self.apply_evaluation(evaluation.clone(), apply_cache)
+                            .unwrap();
 
                         match evaluation.item {
                             CardChange::Created(item) | CardChange::Modified(item) => {
@@ -1314,9 +1325,14 @@ impl<T: LedgerItem> Ledger<T> {
                         latest_upstream = Some(set_upstream);
                     }
                     LedgerEvent::DeleteSet { set } => {
-                        for key in self.load_set(set) {
-                            self.evaluate_action(key, LedgerAction::Delete, false, false)
+                        dbg!(&set);
+                        let keys = self.load_set_topologically_sorted(set);
+                        dbg!(&keys);
+                        for key in keys.into_iter().rev() {
+                            let eval = self
+                                .evaluate_action(key, LedgerAction::Delete, false, apply_cache)
                                 .unwrap();
+                            self.apply_evaluation(eval, apply_cache).unwrap();
                             items.remove(&key);
                         }
                     }
@@ -1328,7 +1344,10 @@ impl<T: LedgerItem> Ledger<T> {
             self.set_remote_commit(&upstream).unwrap();
         }
 
-        self.apply_caches(items);
+        // if we dont apply cache during build then we need to apply it after
+        if !apply_cache {
+            self.apply_caches(items);
+        }
 
         self.verify_all().unwrap();
 
@@ -1596,6 +1615,7 @@ impl<T: LedgerItem> Ledger<T> {
                     self.cache.write().unwrap().remove(&key);
                     debug_assert!(added_caches.is_empty());
                     self.remove(key);
+                    dbg!(key);
                 }
                 CardChange::Unchanged(_) => {}
             }
