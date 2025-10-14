@@ -149,6 +149,10 @@ impl CardProvider {
         self.providers.sets.modify(event)
     }
 
+    fn load_set(&self, set: impl Into<ItemSet<RawCard>>) -> HashSet<CardId> {
+        self.providers.cards.load_set(set.into())
+    }
+
     pub fn modify_metadata(&self, event: MetaEvent) -> Result<(), EventError<Metadata>> {
         let id = event.id();
 

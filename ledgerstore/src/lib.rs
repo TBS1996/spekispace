@@ -3,6 +3,7 @@ use either::Either;
 use git2::build::CheckoutBuilder;
 use nonempty::NonEmpty;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use std::collections::VecDeque;
 use std::fs::{self, hard_link};
 use std::io::{self, Write};
 use std::marker::PhantomData;
@@ -154,7 +155,7 @@ pub enum EventError<T: LedgerItem> {
     Cycle(Vec<(T::Key, T::RefType)>),
     Invariant(T::Error),
     ItemNotFound(T::Key),
-    DeletingWithDependencies,
+    DeletingWithDependencies(HashSet<T::Key>),
     Remote,
 }
 
@@ -877,6 +878,53 @@ impl<T: LedgerItem> Ledger<T> {
         self.remote.current_commit()
     }
 
+    /// Returns a set where all the keys are sorted so that no item depends on a item to its right.
+    pub fn load_set_topologically_sorted(&self, set: ItemSet<T>) -> Vec<T::Key> {
+        let keys = self.load_set(set);
+        self.topological_sort(keys.into_iter().collect())
+    }
+
+    /// Sorts all the cards so that no item in the output vector depends on a item to "the right".
+    pub fn topological_sort(&self, items: Vec<T::Key>) -> Vec<T::Key> {
+        let in_set: HashSet<T::Key> = items.iter().cloned().collect();
+        let mut indeg: HashMap<T::Key, usize> = items.iter().cloned().map(|k| (k, 0)).collect();
+        let mut adj: HashMap<T::Key, Vec<T::Key>> = HashMap::new();
+
+        // Build graph (dep -> dependents) and indegrees within the induced subgraph.
+        for item in &in_set {
+            for d in self.dependencies_recursive(*item) {
+                if in_set.contains(&d) {
+                    adj.entry(d.clone()).or_default().push(item.clone());
+                    *indeg.get_mut(item).unwrap() += 1;
+                }
+            }
+        }
+
+        // Stable zero-indegree queue seeded by original order.
+        let mut q: VecDeque<T::Key> = items
+            .iter()
+            .filter(|k| indeg.get(*k) == Some(&0))
+            .cloned()
+            .collect();
+
+        let mut out = Vec::with_capacity(items.len());
+        while let Some(u) = q.pop_front() {
+            out.push(u.clone());
+            if let Some(dependents) = adj.remove(&u) {
+                for v in dependents {
+                    let e = indeg.get_mut(&v).unwrap();
+                    *e -= 1;
+                    if *e == 0 {
+                        q.push_back(v);
+                    }
+                }
+            }
+        }
+
+        debug_assert_eq!(out.len(), items.len(), "DAG assumed; cycle detected");
+        out
+    }
+
     pub fn latest_upstream_commit(
         &self,
         current_version: semver::Version,
@@ -1031,6 +1079,23 @@ impl<T: LedgerItem> Ledger<T> {
             self.local
                 .collect_all_dependents_recursive_struct(key, false)
         }
+    }
+
+    /// Returns all the dependencies of all the items in the set that are not in the set itself.
+    pub fn dependents_recursive_set(&self, set: ItemSet<T>) -> HashSet<T::Key> {
+        let items = self.load_set(set);
+        let mut dependencies: HashSet<T::Key> = HashSet::new();
+
+        for item in &items {
+            let item_deps = self.dependents_recursive(*item);
+            for dep in item_deps {
+                if !items.contains(&dep) {
+                    dependencies.insert(dep);
+                }
+            }
+        }
+
+        dependencies
     }
 
     pub fn dependencies_recursive(&self, key: T::Key) -> HashSet<T::Key> {

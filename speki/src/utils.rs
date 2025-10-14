@@ -203,7 +203,7 @@ pub fn handle_card_event_error(err: EventError<RawCard>) {
         EventError::Invariant(inv) => format!("invariant broken: {inv:?}"),
         EventError::Remote => format!("remote card cannot be modified"),
         EventError::ItemNotFound(card) => format!("card not found: {card}"),
-        EventError::DeletingWithDependencies => format!("cannot delete card with dependencies"),
+        EventError::DeletingWithDependencies(_) => format!("cannot delete card with dependencies"),
     };
 
     OverlayEnum::new_notice(text).append();
@@ -217,7 +217,9 @@ pub fn handle_review_event_error(err: EventError<History>) {
         EventError::Invariant(inv) => format!("invariant broken in review: {inv:?}"),
         EventError::Remote => format!("remote review cannot be modified"),
         EventError::ItemNotFound(card) => format!("review card not found: {card}"),
-        EventError::DeletingWithDependencies => format!("cannot delete review with dependencies"),
+        EventError::DeletingWithDependencies(_) => {
+            format!("cannot delete review with dependencies")
+        }
     };
 
     OverlayEnum::new_notice(text).append();
@@ -235,7 +237,9 @@ pub fn handle_meta_event_error(err: EventError<Metadata>) {
         EventError::Invariant(inv) => format!("invariant broken in metadata: {inv:?}"),
         EventError::Remote => format!("remote metadata cannot be modified"),
         EventError::ItemNotFound(card) => format!("metadata not found: {card}"),
-        EventError::DeletingWithDependencies => format!("cannot delete metadata with dependencies"),
+        EventError::DeletingWithDependencies(_) => {
+            format!("cannot delete metadata with dependencies")
+        }
     };
 
     OverlayEnum::new_notice(text).append();
