@@ -419,6 +419,7 @@ pub fn CardSelectorRender(
 
     let expr = SetExpr::try_from(collection.clone());
     let expr2 = expr.clone();
+    let expr3 = expr.clone();
 
     let review_title = if expr.is_err() {
         Some("invalid set")
@@ -436,6 +437,7 @@ pub fn CardSelectorRender(
     //let latest_commit: Option<String> = None; // = APP.read().inner().provider.cards.latest_upstream_commit();
 
     let secret_export = search.read().contains("!export!");
+    let secret_delete = search.read().contains("!delete!");
 
     let update_available = use_context::<RemoteUpdate>().latest_commit();
 
@@ -497,6 +499,20 @@ pub fn CardSelectorRender(
                                 }
                             },
                             "review"
+                        }
+                        if secret_delete {
+                            button {
+                                class: "{crate::styles::DELETE_BUTTON} w-full",
+                                onclick: move |_| {
+                                    if let Ok(expr) = expr3.clone() {
+                                        let item_set = expr.to_set();
+                                        if let Err(e) = APP.read().card_provider().delete_set(item_set) {
+                                            handle_card_event_error(e);
+                                        }
+                                    }
+                                },
+                                "delete all"
+                            }
                         }
                         if secret_export {
                             button {

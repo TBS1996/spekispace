@@ -9,7 +9,7 @@ use crate::{
     ArcRecall, Card, CardProperty, CardRefType, FsTime, MyEventError, Provider,
 };
 use dioxus_logger::tracing::{info, trace};
-use ledgerstore::{EventError, Leaf, PropertyCache, RefGetter};
+use ledgerstore::{EventError, ItemSet, Leaf, LedgerEvent, PropertyCache, RefGetter};
 use std::{
     collections::{BTreeSet, HashMap, HashSet},
     fmt::Debug,
@@ -188,31 +188,44 @@ impl CardProvider {
         Ok(())
     }
 
+    pub fn delete_set(&self, set: ItemSet<RawCard>) -> Result<(), EventError<RawCard>> {
+        match self.many_modify(vec![Event::Card(CardEvent::DeleteSet { set })]) {
+            Ok(()) => Ok(()),
+            Err(MyEventError::CardError(e)) => Err(e),
+            Err(_) => unreachable!(),
+        }
+    }
+
     pub fn many_modify(&self, events: Vec<Event>) -> Result<(), MyEventError> {
         let mut card_events: Vec<CardEvent> = vec![];
         let mut review_events: Vec<ReviewEvent> = vec![];
         let mut meta_events: Vec<MetaEvent> = vec![];
 
         for event in events {
-            let card_id: Option<CardId> = match event {
+            let card_ids: Vec<CardId> = match event {
                 Event::Card(card_event) => {
-                    let id = card_event.id();
+                    let ids = match card_event.clone() {
+                        LedgerEvent::ItemAction { id, .. } => vec![id],
+                        LedgerEvent::SetUpstream { .. } => todo!(),
+                        LedgerEvent::DeleteSet { set } => self.load_set(set).into_iter().collect(),
+                    };
+
                     card_events.push(card_event);
-                    id
+                    ids
                 }
                 Event::History(review_event) => {
                     let id = review_event.id();
                     review_events.push(review_event);
-                    id
+                    id.into_iter().collect()
                 }
                 Event::Meta(meta_event) => {
                     let id = meta_event.id();
                     meta_events.push(meta_event);
-                    id
+                    id.into_iter().collect()
                 }
             };
 
-            if let Some(id) = card_id {
+            for id in card_ids {
                 let mut guard = self.cache.write().unwrap();
                 guard.remove(&id);
 
