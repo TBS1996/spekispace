@@ -722,6 +722,17 @@ struct BatchActionEvalResult<T: LedgerItem> {
     is_no_op: bool,
 }
 
+impl<T: LedgerItem> From<ActionEvalResult<T>> for BatchActionEvalResult<T> {
+    fn from(res: ActionEvalResult<T>) -> Self {
+        Self {
+            items: vec![res.item],
+            added_caches: res.added_caches,
+            removed_caches: res.removed_caches,
+            is_no_op: res.is_no_op,
+        }
+    }
+}
+
 impl<T: LedgerItem> BatchActionEvalResult<T> {
     fn new(res: ActionEvalResult<T>) -> Self {
         Self {
@@ -1014,7 +1025,7 @@ impl<T: LedgerItem> Ledger<T> {
                     }
 
                     if !batch.is_no_op {
-                        self.apply_batch_evaluation(batch.clone(), true).unwrap();
+                        self.apply_evaluation(batch.clone(), true).unwrap();
                         applied_events.push(event);
                     }
                 }
@@ -1553,9 +1564,9 @@ impl<T: LedgerItem> Ledger<T> {
         })
     }
 
-    fn apply_batch_evaluation(
+    fn apply_evaluation(
         &self,
-        res: BatchActionEvalResult<T>,
+        res: impl Into<BatchActionEvalResult<T>>,
         cache: bool,
     ) -> Result<(), EventError<T>> {
         let BatchActionEvalResult {
@@ -1563,7 +1574,7 @@ impl<T: LedgerItem> Ledger<T> {
             added_caches,
             removed_caches,
             is_no_op,
-        } = res;
+        } = res.into();
 
         if is_no_op {
             if !added_caches.is_empty() || !removed_caches.is_empty() {
@@ -1588,60 +1599,6 @@ impl<T: LedgerItem> Ledger<T> {
                 }
                 CardChange::Unchanged(_) => {}
             }
-        }
-
-        if !cache {
-            return Ok(());
-        }
-
-        for (cache, key) in added_caches {
-            self.insert_cache(cache, key);
-        }
-
-        for cache in removed_caches {
-            let key: T::Key = cache.1;
-            match cache.0 {
-                CacheKey::Right(ItemRefCache { reftype, id }) => {
-                    self.remove_dependent(id, reftype, key);
-                }
-                CacheKey::Left(PropertyCache { property, value }) => {
-                    self.remove_property(key, property, value);
-                }
-            }
-        }
-
-        Ok(())
-    }
-
-    fn apply_evaluation(&self, res: ActionEvalResult<T>, cache: bool) -> Result<(), EventError<T>> {
-        let ActionEvalResult {
-            item,
-            added_caches,
-            removed_caches,
-            is_no_op,
-        } = res;
-
-        if is_no_op {
-            if !added_caches.is_empty() || !removed_caches.is_empty() {
-                //dbg!(&item, &added_caches, &removed_caches);
-            }
-        }
-
-        match item {
-            CardChange::Created(item) | CardChange::Modified(item) => {
-                self.cache
-                    .write()
-                    .unwrap()
-                    .insert(item.item_id(), item.clone());
-
-                self.save(Arc::unwrap_or_clone(item));
-            }
-            CardChange::Deleted(key) => {
-                self.cache.write().unwrap().remove(&key);
-                debug_assert!(added_caches.is_empty());
-                self.remove(key);
-            }
-            CardChange::Unchanged(_) => {}
         }
 
         if !cache {
