@@ -140,7 +140,7 @@ impl CardProvider {
     pub fn eval_expr(&self, expr: &SetExpr) -> BTreeSet<CardId> {
         self.providers
             .cards
-            .load_set(expr.to_set())
+            .load_expr(expr.to_set().into())
             .into_iter()
             .collect()
     }
@@ -150,7 +150,7 @@ impl CardProvider {
     }
 
     fn load_set(&self, set: impl Into<ItemSet<RawCard>>) -> HashSet<CardId> {
-        self.providers.cards.load_set(set.into())
+        self.providers.cards.load_expr(set.into().into()) // lol
     }
 
     pub fn modify_metadata(&self, event: MetaEvent) -> Result<(), EventError<Metadata>> {

@@ -95,6 +95,47 @@ impl<T: LedgerItem> ItemReference<T> {
     }
 }
 
+/// An expression that evaluates to a set of items.
+#[derive(Debug, Clone, Serialize, Deserialize, Hash)]
+#[serde(bound(deserialize = "T: LedgerItem + DeserializeOwned"))]
+pub enum ItemExpr<T: LedgerItem> {
+    /// Adds all the items in all the nodes.
+    Union(Vec<Self>),
+    /// Only the items that are shared in all the nodes.
+    Intersection(Vec<Self>),
+    /// The items that are in the first node but not in the second.
+    Difference(Box<Self>, Box<Self>),
+    /// All the items in the state, except the ones in the node.
+    Complement(Box<Self>),
+    /// All the items in the state. Kinda just an alias for Complement of empty union.
+    All,
+    /// Just a single item
+    Item(T::Key),
+    /// All items that share a given property.
+    Property {
+        /// Which property type you care about
+        property: T::PropertyType,
+        /// The value that the property should have. e.g. if property is "color", value could be "red".
+        value: String,
+    },
+    /// Set of items based on how they are referenced.
+    /// Each item can reference other items based on the T::RefType type.
+    /// When one item reference another we say it depends on that item.
+    /// The state is a DAG so there's no cycles.
+    Reference {
+        /// The items whose references we are after
+        items: Box<Self>,
+        /// The type of dependencies we want to fetch. None means all, as in, get all the dependencies of these items.
+        ty: Option<T::RefType>,
+        /// If true, fetch items that reference these item(s), meaning, the dependents.
+        reversed: bool,
+        /// If true, recursively get all the references. No cycles guaranteed as it's a DAG.
+        recursive: bool,
+        /// Whether to also include the items themselves when evaluating.
+        include_self: bool,
+    },
+}
+
 /// Expression tree for getting a set of items.
 #[derive(Debug, Clone, Serialize, Deserialize, Hash)]
 #[serde(bound(deserialize = "T: LedgerItem + DeserializeOwned"))]
@@ -107,8 +148,27 @@ pub enum ItemSet<T: LedgerItem> {
     Difference(ItemNode<T>, ItemNode<T>),
     /// All the items in the state, except the ones in the node.
     Complement(ItemNode<T>),
-    /// All the items in the state.
+    /// All the items in the state. Kinda just an alias for Complement of empty union.
     All,
+}
+
+impl<T: LedgerItem> From<ItemSet<T>> for ItemExpr<T> {
+    fn from(value: ItemSet<T>) -> Self {
+        match value {
+            ItemSet::Union(item_nodes) => {
+                ItemExpr::Union(item_nodes.into_iter().map(Self::from).collect())
+            }
+            ItemSet::Intersection(item_nodes) => {
+                ItemExpr::Intersection(item_nodes.into_iter().map(Self::from).collect())
+            }
+            ItemSet::Difference(item_node, item_node1) => ItemExpr::Difference(
+                Box::new(Self::from(item_node)),
+                Box::new(Self::from(item_node1)),
+            ),
+            ItemSet::Complement(item_node) => ItemExpr::Complement(Box::new(Self::from(item_node))),
+            ItemSet::All => ItemExpr::All,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Hash)]
@@ -116,6 +176,15 @@ pub enum ItemSet<T: LedgerItem> {
 pub enum ItemNode<T: LedgerItem> {
     Set(Box<ItemSet<T>>),
     Leaf(Leaf<T>),
+}
+
+impl<T: LedgerItem> From<ItemNode<T>> for ItemExpr<T> {
+    fn from(value: ItemNode<T>) -> Self {
+        match value {
+            ItemNode::Set(set) => ItemExpr::from(*set),
+            ItemNode::Leaf(leaf) => ItemExpr::from(leaf),
+        }
+    }
 }
 
 /// A leaf in the expression tree, evaluates to a list of items.
@@ -128,6 +197,29 @@ pub enum Leaf<T: LedgerItem> {
     Property(PropertyCache<T>),
     /// Items based on how they are referenced by other items.
     Reference(RefGetter<T>),
+}
+
+impl<T: LedgerItem> From<Leaf<T>> for ItemExpr<T> {
+    fn from(value: Leaf<T>) -> Self {
+        match value {
+            Leaf::Item(key) => ItemExpr::Item(key),
+            Leaf::Property(PropertyCache { property, value }) => {
+                ItemExpr::Property { property, value }
+            }
+            Leaf::Reference(RefGetter {
+                reversed,
+                key,
+                ty,
+                recursive,
+            }) => ItemExpr::Reference {
+                items: Box::new(ItemExpr::Item(key)),
+                ty,
+                reversed,
+                recursive,
+                include_self: false,
+            },
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Hash)]
@@ -150,12 +242,18 @@ impl<T: LedgerItem> ItemRefCache<T> {
     }
 }
 
+/// Various reasons why the state cannot be updated with a certain event.
 #[derive(Debug, Clone)]
 pub enum EventError<T: LedgerItem> {
+    /// State must be a DAG, event introduces a cycle.
     Cycle(Vec<(T::Key, T::RefType)>),
+    /// An invariant defined by the user of this library was violated.
     Invariant(T::Error),
+    /// Event references an item not found in state.
     ItemNotFound(T::Key),
+    /// Cannot delete item because it is referenced by other items.
     DeletingWithDependencies(HashSet<T::Key>),
+    /// Remote ledger cannot be modified.
     Remote,
 }
 
@@ -890,8 +988,8 @@ impl<T: LedgerItem> Ledger<T> {
     }
 
     /// Returns a set where all the keys are sorted so that no item depends on a item to its right.
-    pub fn load_set_topologically_sorted(&self, set: ItemSet<T>) -> Vec<T::Key> {
-        let keys = self.load_set(set);
+    pub fn load_set_topologically_sorted(&self, set: ItemExpr<T>) -> Vec<T::Key> {
+        let keys = self.load_expr(set);
         self.topological_sort(keys.into_iter().collect())
     }
 
@@ -1015,7 +1113,10 @@ impl<T: LedgerItem> Ledger<T> {
                     }
 
                     // Reversed because we must delete dependencies before the dependents.
-                    let mut keys = self.load_set_topologically_sorted(set).into_iter().rev();
+                    let mut keys = self
+                        .load_set_topologically_sorted(set.into())
+                        .into_iter()
+                        .rev();
 
                     let Some(key) = keys.next() else {
                         continue;
@@ -1102,7 +1203,7 @@ impl<T: LedgerItem> Ledger<T> {
 
     /// Returns all the dependencies of all the items in the set that are not in the set itself.
     pub fn dependents_recursive_set(&self, set: ItemSet<T>) -> HashSet<T::Key> {
-        let items = self.load_set(set);
+        let items = self.load_expr(set.into());
         let mut dependencies: HashSet<T::Key> = HashSet::new();
 
         for item in &items {
@@ -1136,16 +1237,14 @@ impl<T: LedgerItem> Ledger<T> {
         items
     }
 
-    pub fn load_set(&self, set: ItemSet<T>) -> HashSet<T::Key> {
-        let mut items = self.local.load_set(set.clone());
-        items.extend(self.remote.load_set(set));
+    pub fn load_expr(&self, expr: ItemExpr<T>) -> HashSet<T::Key> {
+        let mut items = self.local.load_expr(expr.clone());
+        items.extend(self.remote.load_expr(expr));
         items
     }
 
     pub fn load_getter(&self, leaf: Leaf<T>) -> HashSet<T::Key> {
-        let mut items = self.local.load_leaf(leaf.clone());
-        items.extend(self.remote.load_leaf(leaf));
-        items
+        self.load_expr(ItemExpr::from(leaf))
     }
 
     fn full_cache(&self) -> bool {
@@ -1326,7 +1425,7 @@ impl<T: LedgerItem> Ledger<T> {
                     }
                     LedgerEvent::DeleteSet { set } => {
                         dbg!(&set);
-                        let keys = self.load_set_topologically_sorted(set);
+                        let keys = self.load_set_topologically_sorted(set.into());
                         dbg!(&keys);
                         for key in keys.into_iter().rev() {
                             let eval = self

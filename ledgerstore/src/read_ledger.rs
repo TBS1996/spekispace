@@ -6,9 +6,7 @@ use std::vec::Vec;
 use walkdir::WalkDir;
 
 pub type CacheKey<T> = Either<PropertyCache<T>, ItemRefCache<T>>;
-use crate::{
-    DiskDirPath, ItemNode, ItemRefCache, ItemSet, Leaf, LedgerItem, Node, PropertyCache, RefGetter,
-};
+use crate::{DiskDirPath, ItemExpr, ItemRefCache, LedgerItem, Node, PropertyCache, RefGetter};
 
 pub trait ReadLedger {
     type Item: LedgerItem;
@@ -206,105 +204,118 @@ pub trait ReadLedger {
         out
     }
 
-    fn load_node(&self, node: ItemNode<Self::Item>) -> HashSet<<Self::Item as LedgerItem>::Key> {
-        match node {
-            ItemNode::Set(set) => self.load_set(*set),
-            ItemNode::Leaf(leaf) => self.load_leaf(leaf),
-        }
-    }
-
-    fn load_set(&self, set: ItemSet<Self::Item>) -> HashSet<<Self::Item as LedgerItem>::Key> {
+    fn load_expr(&self, set: ItemExpr<Self::Item>) -> HashSet<<Self::Item as LedgerItem>::Key> {
         match set {
-            ItemSet::Union(nodes) => {
-                let mut out: HashSet<<Self::Item as LedgerItem>::Key> = HashSet::new();
-
-                for node in nodes {
-                    out.extend(self.load_node(node));
-                }
-
-                out
-            }
-            ItemSet::Intersection(nodes) => {
+            ItemExpr::Union(nodes) => nodes.into_iter().flat_map(|n| self.load_expr(n)).collect(),
+            ItemExpr::Intersection(nodes) => {
                 let mut iter = nodes.into_iter();
 
                 let mut out = match iter.next() {
-                    Some(items) => self.load_node(items),
+                    Some(items) => self.load_expr(items),
                     None => return Default::default(),
                 };
 
                 for node in iter {
-                    out = out.intersection(&self.load_node(node)).cloned().collect();
+                    out = out.intersection(&self.load_expr(node)).cloned().collect();
                 }
 
                 out
             }
-            ItemSet::Difference(node_1, node_2) => {
-                let keys_1 = self.load_node(node_1);
-                let keys_2 = self.load_node(node_2);
+            ItemExpr::Difference(expr1, expr2) => {
+                let keys_1 = self.load_expr(*expr1);
+                let keys_2 = self.load_expr(*expr2);
                 keys_1.difference(&keys_2).cloned().collect()
             }
-            ItemSet::Complement(node) => self
+            ItemExpr::Complement(expr) => self
                 .load_ids()
-                .difference(&self.load_node(node))
+                .difference(&self.load_expr(*expr))
                 .cloned()
                 .collect(),
-            ItemSet::All => self.load_ids(),
+            ItemExpr::All => self.load_ids(),
+            ItemExpr::Item(key) => [key].into_iter().collect(),
+            ItemExpr::Property { property, value } => {
+                self.get_prop_cache(PropertyCache { property, value })
+            }
+            ItemExpr::Reference {
+                items,
+                ty,
+                reversed,
+                recursive,
+                include_self,
+            } => {
+                let mut out = HashSet::new();
+                let items = self.load_expr(*items);
+
+                for item in items {
+                    let refs = self.get_ref_cache(RefGetter {
+                        reversed,
+                        key: item,
+                        ty: ty.clone(),
+                        recursive,
+                    });
+
+                    out.extend(refs);
+
+                    if include_self {
+                        out.insert(item);
+                    }
+                }
+
+                out
+            }
         }
     }
 
-    fn load_leaf(&self, getter: Leaf<Self::Item>) -> HashSet<<Self::Item as LedgerItem>::Key> {
+    fn get_ref_cache(
+        &self,
+        getter: RefGetter<Self::Item>,
+    ) -> HashSet<<Self::Item as LedgerItem>::Key> {
         match getter {
-            Leaf::Reference(RefGetter {
+            RefGetter {
                 recursive: true,
                 reversed,
                 key,
                 ty,
-            }) => {
+            } => {
                 let mut out = HashSet::new();
                 self.collect_all_dependents_recursive(key, ty, &mut out, reversed);
                 out
             }
-            Leaf::Reference(RefGetter {
+            RefGetter {
                 recursive: false,
                 reversed: true,
                 key,
                 ty: Some(ty),
-            }) => {
+            } => {
                 let dir = self.dependents_dir(key, ty);
                 Self::item_keys_from_dir(dir)
             }
-            Leaf::Reference(RefGetter {
+            RefGetter {
                 recursive: false,
                 reversed: true,
                 key,
                 ty: None,
-            }) => {
+            } => {
                 let dep_dir = self.root_dependents_dir(key);
                 Self::item_keys_from_dir_recursive(dep_dir)
             }
-            Leaf::Reference(RefGetter {
+            RefGetter {
                 recursive: false,
                 reversed: false,
                 key,
                 ty: Some(ty),
-            }) => {
+            } => {
                 let dir = self.root_dependencies_dir(key).join(ty.to_string());
                 Self::item_keys_from_dir(dir)
             }
-            Leaf::Reference(RefGetter {
+            RefGetter {
                 recursive: false,
                 reversed: false,
                 key,
                 ty: None,
-            }) => {
+            } => {
                 let dir = self.root_dependencies_dir(key);
                 Self::item_keys_from_dir_recursive(dir)
-            }
-            Leaf::Property(prop) => self.get_prop_cache(prop),
-            Leaf::Item(key) => {
-                let mut set = HashSet::new();
-                set.insert(key);
-                set
             }
         }
     }
