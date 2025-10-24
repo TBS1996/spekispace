@@ -1243,10 +1243,6 @@ impl<T: LedgerItem> Ledger<T> {
         items
     }
 
-    pub fn load_getter(&self, leaf: Leaf<T>) -> HashSet<T::Key> {
-        self.load_expr(ItemExpr::from(leaf))
-    }
-
     fn full_cache(&self) -> bool {
         self.full_cache.load(std::sync::atomic::Ordering::SeqCst)
     }

@@ -12,7 +12,7 @@ pub mod basecard;
 pub use basecard::*;
 
 use either::Either;
-use ledgerstore::{EventError, Leaf, LedgerAction, RefGetter, TimeProvider};
+use ledgerstore::{EventError, ItemExpr, LedgerAction, TimeProvider};
 use nonempty::NonEmpty;
 use serde::Deserializer;
 use serde_json::Value;
@@ -562,14 +562,15 @@ impl Card {
             _ => panic!(),
         };
 
-        let getter = Leaf::Reference(RefGetter {
-            reversed: false,
+        let expr = ItemExpr::Reference {
+            items: Box::new(ItemExpr::Item(key)),
             ty: Some(CardRefType::ParentClass),
-            key,
+            reversed: false,
             recursive: true,
-        });
+            include_self: false,
+        };
 
-        let mut classes = self.card_provider.providers.cards.load_getter(getter);
+        let mut classes = self.card_provider.providers.cards.load_expr(expr);
         classes.insert(key);
         classes
     }
@@ -790,14 +791,15 @@ impl Card {
             debug_assert!(false);
         }
 
-        let getter = Leaf::Reference(RefGetter {
-            reversed: true,
-            key: self.id,
+        let expr = ItemExpr::Reference {
+            items: Box::new(ItemExpr::Item(self.id)),
             ty: Some(CardRefType::InstanceOfAttribute),
+            reversed: true,
             recursive: false,
-        });
+            include_self: false,
+        };
 
-        self.card_provider.providers.cards.load_getter(getter)
+        self.card_provider.providers.cards.load_expr(expr)
     }
 
     pub fn is_attribute(&self) -> bool {

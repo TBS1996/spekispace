@@ -7,7 +7,7 @@ use std::{
 
 use clap::Parser;
 use dioxus::prelude::*;
-use ledgerstore::{EventError, Leaf, PropertyCache};
+use ledgerstore::{EventError, ItemExpr, Leaf, PropertyCache};
 use speki_core::{
     card::{CardId, RawCard},
     card_provider::CardProvider,
@@ -16,7 +16,7 @@ use speki_core::{
     metadata::Metadata,
     recall_rate::{History, Recall, ReviewEvent},
     set::{Set, SetEvent, SetExpr, SetId},
-    Card, CardRefType, Config, MyEventError,
+    Card, CardProperty, CardRefType, Config, MyEventError,
 };
 
 use crate::{overlays::OverlayEnum, Cli, APP};
@@ -94,8 +94,13 @@ impl App {
         self.0.provider.cards.dependencies_recursive(key)
     }
 
-    pub fn load_getter(&self, getter: Leaf<RawCard>) -> HashSet<CardId> {
-        self.0.provider.cards.load_getter(getter)
+    pub fn load_attrs(&self, id: CardId) -> HashSet<CardId> {
+        let expr = ItemExpr::Property {
+            property: CardProperty::AttrId,
+            value: id.to_string(),
+        };
+
+        self.0.provider.cards.load_expr(expr).into_iter().collect()
     }
 
     pub fn load_all_sets(&self) -> HashSet<Set> {

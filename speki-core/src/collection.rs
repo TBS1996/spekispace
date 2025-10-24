@@ -1,4 +1,4 @@
-use ledgerstore::{ItemNode, Leaf, PropertyCache, RefGetter};
+use ledgerstore::{ItemExpr, ItemNode, Leaf, PropertyCache, RefGetter};
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -9,10 +9,15 @@ use crate::{
 
 #[derive(Serialize, Deserialize, Debug, Clone, Eq, PartialEq, Copy, Hash, PartialOrd, Ord)]
 pub enum DynCard {
+    /// Get all instances of a class.
     Instances(CardId),
+    /// Get all direct dependents of a card.
     Dependents(CardId),
+    /// Get all recursive dependents of a card.
     RecDependents(CardId),
+    /// Get all cards of a specific type.
     CardType(CType),
+    /// Get all trivial cards.
     Trivial(bool),
 }
 
@@ -91,29 +96,28 @@ impl DynCard {
     pub fn evaluate(&self, provider: CardProvider) -> Vec<CardId> {
         match self {
             DynCard::Instances(id) => {
-                let mut output = vec![];
-                let getter = Leaf::Reference(RefGetter {
-                    reversed: true,
-                    key: *id,
+                let sub_classes: ItemExpr<RawCard> = ItemExpr::Reference {
+                    items: Box::new(ItemExpr::Item(*id)),
                     ty: Some(CardRefType::ParentClass),
+                    reversed: true,
                     recursive: true,
-                });
-                let mut all_classes = dbg!(provider.providers.cards.load_getter(getter));
-                all_classes.insert(*id);
+                    include_self: true,
+                };
 
-                for class in all_classes {
-                    let getter = Leaf::Reference(RefGetter {
-                        reversed: true,
-                        key: class,
-                        ty: Some(CardRefType::ClassOfInstance),
-                        recursive: false,
-                    });
-                    for instance in provider.providers.cards.load_getter(getter) {
-                        output.push(instance);
-                    }
-                }
+                let expr = ItemExpr::Reference {
+                    items: Box::new(sub_classes),
+                    ty: Some(CardRefType::ClassOfInstance),
+                    reversed: true,
+                    recursive: true,
+                    include_self: false,
+                };
 
-                output
+                provider
+                    .providers
+                    .cards
+                    .load_expr(expr)
+                    .into_iter()
+                    .collect()
             }
             DynCard::Trivial(flag) => provider
                 .providers

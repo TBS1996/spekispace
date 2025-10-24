@@ -100,11 +100,7 @@ pub fn RenderInheritedAttrs(
         .cloned()
         .into_iter()
         .map(|attr| {
-            let getter = Leaf::Property(PropertyCache::new(
-                CardProperty::AttrId,
-                attr.id.to_string(),
-            ));
-            let cached = APP.read().load_getter(getter);
+            let cached = APP.read().load_attrs(attr.id);
             let disabled = !cached.is_empty();
 
             let title = if is_param {
@@ -192,11 +188,7 @@ pub fn RenderAttrs(
         .cloned()
         .into_iter()
         .map(|attr| {
-            let getter = Leaf::Property(PropertyCache::new(
-                CardProperty::AttrId,
-                attr.id.to_string(),
-            ));
-            let cached = APP.read().load_getter(getter);
+            let cached = APP.read().load_attrs(attr.id);
             let disabled = !cached.is_empty() || disabled;
 
             let title = match (is_param, disabled) {

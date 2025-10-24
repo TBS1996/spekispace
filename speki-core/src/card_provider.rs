@@ -9,7 +9,7 @@ use crate::{
     ArcRecall, Card, CardProperty, CardRefType, FsTime, MyEventError, Provider,
 };
 use dioxus_logger::tracing::{info, trace};
-use ledgerstore::{EventError, ItemSet, Leaf, LedgerEvent, PropertyCache, RefGetter};
+use ledgerstore::{EventError, ItemExpr, ItemSet, LedgerEvent, PropertyCache};
 use std::{
     collections::{BTreeSet, HashMap, HashSet},
     fmt::Debug,
@@ -70,29 +70,23 @@ impl CardProvider {
     pub fn eval_dyncard(&self, dyncard: &DynCard) -> Vec<CardId> {
         match dyncard {
             DynCard::Instances(id) => {
-                let mut output = vec![];
-                let getter = Leaf::Reference(RefGetter {
-                    reversed: true,
-                    key: *id,
+                let sub_classes: ItemExpr<RawCard> = ItemExpr::Reference {
+                    items: Box::new(ItemExpr::Item(*id)),
                     ty: Some(CardRefType::ParentClass),
+                    reversed: true,
                     recursive: true,
-                });
-                let mut all_classes = dbg!(self.providers.cards.load_getter(getter));
-                all_classes.insert(*id);
+                    include_self: true,
+                };
 
-                for class in all_classes {
-                    let getter = Leaf::Reference(RefGetter {
-                        reversed: true,
-                        key: class,
-                        ty: Some(CardRefType::ClassOfInstance),
-                        recursive: false,
-                    });
-                    for instance in self.providers.cards.load_getter(getter) {
-                        output.push(instance);
-                    }
-                }
+                let expr = ItemExpr::Reference {
+                    items: Box::new(sub_classes),
+                    ty: Some(CardRefType::ClassOfInstance),
+                    reversed: true,
+                    recursive: true,
+                    include_self: false,
+                };
 
-                output
+                self.providers.cards.load_expr(expr).into_iter().collect()
             }
             DynCard::Trivial(flag) => self
                 .providers
