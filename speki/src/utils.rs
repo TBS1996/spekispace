@@ -7,7 +7,7 @@ use std::{
 
 use clap::Parser;
 use dioxus::prelude::*;
-use ledgerstore::{EventError, ItemExpr, Leaf, PropertyCache};
+use ledgerstore::{EventError, ItemExpr, PropertyCache};
 use speki_core::{
     card::{CardId, RawCard},
     card_provider::CardProvider,

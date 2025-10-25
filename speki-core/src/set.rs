@@ -1,6 +1,6 @@
 use std::{collections::BTreeSet, fmt::Display};
 
-use ledgerstore::{ItemNode, ItemSet, Leaf, LedgerEvent, LedgerItem};
+use ledgerstore::{ItemExpr, LedgerEvent, LedgerItem};
 use serde::{Deserialize, Serialize};
 use strum::{Display, EnumDiscriminants, EnumIter, EnumString};
 use uuid::Uuid;
@@ -8,6 +8,7 @@ use uuid::Uuid;
 use crate::{
     card::{CardId, RawCard},
     collection::DynCard,
+    CardProperty, CardRefType,
 };
 
 impl Display for Set {
@@ -105,10 +106,6 @@ impl Set {
             expr: SetExpr::All,
         }
     }
-
-    pub fn to_itemset(&self) -> ItemSet<RawCard> {
-        self.expr.to_set()
-    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Hash, Ord, PartialOrd, Eq)]
@@ -119,13 +116,59 @@ pub enum Input {
     Expr(Box<SetExpr>),
 }
 
-impl Input {
-    pub fn to_node(&self) -> ItemNode<RawCard> {
-        match self {
-            Input::Card(id) => ItemNode::Leaf(Leaf::<RawCard>::Item(*id)),
-            Input::Leaf(dyn_card) => dyn_card.to_node(),
-            Input::Reference(_) => todo!(),
-            Input::Expr(set) => ItemNode::Set(Box::new(set.to_set())),
+impl From<DynCard> for ItemExpr<RawCard> {
+    fn from(value: DynCard) -> Self {
+        match value {
+            DynCard::Instances(id) => {
+                let sub_classes: ItemExpr<RawCard> = ItemExpr::Reference {
+                    items: Box::new(ItemExpr::Item(id)),
+                    ty: Some(CardRefType::ParentClass),
+                    reversed: true,
+                    recursive: true,
+                    include_self: true,
+                };
+
+                ItemExpr::Reference {
+                    items: Box::new(sub_classes),
+                    ty: Some(CardRefType::ClassOfInstance),
+                    reversed: true,
+                    recursive: true,
+                    include_self: false,
+                }
+            }
+            DynCard::RecDependents(id) => ItemExpr::Reference {
+                items: Box::new(ItemExpr::Item(id)),
+                ty: None,
+                reversed: true,
+                recursive: true,
+                include_self: false,
+            },
+            DynCard::Dependents(id) => ItemExpr::Reference {
+                items: Box::new(ItemExpr::Item(id)),
+                ty: None,
+                reversed: true,
+                recursive: false,
+                include_self: false,
+            },
+            DynCard::CardType(ty) => ItemExpr::Property {
+                property: CardProperty::CardType,
+                value: ty.to_string(),
+            },
+            DynCard::Trivial(flag) => ItemExpr::Property {
+                property: CardProperty::Trivial,
+                value: flag.to_string(),
+            },
+        }
+    }
+}
+
+impl From<Input> for ItemExpr<RawCard> {
+    fn from(value: Input) -> Self {
+        match value {
+            Input::Card(id) => ItemExpr::Item(id),
+            Input::Leaf(dyn_card) => ItemExpr::from(dyn_card),
+            Input::Reference(_id) => todo!(),
+            Input::Expr(expr) => expr.to_set(),
         }
     }
 }
@@ -161,19 +204,26 @@ impl SetExpr {
         Self::All
     }
 
-    pub fn to_set(&self) -> ItemSet<RawCard> {
-        let set = match self {
-            SetExpr::Union(set) => {
-                ItemSet::Union(set.iter().map(|input| input.to_node()).collect())
-            }
-            SetExpr::Intersection(btree_set) => {
-                ItemSet::Intersection(btree_set.iter().map(|input| input.to_node()).collect())
-            }
-            SetExpr::Difference(input, input1) => {
-                ItemSet::Difference(input.to_node(), input1.to_node())
-            }
-            SetExpr::Complement(input) => ItemSet::Complement(input.to_node()),
-            SetExpr::All => ItemSet::All,
+    pub fn to_set(&self) -> ItemExpr<RawCard> {
+        let set = self.clone();
+        let set = match set {
+            SetExpr::Union(set) => ItemExpr::Union(
+                set.iter()
+                    .map(|input| ItemExpr::from(input.clone()))
+                    .collect(),
+            ),
+            SetExpr::Intersection(btree_set) => ItemExpr::Intersection(
+                btree_set
+                    .iter()
+                    .map(|input| ItemExpr::from(input.clone()))
+                    .collect(),
+            ),
+            SetExpr::Difference(input, input1) => ItemExpr::Difference(
+                Box::new(ItemExpr::from(input)),
+                Box::new(ItemExpr::from(input1)),
+            ),
+            SetExpr::Complement(input) => ItemExpr::Complement(Box::new(ItemExpr::from(input))),
+            SetExpr::All => ItemExpr::All,
         };
 
         set

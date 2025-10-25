@@ -9,7 +9,7 @@ use crate::{
     ArcRecall, Card, CardProperty, CardRefType, FsTime, MyEventError, Provider,
 };
 use dioxus_logger::tracing::{info, trace};
-use ledgerstore::{EventError, ItemExpr, ItemSet, LedgerEvent, PropertyCache};
+use ledgerstore::{EventError, ItemExpr, LedgerEvent, PropertyCache};
 use std::{
     collections::{BTreeSet, HashMap, HashSet},
     fmt::Debug,
@@ -143,8 +143,8 @@ impl CardProvider {
         self.providers.sets.modify(event)
     }
 
-    fn load_set(&self, set: impl Into<ItemSet<RawCard>>) -> HashSet<CardId> {
-        self.providers.cards.load_expr(set.into().into()) // lol
+    fn load_set(&self, set: impl Into<ItemExpr<RawCard>>) -> HashSet<CardId> {
+        self.providers.cards.load_expr(set.into())
     }
 
     pub fn modify_metadata(&self, event: MetaEvent) -> Result<(), EventError<Metadata>> {
@@ -182,7 +182,7 @@ impl CardProvider {
         Ok(())
     }
 
-    pub fn delete_set(&self, set: ItemSet<RawCard>) -> Result<(), EventError<RawCard>> {
+    pub fn delete_set(&self, set: ItemExpr<RawCard>) -> Result<(), EventError<RawCard>> {
         match self.many_modify(vec![Event::Card(CardEvent::DeleteSet { set })]) {
             Ok(()) => Ok(()),
             Err(MyEventError::CardError(e)) => Err(e),

@@ -136,92 +136,6 @@ pub enum ItemExpr<T: LedgerItem> {
     },
 }
 
-/// Expression tree for getting a set of items.
-#[derive(Debug, Clone, Serialize, Deserialize, Hash)]
-#[serde(bound(deserialize = "T: LedgerItem + DeserializeOwned"))]
-pub enum ItemSet<T: LedgerItem> {
-    /// Adds all the items in all the nodes.
-    Union(Vec<ItemNode<T>>),
-    /// Only the items that are shared in all the nodes.
-    Intersection(Vec<ItemNode<T>>),
-    /// The items that are in the first node but not in the second.
-    Difference(ItemNode<T>, ItemNode<T>),
-    /// All the items in the state, except the ones in the node.
-    Complement(ItemNode<T>),
-    /// All the items in the state. Kinda just an alias for Complement of empty union.
-    All,
-}
-
-impl<T: LedgerItem> From<ItemSet<T>> for ItemExpr<T> {
-    fn from(value: ItemSet<T>) -> Self {
-        match value {
-            ItemSet::Union(item_nodes) => {
-                ItemExpr::Union(item_nodes.into_iter().map(Self::from).collect())
-            }
-            ItemSet::Intersection(item_nodes) => {
-                ItemExpr::Intersection(item_nodes.into_iter().map(Self::from).collect())
-            }
-            ItemSet::Difference(item_node, item_node1) => ItemExpr::Difference(
-                Box::new(Self::from(item_node)),
-                Box::new(Self::from(item_node1)),
-            ),
-            ItemSet::Complement(item_node) => ItemExpr::Complement(Box::new(Self::from(item_node))),
-            ItemSet::All => ItemExpr::All,
-        }
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, Hash)]
-#[serde(bound(deserialize = "T: LedgerItem + DeserializeOwned"))]
-pub enum ItemNode<T: LedgerItem> {
-    Set(Box<ItemSet<T>>),
-    Leaf(Leaf<T>),
-}
-
-impl<T: LedgerItem> From<ItemNode<T>> for ItemExpr<T> {
-    fn from(value: ItemNode<T>) -> Self {
-        match value {
-            ItemNode::Set(set) => ItemExpr::from(*set),
-            ItemNode::Leaf(leaf) => ItemExpr::from(leaf),
-        }
-    }
-}
-
-/// A leaf in the expression tree, evaluates to a list of items.
-#[derive(Debug, Clone, Serialize, Deserialize, Hash)]
-#[serde(bound(deserialize = "T: LedgerItem + DeserializeOwned"))]
-pub enum Leaf<T: LedgerItem> {
-    /// A single item.
-    Item(T::Key),
-    /// Items that all share a common property.
-    Property(PropertyCache<T>),
-    /// Items based on how they are referenced by other items.
-    Reference(RefGetter<T>),
-}
-
-impl<T: LedgerItem> From<Leaf<T>> for ItemExpr<T> {
-    fn from(value: Leaf<T>) -> Self {
-        match value {
-            Leaf::Item(key) => ItemExpr::Item(key),
-            Leaf::Property(PropertyCache { property, value }) => {
-                ItemExpr::Property { property, value }
-            }
-            Leaf::Reference(RefGetter {
-                reversed,
-                key,
-                ty,
-                recursive,
-            }) => ItemExpr::Reference {
-                items: Box::new(ItemExpr::Item(key)),
-                ty,
-                reversed,
-                recursive,
-                include_self: false,
-            },
-        }
-    }
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize, Hash)]
 pub struct RefGetter<T: LedgerItem> {
     pub reversed: bool, // whether it fetches links from the item to other items or the way this item being referenced
@@ -297,7 +211,7 @@ pub enum LedgerEvent<T: LedgerItem> {
         upstream_url: String,
     },
     DeleteSet {
-        set: ItemSet<T>,
+        set: ItemExpr<T>,
     },
 }
 
@@ -1202,8 +1116,8 @@ impl<T: LedgerItem> Ledger<T> {
     }
 
     /// Returns all the dependencies of all the items in the set that are not in the set itself.
-    pub fn dependents_recursive_set(&self, set: ItemSet<T>) -> HashSet<T::Key> {
-        let items = self.load_expr(set.into());
+    pub fn dependents_recursive_set(&self, set: ItemExpr<T>) -> HashSet<T::Key> {
+        let items = self.load_expr(set);
         let mut dependencies: HashSet<T::Key> = HashSet::new();
 
         for item in &items {

@@ -195,9 +195,7 @@ impl CardSelector {
         });
 
         let collection: ExprEditor = ExprEditor::from(filter);
-        dbg!(&collection);
         let col_cards = collection.expanded();
-        dbg!(&col_cards);
 
         let allowed = allowed_cards.clone();
         let cards = ScopeId::APP.in_runtime(|| {

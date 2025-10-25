@@ -4,13 +4,13 @@ use std::{
 };
 
 use dioxus::prelude::*;
-use ledgerstore::{Leaf, LedgerEvent, PropertyCache};
+use ledgerstore::LedgerEvent;
 use speki_core::{
     card::{AttrBackType, AttributeId, Attrv2, BackSide, CType, CardId, ParamAnswer, RawCard},
     collection::DynCard,
     ledger::CardAction,
     set::SetExpr,
-    Card, CardProperty,
+    Card,
 };
 
 use crate::{
