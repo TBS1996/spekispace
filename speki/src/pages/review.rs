@@ -668,6 +668,7 @@ impl From<Input> for InputEditor {
             Input::Reference(uuid) => InputEditor::Reference(uuid),
             Input::Expr(set_expr) => InputEditor::Expr((*set_expr).into()),
             Input::Card(id) => InputEditor::Card(id),
+            Input::Raw(_expr) => todo!(),
         }
     }
 }

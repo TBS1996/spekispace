@@ -114,6 +114,7 @@ pub enum Input {
     Leaf(DynCard),
     Reference(SetId),
     Expr(Box<SetExpr>),
+    Raw(ItemExpr<RawCard>),
 }
 
 impl From<DynCard> for ItemExpr<RawCard> {
@@ -169,6 +170,7 @@ impl From<Input> for ItemExpr<RawCard> {
             Input::Leaf(dyn_card) => ItemExpr::from(dyn_card),
             Input::Reference(_id) => todo!(),
             Input::Expr(expr) => expr.to_set(),
+            Input::Raw(expr) => expr,
         }
     }
 }

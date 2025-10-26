@@ -96,7 +96,7 @@ impl<T: LedgerItem> ItemReference<T> {
 }
 
 /// An expression that evaluates to a set of items.
-#[derive(Debug, Clone, Serialize, Deserialize, Hash)]
+#[derive(Debug, Clone, Serialize, Deserialize, Hash, PartialEq, Eq, PartialOrd, Ord)]
 #[serde(bound(deserialize = "T: LedgerItem + DeserializeOwned"))]
 pub enum ItemExpr<T: LedgerItem> {
     /// Adds all the items in all the nodes.

@@ -5,7 +5,7 @@ use crate::{
     ledger::{CardEvent, Event, MetaEvent},
     metadata::Metadata,
     recall_rate::{History, ReviewEvent},
-    set::{Input, Set, SetEvent, SetExpr},
+    set::{Set, SetEvent, SetExpr},
     ArcRecall, Card, CardProperty, CardRefType, FsTime, MyEventError, Provider,
 };
 use dioxus_logger::tracing::{info, trace};
@@ -114,21 +114,6 @@ impl CardProvider {
                 }
             }
         }
-    }
-
-    pub fn eval_input(&self, input: &Input) -> BTreeSet<CardId> {
-        let res = match input {
-            Input::Leaf(dc) => self.eval_dyncard(dc).into_iter().collect(),
-            Input::Reference(id) => self.eval_expr(&self.providers.sets.load(*id).unwrap().expr),
-            Input::Expr(expr) => self.eval_expr(&expr),
-            Input::Card(id) => {
-                let mut set = BTreeSet::default();
-                set.insert(*id);
-                set
-            }
-        };
-        dbg!("evaluated: {:?}", self);
-        res
     }
 
     pub fn eval_expr(&self, expr: &SetExpr) -> BTreeSet<CardId> {

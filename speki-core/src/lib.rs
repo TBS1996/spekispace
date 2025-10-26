@@ -162,7 +162,7 @@ impl Config {
 }
 
 /// {from} is a(n) {ty} of {to}
-#[derive(Clone, PartialEq, PartialOrd, Hash, Eq, Debug, Deserialize, Serialize)]
+#[derive(Clone, PartialEq, PartialOrd, Hash, Eq, Debug, Deserialize, Serialize, Ord)]
 pub enum CardRefType {
     ExplicitDependency,
     ClassOfInstance,
@@ -226,7 +226,7 @@ impl CardRefType {
     }
 }
 
-#[derive(Clone, PartialEq, PartialOrd, Hash, Eq, Debug, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, PartialOrd, Hash, Eq, Debug, Serialize, Deserialize, Ord)]
 pub enum CardProperty {
     Trivial,
     Bigram,

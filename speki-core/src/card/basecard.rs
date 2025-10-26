@@ -378,7 +378,7 @@ pub struct ParamAnswer {
     pub answer: BackSide,
 }
 
-#[derive(PartialEq, Debug, Clone, Serialize, Deserialize, Hash, Eq)]
+#[derive(PartialEq, Debug, Clone, Serialize, Deserialize, Hash, Eq, PartialOrd, Ord)]
 pub enum CardType {
     /// A specific instance of a class
     /// For example, the instance might be Elvis Presley where the concept would be "Person"
@@ -767,7 +767,7 @@ fn bool_is_false(b: &bool) -> bool {
     *b == false
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, Hash, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub struct RawCard {
     pub id: Uuid,
     /// The context of which the name of the card makes sense. For example, instead of writing `kubernetes node`, you can just
