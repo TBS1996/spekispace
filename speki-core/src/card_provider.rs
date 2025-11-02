@@ -5,11 +5,11 @@ use crate::{
     ledger::{CardEvent, Event, MetaEvent},
     metadata::Metadata,
     recall_rate::{History, ReviewEvent},
-    set::{Set, SetEvent, SetExpr},
+    set::{Set, SetEvent},
     ArcRecall, Card, CardProperty, CardRefType, FsTime, MyEventError, Provider,
 };
 use dioxus_logger::tracing::{info, trace};
-use ledgerstore::{EventError, ItemExpr, LedgerEvent, PropertyCache};
+use ledgerstore::{EventError, ItemExpr, LedgerEvent, PropertyCache, SavedItem};
 use std::{
     collections::{BTreeSet, HashMap, HashSet},
     fmt::Debug,
@@ -38,7 +38,7 @@ impl CardProvider {
         self.providers.cards.load_ids().into_iter().collect()
     }
 
-    pub fn load_metadata(&self, id: CardId) -> Option<Arc<Metadata>> {
+    pub fn load_metadata(&self, id: CardId) -> Option<Arc<SavedItem<Metadata>>> {
         self.providers.metadata.load(id)
     }
 
@@ -116,10 +116,10 @@ impl CardProvider {
         }
     }
 
-    pub fn eval_expr(&self, expr: &SetExpr) -> BTreeSet<CardId> {
+    pub fn eval_expr(&self, expr: impl Into<ItemExpr<RawCard>>) -> BTreeSet<CardId> {
         self.providers
             .cards
-            .load_expr(expr.to_set().into())
+            .load_expr(expr.into())
             .into_iter()
             .collect()
     }
@@ -290,12 +290,12 @@ impl CardProvider {
         }
 
         let (base, is_remote) = self.providers.cards.load_with_remote_info(id)?;
-        let history = match self.providers.reviews.load(id) {
-            Some(revs) => revs,
+        let history = match self.providers.reviews.load(id).map(|s| s.clone_item()) {
+            Some(revs) => Arc::new(revs),
             None => Arc::new(History::new(id)),
         };
-        let metadata = match self.providers.metadata.load(id) {
-            Some(meta) => meta,
+        let metadata = match self.providers.metadata.load(id).map(|s| s.clone_item()) {
+            Some(meta) => Arc::new(meta),
             None => Arc::new(Metadata::new(id)),
         };
 

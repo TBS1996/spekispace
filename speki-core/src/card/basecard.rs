@@ -959,7 +959,7 @@ impl RawCard {
             return None;
         };
 
-        let mut card: Arc<Self> = ledger.load(*instance).unwrap();
+        let mut card = ledger.load(*instance).unwrap();
 
         while let Some(parent) = card.parent_class() {
             card = ledger.load(parent).unwrap();

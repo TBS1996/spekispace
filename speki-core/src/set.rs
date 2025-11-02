@@ -88,7 +88,7 @@ impl LedgerItem for Set {
 
 pub type SetId = Uuid;
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Hash, Eq)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Hash, Eq, Ord, PartialOrd)]
 pub struct Set {
     pub id: SetId,
     pub name: String,
@@ -198,6 +198,18 @@ pub enum SetExpr {
 impl Default for SetExpr {
     fn default() -> Self {
         Self::Union(Default::default())
+    }
+}
+
+impl From<SetExpr> for ItemExpr<RawCard> {
+    fn from(value: SetExpr) -> Self {
+        value.to_set()
+    }
+}
+
+impl From<Set> for ItemExpr<RawCard> {
+    fn from(value: Set) -> Self {
+        value.expr.to_set()
     }
 }
 

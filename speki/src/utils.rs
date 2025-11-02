@@ -7,7 +7,7 @@ use std::{
 
 use clap::Parser;
 use dioxus::prelude::*;
-use ledgerstore::{EventError, ItemExpr, PropertyCache};
+use ledgerstore::{EventError, ItemExpr, PropertyCache, SavedItem};
 use speki_core::{
     card::{CardId, RawCard},
     card_provider::CardProvider,
@@ -74,11 +74,11 @@ impl App {
         self.0.provider.cards.all_dependents_with_ty(key)
     }
 
-    pub fn load_set(&self, id: SetId) -> Option<Arc<Set>> {
+    pub fn load_set(&self, id: SetId) -> Option<Arc<SavedItem<Set>>> {
         self.0.provider.sets.load(id)
     }
 
-    pub fn load_metadata(&self, id: CardId) -> Option<Arc<Metadata>> {
+    pub fn load_metadata(&self, id: CardId) -> Option<Arc<SavedItem<Metadata>>> {
         self.0.provider.metadata.load(id)
     }
 
@@ -86,7 +86,7 @@ impl App {
         self.0.provider.cards.has_item(id)
     }
 
-    pub fn load_all_histories(&self) -> HashSet<History> {
+    pub fn load_all_histories(&self) -> HashSet<Arc<SavedItem<History>>> {
         self.0.provider.reviews.load_all()
     }
 
@@ -103,7 +103,7 @@ impl App {
         self.0.provider.cards.load_expr(expr).into_iter().collect()
     }
 
-    pub fn load_all_sets(&self) -> HashSet<Set> {
+    pub fn load_all_sets(&self) -> HashSet<Arc<SavedItem<Set>>> {
         self.0.provider.sets.load_all()
     }
 
@@ -127,7 +127,7 @@ impl App {
     }
 
     pub fn eval_expr(&self, expr: &SetExpr) -> BTreeSet<CardId> {
-        self.0.card_provider.eval_expr(expr)
+        self.0.card_provider.eval_expr(expr.clone())
     }
 
     pub fn display_dyncard(&self, dyncard: &DynCard) -> String {

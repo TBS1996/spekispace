@@ -257,7 +257,8 @@ pub fn TheApp() -> Element {
         let mut eval_data: Vec<History> = vec![];
         let mut all_data: Vec<History> = vec![];
 
-        for mut history in histories {
+        for history in histories {
+            let mut history = history.clone_item();
             if !APP.read().card_exists(history.id) {
                 continue;
             };

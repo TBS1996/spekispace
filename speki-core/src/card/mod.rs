@@ -12,7 +12,7 @@ pub mod basecard;
 pub use basecard::*;
 
 use either::Either;
-use ledgerstore::{EventError, ItemExpr, LedgerAction, TimeProvider};
+use ledgerstore::{EventError, ItemExpr, LedgerAction, SavedItem, TimeProvider};
 use nonempty::NonEmpty;
 use serde::Deserializer;
 use serde_json::Value;
@@ -319,7 +319,7 @@ pub struct Card {
     name: EvalText,
     frontside: EvalText,
     backside: EvalText,
-    base: Arc<RawCard>,
+    base: Arc<SavedItem<RawCard>>,
     metadata: Arc<Metadata>,
     history: Arc<History>,
     card_provider: CardProvider,
@@ -402,8 +402,8 @@ impl Card {
         Ok(out)
     }
 
-    pub fn metadata(&self) -> Metadata {
-        Arc::unwrap_or_clone(self.metadata.clone())
+    pub fn metadata(&self) -> Arc<Metadata> {
+        self.metadata.clone()
     }
 
     pub fn display_card(&self, namespace: bool, class: bool) -> EvalText {
@@ -518,7 +518,7 @@ impl Card {
         self.is_finished() && !self.trivial() && self.back_side().is_some()
     }
 
-    pub fn clone_base(&self) -> Arc<RawCard> {
+    pub fn clone_base(&self) -> Arc<SavedItem<RawCard>> {
         self.base.clone()
     }
 
@@ -689,7 +689,7 @@ impl Card {
     }
 
     pub fn from_parts(
-        base: Arc<RawCard>,
+        base: Arc<SavedItem<RawCard>>,
         is_remote: bool,
         history: Arc<History>,
         metadata: Arc<Metadata>,

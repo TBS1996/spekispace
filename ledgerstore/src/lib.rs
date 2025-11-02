@@ -3,7 +3,8 @@ use either::Either;
 use git2::build::CheckoutBuilder;
 use nonempty::NonEmpty;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
-use std::collections::VecDeque;
+use std::cell::OnceCell;
+use std::collections::{BTreeMap, VecDeque};
 use std::fs::{self, hard_link};
 use std::io::{self, Write};
 use std::marker::PhantomData;
@@ -25,8 +26,11 @@ pub mod ledger_cache;
 mod ledger_item;
 mod read_ledger;
 use blockchain::BlockChain;
+mod cache;
 pub mod entry_thing;
 mod node;
+
+pub use cache::SavedItem;
 
 pub use ledger_item::LedgerItem;
 
@@ -134,6 +138,18 @@ pub enum ItemExpr<T: LedgerItem> {
         /// Whether to also include the items themselves when evaluating.
         include_self: bool,
     },
+}
+
+impl<T: LedgerItem> ItemExpr<T> {
+    pub fn with_recursive_dependencies(self) -> Self {
+        Self::Reference {
+            items: Box::new(self),
+            ty: None,
+            reversed: false,
+            recursive: true,
+            include_self: true,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Hash)]
@@ -293,7 +309,7 @@ impl<T: LedgerItem> LedgerType<T> {
     pub fn load(&self, key: T::Key) -> Option<Arc<T>> {
         match self {
             LedgerType::OverRide(ledger) => ledger.load(key),
-            LedgerType::Normal(ledger) => ledger.load(key),
+            LedgerType::Normal(ledger) => ledger.load(key).map(|s| Arc::new(s.clone_item())),
         }
     }
 
@@ -343,7 +359,7 @@ impl<T: LedgerItem> OverrideLedger<T> {
         if let Some(val) = self.new.get(&key).cloned() {
             return Some(val);
         } else {
-            self.inner.load(key)
+            self.inner.load(key).map(|s| Arc::new(s.clone_item()))
         }
     }
 
@@ -372,6 +388,7 @@ struct Remote<T: LedgerItem> {
 
 use git2::{Delta, DiffFindOptions, DiffOptions, ObjectType, Oid, Repository, ResetType};
 
+use crate::cache::{Cache, MaybeItem};
 use crate::entry_thing::EventNode;
 use crate::read_ledger::ReadLedger;
 
@@ -839,8 +856,8 @@ pub struct Ledger<T: LedgerItem> {
     ledger_hash: Arc<PathBuf>,
     remote: Arc<Remote<T>>,
     local: Local<T>,
-    cache: Arc<RwLock<HashMap<T::Key, Arc<T>>>>,
     full_cache: Arc<AtomicBool>,
+    cache: Cache<T>,
 }
 
 impl<T: LedgerItem> Ledger<T> {
@@ -873,6 +890,11 @@ impl<T: LedgerItem> Ledger<T> {
         let items = DiskDirPath::new(root.join("items")).unwrap();
         let ledger_hash = root.join("applied");
 
+        let local = Local {
+            root: Arc::new(root.clone()),
+            _phantom: PhantomData,
+        };
+
         let remote = Remote::new(&root);
         //let _ = remote.hard_reset_current();
 
@@ -884,13 +906,107 @@ impl<T: LedgerItem> Ledger<T> {
             ledger_hash: Arc::new(ledger_hash),
             entries,
             remote: Arc::new(remote),
-            cache: Default::default(),
             full_cache: Arc::new(AtomicBool::new(false)),
-            local: Local {
-                root: Arc::new(root.clone()),
-                _phantom: PhantomData,
-            },
+            cache: Cache::new(Arc::new(local.clone())),
+            local,
         }
+    }
+
+    fn collect_all_deps_with_ty(
+        &self,
+        key: T::Key,
+        ty: Option<T::RefType>,
+        reversed: bool,
+        recursive: bool,
+    ) -> HashMap<T::RefType, HashSet<T::Key>> {
+        let mut local_out = HashSet::new();
+
+        self.local
+            .collect_all_deps_with_ty(key, ty.clone(), &mut local_out, reversed, recursive);
+
+        let mut remote_out = HashSet::new();
+
+        self.remote
+            .collect_all_deps_with_ty(key, ty, &mut remote_out, reversed, recursive);
+
+        let mut out: HashMap<T::RefType, HashSet<T::Key>> = HashMap::new();
+
+        for (ty, keys) in local_out {
+            out.entry(ty).or_default().insert(keys);
+        }
+
+        for (ty, keys) in remote_out {
+            out.entry(ty).or_default().insert(keys);
+        }
+
+        out
+    }
+
+    fn load_all_nodes(&self) -> BTreeMap<T::Key, SavedItem<T>> {
+        let mut out: BTreeMap<T::Key, SavedItem<T>> = Default::default();
+
+        for id in self.remote.load_ids() {
+            let node = self.load_node(id).unwrap(); // Shouldn't be `None` because we just confirmed the id exists from load_ids.
+            out.insert(id, node);
+        }
+
+        for id in self.local.load_ids() {
+            if !out.contains_key(&id) {
+                let node = self.load_node(id).unwrap();
+                out.insert(id, node);
+            }
+        }
+
+        out
+    }
+
+    fn load_node(&self, key: T::Key) -> Option<SavedItem<T>> {
+        if !self.has_item(key) {
+            return None;
+        }
+
+        let dependencies = self.collect_all_deps_with_ty(key, None, false, false);
+        let dependents = self.collect_all_deps_with_ty(key, None, true, false);
+
+        let mut node = SavedItem {
+            key,
+            item: OnceCell::new(),
+            dependencies: Default::default(),
+            dependents: Default::default(),
+            ledger: Arc::new(self.local.clone()),
+        };
+
+        for (ty, keys) in dependencies {
+            for key in keys {
+                node.dependencies
+                    .entry(ty.clone())
+                    .or_default()
+                    .insert(MaybeItem::new(key, self.cache.clone()));
+            }
+        }
+
+        for (ty, keys) in dependents {
+            for key in keys {
+                node.dependents
+                    .entry(ty.clone())
+                    .or_default()
+                    .insert(MaybeItem::new(key, self.cache.clone()));
+            }
+        }
+
+        Some(node)
+    }
+
+    pub fn load_node_with_cache(&self, key: T::Key) -> Option<Arc<SavedItem<T>>> {
+        if let Some(node) = self.cache.load_cached(key) {
+            return Some(node);
+        }
+
+        let node = Arc::new(self.load_node(key)?);
+
+        self.cache.insert(node.clone());
+
+        Some(node)
     }
 
     pub fn current_commit_date(&self) -> Option<DateTime<Utc>> {
@@ -1074,7 +1190,7 @@ impl<T: LedgerItem> Ledger<T> {
 
     pub fn load_ids(&self) -> HashSet<T::Key> {
         if self.full_cache() {
-            return self.cache.read().unwrap().keys().cloned().collect();
+            return self.cache.load_ids();
         }
 
         let mut ids = self.local.load_ids();
@@ -1161,24 +1277,17 @@ impl<T: LedgerItem> Ledger<T> {
         self.full_cache.load(std::sync::atomic::Ordering::SeqCst)
     }
 
-    pub fn load_all(&self) -> HashSet<T> {
+    pub fn load_all(&self) -> HashSet<Arc<SavedItem<T>>> {
         if self.full_cache() {
-            return self
-                .cache
-                .read()
-                .unwrap()
-                .values()
-                .map(|v| Arc::unwrap_or_clone(v.clone()))
-                .collect();
+            return self.cache.load_all();
         }
 
-        let mut items = self.local.load_all();
-        items.extend(self.remote.load_all());
+        let mut items: HashSet<Arc<SavedItem<T>>> = Default::default();
+        let all_nodes = self.load_all_nodes();
 
-        let mut cache_guard = self.cache.write().unwrap();
-
-        for item in items.clone() {
-            cache_guard.insert(item.item_id(), Arc::new(item));
+        for node in all_nodes.into_values().map(Arc::new) {
+            items.insert(node.clone());
+            self.cache.insert(node);
         }
 
         self.full_cache
@@ -1187,7 +1296,7 @@ impl<T: LedgerItem> Ledger<T> {
         items
     }
 
-    pub fn load_with_remote_info(&self, key: T::Key) -> Option<(Arc<T>, bool)> {
+    pub fn load_with_remote_info(&self, key: T::Key) -> Option<(Arc<SavedItem<T>>, bool)> {
         let is_remote = self.is_remote(key);
         let item = self.load(key)?;
 
@@ -1196,22 +1305,12 @@ impl<T: LedgerItem> Ledger<T> {
 
     pub fn load_or_default(&self, key: T::Key) -> Arc<T> {
         self.load(key)
+            .map(|saved| Arc::new(saved.clone_item()))
             .unwrap_or_else(|| Arc::new(T::new_default(key)))
     }
 
-    pub fn load(&self, key: T::Key) -> Option<Arc<T>> {
-        if let Some(item) = self.cache.read().unwrap().get(&key).cloned() {
-            return Some(item);
-        }
-
-        match self.remote.load(key).or_else(|| self.local.load(key)) {
-            Some(item) => {
-                let item = Arc::new(item);
-                self.cache.write().unwrap().insert(key, item.clone());
-                Some(item)
-            }
-            None => None,
-        }
+    pub fn load(&self, key: T::Key) -> Option<Arc<SavedItem<T>>> {
+        self.load_node_with_cache(key)
     }
 
     pub fn currently_applied_ledger_hash(&self) -> Option<LedgerHash> {
@@ -1535,7 +1634,8 @@ impl<T: LedgerItem> Ledger<T> {
 
         let (old_caches, new_caches, item, is_no_op) = match action.clone() {
             LedgerAction::Modify(action) => {
-                let (old_caches, old_item) = match self.load(key) {
+                let (old_caches, old_item) = match self.load(key).map(|s| Arc::new(s.clone_item()))
+                {
                     Some(item) if cache => (item.caches(self), item),
                     Some(item) => (Default::default(), item),
                     None => (Default::default(), Arc::new(T::new_default(key))),
@@ -1613,15 +1713,12 @@ impl<T: LedgerItem> Ledger<T> {
         for item in items {
             match item {
                 CardChange::Created(item) | CardChange::Modified(item) => {
-                    self.cache
-                        .write()
-                        .unwrap()
-                        .insert(item.item_id(), item.clone());
+                    self.cache.invalidate(item.item_id());
 
                     self.save(Arc::unwrap_or_clone(item));
                 }
                 CardChange::Deleted(key) => {
-                    self.cache.write().unwrap().remove(&key);
+                    self.cache.invalidate(key);
                     debug_assert!(added_caches.is_empty());
                     self.remove(key);
                     dbg!(key);

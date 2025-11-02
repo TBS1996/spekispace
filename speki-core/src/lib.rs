@@ -2,6 +2,7 @@ use card::{CardId, RawCard};
 use card_provider::CardProvider;
 use dioxus_logger::tracing::info;
 use ledgerstore::EventError;
+use ledgerstore::ItemExpr;
 use ledgerstore::Ledger;
 use ledgerstore::Node;
 use ledgerstore::TimeProvider;
@@ -322,7 +323,7 @@ pub fn the_reviewable_cards(
     filter: Option<CardFilter>,
 ) -> ReviewableCards {
     info!("getting reviewable cards");
-    let card_ids = provider.eval_expr(&expr);
+    let card_ids = provider.eval_expr(ItemExpr::from(expr).with_recursive_dependencies());
     info!("{} cards loaded", card_ids.len());
 
     let mut nodes: Vec<Node<RawCard>> = Vec::with_capacity(card_ids.len());
@@ -358,7 +359,7 @@ pub fn the_reviewable_cards(
     info!("start filter cards");
     for (id, recstate) in recalls {
         let reviewable = recstate.reviewable;
-        let metadata = provider.load_metadata(id).map(|m| (*m).clone());
+        let metadata = provider.load_metadata(id).map(|m| Arc::new(m.clone_item()));
 
         if reviewable
             && filter

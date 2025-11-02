@@ -17,7 +17,7 @@ fn is_not_suspended(val: &IsSuspended) -> bool {
     !val.is_suspended()
 }
 
-#[derive(Clone, Debug, Default, Deserialize, Serialize, Hash, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize, Hash, PartialEq, Eq, Ord, PartialOrd)]
 pub struct Metadata {
     #[serde(default, skip_serializing_if = "is_false")]
     pub needs_work: bool,

@@ -17,7 +17,7 @@ use crate::{ItemReference, Ledger};
 
 /// Represents how a ledger mutates or creates an item.
 pub trait LedgerItem:
-    Serialize + DeserializeOwned + Hash + Clone + Debug + Send + Sync + Eq + PartialEq + 'static
+    Ord + Serialize + DeserializeOwned + Hash + Clone + Debug + Send + Sync + Eq + PartialEq + 'static
 {
     type Key: Copy
         + Eq
@@ -28,7 +28,8 @@ pub trait LedgerItem:
         + DeserializeOwned
         + FromStr
         + Send
-        + Sync;
+        + Sync
+        + Ord;
     type Error: Debug;
 
     /// The different ways an item can reference another item
@@ -43,7 +44,8 @@ pub trait LedgerItem:
         + Debug
         + FromStr
         + Serialize
-        + DeserializeOwned;
+        + DeserializeOwned
+        + Ord;
 
     /// Cache regarding property of a card so you get like all the cards that have a certain value or whatever
     type PropertyType: AsRef<str>

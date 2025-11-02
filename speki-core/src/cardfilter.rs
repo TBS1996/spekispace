@@ -357,7 +357,7 @@ impl MetaFilter {
         self.suspended.is_none() && self.needs_work.is_none()
     }
 
-    pub fn filter(&self, metadata: Option<Metadata>) -> bool {
+    pub fn filter(&self, metadata: Option<Arc<Metadata>>) -> bool {
         let Self {
             suspended,
             needs_work,
@@ -390,7 +390,7 @@ pub struct CardFilter {
 }
 
 impl CardFilter {
-    pub fn filter(&self, recall: RecallState, metadata: Option<Metadata>) -> bool {
+    pub fn filter(&self, recall: RecallState, metadata: Option<Arc<Metadata>>) -> bool {
         let CardFilter { history, meta } = self.clone();
 
         if !meta.is_empty() {
