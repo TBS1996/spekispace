@@ -5,12 +5,12 @@ use std::ops::Deref;
 use std::sync::{Arc, RwLock};
 
 use crate::read_ledger::ReadLedger;
-use crate::LedgerItem;
+use crate::{Ledger, LedgerItem};
 
 #[derive(Clone)]
 pub struct Cache<T: LedgerItem> {
     pub items: Arc<RwLock<BTreeMap<T::Key, Arc<SavedItem<T>>>>>,
-    pub ledger: Arc<dyn ReadLedger<Item = T>>,
+    pub ledger: Arc<Ledger<T>>,
 }
 
 impl<T: LedgerItem + Ord> Cache<T> {
@@ -85,10 +85,7 @@ impl<T: LedgerItem + Ord> Cache<T> {
             return Some(item);
         }
 
-        if let Some(item) = self
-            .ledger
-            .load_node(key, self.ledger.clone(), self.clone())
-        {
+        if let Some(item) = self.ledger.load_node(key, self.ledger.clone()) {
             let item = Arc::new(item);
 
             if let Ok(mut guard) = self.items.try_write() {
@@ -124,15 +121,15 @@ impl<T: LedgerItem> Ord for MaybeItem<T> {
 pub struct MaybeItem<T: LedgerItem> {
     item: OnceCell<Arc<SavedItem<T>>>,
     key: T::Key,
-    cache: Cache<T>,
+    ledger: Arc<Ledger<T>>,
 }
 
 impl<T: LedgerItem> MaybeItem<T> {
-    pub fn new(key: T::Key, cache: Cache<T>) -> Self {
+    pub fn new(key: T::Key, ledger: Arc<Ledger<T>>) -> Self {
         Self {
             item: OnceCell::new(),
             key,
-            cache,
+            ledger,
         }
     }
 
@@ -146,7 +143,7 @@ impl<T: LedgerItem + Ord> Deref for MaybeItem<T> {
 
     fn deref(&self) -> &Self::Target {
         self.item
-            .get_or_init(|| self.cache.load_or_fetch(self.id()).unwrap())
+            .get_or_init(|| self.ledger.load_node_with_cache(self.key).unwrap())
     }
 }
 
@@ -180,7 +177,7 @@ pub struct SavedItem<T: LedgerItem> {
     pub key: T::Key,
     pub dependencies: BTreeMap<T::RefType, BTreeSet<MaybeItem<T>>>,
     pub dependents: BTreeMap<T::RefType, BTreeSet<MaybeItem<T>>>,
-    pub ledger: Arc<dyn ReadLedger<Item = T>>,
+    pub ledger: Arc<Ledger<T>>,
 }
 
 impl<T: LedgerItem + Ord> SavedItem<T> {

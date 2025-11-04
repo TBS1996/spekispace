@@ -9,7 +9,9 @@ use walkdir::WalkDir;
 
 pub type CacheKey<T> = Either<PropertyCache<T>, ItemRefCache<T>>;
 use crate::cache::{Cache, MaybeItem, SavedItem};
-use crate::{DiskDirPath, ItemExpr, ItemRefCache, LedgerItem, Node, PropertyCache, RefGetter};
+use crate::{
+    DiskDirPath, ItemExpr, ItemRefCache, Ledger, LedgerItem, Node, PropertyCache, RefGetter,
+};
 
 pub trait ReadLedger {
     type Item: LedgerItem;
@@ -30,8 +32,7 @@ pub trait ReadLedger {
     fn load_node(
         &self,
         key: <Self::Item as LedgerItem>::Key,
-        ledger: Arc<dyn ReadLedger<Item = Self::Item>>,
-        cache: Cache<Self::Item>,
+        ledger: Arc<Ledger<Self::Item>>,
     ) -> Option<SavedItem<Self::Item>>
     where
         Self::Item: Ord,
@@ -57,14 +58,14 @@ pub trait ReadLedger {
             node.dependencies
                 .entry(ty)
                 .or_default()
-                .insert(MaybeItem::new(key, cache.clone()));
+                .insert(MaybeItem::new(key, ledger.clone()));
         }
 
         for (ty, key) in dependents {
             node.dependents
                 .entry(ty)
                 .or_default()
-                .insert(MaybeItem::new(key, cache.clone()));
+                .insert(MaybeItem::new(key, ledger.clone()));
         }
 
         Some(node)

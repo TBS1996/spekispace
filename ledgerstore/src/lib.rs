@@ -968,12 +968,14 @@ impl<T: LedgerItem> Ledger<T> {
         let dependencies = self.collect_all_deps_with_ty(key, None, false, false);
         let dependents = self.collect_all_deps_with_ty(key, None, true, false);
 
+        let selv: Arc<Self> = Arc::new(self.clone());
+
         let mut node = SavedItem {
             key,
             item: OnceCell::new(),
             dependencies: Default::default(),
             dependents: Default::default(),
-            ledger: Arc::new(self.local.clone()),
+            ledger: selv.clone(),
         };
 
         for (ty, keys) in dependencies {
@@ -981,7 +983,7 @@ impl<T: LedgerItem> Ledger<T> {
                 node.dependencies
                     .entry(ty.clone())
                     .or_default()
-                    .insert(MaybeItem::new(key, self.cache.clone()));
+                    .insert(MaybeItem::new(key, self.cache.clone(), selv.clone()));
             }
         }
 
@@ -990,7 +992,7 @@ impl<T: LedgerItem> Ledger<T> {
                 node.dependents
                     .entry(ty.clone())
                     .or_default()
-                    .insert(MaybeItem::new(key, self.cache.clone()));
+                    .insert(MaybeItem::new(key, self.cache.clone(), selv.clone()));
             }
         }
 
