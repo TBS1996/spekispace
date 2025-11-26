@@ -1,6 +1,7 @@
 use either::Either;
 use std::collections::HashSet;
 use std::fs::{self};
+use std::io::ErrorKind;
 use std::path::PathBuf;
 use std::vec::Vec;
 use walkdir::WalkDir;
@@ -550,7 +551,17 @@ pub trait ReadLedger {
                     <Self::Item as LedgerItem>::Key,
                 )> = Default::default();
                 let dep_dir = self.root_dependents_dir(key);
-                for dir in fs::read_dir(&dep_dir).unwrap() {
+
+                let topdir = match fs::read_dir(&dep_dir) {
+                    Ok(dir) => dir,
+                    Err(e) if e.kind() == ErrorKind::NotFound => return Default::default(),
+                    Err(e) => {
+                        dbg!(key, dep_dir, e);
+                        panic!();
+                    }
+                };
+
+                for dir in topdir {
                     let dir = dir.unwrap();
                     let ty: <Self::Item as LedgerItem>::RefType =
                         match dir.file_name().to_str().unwrap().parse() {

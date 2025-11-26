@@ -5,7 +5,7 @@ use nonempty::NonEmpty;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use std::collections::VecDeque;
 use std::fs::{self, hard_link};
-use std::io::{self, Write};
+use std::io::{self, ErrorKind, Write};
 use std::marker::PhantomData;
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
@@ -1331,6 +1331,7 @@ impl<T: LedgerItem> Ledger<T> {
                             commit,
                             upstream_url,
                         };
+                        self.set_remote_commit(&set_upstream).unwrap();
                         latest_upstream = Some(set_upstream);
                     }
                     LedgerEvent::DeleteSet { set } => {
@@ -1456,8 +1457,10 @@ impl<T: LedgerItem> Ledger<T> {
         let _res = fs::remove_file(&path);
 
         if let Err(e) = _res {
-            dbg!(&path, e, cache, id);
-            panic!();
+            dbg!(&path, &e, cache, id);
+            if e.kind() != ErrorKind::NotFound {
+                panic!();
+            }
         }
     }
 

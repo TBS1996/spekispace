@@ -1053,7 +1053,11 @@ fn resolve_text(txt: String, ledger: &Ledger<RawCard>, re: &Regex) -> String {
 
     let mut s: String = re.replace_all(&txt, "").to_string();
     for id in uuids {
-        let card = ledger.load(id).unwrap();
+        let Some(card) = ledger.load(id) else {
+            dbg!(id);
+            panic!();
+        };
+
         let txt = card.cache_front(ledger);
         s.push_str(&resolve_text(txt, ledger, re));
     }
