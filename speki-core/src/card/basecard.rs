@@ -856,6 +856,7 @@ impl RawCard {
                 end_time: _,
                 parent_event: _,
             } => {
+                #[allow(deprecated)]
                 actions.push(CardAction::EventType { front, start_time });
             }
         }
@@ -1497,6 +1498,7 @@ impl LedgerItem for RawCard {
 
     fn inner_run_event(mut self, event: CardAction) -> Result<Self, Self::Error> {
         match event {
+            #[allow(deprecated)]
             CardAction::SetDefaultQuestion(default) => match &mut self.data {
                 CardType::Class {
                     ref mut default_question,
@@ -1541,6 +1543,7 @@ impl LedgerItem for RawCard {
             CardAction::SetBackAudio(audio) => {
                 self.back_audio = audio;
             }
+            #[allow(deprecated)]
             CardAction::UpsertCard(ty) => {
                 self.data = ty;
             }
@@ -1637,6 +1640,7 @@ impl LedgerItem for RawCard {
             CardAction::UnfinishedType { front } => {
                 self.data = CardType::Unfinished { front };
             }
+            #[allow(deprecated)]
             CardAction::EventType { front, start_time } => {
                 self.data = CardType::Event {
                     front,

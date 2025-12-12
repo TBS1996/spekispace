@@ -15,52 +15,93 @@ pub type CardEvent = LedgerEvent<RawCard>;
 
 #[derive(Deserialize, Serialize, Clone, Debug, Hash)]
 pub enum CardAction {
+    /// Sets front audio. To remove, Set it to None.
     SetFrontAudio(Option<AudioId>),
+    /// Sets back audio. To remove, Set it to None.
     SetBackAudio(Option<AudioId>),
+    /// Removes explicit dependency. Dependency must exist.
     RemoveDependency(CardId),
+    /// Insert explicit dependency.
     AddDependency(CardId),
+    /// Creates or updates card.
+    #[deprecated(note = "Use more specific actions, e.g., NormalType, AttributeType, etc.")]
     UpsertCard(CardType),
+    /// Sets answer side to a given card.
     SetBackRef(CardId),
+    /// Sets answer to be of type boolean.
     SetBackBool(bool),
+    /// Set answer to card to a given timestamp.
     SetBackTime(TimeStamp),
+    #[deprecated(note = "Realized this was a silly idea")]
     SetDefaultQuestion(Option<String>),
+    /// Sets or unsets a given namespace for a card.
+    ///
+    /// Namespaces are used for when a card only makes sense in a given context.
     SetNamespace(Option<CardId>),
+    /// Inserts an attribute to a class card.
     InsertAttr(Attrv2),
+    /// Inserts multiple attributes to a class card.
     InsertAttrs(BTreeSet<Attrv2>),
+    /// Inserts parameters to a class card.
+    ///
+    /// A parameter is a something that helps identify a specific instance. It's related to attributes but with a key distinction.
+    /// While an attribute is an additional question about a given instance, a parameter is something to identify the instance itself.
+    /// For example, "date of birth" can be an attribute on "Person" class, you don't need to know the date of birth of a person to "know" about this person.
+    /// So it's something that is asked after you already know about the person, its a separate card that has the person as an implicit dependency.
+    /// But for example, if you have a class `Rust module`, you need to know in which rust crate this module is defined in. So this would be a parameter.
+    /// As the crate a module is defined by is an essential part of this module's identity.
+    /// We do however use the same underlying struct `Attrv2` just from coincidentally they need the same data.
     InsertParams(BTreeSet<Attrv2>),
+    /// Inserts parameter value to an instance card.
+    ///
+    /// The class of this instance must have a parameter with the given attributeId, and the answer must be of correct type if the parameter has a backtype constraint.
     InsertParamAnswers(BTreeMap<AttributeId, ParamAnswer>),
+    /// Removes an attribute from a class card.
     RemoveAttr(AttributeId),
+    /// Removes a param from a class card.
     RemoveParam(AttributeId),
+    /// Sets the card to be trivial or not.
     SetTrivial(bool),
+    /// Sets (or unsets) the parent class of a given class.
+    ///
+    /// Any class may have a parent class from which it will inherit attributes and parameters.
+    /// And also, the instances of a class are also considered to be instances of the parent class (recursively).
     SetParentClass(Option<CardId>),
+    /// Sets class of a given instance.
+    ///
+    /// Non-optional as every instance must have a class.
     SetInstanceClass(CardId),
+    /// Creates an attribute type card.
+    ///
+    /// Attribute cards are the answers to an attribute of an instance card.
     AttributeType {
         attribute: AttributeId,
         back: BackSide,
         instance: CardId,
     },
-    NormalType {
-        front: TextData,
-        back: BackSide,
-    },
-    InstanceType {
-        front: TextData,
-        class: CardId,
-    },
-    StatementType {
-        front: TextData,
-    },
-    ClassType {
-        front: TextData,
-    },
-    UnfinishedType {
-        front: TextData,
-    },
+    /// Creates a normal card.
+    NormalType { front: TextData, back: BackSide },
+    /// Creates an instance card.
+    InstanceType { front: TextData, class: CardId },
+    /// Creates a statement card.
+    ///
+    /// Statement cards are for cards that cannot easily be turned into a question, but still nice to have in order
+    /// to create a proper knowledge graph.
+    StatementType { front: TextData },
+    /// Creates a class card.
+    ClassType { front: TextData },
+    /// Creates an unfinished card.
+    UnfinishedType { front: TextData },
+    #[deprecated(
+        note = "Not sure if I want this. It might be enough to have a normal event class instead."
+    )]
     EventType {
         front: TextData,
         start_time: TimeStamp,
     },
+    /// Sets the backside of a card.
     SetBackside(Option<BackSide>),
+    /// sets the front side of a card.
     SetFront(TextData),
 }
 
