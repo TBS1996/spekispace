@@ -1026,6 +1026,34 @@ impl RawCard {
     }
 }
 
+pub fn bigrams_expression_and(text: &str) -> ItemExpr<RawCard> {
+    let bigrams = bigrams(text);
+    let mut exprs: Vec<ItemExpr<RawCard>> = vec![];
+
+    for bigram in bigrams {
+        exprs.push(ItemExpr::Property {
+            property: CardProperty::Bigram,
+            value: format!("{}{}", bigram[0], bigram[1]),
+        });
+    }
+
+    ItemExpr::Intersection(exprs)
+}
+
+pub fn bigrams_expression_or(text: &str) -> ItemExpr<RawCard> {
+    let bigrams = bigrams(text);
+    let mut exprs: Vec<ItemExpr<RawCard>> = vec![];
+
+    for bigram in bigrams {
+        exprs.push(ItemExpr::Property {
+            property: CardProperty::Bigram,
+            value: format!("{}{}", bigram[0], bigram[1]),
+        });
+    }
+
+    ItemExpr::Union(exprs)
+}
+
 pub fn bigrams(text: &str) -> Vec<[char; 2]> {
     normalize_string(text)
         .chars()
@@ -1883,6 +1911,23 @@ pub enum CType {
 impl Display for CType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{:?}", self)
+    }
+}
+
+impl FromStr for CType {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_lowercase().as_str() {
+            "instance" | "i" => Ok(CType::Instance),
+            "normal" | "n" => Ok(CType::Normal),
+            "unfinished" | "u" => Ok(CType::Unfinished),
+            "attribute" | "a" => Ok(CType::Attribute),
+            "class" | "c" => Ok(CType::Class),
+            "statement" | "s" => Ok(CType::Statement),
+            "event" | "e" => Ok(CType::Event),
+            _ => Err(()),
+        }
     }
 }
 

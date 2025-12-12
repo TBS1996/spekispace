@@ -2,19 +2,21 @@
 
 use std::{
     path::PathBuf,
+    str::FromStr,
     sync::{
         atomic::{AtomicBool, Ordering},
         Arc,
     },
 };
 
-use clap::Parser;
+use clap::{Args, Parser, ValueEnum};
 use dioxus::prelude::*;
 use dioxus_logger::tracing::{info, Level};
-use ledgerstore::Ledger;
+use ledgerstore::{ItemExpr, Ledger};
 use pages::ReviewPage;
+use serde_json::json;
 use speki_core::{
-    card::{BackSide, CardId, RawCard, TextData},
+    card::{bigrams_expression_and, BackSide, CType, CardId, RawCard, TextData},
     ledger::{CardAction, CardEvent},
     log_loss_accuracy,
     recall_rate::{
@@ -22,7 +24,7 @@ use speki_core::{
         ReviewEvent, FSRS,
     },
     set::{Input, Set, SetAction, SetEvent},
-    Config, RecallChoice, SimpleRecall,
+    CardProperty, Config, RecallChoice, SimpleRecall,
 };
 use std::fs;
 
@@ -84,6 +86,73 @@ struct Cli {
     review: bool,
     #[arg(long)]
     rebuild_state: bool,
+    #[arg(long)]
+    load_cards: bool,
+
+    #[command(flatten)]
+    load_card_args: LoadCardsArgs,
+}
+
+#[derive(Args, Debug, Default)]
+struct LoadCardsArgs {
+    #[command(flatten)]
+    filter: CardFilters,
+
+    #[arg(long)]
+    format: Option<OutputFormat>,
+
+    #[arg(long)]
+    limit: Option<i32>,
+}
+
+#[derive(Args, Debug, Default)]
+struct CardFilters {
+    #[arg(long)]
+    contains: Option<String>,
+    #[arg(long)]
+    card_type: Option<String>,
+    #[arg(long)]
+    trivial: Option<bool>,
+}
+
+impl CardFilters {
+    fn as_expression(&self) -> ItemExpr<RawCard> {
+        let mut exprs: Vec<ItemExpr<RawCard>> = vec![];
+
+        if let Some(ctype) = self.card_type.as_ref() {
+            let ctype = CType::from_str(&ctype).unwrap().to_string();
+
+            exprs.push(ItemExpr::Property {
+                property: CardProperty::CardType,
+                value: ctype,
+            });
+        }
+
+        if let Some(ref search_str) = self.contains {
+            exprs.push(bigrams_expression_and(&search_str));
+        }
+
+        if let Some(trivial) = self.trivial {
+            exprs.push(ItemExpr::Property {
+                property: CardProperty::Trivial,
+                value: trivial.to_string(),
+            });
+        }
+
+        if exprs.is_empty() {
+            ItemExpr::All
+        } else {
+            ItemExpr::Intersection(exprs)
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, ValueEnum, Default)]
+pub enum OutputFormat {
+    #[default]
+    Text,
+    Json,
+    Id,
 }
 
 #[derive(Clone)]
@@ -118,7 +187,9 @@ impl RemoteUpdate {
 }
 
 fn main() {
-    std::env::set_var("GDK_BACKEND", "x11");
+    unsafe {
+        std::env::set_var("GDK_BACKEND", "x11");
+    }
 
     let cli = Cli::parse();
 
@@ -129,7 +200,8 @@ fn main() {
         || cli.view_front.is_some()
         || cli.commit.is_some()
         || cli.import_cards.is_some()
-        || cli.grade.is_some();
+        || cli.grade.is_some()
+        || cli.load_cards;
 
     if headless {
         log_level = Level::ERROR;
@@ -137,7 +209,10 @@ fn main() {
 
     dioxus_logger::init(log_level).expect("failed to init logger");
 
-    if cli.review {
+    if cli.load_cards {
+        handle_load_cards(&cli.load_card_args);
+        return;
+    } else if cli.review {
         let path = Config::load().storage_path.clone();
         let app = speki_core::App::new(path);
         app.review_cli();
@@ -156,6 +231,25 @@ fn main() {
     info!("starting speki");
 
     dioxus::launch(TheApp);
+}
+
+fn print_card_with_format(card: &speki_core::card::Card, format: OutputFormat) -> String {
+    match format {
+        OutputFormat::Text => {
+            let mut s = format!("Q: {}", card.front_side().to_string());
+            if card.back_side().is_some() {
+                s.push_str(&format!(". A: {}", card.backside().to_string()));
+            }
+            s
+        }
+        OutputFormat::Id => card.id().to_string(),
+        OutputFormat::Json => json!({
+            "id": card.id().to_string(),
+            "front": card.front_side().to_string(),
+            "back": card.back_side().as_ref().map(|x| x.to_string())
+        })
+        .to_string(),
+    }
 }
 
 fn handle_add_card(args: &Vec<String>) {
@@ -193,6 +287,55 @@ fn handle_add_card(args: &Vec<String>) {
     APP.read().modify_set(event).unwrap();
     println!("{}", card_id);
     std::process::exit(0);
+}
+
+fn handle_load_cards(
+    LoadCardsArgs {
+        filter,
+        format,
+        limit,
+    }: &LoadCardsArgs,
+) {
+    let path = Config::load().storage_path.clone();
+    let app = speki_core::App::new(path);
+
+    let expr = filter.as_expression();
+
+    let cards = app.card_provider.providers.cards.load_expr(expr);
+    let qty = cards.len();
+    let limit = limit
+        .map(|limit| {
+            if limit == 0 {
+                usize::MAX
+            } else {
+                limit as usize
+            }
+        })
+        .unwrap_or(10);
+
+    let overflow = if qty > limit { qty - limit } else { 0 };
+
+    let format = format.unwrap_or_default();
+
+    for (idx, card) in cards.into_iter().enumerate() {
+        if idx >= limit {
+            break;
+        }
+
+        let card = app.load_card(card).unwrap();
+        print!("{}", print_card_with_format(&card, format));
+
+        if idx < qty - 1 {
+            println!();
+        }
+    }
+
+    if overflow > 0 {
+        eprintln!(
+            "output truncated, {} more cards. use --limit to increase the limit. 0 to remove limit",
+            overflow
+        );
+    }
 }
 
 #[component]
