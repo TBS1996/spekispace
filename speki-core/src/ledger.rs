@@ -38,11 +38,16 @@ pub enum CardAction {
     ///
     /// Namespaces are used for when a card only makes sense in a given context.
     SetNamespace(Option<CardId>),
+
     /// Inserts an attribute to a class card.
     InsertAttr(Attrv2),
-    /// Inserts multiple attributes to a class card.
-    InsertAttrs(BTreeSet<Attrv2>),
-    /// Inserts parameters to a class card.
+    /// Inserts multiple attributes to a class card. Will override existing attributes.
+    #[serde(rename = "SetAttrs", alias = "InsertAttrs")]
+    SetAttrs(BTreeSet<Attrv2>),
+    /// Removes an attribute from a class card.
+    RemoveAttr(AttributeId),
+
+    /// Sets parameters to a class card. Will override existing parameters.
     ///
     /// A parameter is a something that helps identify a specific instance. It's related to attributes but with a key distinction.
     /// While an attribute is an additional question about a given instance, a parameter is something to identify the instance itself.
@@ -51,15 +56,27 @@ pub enum CardAction {
     /// But for example, if you have a class `Rust module`, you need to know in which rust crate this module is defined in. So this would be a parameter.
     /// As the crate a module is defined by is an essential part of this module's identity.
     /// We do however use the same underlying struct `Attrv2` just from coincidentally they need the same data.
-    InsertParams(BTreeSet<Attrv2>),
-    /// Inserts parameter value to an instance card.
-    ///
-    /// The class of this instance must have a parameter with the given attributeId, and the answer must be of correct type if the parameter has a backtype constraint.
-    InsertParamAnswers(BTreeMap<AttributeId, ParamAnswer>),
-    /// Removes an attribute from a class card.
-    RemoveAttr(AttributeId),
+    #[serde(rename = "SetParams", alias = "InsertParams")]
+    SetParams(BTreeSet<Attrv2>),
     /// Removes a param from a class card.
     RemoveParam(AttributeId),
+    /// Insert a param to a class card.
+    InsertParam(Attrv2),
+
+    /// Sets parameter values to an instance card. Will override existing param values.
+    ///
+    /// The class of this instance must have a parameter with the given attributeId, and the answer must be of correct type if the parameter has a backtype constraint.
+    #[serde(rename = "SetParamAnswers", alias = "InsertParamAnswers")]
+    SetParamAnswers(BTreeMap<AttributeId, ParamAnswer>),
+
+    /// Inserts an answer to a parameter.
+    InsertParamAnswer {
+        id: AttributeId,
+        answer: ParamAnswer,
+    },
+    /// Removes a parameter value from an instance card.
+    RemoveParamAnswer(AttributeId),
+
     /// Sets the card to be trivial or not.
     SetTrivial(bool),
     /// Sets (or unsets) the parent class of a given class.

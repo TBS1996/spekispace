@@ -728,7 +728,7 @@ fn save_cardrep(rep: CardRep, old_card: Option<Arc<Card>>) -> Result<EventResult
         ) => {
             actions.push(CardAction::InstanceType { front: name, class });
             actions.push(CardAction::SetBackside(back));
-            actions.push(CardAction::InsertParamAnswers(answered_params));
+            actions.push(CardAction::SetParamAnswers(answered_params));
         }
         (
             CardType::Instance {
@@ -742,7 +742,7 @@ fn save_cardrep(rep: CardRep, old_card: Option<Arc<Card>>) -> Result<EventResult
             actions.push(CardAction::SetFront(name));
             actions.push(CardAction::SetBackside(back));
             actions.push(CardAction::SetInstanceClass(class));
-            actions.push(CardAction::InsertParamAnswers(answered_params));
+            actions.push(CardAction::SetParamAnswers(answered_params));
         }
         (CardType::Normal { front, back }, true) => {
             actions.push(CardAction::SetFront(front));
@@ -799,8 +799,8 @@ fn save_cardrep(rep: CardRep, old_card: Option<Arc<Card>>) -> Result<EventResult
             actions.push(CardAction::SetFront(name));
             actions.push(CardAction::SetBackside(back));
             actions.push(CardAction::SetParentClass(parent_class));
-            actions.push(CardAction::InsertAttrs(attrs));
-            actions.push(CardAction::InsertParams(params.into_values().collect()));
+            actions.push(CardAction::SetAttrs(attrs));
+            actions.push(CardAction::SetParams(params.into_values().collect()));
         }
         (
             CardType::Class {
@@ -816,8 +816,8 @@ fn save_cardrep(rep: CardRep, old_card: Option<Arc<Card>>) -> Result<EventResult
             actions.push(CardAction::ClassType { front: name });
             actions.push(CardAction::SetBackside(back));
             actions.push(CardAction::SetParentClass(parent_class));
-            actions.push(CardAction::InsertAttrs(attrs));
-            actions.push(CardAction::InsertParams(params.into_values().collect()));
+            actions.push(CardAction::SetAttrs(attrs));
+            actions.push(CardAction::SetParams(params.into_values().collect()));
         }
         (CardType::Statement { front }, true) => {
             actions.push(CardAction::SetFront(front));

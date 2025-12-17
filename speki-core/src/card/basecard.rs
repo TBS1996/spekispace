@@ -364,8 +364,11 @@ impl<'de> Deserialize<'de> for AttrBackType {
 /// Instances refer to both direct instances of the class, and instances of any sub-classes of the class.
 #[derive(PartialEq, Debug, Clone, Serialize, Deserialize, Hash, Eq, PartialOrd, Ord)]
 pub struct Attrv2 {
+    /// Unique identifier for itself. Required because attribute cards are stored separately and need to refer to a specific attribute.
     pub id: AttributeId,
+    /// The attribute itself. For example "birthdate" attribute on class person.
     pub pattern: String,
+    /// An optional constraint on the answer to a given attribute. For example in the birthdate attribute, the answer must be a timestamp.
     pub back_type: Option<AttrBackType>,
 }
 
@@ -816,7 +819,7 @@ impl RawCard {
 
                 actions.push(action);
                 actions.push(CardAction::SetBackside(back));
-                actions.push(CardAction::InsertParamAnswers(answered_params));
+                actions.push(CardAction::SetParamAnswers(answered_params));
             }
             CardType::Normal { front, back } => {
                 actions.push(CardAction::NormalType { front, back });
@@ -844,8 +847,8 @@ impl RawCard {
                 actions.push(CardAction::ClassType { front: name });
                 actions.push(CardAction::SetParentClass(parent_class));
                 actions.push(CardAction::SetBackside(back));
-                actions.push(CardAction::InsertAttrs(attrs));
-                actions.push(CardAction::InsertParams(params.into_values().collect()));
+                actions.push(CardAction::SetAttrs(attrs));
+                actions.push(CardAction::SetParams(params.into_values().collect()));
             }
             CardType::Statement { front } => {
                 actions.push(CardAction::StatementType { front });
@@ -1498,6 +1501,14 @@ impl LedgerItem for RawCard {
 
     fn inner_run_event(mut self, event: CardAction) -> Result<Self, Self::Error> {
         match event {
+            CardAction::InsertParam(param) => {
+                let CardType::Class { ref mut params, .. } = &mut self.data else {
+                    return Err(CardError::WrongCardType);
+                };
+
+                params.insert(param.id, param);
+            }
+
             #[allow(deprecated)]
             CardAction::SetDefaultQuestion(default) => match &mut self.data {
                 CardType::Class {
@@ -1509,7 +1520,7 @@ impl LedgerItem for RawCard {
             CardAction::SetBackTime(ts) => {
                 self = self.set_backside(BackSide::Time(ts));
             }
-            CardAction::InsertParams(params) => {
+            CardAction::SetParams(params) => {
                 let new_params: BTreeMap<AttributeId, Attrv2> =
                     params.into_iter().map(|attr| (attr.id, attr)).collect();
 
@@ -1519,7 +1530,29 @@ impl LedgerItem for RawCard {
 
                 *params = new_params;
             }
-            CardAction::InsertParamAnswers(new_answered_params) => {
+            CardAction::InsertParamAnswer { id, answer } => {
+                let CardType::Instance {
+                    ref mut answered_params,
+                    ..
+                } = &mut self.data
+                else {
+                    return Err(CardError::WrongCardType);
+                };
+
+                answered_params.insert(id, answer);
+            }
+            CardAction::RemoveParamAnswer(id) => {
+                let CardType::Instance {
+                    ref mut answered_params,
+                    ..
+                } = &mut self.data
+                else {
+                    return Err(CardError::WrongCardType);
+                };
+
+                answered_params.remove(&id).unwrap();
+            }
+            CardAction::SetParamAnswers(new_answered_params) => {
                 let CardType::Instance {
                     ref mut answered_params,
                     ..
@@ -1676,7 +1709,7 @@ impl LedgerItem for RawCard {
                 CardType::Statement { .. } => panic!("no back on statement"),
                 CardType::Event { .. } => panic!("no back on event"),
             },
-            CardAction::InsertAttrs(new_attrs) => {
+            CardAction::SetAttrs(new_attrs) => {
                 if let CardType::Class { ref mut attrs, .. } = self.data {
                     *attrs = new_attrs;
                 } else {
