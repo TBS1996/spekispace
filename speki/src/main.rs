@@ -65,6 +65,8 @@ struct Cli {
     #[arg(long, num_args = 2)]
     add: Option<Vec<String>>,
     #[arg(long)]
+    view: Option<CardId>,
+    #[arg(long)]
     view_front: Option<CardId>,
     #[arg(long)]
     view_back: Option<CardId>,
@@ -208,6 +210,16 @@ fn main() {
     }
 
     dioxus_logger::init(log_level).expect("failed to init logger");
+
+    if let Some(card) = cli.view {
+        let path = Config::load().storage_path.clone();
+        let app = speki_core::App::new(path);
+        let raw = app.card_provider.providers.cards.load(card).unwrap();
+        let raw = Arc::unwrap_or_clone(raw);
+
+        serde_json::to_writer_pretty(std::io::stdout(), &raw).unwrap();
+        return;
+    }
 
     if cli.load_cards {
         handle_load_cards(&cli.load_card_args);
