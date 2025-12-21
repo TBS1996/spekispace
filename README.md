@@ -1,18 +1,31 @@
-# speki
+# Speki
 
+**Speki is an ontological flashcard app.**
 
-Speki is a flashcard app.
+It models knowledge explicitly, not as loose cards in decks, but as a structured system with well-defined dependencies. This leads to fundamentally different behavior from traditional flashcard apps.
 
-PRs welcome!!
+## Core ideas
 
-# about 
+### Ontological cards
+Cards are typed. They represent things like concepts, instances, attributes, and relations. Not just text prompts. Knowledge has structure.
 
-Speki is a flashcard app, which mainly takes inspiration from Anki, Supermemo, Obsidian, and Wikidata.
+### Knowledge as a directed acyclic graph
+All cards live in a single DAG. Each card declares its dependencies. A card is only valid once its prerequisites are learned.
 
-The backbone of Speki is it's dependency system. Each flashcard represents a piece of knowledge (as atomic as possible).
-In order to understand almost any fact, you have to first understand a number of other facts. These are its _dependencies_.
+## What this enables
 
-No other flashcards app that i've seen currently ensures that you know the dependencies of a fact before it quizzes you on it. This often
-leads to you being told to memorize things that you don't really understand. (read: [do not memorize before you understand](https://supermemo.guru/wiki/Do_not_memorize_before_you_understand)).
+- **Prerequisite-safe reviews**  
+  Speki will never ask a question if you have not learned all its transitive dependencies.  
+  Example. You will not be asked for the gender of *perro* before learning what *perro* means.
 
-In speki, this is no longer a problem. All your cards live in a graph of dependencies, where on the top of the graph, you have foundational knowledge you need to learn first, and as you learn them, it "unlocks" other cards that depend on these. If you answer a card incorrecly which has other cards that depend on it, those dependents will be hidden from you until you've re-learned its dependencies. This means that when you answer a card incorrectly, it'll almost always be because you forgot the knowledge that the card itself represents, and not because you forgot a pre-requisite for knowing that card. 
+- **No duplicate decks**  
+  Traditional apps duplicate the same knowledge across countless decks.  
+  Speki has one global knowledge graph. Each fact exists once.
+
+- **Truly atomic cards**  
+  Cards can be minimal and precise.  
+  No need to repeat context. Dependencies guarantee the required background.
+
+- **No hidden knowledge gaps**  
+  Creating cards forces you to explicitly model prerequisites.  
+  Missing foundations surface immediately instead of later during review.

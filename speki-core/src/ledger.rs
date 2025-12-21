@@ -23,17 +23,12 @@ pub enum CardAction {
     RemoveDependency(CardId),
     /// Insert explicit dependency.
     AddDependency(CardId),
-    /// Creates or updates card.
-    #[deprecated(note = "Use more specific actions, e.g., NormalType, AttributeType, etc.")]
-    UpsertCard(CardType),
     /// Sets answer side to a given card.
     SetBackRef(CardId),
     /// Sets answer to be of type boolean.
     SetBackBool(bool),
     /// Set answer to card to a given timestamp.
     SetBackTime(TimeStamp),
-    #[deprecated(note = "Realized this was a silly idea")]
-    SetDefaultQuestion(Option<String>),
     /// Sets or unsets a given namespace for a card.
     ///
     /// Namespaces are used for when a card only makes sense in a given context.
@@ -107,8 +102,19 @@ pub enum CardAction {
     StatementType { front: TextData },
     /// Creates a class card.
     ClassType { front: TextData },
+
+    /// Sets the backside of a card.
+    SetBackside(Option<BackSide>),
+    /// sets the front side of a card.
+    SetFront(TextData),
+
     /// Creates an unfinished card.
     UnfinishedType { front: TextData },
+
+    /// Creates or updates card.
+    #[deprecated(note = "Use more specific actions, e.g., NormalType, AttributeType, etc.")]
+    UpsertCard(CardType),
+
     #[deprecated(
         note = "Not sure if I want this. It might be enough to have a normal event class instead."
     )]
@@ -116,10 +122,8 @@ pub enum CardAction {
         front: TextData,
         start_time: TimeStamp,
     },
-    /// Sets the backside of a card.
-    SetBackside(Option<BackSide>),
-    /// sets the front side of a card.
-    SetFront(TextData),
+    #[deprecated(note = "Realized this was a silly idea")]
+    SetDefaultQuestion(Option<String>),
 }
 
 pub enum HistoryEvent {
