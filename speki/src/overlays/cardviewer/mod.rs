@@ -302,19 +302,6 @@ fn RenderDependencies(
     }
 }
 
-enum _TheEditor {
-    /// so let's persist the param answers
-    Instance {
-        param_answers: ReadOnlySignal<BTreeMap<AttributeId, ParamAnswerEditor>>,
-    },
-    Class {
-        params: Signal<Vec<AttrEditor>>,
-        attrs: Signal<Vec<AttrEditor>>,
-        inherited_attrs: ReadOnlySignal<Vec<AttrEditor>>,
-        inherited_params: ReadOnlySignal<Vec<AttrEditor>>,
-    },
-}
-
 #[component]
 pub fn ImportCards(viewer: CardViewer) -> Element {
     let editor = viewer.editor.clone();
