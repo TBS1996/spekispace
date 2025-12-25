@@ -156,6 +156,12 @@ pub fn CardViewerRender(props: CardViewer) -> Element {
 
                         save_button { CardViewer: props.clone() }
 
+                        if let Some(card) = props.old_card.clone() {
+                            if card.is_class() {
+                                create_instance_button { class_card: card.clone() }
+                            }
+                        }
+
                         div {
                             if let Some(card) = props.old_card.clone() {
                                 DeleteButton{card_id: card.id()}
@@ -989,6 +995,22 @@ fn save_cardrep(rep: CardRep, old_card: Option<Arc<Card>>) -> Result<EventResult
     out.cards.extend(card_events);
 
     Ok(out)
+}
+
+#[component]
+fn create_instance_button(class_card: Arc<Card>) -> Element {
+    rsx! {
+        button {
+            class: "{crate::styles::CREATE_BUTTON}",
+            onclick: move |_| {
+                let viewer = CardViewer::new()
+                    .with_class(class_card.id())
+                    .with_allowed_cards(vec![CardTy::Instance]);
+                OverlayEnum::CardViewer(viewer).append();
+            },
+            "Create Instance"
+        }
+    }
 }
 
 #[component]
