@@ -7,7 +7,7 @@ use crate::{
     card::{CardId, RawCard},
     metadata::Metadata,
     recall_rate::{History, Recaller},
-    Card, CardProperty, Config,
+    Card, CardProperty,
 };
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
@@ -513,9 +513,8 @@ impl RecallState {
         card_ledger: &Ledger<RawCard>,
         time: Duration,
         recaller: Arc<Box<dyn Recaller>>,
+        randomize: bool,
     ) -> Self {
-        let randomize = Config::load().randomize;
-
         if let Some(state) = all.get(&card.id()) {
             return *state;
         }
@@ -550,7 +549,15 @@ impl RecallState {
         };
 
         for dep in card.deps() {
-            let recstate = Self::eval_card(dep, all, ledger, card_ledger, time, recaller.clone());
+            let recstate = Self::eval_card(
+                dep,
+                all,
+                ledger,
+                card_ledger,
+                time,
+                recaller.clone(),
+                randomize,
+            );
 
             let min_recall = match (recstate.reviewable, recstate.min_rec_recall) {
                 (true, Some(sub)) => Some(sub.min(recstate.recall)),

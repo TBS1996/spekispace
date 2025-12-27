@@ -340,6 +340,7 @@ pub fn the_reviewable_cards(
     let time = current_time();
 
     info!("start eval nodes");
+    let randomize = Config::load().randomize;
     for node in nodes {
         RecallState::eval_card(
             &node,
@@ -348,6 +349,7 @@ pub fn the_reviewable_cards(
             &card_ledger,
             time,
             provider.recaller.clone(),
+            randomize,
         );
     }
     info!("finished eval nodes");
