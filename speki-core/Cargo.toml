@@ -23,6 +23,7 @@ semver.workspace = true
 textplots.workspace = true
 dirs.workspace = true
 rand.workspace = true
+simpletime.workspace = true
 
 
 omtrent.workspace = true

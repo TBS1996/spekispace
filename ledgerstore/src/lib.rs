@@ -5,8 +5,7 @@ use nonempty::NonEmpty;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use std::collections::VecDeque;
 use std::fs::{self, hard_link};
-use std::io::{self, ErrorKind, Write};
-use std::marker::PhantomData;
+use std::io::{self, Write};
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::AtomicBool;
@@ -27,6 +26,7 @@ mod read_ledger;
 use blockchain::BlockChain;
 pub mod entry_thing;
 mod node;
+mod write_ledger;
 
 pub use ledger_item::LedgerItem;
 
@@ -366,14 +366,14 @@ impl<T: LedgerItem> OverrideLedger<T> {
 
 struct Remote<T: LedgerItem> {
     repo: Repository,
-    path: Arc<DiskDirPath>,
-    _phantom: PhantomData<T>,
+    state: FsReadLedger<T>,
 }
 
 use git2::{Delta, DiffFindOptions, DiffOptions, ObjectType, Oid, Repository, ResetType};
 
 use crate::entry_thing::EventNode;
-use crate::read_ledger::ReadLedger;
+use crate::read_ledger::{FsReadLedger, ReadLedger};
+use crate::write_ledger::WriteLedger;
 
 #[derive(Debug)]
 pub struct ChangeSet<T> {
@@ -395,8 +395,51 @@ impl<T> Default for ChangeSet<T> {
 impl<T: LedgerItem> ReadLedger for Remote<T> {
     type Item = T;
 
-    fn root_path(&self) -> PathBuf {
-        self.path.to_path_buf()
+    fn load(&self, key: <Self::Item as LedgerItem>::Key) -> Option<Self::Item> {
+        self.state.load(key)
+    }
+
+    fn load_ids(&self) -> HashSet<<Self::Item as LedgerItem>::Key> {
+        self.state.load_ids()
+    }
+
+    fn get_property_cache(
+        &self,
+        cache: PropertyCache<Self::Item>,
+    ) -> HashSet<<Self::Item as LedgerItem>::Key> {
+        self.state.get_property_cache(cache)
+    }
+
+    fn has_property(
+        &self,
+        key: <Self::Item as LedgerItem>::Key,
+        property: PropertyCache<Self::Item>,
+    ) -> bool {
+        self.state.has_property(key, property)
+    }
+
+    fn get_reference_cache(
+        &self,
+        key: <Self::Item as LedgerItem>::Key,
+        ty: Option<<Self::Item as LedgerItem>::RefType>,
+        reversed: bool,
+        recursive: bool,
+    ) -> HashSet<<Self::Item as LedgerItem>::Key> {
+        self.state.get_reference_cache(key, ty, reversed, recursive)
+    }
+
+    fn get_reference_cache_with_ty(
+        &self,
+        key: <Self::Item as LedgerItem>::Key,
+        ty: Option<<Self::Item as LedgerItem>::RefType>,
+        reversed: bool,
+        recursive: bool,
+    ) -> HashSet<(
+        <Self::Item as LedgerItem>::RefType,
+        <Self::Item as LedgerItem>::Key,
+    )> {
+        self.state
+            .get_reference_cache_with_ty(key, ty, reversed, recursive)
     }
 }
 
@@ -411,9 +454,12 @@ impl<T: LedgerItem> Remote<T> {
 
         Self {
             repo,
-            path: Arc::new(path),
-            _phantom: PhantomData,
+            state: FsReadLedger::new(path.to_path_buf()),
         }
+    }
+
+    pub fn item_path(&self, key: T::Key) -> PathBuf {
+        self.state.item_path(key)
     }
 
     pub fn current_commit(&self) -> Option<String> {
@@ -786,15 +832,67 @@ impl<T: LedgerItem> CardChange<T> {
 
 #[derive(Clone)]
 struct Local<T: LedgerItem> {
-    root: Arc<PathBuf>,
-    _phantom: PhantomData<T>,
+    pub inner: FsReadLedger<T>,
+}
+
+impl<T: LedgerItem> Local<T> {
+    pub fn item_path(&self, key: T::Key) -> PathBuf {
+        self.inner.item_path(key)
+    }
+
+    pub fn item_path_create(&self, key: T::Key) -> PathBuf {
+        self.inner.item_path_create(key)
+    }
 }
 
 impl<T: LedgerItem> ReadLedger for Local<T> {
     type Item = T;
 
-    fn root_path(&self) -> PathBuf {
-        self.root.to_path_buf()
+    fn load(&self, key: <Self::Item as LedgerItem>::Key) -> Option<Self::Item> {
+        self.inner.load(key)
+    }
+
+    fn load_ids(&self) -> HashSet<<Self::Item as LedgerItem>::Key> {
+        self.inner.load_ids()
+    }
+
+    fn get_property_cache(
+        &self,
+        cache: PropertyCache<Self::Item>,
+    ) -> HashSet<<Self::Item as LedgerItem>::Key> {
+        self.inner.get_property_cache(cache)
+    }
+
+    fn has_property(
+        &self,
+        key: <Self::Item as LedgerItem>::Key,
+        property: PropertyCache<Self::Item>,
+    ) -> bool {
+        self.inner.has_property(key, property)
+    }
+
+    fn get_reference_cache(
+        &self,
+        key: <Self::Item as LedgerItem>::Key,
+        ty: Option<<Self::Item as LedgerItem>::RefType>,
+        reversed: bool,
+        recursive: bool,
+    ) -> HashSet<<Self::Item as LedgerItem>::Key> {
+        self.inner.get_reference_cache(key, ty, reversed, recursive)
+    }
+
+    fn get_reference_cache_with_ty(
+        &self,
+        key: <Self::Item as LedgerItem>::Key,
+        ty: Option<<Self::Item as LedgerItem>::RefType>,
+        reversed: bool,
+        recursive: bool,
+    ) -> HashSet<(
+        <Self::Item as LedgerItem>::RefType,
+        <Self::Item as LedgerItem>::Key,
+    )> {
+        self.inner
+            .get_reference_cache_with_ty(key, ty, reversed, recursive)
     }
 }
 
@@ -887,8 +985,7 @@ impl<T: LedgerItem> Ledger<T> {
             cache: Default::default(),
             full_cache: Arc::new(AtomicBool::new(false)),
             local: Local {
-                root: Arc::new(root.clone()),
-                _phantom: PhantomData,
+                inner: FsReadLedger::new(root),
             },
         }
     }
@@ -1099,8 +1196,8 @@ impl<T: LedgerItem> Ledger<T> {
     }
 
     pub fn get_prop_cache(&self, key: PropertyCache<T>) -> HashSet<T::Key> {
-        let mut items = self.local.get_prop_cache(key.clone());
-        items.extend(self.remote.get_prop_cache(key));
+        let mut items = self.local.get_property_cache(key.clone());
+        items.extend(self.remote.get_property_cache(key));
 
         items
     }
@@ -1367,34 +1464,6 @@ impl<T: LedgerItem> Ledger<T> {
         }
     }
 
-    fn set_dependencies(&self, item: &T) {
-        let id = item.item_id();
-        let dependencies_dir = self.local.root_dependencies_dir(id);
-
-        if dependencies_dir.exists() {
-            fs::remove_dir_all(&dependencies_dir).unwrap();
-        }
-
-        let ref_caches = item.ref_cache();
-
-        let dependencies_dir = if !ref_caches.is_empty() {
-            self.local.root_dependencies_dir(id) //recreate it
-        } else {
-            return;
-        };
-
-        for ItemReference { from: _, to, ty } in ref_caches {
-            let dir = dependencies_dir.join(ty.to_string());
-            fs::create_dir_all(&dir).unwrap();
-            let original = self.item_path(to);
-            let link = dir.join(to.to_string());
-            if let Err(e) = hard_link(&original, &link) {
-                dbg!(e, original, link);
-                panic!();
-            }
-        }
-    }
-
     fn apply_caches(&self, items: HashMap<T::Key, Arc<T>>) {
         info!("applying caches");
         let mut the_caches: HashMap<CacheKey<T>, HashSet<T::Key>> = Default::default();
@@ -1423,47 +1492,130 @@ impl<T: LedgerItem> Ledger<T> {
         f.write_all(hash.as_bytes()).unwrap();
     }
 
-    fn remove_dependent(&self, key: T::Key, ty: T::RefType, dependent: T::Key) {
-        let path = self
-            .local
-            .dependents_dir(key, ty.clone())
-            .join(dependent.to_string());
-        match fs::remove_file(&path) {
-            Ok(_) => {}
-            Err(e) => {
-                dbg!(&path);
-                dbg!(key, ty, dependent);
-                dbg!(e);
-                debug_assert!(false);
+    fn insert_cache(&self, cache: CacheKey<T>, id: T::Key) {
+        match cache {
+            CacheKey::Left(PropertyCache { property, value }) => {
+                self.insert_property(id, property, value);
+            }
+            CacheKey::Right(ItemRefCache { reftype, id: to }) => {
+                self.insert_reference(ItemReference::new(id, to, reftype));
             }
         }
     }
 
-    fn remove_property(&self, key: T::Key, property: T::PropertyType, value: String) {
-        let cache = CacheKey::Left(PropertyCache { property, value });
-        self.remove_cache(cache, key);
-    }
-
-    fn insert_cache(&self, cache: CacheKey<T>, id: T::Key) {
-        let path = self.local.cache_dir(cache);
-        fs::create_dir_all(&path).unwrap();
-        let original = self.item_path(id);
-        let link = path.join(id.to_string());
-        hard_link(original, link).unwrap();
-    }
-
     fn remove_cache(&self, cache: CacheKey<T>, id: T::Key) {
-        let path = self.local.cache_dir(cache.clone()).join(id.to_string());
-        let _res = fs::remove_file(&path);
+        match cache {
+            CacheKey::Left(PropertyCache { property, value }) => {
+                self.remove_property(id, property, value);
+            }
+            CacheKey::Right(ItemRefCache { reftype, id: to }) => {
+                self.remove_reference(ItemReference::new(id, to, reftype));
+            }
+        }
+    }
+}
 
-        if let Err(e) = _res {
-            dbg!(&path, &e, cache, id);
-            if e.kind() != ErrorKind::NotFound {
+impl<T: LedgerItem> WriteLedger for Ledger<T> {
+    type Item = T;
+
+    fn remove(&self, key: T::Key) {
+        let path = self.local.item_path(key);
+        std::fs::remove_file(path).unwrap();
+    }
+
+    fn save(&self, item: T) {
+        let key = item.item_id();
+        let item_path = self.local.item_path_create(key);
+
+        let serialized = serde_json::to_string_pretty(&item).unwrap();
+        let mut f = std::fs::File::create(&item_path).unwrap();
+        use std::io::Write;
+
+        f.write_all(serialized.as_bytes()).unwrap();
+        self.set_dependencies(&item);
+    }
+
+    fn set_dependencies(&self, item: &T) {
+        let id = item.item_id();
+        let dependencies_dir = self.local.inner.root_dependencies_dir(id);
+
+        if dependencies_dir.exists() {
+            fs::remove_dir_all(&dependencies_dir).unwrap();
+        }
+
+        let ref_caches = item.ref_cache();
+
+        let dependencies_dir = if !ref_caches.is_empty() {
+            self.local.inner.root_dependencies_dir(id) //recreate it
+        } else {
+            return;
+        };
+
+        for ItemReference { from: _, to, ty } in ref_caches {
+            let dir = dependencies_dir.join(ty.to_string());
+            fs::create_dir_all(&dir).unwrap();
+            let original = self.item_path(to); // Uses Ledger's item_path for remote+local
+            let link = dir.join(to.to_string());
+            if let Err(e) = hard_link(&original, &link) {
+                dbg!(e, original, link);
                 panic!();
             }
         }
     }
 
+    fn remove_property(&self, key: T::Key, property: T::PropertyType, value: String) {
+        let path = self
+            .local
+            .inner
+            .properties_path()
+            .join(property.to_string())
+            .join(&value)
+            .join(key.to_string());
+        let _ = fs::remove_file(&path);
+    }
+
+    fn insert_property(&self, key: T::Key, property: T::PropertyType, value: String) {
+        let dir = self
+            .local
+            .inner
+            .properties_path()
+            .join(property.to_string())
+            .join(&value);
+        fs::create_dir_all(&dir).unwrap();
+        let original = self.item_path(key); // Uses Ledger's item_path for remote+local
+        let link = dir.join(key.to_string());
+        hard_link(original, link).unwrap();
+    }
+
+    fn insert_reference(&self, reference: ItemReference<T>) {
+        // Creates a link in dependents/to/ty/from
+        // ItemReference { from, to, ty } means 'from' item references 'to' item via 'ty'
+        // So we track this in dependents/to/ty/from
+        let ItemReference { from, to, ty } = reference;
+        let dir = self
+            .local
+            .inner
+            .root_dependents_dir(to)
+            .join(ty.to_string());
+        fs::create_dir_all(&dir).unwrap();
+        let original = self.item_path(from); // Uses Ledger's item_path for remote+local
+        let link = dir.join(from.to_string());
+        hard_link(original, link).unwrap();
+    }
+
+    fn remove_reference(&self, reference: ItemReference<T>) {
+        let ItemReference { from, to, ty } = reference;
+        let path = self
+            .local
+            .inner
+            .root_dependents_dir(to)
+            .join(ty.to_string())
+            .join(from.to_string());
+        let _ = fs::remove_file(&path);
+    }
+}
+
+impl<T: LedgerItem> Ledger<T> {
     fn is_remote(&self, key: T::Key) -> bool {
         self.remote.has_item(key)
     }
@@ -1641,16 +1793,8 @@ impl<T: LedgerItem> Ledger<T> {
             self.insert_cache(cache, key);
         }
 
-        for cache in removed_caches {
-            let key: T::Key = cache.1;
-            match cache.0 {
-                CacheKey::Right(ItemRefCache { reftype, id }) => {
-                    self.remove_dependent(id, reftype, key);
-                }
-                CacheKey::Left(PropertyCache { property, value }) => {
-                    self.remove_property(key, property, value);
-                }
-            }
+        for (cache, key) in removed_caches {
+            self.remove_cache(cache, key);
         }
 
         Ok(())
@@ -1666,23 +1810,6 @@ impl<T: LedgerItem> Ledger<T> {
         let entry = EventNode::new_leaf(event.into());
         let hash = self.entries.save_entry(entry);
         self.set_ledger_hash(hash);
-    }
-
-    fn remove(&self, key: T::Key) {
-        let path = self.item_path(key);
-        std::fs::remove_file(path).unwrap();
-    }
-
-    fn save(&self, item: T) {
-        let key = item.item_id();
-        let item_path = self.item_path(key);
-
-        let serialized = serde_json::to_string_pretty(&item).unwrap();
-        let mut f = std::fs::File::create(&item_path).unwrap();
-        use std::io::Write;
-
-        f.write_all(serialized.as_bytes()).unwrap();
-        self.set_dependencies(&item);
     }
 }
 
