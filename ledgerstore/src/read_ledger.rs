@@ -2,6 +2,7 @@ use std::collections::HashSet;
 use std::fs::{self};
 use std::io::ErrorKind;
 use std::path::PathBuf;
+use std::sync::Arc;
 use std::vec::Vec;
 use walkdir::WalkDir;
 
@@ -197,15 +198,30 @@ pub trait ReadLedger {
 #[derive(Clone, Debug)]
 pub struct FsReadLedger<T: LedgerItem> {
     root: PathBuf,
+    properties: Arc<DiskDirPath>,
+    dependencies: Arc<DiskDirPath>,
+    dependents: Arc<DiskDirPath>,
+    items: Arc<DiskDirPath>,
     _phantom: std::marker::PhantomData<T>,
 }
 
 impl<T: LedgerItem> FsReadLedger<T> {
     pub fn new(root: PathBuf) -> Self {
         Self {
+            properties: Arc::new(DiskDirPath::new(root.join("properties")).unwrap()),
+            dependencies: Arc::new(DiskDirPath::new(root.join("dependencies")).unwrap()),
+            dependents: Arc::new(DiskDirPath::new(root.join("dependents")).unwrap()),
+            items: Arc::new(DiskDirPath::new(root.join("items")).unwrap()),
             root,
             _phantom: std::marker::PhantomData,
         }
+    }
+
+    pub fn clear_state(&self) {
+        self.properties.clear_contents().unwrap();
+        self.dependencies.clear_contents().unwrap();
+        self.dependents.clear_contents().unwrap();
+        self.items.clear_contents().unwrap();
     }
 
     fn items_path(&self) -> DiskDirPath {
@@ -213,17 +229,25 @@ impl<T: LedgerItem> FsReadLedger<T> {
         DiskDirPath::new(p).unwrap()
     }
 
-    pub fn properties_path(&self) -> DiskDirPath {
-        let p = self.root.join("properties");
+    fn dependents_path(&self) -> DiskDirPath {
+        let p = self.root.join("dependents");
+        DiskDirPath::new(p).unwrap()
+    }
+    fn dependencies_path(&self) -> DiskDirPath {
+        let p = self.root.join("dependencies");
         DiskDirPath::new(p).unwrap()
     }
 
+    pub fn properties_path(&self) -> Arc<DiskDirPath> {
+        self.properties.clone()
+    }
+
     pub fn root_dependencies_dir(&self, key: T::Key) -> PathBuf {
-        self.root.join("dependencies").join(key.to_string())
+        self.dependencies_path().join(key.to_string())
     }
 
     pub fn root_dependents_dir(&self, key: T::Key) -> PathBuf {
-        self.root.join("dependents").join(key.to_string())
+        self.dependents_path().join(key.to_string())
     }
 
     pub fn has_property(&self, key: T::Key, property: PropertyCache<T>) -> bool {

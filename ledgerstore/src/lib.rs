@@ -373,10 +373,6 @@ impl<T: LedgerItem> Node<T> {
 #[derive(Clone)]
 pub struct Ledger<T: LedgerItem> {
     entries: BlockChain<T>,
-    properties: Arc<DiskDirPath>,
-    dependencies: Arc<DiskDirPath>,
-    dependents: Arc<DiskDirPath>,
-    items: Arc<DiskDirPath>,
     ledger_hash: Arc<PathBuf>,
     remote: Arc<Remote<T>>,
     local: Local<T>,
@@ -407,21 +403,12 @@ impl<T: LedgerItem> Ledger<T> {
         let entries = DiskDirPath::new(root.join("entries")).unwrap();
         let entries = BlockChain::new(entries);
         let root = root.join("state");
-
-        let properties = DiskDirPath::new(root.join("properties")).unwrap();
-        let dependencies = DiskDirPath::new(root.join("dependencies")).unwrap();
-        let dependents = DiskDirPath::new(root.join("dependents")).unwrap();
-        let items = DiskDirPath::new(root.join("items")).unwrap();
         let ledger_hash = root.join("applied");
 
         let remote = Remote::new(&root);
         //let _ = remote.hard_reset_current();
 
         Self {
-            properties: Arc::new(properties),
-            dependencies: Arc::new(dependencies),
-            dependents: Arc::new(dependents),
-            items: Arc::new(items),
             ledger_hash: Arc::new(ledger_hash),
             entries,
             remote: Arc::new(remote),
@@ -818,10 +805,7 @@ impl<T: LedgerItem> Ledger<T> {
     /// caused it to become invalid. It also means that even if the state is valid after all the entries have been applied, it
     /// could be invalid at some points leading up to the last entry.
     pub fn apply(&self) {
-        self.items.clear_contents().unwrap();
-        self.properties.clear_contents().unwrap();
-        self.dependencies.clear_contents().unwrap();
-        self.dependents.clear_contents().unwrap();
+        self.local.inner.clear_state();
 
         let apply_cache = true; //damn, gotta build caches as we go cause the set actions depend on caches ..
 
