@@ -185,7 +185,7 @@ pub fn ReviewRender(
                             class: "flex-1 box-border relative overflow-y-auto",
                             style: "min-height: 0;",
                             if show_backside.cloned() {
-                                MasterySection { history }
+                                MasterySection { history, card_id: card.id() }
                             }
                             RenderDependencies{
                                 card: card.clone(),

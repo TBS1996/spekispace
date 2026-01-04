@@ -2,17 +2,17 @@ use std::time::Duration;
 
 use chrono::{DateTime, Local, TimeZone};
 use dioxus::prelude::*;
-use speki_core::recall_rate::{History as MyHistory, Recall};
+use speki_core::recall_rate::{History as MyHistory, Recall, ReviewAction, ReviewEvent};
 
 use crate::{utils::recall_to_emoji, APP};
 
 /// Info about the review history/recall/stability of the card
 #[component]
-pub fn MasterySection(history: MyHistory) -> Element {
+pub fn MasterySection(history: MyHistory, card_id: speki_core::card::CardId) -> Element {
     let now = APP.read().current_time();
 
     rsx! {
-        DisplayHistory { history, now }
+        DisplayHistory { history, now, card_id }
     }
 }
 
@@ -39,13 +39,18 @@ fn recall_to_bg_class(recall: Recall) -> &'static str {
 }
 
 #[component]
-fn DisplayHistory(history: MyHistory, now: Duration, #[props(default = 5)] rows: usize) -> Element {
+fn DisplayHistory(
+    history: MyHistory,
+    now: Duration,
+    card_id: speki_core::card::CardId,
+    #[props(default = 5)] rows: usize,
+) -> Element {
     let height_px = rows * 32;
 
     let reviews = history.reviews.clone();
     let is_empty = history.reviews.is_empty();
 
-    let bg_emoji_ago_exact: Vec<(&str, &str, String, String)> = reviews
+    let bg_emoji_ago_exact_ts: Vec<(&str, &str, String, String, Duration)> = reviews
         .iter()
         .rev()
         .map(|review| {
@@ -56,7 +61,7 @@ fn DisplayHistory(history: MyHistory, now: Duration, #[props(default = 5)] rows:
             let secs = review.timestamp.as_secs() as i64;
             let dt: DateTime<Local> = Local.timestamp_opt(secs, 0).unwrap();
             let exact = dt.format("%Y-%m-%d %H:%M:%S %Z").to_string();
-            (bg, emoji, ago, exact)
+            (bg, emoji, ago, exact, review.timestamp)
         })
         .collect();
 
@@ -68,19 +73,31 @@ fn DisplayHistory(history: MyHistory, now: Duration, #[props(default = 5)] rows:
                 "Past reviews"
             }
             div {
-                class: "overflow-y-auto",
+                class: "overflow-y-auto pr-2",
                 style: "height: {height_px}px;",
                 if is_empty {
                     p { "No review history." }
                 } else {
-                    for (bg, emoji, ago, exact) in bg_emoji_ago_exact {
+                    for (bg, emoji, ago, exact, timestamp) in bg_emoji_ago_exact_ts {
                             div {
-                                class: "rounded px-3 py-1 flex items-center justify-between text-base {bg}",
+                                class: "rounded px-3 py-1 flex items-center gap-2 text-base {bg}",
                                 span {
                                     class: "text-2xl font-emoji leading-none",
                                     "{emoji}"
                                 }
-                                span { title: "{exact}", "{ago}" }
+                                div {
+                                    class: "flex items-center gap-1 flex-1 justify-end",
+                                    span { title: "{exact}", "{ago}" }
+                                    button {
+                                        class: "text-gray-600 hover:text-red-600 font-bold text-lg leading-none",
+                                        title: "Delete this review",
+                                        onclick: move |_| {
+                                            let event = ReviewEvent::new_modify(card_id, ReviewAction::Remove(timestamp));
+                                            let _ = APP.read().modify_history(event);
+                                        },
+                                        "\u{d7}"
+                                    }
+                                }
                             }
                     }
                 }

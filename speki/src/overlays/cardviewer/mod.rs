@@ -193,9 +193,11 @@ pub fn CardViewerRender(props: CardViewer) -> Element {
                     DisplayMetadata { metadata: props.editor.metadata.clone()  }
 
                     if let Some(history) = history {
-                        div {
-                            class: "min-w-[200px] max-w-[300px] w-full flex-shrink",
-                            MasterySection { history }
+                        if let Some(card) = props.old_card.as_ref() {
+                            div {
+                                class: "min-w-[200px] max-w-[300px] w-full flex-shrink",
+                                MasterySection { history, card_id: card.id() }
+                            }
                         }
                     }
                 }

@@ -416,6 +416,7 @@ impl Review {
 #[derive(Debug, Clone, Serialize, Deserialize, Hash)]
 pub enum ReviewAction {
     Insert(Review),
+    Remove(Duration),
 }
 
 pub type ReviewEvent = LedgerEvent<History>;
@@ -433,6 +434,10 @@ impl LedgerItem for History {
                 timestamp: review.timestamp,
                 grade: review.grade,
             },
+            ReviewAction::Remove(timestamp) => {
+                self.reviews.retain(|r| r.timestamp != timestamp);
+                return Ok(self);
+            }
         };
 
         self.push(review);
