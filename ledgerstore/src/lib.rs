@@ -30,7 +30,7 @@ pub mod entry_thing;
 mod node;
 mod write_ledger;
 
-pub use blockchain::{LedgerAction, LedgerEntry, LedgerEvent};
+pub use blockchain::{ItemAction, LedgerAction, LedgerEntry, LedgerEvent};
 pub use remote::ChangeSet;
 
 pub use ledger_item::LedgerItem;
@@ -152,15 +152,18 @@ pub struct RefGetter<T: LedgerItem> {
     pub recursive: bool, // recursively get all cards that link
 }
 
+/// Represents a reference to another item.
+/// Does not contain information on which item contains this reference.
 #[derive(Debug, Clone, Hash, Eq, PartialEq, Ord, PartialOrd)]
 pub struct ItemRefCache<T: LedgerItem> {
     pub reftype: T::RefType,
-    pub id: T::Key,
+    /// The target item being referenced (the dependency)
+    pub referent: T::Key,
 }
 
 impl<T: LedgerItem> ItemRefCache<T> {
-    pub fn new(reftype: T::RefType, id: T::Key) -> Self {
-        Self { reftype, id }
+    pub fn new(reftype: T::RefType, referent: T::Key) -> Self {
+        Self { reftype, referent }
     }
 }
 
@@ -401,6 +404,10 @@ impl<T: LedgerItem> Ledger<T> {
         selv
     }
 
+    pub fn new_staging(&self) -> StagingLedger<T> {
+        StagingLedger::new(self.clone())
+    }
+
     pub fn new_no_apply(root: PathBuf) -> Self {
         let root = root.join(Self::item_name());
         let entries = DiskDirPath::new(root.join("entries")).unwrap();
@@ -519,6 +526,21 @@ impl<T: LedgerItem> Ledger<T> {
         self.modify_many(vec![event])
     }
 
+    /// Modify the ledger with multiple actions in one go.
+    ///
+    /// Uses stagingledger for efficiency.
+    pub fn modify_actions(&self, actions: Vec<ItemAction<T>>) -> Result<(), EventError<T>> {
+        let mut staging = self.new_staging();
+
+        for action in actions {
+            staging.push_event(action)?;
+        }
+
+        staging.commit_events()?;
+
+        Ok(())
+    }
+
     pub fn modify_many(&self, events: Vec<LedgerEvent<T>>) -> Result<(), EventError<T>> {
         let mut applied_events: Vec<LedgerEvent<T>> = vec![];
 
@@ -585,20 +607,26 @@ impl<T: LedgerItem> Ledger<T> {
             }
         }
 
-        if applied_events.is_empty() {
-            Ok(())
-        } else if applied_events.len() == 1 {
-            let entry = applied_events.remove(0);
+        self.save_events(applied_events);
+
+        Ok(())
+    }
+
+    pub fn save_events(&self, events: Vec<impl Into<LedgerEvent<T>>>) {
+        let events: Vec<LedgerEvent<T>> = events.into_iter().map(|e| e.into()).collect();
+
+        if events.is_empty() {
+            return;
+        } else if events.len() == 1 {
+            let entry = events.into_iter().next().unwrap();
             let entry = EventNode::new_leaf(entry);
             let hashed = self.entries.save_entry(entry);
             self.set_ledger_hash(hashed);
-            Ok(())
         } else {
-            let entries = NonEmpty::from_vec(applied_events).unwrap();
+            let entries = NonEmpty::from_vec(events).unwrap();
             let entry = EventNode::new_branch(entries);
             let hash = self.entries.save_entry(entry);
             self.set_ledger_hash(hash);
-            Ok(())
         }
     }
 
@@ -823,10 +851,8 @@ impl<T: LedgerItem> Ledger<T> {
     fn verify_all(&self) -> Result<(), EventError<T>> {
         let all = self.load_all();
 
-        let ledger = LedgerType::Normal(self.clone());
-
         for item in all {
-            if let Err(e) = item.validate(&ledger) {
+            if let Err(e) = item.validate(self) {
                 return Err(EventError::Invariant(e));
             }
         }
@@ -964,7 +990,10 @@ impl<T: LedgerItem> Ledger<T> {
             CacheKey::Left(PropertyCache { property, value }) => {
                 self.insert_property(id, property, value);
             }
-            CacheKey::Right(ItemRefCache { reftype, id: to }) => {
+            CacheKey::Right(ItemRefCache {
+                reftype,
+                referent: to,
+            }) => {
                 self.insert_reference(ItemReference::new(id, to, reftype));
             }
         }
@@ -975,7 +1004,10 @@ impl<T: LedgerItem> Ledger<T> {
             CacheKey::Left(PropertyCache { property, value }) => {
                 self.remove_property(id, property, value);
             }
-            CacheKey::Right(ItemRefCache { reftype, id: to }) => {
+            CacheKey::Right(ItemRefCache {
+                reftype,
+                referent: to,
+            }) => {
                 self.remove_reference(ItemReference::new(id, to, reftype));
             }
         }
@@ -1277,5 +1309,47 @@ impl<T: LedgerItem> Ledger<T> {
         let entry = EventNode::new_leaf(event.into());
         let hash = self.entries.save_entry(entry);
         self.set_ledger_hash(hash);
+    }
+}
+
+impl<T: LedgerItem> ReadLedger for Ledger<T> {
+    type Item = T;
+
+    fn load(&self, key: <Self::Item as LedgerItem>::Key) -> Option<Self::Item> {
+        self.load(key).map(|x| (*x).clone())
+    }
+
+    fn load_ids(&self) -> HashSet<<Self::Item as LedgerItem>::Key> {
+        self.load_ids()
+    }
+
+    fn get_property_cache(
+        &self,
+        cache: PropertyCache<Self::Item>,
+    ) -> HashSet<<Self::Item as LedgerItem>::Key> {
+        self.get_prop_cache(cache)
+    }
+
+    fn get_reference_cache(
+        &self,
+        key: <Self::Item as LedgerItem>::Key,
+        ty: Option<<Self::Item as LedgerItem>::RefType>,
+        reversed: bool,
+        recursive: bool,
+    ) -> HashSet<<Self::Item as LedgerItem>::Key> {
+        self.get_reference_cache(key, ty, reversed, recursive)
+    }
+
+    fn get_reference_cache_with_ty(
+        &self,
+        key: <Self::Item as LedgerItem>::Key,
+        ty: Option<<Self::Item as LedgerItem>::RefType>,
+        reversed: bool,
+        recursive: bool,
+    ) -> HashSet<(
+        <Self::Item as LedgerItem>::RefType,
+        <Self::Item as LedgerItem>::Key,
+    )> {
+        self.get_reference_cache_with_ty(key, ty, reversed, recursive)
     }
 }

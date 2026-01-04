@@ -66,9 +66,19 @@ pub enum LedgerEvent<T: LedgerItem> {
     },
 }
 
-pub(crate) struct ItemAction<T: LedgerItem> {
-    pub(crate) id: T::Key,
-    pub(crate) action: LedgerAction<T>,
+#[derive(Clone, Debug)]
+pub struct ItemAction<T: LedgerItem> {
+    pub id: T::Key,
+    pub action: LedgerAction<T>,
+}
+
+impl<T: LedgerItem> ItemAction<T> {
+    pub fn new_modify(id: T::Key, action: T::Modifier) -> Self {
+        Self {
+            id,
+            action: LedgerAction::Modify(action),
+        }
+    }
 }
 
 #[derive(Clone, Debug)]

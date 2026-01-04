@@ -1,7 +1,7 @@
 use super::*;
 use crate::{audio::AudioId, card_provider::CardProvider, CardProperty, CardRefType};
 use either::Either;
-use ledgerstore::{ItemReference, Ledger, LedgerItem, LedgerType, PropertyCache};
+use ledgerstore::{ItemReference, LedgerItem, PropertyCache, ReadLedger};
 use omtrent::TimeStamp;
 use serde::{Deserialize, Serialize, Serializer};
 use std::{collections::HashSet, fmt::Display, str::FromStr};
@@ -296,7 +296,7 @@ impl AttrBackType {
     pub fn is_valid(
         &self,
         back_side: &BackSide,
-        ledger: &LedgerType<RawCard>,
+        ledger: &impl ReadLedger<Item = RawCard>,
     ) -> Result<(), CardError> {
         match (self, back_side) {
             (AttrBackType::InstanceOfClass(instance), BackSide::Card(answer)) => {
@@ -880,7 +880,7 @@ impl RawCard {
         events
     }
 
-    pub fn cache_front(&self, ledger: &Ledger<RawCard>) -> String {
+    pub fn cache_front(&self, ledger: &impl ReadLedger<Item = RawCard>) -> String {
         match self.data.clone() {
             CardType::Instance { name, .. } => name.to_raw(),
             CardType::Normal { front, .. } => front.to_raw(),
@@ -890,7 +890,7 @@ impl RawCard {
                 instance,
                 ..
             } => {
-                let attr = self.get_attr_rec(ledger.to_owned()).unwrap();
+                let attr = self.get_attr_rec(ledger).unwrap();
 
                 let instance = ledger.load(instance).unwrap().data.name_fixed_ledger();
                 let instance = instance.to_raw();
@@ -953,7 +953,7 @@ impl RawCard {
         }
     }
 
-    pub fn get_attr_rec(&self, ledger: Ledger<RawCard>) -> Option<Attrv2> {
+    pub fn get_attr_rec(&self, ledger: &impl ReadLedger<Item = RawCard>) -> Option<Attrv2> {
         let CardType::Attribute {
             attribute,
             instance,
@@ -963,7 +963,7 @@ impl RawCard {
             return None;
         };
 
-        let mut card: Arc<Self> = ledger.load(*instance).unwrap();
+        let mut card: RawCard = ledger.load(*instance).unwrap();
 
         while let Some(parent) = card.parent_class() {
             card = ledger.load(parent).unwrap();
@@ -1076,7 +1076,7 @@ pub fn normalize_string(str: &str) -> String {
 }
 
 use fancy_regex::Regex;
-fn resolve_text(txt: String, ledger: &Ledger<RawCard>, re: &Regex) -> String {
+fn resolve_text(txt: String, ledger: &impl ReadLedger<Item = RawCard>, re: &Regex) -> String {
     let uuids: Vec<CardId> = re
         .find_iter(&txt)
         .filter_map(Result::ok)
@@ -1099,7 +1099,7 @@ fn resolve_text(txt: String, ledger: &Ledger<RawCard>, re: &Regex) -> String {
 
 /// replaces all uuids on frontside of card with the frontside of the card referenced by uuid.
 /// just appends it, doesn't preserve order, this is just to collect bigrams.
-fn resolve_card(card: &RawCard, ledger: &Ledger<RawCard>) -> String {
+fn resolve_card(card: &RawCard, ledger: &impl ReadLedger<Item = RawCard>) -> String {
     let uuid_regex = Regex::new(
         r"\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\b",
     )
@@ -1123,7 +1123,11 @@ pub enum CardError {
     BackTypeMustBeClass,
 }
 
-fn instance_is_of_type(instance: CardId, ty: CardId, ledger: &LedgerType<RawCard>) -> bool {
+fn instance_is_of_type(
+    instance: CardId,
+    ty: CardId,
+    ledger: &impl ReadLedger<Item = RawCard>,
+) -> bool {
     let instance = ledger.load(instance).unwrap();
     assert!(instance.data.is_instance());
 
@@ -1133,9 +1137,9 @@ fn instance_is_of_type(instance: CardId, ty: CardId, ledger: &LedgerType<RawCard
         .is_some()
 }
 
-fn get_parent_classes(class: CardId, ledger: &LedgerType<RawCard>) -> Vec<Arc<RawCard>> {
+fn get_parent_classes(class: CardId, ledger: &impl ReadLedger<Item = RawCard>) -> Vec<RawCard> {
     let class = ledger.load(class).unwrap();
-    let mut classes: Vec<Arc<RawCard>> = vec![class.clone()];
+    let mut classes: Vec<RawCard> = vec![class.clone()];
     assert!(class.data.is_class());
     let mut parent_class = class.parent_class();
 
@@ -1149,7 +1153,7 @@ fn get_parent_classes(class: CardId, ledger: &LedgerType<RawCard>) -> Vec<Arc<Ra
     classes
 }
 
-fn get_attributes(class: CardId, ledger: &LedgerType<RawCard>) -> Vec<Attrv2> {
+fn get_attributes(class: CardId, ledger: &impl ReadLedger<Item = RawCard>) -> Vec<Attrv2> {
     let mut out: Vec<Attrv2> = vec![];
     for class in get_parent_classes(class, ledger) {
         if let CardType::Class { attrs, .. } = &class.data {
@@ -1168,7 +1172,7 @@ impl LedgerItem for RawCard {
     type PropertyType = CardProperty;
     type Modifier = CardAction;
 
-    fn validate(&self, ledger: &LedgerType<Self>) -> Result<(), Self::Error> {
+    fn validate(&self, ledger: &impl ReadLedger<Item = Self>) -> Result<(), Self::Error> {
         match &self.data {
             CardType::Instance {
                 name: _,
@@ -1176,7 +1180,7 @@ impl LedgerItem for RawCard {
                 class,
                 answered_params,
             } => {
-                let mut class: Option<Arc<RawCard>> = Some(ledger.load(*class).unwrap());
+                let mut class: Option<RawCard> = Some(ledger.load(*class).unwrap());
                 let mut recursive_params: BTreeMap<AttributeId, Attrv2> = Default::default();
 
                 while let Some(the_class) = class.clone() {
@@ -1233,7 +1237,7 @@ impl LedgerItem for RawCard {
                     class
                 };
 
-                let Some(Attrv2 { back_type, .. }) = get_attributes(class.id, &ledger)
+                let Some(Attrv2 { back_type, .. }) = get_attributes(class.id, ledger)
                     .into_iter()
                     .find(|attr| attr.id == *attribute)
                 else {
@@ -1253,7 +1257,7 @@ impl LedgerItem for RawCard {
                     }
                     Some(AttrBackType::InstanceOfClass(back_class)) => {
                         if let BackSide::Card(answer) = attr_back {
-                            if !instance_is_of_type(*answer, back_class, &ledger) {
+                            if !instance_is_of_type(*answer, back_class, ledger) {
                                 return Err(CardError::WrongCardType);
                             }
                         } else {
@@ -1421,10 +1425,13 @@ impl LedgerItem for RawCard {
         out
     }
 
-    fn properties_cache(&self, cache: &Ledger<Self>) -> HashSet<PropertyCache<Self>> {
+    fn properties_cache(
+        &self,
+        cache: &impl ReadLedger<Item = Self>,
+    ) -> HashSet<PropertyCache<Self>> {
         let mut out: HashSet<PropertyCache<Self>> = Default::default();
 
-        let resolved_text = resolve_card(self, &cache);
+        let resolved_text = resolve_card(self, cache);
 
         for bigram in bigrams(&resolved_text) {
             let value = format!("{}{}", bigram[0], bigram[1]);

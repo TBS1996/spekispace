@@ -10,10 +10,9 @@ use std::{
 };
 use tracing::trace;
 
-use crate::LedgerType;
-use crate::OverrideLedger;
+use crate::ItemReference;
+use crate::ReadLedger;
 use crate::{CacheKey, EventError, ItemRefCache, PropertyCache};
-use crate::{ItemReference, Ledger};
 
 /// Represents how a ledger mutates or creates an item.
 pub trait LedgerItem:
@@ -64,19 +63,17 @@ pub trait LedgerItem:
     /// Modifies `Self`.
     fn inner_run_event(self, event: Self::Modifier) -> Result<Self, Self::Error>;
 
-    fn verify(self, ledger: &Ledger<Self>) -> Result<Self, EventError<Self>> {
-        let ledger = LedgerType::OverRide(OverrideLedger::new(ledger, self.clone()));
-
-        if let Some(cycle) = self.find_cycle(&ledger) {
+    fn verify(self, ledger: &impl ReadLedger<Item = Self>) -> Result<Self, EventError<Self>> {
+        if let Some(cycle) = self.find_cycle(ledger) {
             return Err(EventError::Cycle(cycle));
         }
 
-        if let Err(e) = self.validate(&ledger) {
+        if let Err(e) = self.validate(ledger) {
             return Err(EventError::Invariant(e));
         }
 
-        for dep in self.recursive_dependents(&ledger) {
-            if let Err(e) = dep.validate(&ledger) {
+        for dep in self.recursive_dependents(ledger) {
+            if let Err(e) = dep.validate(ledger) {
                 return Err(EventError::Invariant(e));
             }
         }
@@ -88,7 +85,7 @@ pub trait LedgerItem:
     fn run_event(
         self,
         event: Self::Modifier,
-        ledger: &Ledger<Self>,
+        ledger: &impl ReadLedger<Item = Self>,
         verify: bool,
     ) -> Result<Self, EventError<Self>> {
         let new = match self.inner_run_event(event) {
@@ -107,10 +104,13 @@ pub trait LedgerItem:
 
     fn item_id(&self) -> Self::Key;
 
-    fn find_cycle(&self, ledger: &LedgerType<Self>) -> Option<Vec<(Self::Key, Self::RefType)>> {
+    fn find_cycle(
+        &self,
+        ledger: &impl ReadLedger<Item = Self>,
+    ) -> Option<Vec<(Self::Key, Self::RefType)>> {
         fn dfs<T: LedgerItem>(
             current: T::Key,
-            ledger: &LedgerType<T>,
+            ledger: &impl ReadLedger<Item = T>,
             visiting: &mut HashSet<T::Key>,
             visited: &mut HashSet<T::Key>,
             parent: &mut HashMap<T::Key, (T::Key, T::RefType)>,
@@ -182,7 +182,7 @@ pub trait LedgerItem:
 
     /// Assertions that should hold true. Like invariants with other cards that it references.
     /// called by run_event, if it returns error after an event is run, the event is not applied.
-    fn validate(&self, ledger: &LedgerType<Self>) -> Result<(), Self::Error> {
+    fn validate(&self, ledger: &impl ReadLedger<Item = Self>) -> Result<(), Self::Error> {
         let _ = ledger;
         Ok(())
     }
@@ -202,40 +202,7 @@ pub trait LedgerItem:
             .collect()
     }
 
-    fn recursive_dependent_ids(&self, ledger: &LedgerType<Self>) -> HashSet<Self::Key>
-    where
-        Self: Sized,
-    {
-        let mut out: HashSet<Self::Key> = HashSet::new();
-        let mut visited: HashSet<Self::Key> = HashSet::new();
-
-        fn visit<T: LedgerItem>(
-            key: T::Key,
-            ledger: &LedgerType<T>,
-            out: &mut HashSet<T::Key>,
-            visited: &mut HashSet<T::Key>,
-        ) where
-            T: Sized,
-        {
-            if !visited.insert(key) {
-                return;
-            }
-
-            out.insert(key);
-
-            for dep_key in ledger.dependents(key) {
-                visit(dep_key, ledger, out, visited);
-            }
-        }
-
-        for dep_key in self.dependents(&ledger) {
-            visit(dep_key, &ledger, &mut out, &mut visited);
-        }
-
-        out
-    }
-
-    fn recursive_dependents(&self, ledger: &LedgerType<Self>) -> HashSet<Arc<Self>>
+    fn recursive_dependents(&self, ledger: &impl ReadLedger<Item = Self>) -> HashSet<Arc<Self>>
     where
         Self: Sized,
     {
@@ -244,7 +211,7 @@ pub trait LedgerItem:
 
         fn visit<T: LedgerItem>(
             key: T::Key,
-            ledger: &LedgerType<T>,
+            ledger: &impl ReadLedger<Item = T>,
             out: &mut HashSet<Arc<T>>,
             visited: &mut HashSet<T::Key>,
         ) where
@@ -253,27 +220,24 @@ pub trait LedgerItem:
             if !visited.insert(key) {
                 return;
             }
-            let item = ledger.load(key).unwrap();
+            let item = Arc::new(ledger.load(key).unwrap());
 
             out.insert(item.clone());
 
-            for dep_key in item.dependents(ledger) {
+            // Get dependents from the reference cache
+            let dep_keys = ledger.get_reference_cache(key, None, true, false);
+            for dep_key in dep_keys {
                 visit(dep_key, ledger, out, visited);
             }
         }
 
-        for dep_key in self.dependents(&ledger) {
-            visit(dep_key, &ledger, &mut out, &mut visited);
+        // Get direct dependents of self
+        let dep_keys = ledger.get_reference_cache(self.item_id(), None, true, false);
+        for dep_key in dep_keys {
+            visit(dep_key, ledger, &mut out, &mut visited);
         }
 
         out
-    }
-
-    fn dependents(&self, ledger: &LedgerType<Self>) -> HashSet<Self::Key> {
-        match ledger {
-            LedgerType::OverRide(ledger) => ledger.dependents(self.item_id()),
-            LedgerType::Normal(ledger) => ledger.dependents_recursive(self.item_id()),
-        }
     }
 
     /// List of defined properties that this item has.
@@ -281,7 +245,10 @@ pub trait LedgerItem:
     /// The property keys are predefined, hence theyre static str
     /// the String is the Value which could be anything.
     /// For example ("suspended", true).
-    fn properties_cache(&self, ledger: &Ledger<Self>) -> HashSet<PropertyCache<Self>>
+    fn properties_cache(
+        &self,
+        ledger: &impl ReadLedger<Item = Self>,
+    ) -> HashSet<PropertyCache<Self>>
     where
         Self: LedgerItem,
     {
@@ -289,7 +256,10 @@ pub trait LedgerItem:
         Default::default()
     }
 
-    fn listed_cache(&self, ledger: &Ledger<Self>) -> HashMap<CacheKey<Self>, HashSet<Self::Key>> {
+    fn listed_cache(
+        &self,
+        ledger: &impl ReadLedger<Item = Self>,
+    ) -> HashMap<CacheKey<Self>, HashSet<Self::Key>> {
         let mut out: HashMap<CacheKey<Self>, HashSet<Self::Key>> = HashMap::default();
 
         for (key, id) in self.caches(ledger) {
@@ -299,7 +269,7 @@ pub trait LedgerItem:
         out
     }
 
-    fn caches(&self, ledger: &Ledger<Self>) -> HashSet<(CacheKey<Self>, Self::Key)>
+    fn caches(&self, ledger: &impl ReadLedger<Item = Self>) -> HashSet<(CacheKey<Self>, Self::Key)>
     where
         Self: LedgerItem,
     {
@@ -316,7 +286,7 @@ pub trait LedgerItem:
             out.insert((
                 CacheKey::Right(ItemRefCache {
                     reftype: ty.clone(),
-                    id: to,
+                    referent: to,
                 }),
                 from,
             ));

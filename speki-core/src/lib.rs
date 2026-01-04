@@ -2,6 +2,7 @@ use card::{CardId, RawCard};
 use card_provider::CardProvider;
 use dioxus_logger::tracing::info;
 use ledgerstore::EventError;
+use ledgerstore::ItemAction;
 use ledgerstore::Ledger;
 use ledgerstore::Node;
 use ledgerstore::TimeProvider;
@@ -953,6 +954,13 @@ impl App {
 
     pub fn rebuild_card_state(&self) {
         self.provider.cards.apply();
+    }
+
+    pub fn apply_many_actions(
+        &self,
+        events: Vec<ItemAction<RawCard>>,
+    ) -> Result<(), EventError<RawCard>> {
+        self.card_provider.providers.cards.modify_actions(events)
     }
 
     pub fn apply_many(&self, events: Vec<Event>) -> Result<(), MyEventError> {

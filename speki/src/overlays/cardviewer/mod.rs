@@ -11,13 +11,13 @@ use std::{
 
 use attributes::{load_param_answers_from_class, ParamAnswerEditor};
 use dioxus::prelude::*;
-use ledgerstore::LedgerEvent;
+use ledgerstore::{ItemAction, LedgerAction, LedgerEvent};
 use omtrent::TimeStamp;
 use rfd::FileDialog;
 use speki_core::{
-    card::{AttributeId, BackSide, CType, CardId},
+    card::{AttributeId, BackSide, CType, CardId, RawCard},
     collection::DynCard,
-    ledger::{CardAction, CardEvent, Event, MetaAction, MetaEvent},
+    ledger::{CardAction, Event, MetaAction, MetaEvent},
     recall_rate::ReviewEvent,
     set::{Input, SetAction, SetEvent, SetExpr, SetId},
     Card, CardType,
@@ -648,7 +648,7 @@ fn InputElements(
 /// Batch of events modifying a specific card, across different components
 pub struct EventResult {
     id: CardId,
-    cards: Vec<CardEvent>,
+    cards: Vec<ItemAction<RawCard>>,
     meta: Vec<MetaEvent>,
     reviews: Vec<ReviewEvent>,
 }
@@ -657,7 +657,7 @@ impl EventResult {
     pub fn into_events(self) -> Vec<Event> {
         self.cards
             .into_iter()
-            .map(Event::Card)
+            .map(|action| Event::Card(LedgerEvent::from(action)))
             .chain(self.meta.into_iter().map(Event::Meta))
             .chain(self.reviews.into_iter().map(Event::History))
             .collect()
@@ -830,9 +830,12 @@ fn save_cardrep(rep: CardRep, old_card: Option<Arc<Card>>) -> Result<EventResult
         actions.push(CardAction::AddDependency(dep));
     }
 
-    let mut card_events: Vec<CardEvent> = actions
+    let mut card_events: Vec<ItemAction<RawCard>> = actions
         .into_iter()
-        .map(|action| CardEvent::new_modify(id, action))
+        .map(|action| ItemAction {
+            id,
+            action: LedgerAction::Modify(action),
+        })
         .collect();
 
     for answer in answered_attrs {
@@ -852,7 +855,7 @@ fn save_cardrep(rep: CardRep, old_card: Option<Arc<Card>>) -> Result<EventResult
                                     back,
                                     instance: id,
                                 };
-                                let event = CardEvent::new_modify(CardId::new_v4(), action);
+                                let event = ItemAction::new_modify(CardId::new_v4(), action);
                                 card_events.push(event);
                             }
                         }
@@ -865,7 +868,7 @@ fn save_cardrep(rep: CardRep, old_card: Option<Arc<Card>>) -> Result<EventResult
                                         back,
                                         instance: id,
                                     };
-                                    let event = CardEvent::new_modify(CardId::new_v4(), action);
+                                    let event = ItemAction::new_modify(CardId::new_v4(), action);
                                     card_events.push(event);
                                 }
                             }
@@ -877,7 +880,7 @@ fn save_cardrep(rep: CardRep, old_card: Option<Arc<Card>>) -> Result<EventResult
                                     back,
                                     instance: id,
                                 };
-                                let event = CardEvent::new_modify(CardId::new_v4(), action);
+                                let event = ItemAction::new_modify(CardId::new_v4(), action);
                                 card_events.push(event);
                             }
                         }
@@ -893,7 +896,7 @@ fn save_cardrep(rep: CardRep, old_card: Option<Arc<Card>>) -> Result<EventResult
                                     back,
                                     instance: id,
                                 };
-                                let event = CardEvent::new_modify(CardId::new_v4(), action);
+                                let event = ItemAction::new_modify(CardId::new_v4(), action);
                                 card_events.push(event);
                             }
                         }
@@ -918,7 +921,7 @@ fn save_cardrep(rep: CardRep, old_card: Option<Arc<Card>>) -> Result<EventResult
                     let back = BackSide::Bool(boolean);
                     if prev_back != back {
                         let action = CardAction::SetBackBool(boolean);
-                        let event = CardEvent::new_modify(attr_card_id, action);
+                        let event = ItemAction::new_modify(attr_card_id, action);
                         card_events.push(event);
                     }
                 }
@@ -935,7 +938,7 @@ fn save_cardrep(rep: CardRep, old_card: Option<Arc<Card>>) -> Result<EventResult
                         let back = BackSide::Time(ts.clone());
                         if prev_back != back {
                             let action = CardAction::SetBackTime(ts);
-                            let event = CardEvent::new_modify(attr_card_id, action);
+                            let event = ItemAction::new_modify(attr_card_id, action);
                             card_events.push(event);
                         }
                     }
@@ -956,7 +959,7 @@ fn save_cardrep(rep: CardRep, old_card: Option<Arc<Card>>) -> Result<EventResult
                                 back,
                                 instance: id,
                             };
-                            let event = CardEvent::new_modify(attr_card_id, action);
+                            let event = ItemAction::new_modify(attr_card_id, action);
                             card_events.push(event);
                         }
                     }
@@ -972,7 +975,7 @@ fn save_cardrep(rep: CardRep, old_card: Option<Arc<Card>>) -> Result<EventResult
                         back,
                         instance: id,
                     };
-                    let event = CardEvent::new_modify(attr_card_id, action);
+                    let event = ItemAction::new_modify(attr_card_id, action);
                     card_events.push(event);
                 }
             },
@@ -1041,8 +1044,15 @@ fn save_button(CardViewer: CardViewer) -> Element {
                 };
 
                 match save_cardrep(rep, CardViewer.old_card.clone()) {
-                    Ok(events) => {
+                    Ok(mut events) => {
                         let id = events.id;
+
+                        let card_events = std::mem::take(&mut events.cards);
+
+                        if let Err(e) = APP.read().0.apply_many_actions(card_events) {
+                            handle_card_event_error(e);
+                            return;
+                        }
 
                         if let Err(e) = APP.read().0.apply_many(events.into_events()) {
                             handle_event_error(e);
