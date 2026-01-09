@@ -324,7 +324,7 @@ impl<T: LedgerItem> BatchActionEvalResult<T> {
 }
 
 #[derive(Debug, Clone)]
-enum CardChange<T: LedgerItem> {
+pub enum CardChange<T: LedgerItem> {
     Created(Arc<T>),
     Modified(Arc<T>),
     Deleted(T::Key),
@@ -332,13 +332,22 @@ enum CardChange<T: LedgerItem> {
 }
 
 impl<T: LedgerItem> CardChange<T> {
-    #[allow(dead_code)]
-    fn key(&self) -> T::Key {
+    pub fn key(&self) -> T::Key {
         match self {
             CardChange::Modified(item) => item.item_id(),
             CardChange::Created(item) => item.item_id(),
             CardChange::Deleted(key) => *key,
             CardChange::Unchanged(key) => *key,
+        }
+    }
+
+    pub fn print_terse(&self) -> String {
+        let id = self.key().to_string();
+        match self {
+            CardChange::Created(_) => format!("Created {}", id),
+            CardChange::Modified(_) => format!("Modified {}", id),
+            CardChange::Deleted(_) => format!("Deleted {}", id),
+            CardChange::Unchanged(_) => format!("Unchanged {}", id),
         }
     }
 }
@@ -392,10 +401,6 @@ impl<T: LedgerItem> Ledger<T> {
 
         let current_hash = selv.entries.current_hash();
         let applied_hash = selv.currently_applied_ledger_hash();
-
-        dbg!(Self::item_name());
-        dbg!(&current_hash);
-        dbg!(&applied_hash);
 
         if current_hash != applied_hash {
             selv.apply();
@@ -529,16 +534,17 @@ impl<T: LedgerItem> Ledger<T> {
     /// Modify the ledger with multiple actions in one go.
     ///
     /// Uses stagingledger for efficiency.
-    pub fn modify_actions(&self, actions: Vec<ItemAction<T>>) -> Result<(), EventError<T>> {
+    pub fn modify_actions(
+        &self,
+        actions: Vec<ItemAction<T>>,
+    ) -> Result<Vec<CardChange<T>>, EventError<T>> {
         let mut staging = self.new_staging();
 
         for action in actions {
             staging.push_event(action)?;
         }
 
-        staging.commit_events()?;
-
-        Ok(())
+        staging.commit_events()
     }
 
     pub fn modify_many(&self, events: Vec<LedgerEvent<T>>) -> Result<(), EventError<T>> {

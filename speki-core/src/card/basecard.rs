@@ -937,7 +937,7 @@ impl RawCard {
         }
     }
 
-    fn attrs(&self) -> BTreeSet<Attrv2> {
+    pub fn attrs(&self) -> BTreeSet<Attrv2> {
         if let CardType::Class { ref attrs, .. } = &self.data {
             return attrs.clone();
         } else {
@@ -973,6 +973,14 @@ impl RawCard {
         }
 
         None
+    }
+
+    /// Get all attributes for this class including inherited ones from parent classes
+    pub fn get_all_attributes(&self, ledger: &impl ReadLedger<Item = RawCard>) -> Vec<Attrv2> {
+        if !self.data.is_class() {
+            return vec![];
+        }
+        get_attributes(self.id, ledger)
     }
 
     pub fn set_backside(mut self, new_back: BackSide) -> Self {
@@ -1329,7 +1337,9 @@ impl LedgerItem for RawCard {
                     }
                 }
                 BackSide::Time(_) => {}
+                #[allow(deprecated)]
                 BackSide::Trivial => {}
+                #[allow(deprecated)]
                 BackSide::Invalid => {}
                 BackSide::Bool(_) => {}
             }
@@ -1779,7 +1789,9 @@ pub enum BackSide {
     Card(CardId),
     List(Vec<CardId>),
     Time(TimeStamp),
+    #[deprecated]
     Trivial, // Answer is obvious, used when card is more of a dependency anchor
+    #[deprecated(note = "Ledger validation should prevent this state")]
     Invalid, // A reference card was deleted
 }
 
@@ -1802,7 +1814,9 @@ impl From<BarSide> for BackSide {
             BarSide::Card(val) => BackSide::Card(val),
             BarSide::List(val) => BackSide::List(val),
             BarSide::Time(val) => BackSide::Time(val),
+            #[allow(deprecated)]
             BarSide::Trivial => BackSide::Trivial,
+            #[allow(deprecated)]
             BarSide::Invalid => BackSide::Invalid,
         }
     }
@@ -1821,6 +1835,7 @@ impl From<String> for BackSide {
         } else if let Ok(timestamp) = TimeStamp::from_str(&s) {
             Self::Time(timestamp)
         } else if s.as_str() == Self::INVALID_STR {
+            #[allow(deprecated)]
             Self::Invalid
         } else {
             Self::Text(s.into())
@@ -1882,7 +1897,9 @@ impl BackSide {
             BackSide::Card(id) => id.to_string(),
             BackSide::List(ids) => format!("{ids:?}"),
             BackSide::Time(ts) => dbg!(ts.serialize()),
+            #[allow(deprecated)]
             BackSide::Trivial => "<trivial>".to_string(),
+            #[allow(deprecated)]
             BackSide::Invalid => "<invalid>".to_string(),
         }
     }
@@ -1900,7 +1917,9 @@ impl BackSide {
                 set.extend(vec.iter());
             }
             BackSide::Time(_) => {}
+            #[allow(deprecated)]
             BackSide::Trivial => {}
+            #[allow(deprecated)]
             BackSide::Invalid => {}
             BackSide::Bool(_) => {}
         }
@@ -1932,6 +1951,7 @@ impl<'de> Deserialize<'de> for BackSide {
                 }
                 Ok(BackSide::List(ids))
             }
+            #[allow(deprecated)]
             Value::Bool(_) => Ok(BackSide::Trivial),
             Value::String(s) => Ok(s.into()),
             val => Ok(serde_json::from_value::<BarSide>(val).unwrap().into()),

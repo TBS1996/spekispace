@@ -9,5 +9,7 @@ speki/static/
 speki/.dioxus/
 speki/assets/tailwind.css
 speki**/*.rs.bk
+card_creation_plan.txt
+input
 **/*.dot
 **/*.svg

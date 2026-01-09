@@ -131,7 +131,9 @@ impl EvalText {
                     Self::just_some_string(format!("{}", ts.to_string()), provider)
                 }
             }
+            #[allow(deprecated)]
             BackSide::Trivial => Self::just_some_string("<trivial>".to_string(), provider),
+            #[allow(deprecated)]
             BackSide::Invalid => Self::just_some_string("<invalid>".to_string(), provider),
             BackSide::Bool(b) => Self::just_some_string(
                 if hint {
@@ -555,6 +557,13 @@ impl Card {
         }
     }
 
+    pub fn parent_class(&self) -> Option<CardId> {
+        match &self.base.data {
+            CardType::Class { parent_class, .. } => *parent_class,
+            _ => None,
+        }
+    }
+
     pub fn parent_classes(&self) -> HashSet<CardId> {
         let key = match self.base.data {
             CardType::Instance { class, .. } => class,
@@ -906,7 +915,9 @@ impl Card {
                 BackSide::List(ids) => Some(NonEmpty::from_vec(ids.clone()).unwrap()),
                 BackSide::Text(_) => None,
                 BackSide::Time(_) => None,
+                #[allow(deprecated)]
                 BackSide::Trivial => None,
+                #[allow(deprecated)]
                 BackSide::Invalid => None,
                 BackSide::Bool(_) => None,
             },

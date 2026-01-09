@@ -169,7 +169,7 @@ impl<T: LedgerItem> ReferenceCacheDelta<T> {
 /// persisting them to the base ledger until explicitly committed.
 pub struct StagingLedger<T: LedgerItem> {
     pub base: Ledger<T>,
-    events: Vec<ItemAction<T>>,
+    events: Vec<(ItemAction<T>, CardChange<T>)>,
     // How the staged events will modify items in base ledger.
     pub modified_items: HashMap<T::Key, Option<Arc<T>>>, // None means deleted
     added_properties: HashMap<PropertyCache<T>, HashSet<T::Key>>,
@@ -210,13 +210,13 @@ impl<T: LedgerItem> StagingLedger<T> {
             return Ok(());
         }
 
+        self.events.push((event, res.item.clone()));
         self.update_layer(res);
-        self.events.push(event);
 
         Ok(())
     }
 
-    pub fn commit_events(self) -> Result<(), EventError<T>> {
+    pub fn commit_events(self) -> Result<Vec<CardChange<T>>, EventError<T>> {
         let Self {
             modified_items: items,
             added_properties,
@@ -279,9 +279,11 @@ impl<T: LedgerItem> StagingLedger<T> {
             }
         }
 
+        let (events, changes) = events.into_iter().unzip();
+
         base.save_events(events);
 
-        Ok(())
+        Ok(changes)
     }
 
     fn update_layer(&mut self, res: ActionEvalResult<T>) {

@@ -1,6 +1,7 @@
 use card::{CardId, RawCard};
 use card_provider::CardProvider;
 use dioxus_logger::tracing::info;
+use ledgerstore::CardChange;
 use ledgerstore::EventError;
 use ledgerstore::ItemAction;
 use ledgerstore::Ledger;
@@ -956,10 +957,24 @@ impl App {
         self.provider.cards.apply();
     }
 
+    pub fn apply_action(
+        &self,
+        action: ItemAction<RawCard>,
+    ) -> Result<CardChange<RawCard>, EventError<RawCard>> {
+        let res = self
+            .card_provider
+            .providers
+            .cards
+            .modify_actions(vec![action])?;
+
+        assert!(res.len() == 1);
+        Ok(res.into_iter().next().unwrap())
+    }
+
     pub fn apply_many_actions(
         &self,
         events: Vec<ItemAction<RawCard>>,
-    ) -> Result<(), EventError<RawCard>> {
+    ) -> Result<Vec<CardChange<RawCard>>, EventError<RawCard>> {
         self.card_provider.providers.cards.modify_actions(events)
     }
 

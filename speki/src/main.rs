@@ -12,11 +12,15 @@ use std::{
 use clap::{Args, Parser, ValueEnum};
 use dioxus::prelude::*;
 use dioxus_logger::tracing::{info, Level};
-use ledgerstore::{ItemExpr, Ledger};
+use ledgerstore::{ItemAction, ItemExpr, Ledger};
 use pages::ReviewPage;
+use serde::Deserialize;
 use serde_json::json;
+use sha2::{Digest, Sha256};
 use speki_core::{
-    card::{bigrams_expression_and, BackSide, CType, CardId, RawCard, TextData},
+    card::{
+        bigrams_expression_and, AttrBackType, Attrv2, BackSide, CType, CardId, RawCard, TextData,
+    },
     ledger::{CardAction, CardEvent},
     log_loss_accuracy,
     recall_rate::{
@@ -27,6 +31,7 @@ use speki_core::{
     CardProperty, Config, RecallChoice, SimpleRecall,
 };
 use std::fs;
+use uuid::Uuid;
 
 use crate::{
     overlays::OverlayEnum,
@@ -90,6 +95,28 @@ struct Cli {
     rebuild_state: bool,
     #[arg(long)]
     load_cards: bool,
+    #[arg(long)]
+    set: Option<String>,
+
+    /// Create or modify a card by passing a JSON CardAction. Can be combined with --card to modify an existing card.
+    /// Example: --action '{"NormalType":{"front":{"Raw":"What is Rust?"},"back":{"Text":{"Raw":"A systems programming language"}}}}'
+    #[arg(long)]
+    action: Option<String>,
+
+    /// Add an attribute to a class card. Requires --card to specify the class.
+    /// Format: --add-attribute '{"pattern":"When was this person born?","back_type":{"Time":null}}'
+    #[arg(long)]
+    add_attribute: Option<String>,
+
+    /// Add a parameter to a class card. Requires --card to specify the class.
+    /// Format: --add-parameter '{"pattern":"Which crate?","back_type":{"Text":null}}'
+    #[arg(long)]
+    add_parameter: Option<String>,
+
+    /// Show class information including all inherited attributes from parent classes.
+    /// Requires --card to specify the class.
+    #[arg(long)]
+    show_class_info: bool,
 
     #[command(flatten)]
     load_card_args: LoadCardsArgs,
@@ -203,7 +230,8 @@ fn main() {
         || cli.commit.is_some()
         || cli.import_cards.is_some()
         || cli.grade.is_some()
-        || cli.load_cards;
+        || cli.load_cards
+        || cli.action.is_some();
 
     if headless {
         log_level = Level::ERROR;
@@ -298,6 +326,208 @@ fn handle_add_card(args: &Vec<String>) {
     let event = SetEvent::new_modify(Set::CLI_CARDS, SetAction::AddInput(Input::Card(card_id)));
     APP.read().modify_set(event).unwrap();
     println!("{}", card_id);
+    std::process::exit(0);
+}
+
+fn handle_card_action(action_json: &str, card_id: Option<CardId>, set: Option<String>) {
+    // Parse the JSON into a CardAction
+    let action: CardAction = match serde_json::from_str(action_json) {
+        Ok(action) => action,
+        Err(e) => {
+            eprintln!("Error parsing CardAction JSON: {}", e);
+            eprintln!("Hint: Make sure your JSON matches the CardAction enum structure.");
+            std::process::exit(1);
+        }
+    };
+
+    // Reject actions that should use dedicated commands
+    match &action {
+        CardAction::InsertAttr(_) | CardAction::SetAttrs(_) => {
+            eprintln!("Error: InsertAttr and SetAttrs cannot be used directly via --action.");
+            eprintln!("Use --add-attribute instead to create attributes with auto-generated IDs.");
+            eprintln!("Example: --card <class-id> --add-attribute '{{\"pattern\":\"When was this born?\",\"back_type\":{{\"Time\":null}}}}'.");
+            std::process::exit(1);
+        }
+        CardAction::SetParams(_) | CardAction::InsertParam(_) => {
+            eprintln!("Error: SetParams and InsertParam cannot be used directly via --action.");
+            eprintln!("Use --add-parameter instead to create parameters with auto-generated IDs.");
+            eprintln!("Example: --card <class-id> --add-parameter '{{\"pattern\":\"Which crate?\",\"back_type\":{{\"Text\":null}}}}'.");
+            std::process::exit(1);
+        }
+        _ => {}
+    }
+
+    // Determine if we're creating a new card
+    let is_new_card = card_id.is_none();
+    let target_card_id = card_id.unwrap_or_else(CardId::new_v4);
+
+    // Create the ItemAction
+    let item_action = ItemAction::new_modify(target_card_id, action);
+
+    // Apply the action
+    match APP.read().0.apply_action(item_action) {
+        Ok(change) => {
+            // If this was a new card, add it to the appropriate set
+            if is_new_card {
+                let set_id = if let Some(set_name) = set.clone() {
+                    // Generate deterministic set ID from name
+                    uuid_from_hash(&set_name)
+                } else {
+                    // Default to CLI_CARDS set
+                    Set::CLI_CARDS
+                };
+
+                // Ensure the set exists
+                if APP.read().load_set(set_id).is_none() {
+                    let set_name_str = set.unwrap_or_else(|| "CLI imports".to_string());
+                    let action = SetAction::SetName(set_name_str);
+                    let event = SetEvent::new_modify(set_id, action);
+                    APP.read().modify_set(event).unwrap();
+                }
+
+                // Add card to the set
+                let event =
+                    SetEvent::new_modify(set_id, SetAction::AddInput(Input::Card(target_card_id)));
+                APP.read().modify_set(event).unwrap();
+            }
+
+            change.print_terse();
+            std::process::exit(0);
+        }
+        Err(e) => {
+            eprintln!("Error modifying card: {:?}", e);
+            std::process::exit(1);
+        }
+    }
+}
+
+#[derive(Deserialize)]
+struct AttributeInput {
+    pattern: String,
+    back_type: Option<AttrBackType>,
+}
+
+fn handle_add_attribute(attr_json: &str, class_id: CardId) {
+    // Parse the JSON into AttributeInput
+    let input: AttributeInput = match serde_json::from_str(attr_json) {
+        Ok(input) => input,
+        Err(e) => {
+            eprintln!("Error parsing attribute JSON: {}", e);
+            eprintln!("Expected format: '{{\"pattern\":\"question text\",\"back_type\":{{\"Time\":null}}}}'");
+            std::process::exit(1);
+        }
+    };
+
+    // Generate a new AttributeId
+    let attr_id = uuid::Uuid::new_v4();
+
+    // Create the Attrv2
+    let attr = Attrv2 {
+        id: attr_id,
+        pattern: input.pattern,
+        back_type: input.back_type,
+    };
+
+    // Create the action
+    let action = CardAction::InsertAttr(attr);
+    let item_action = ItemAction::new_modify(class_id, action);
+
+    // Apply the action
+    match APP.read().0.apply_action(item_action) {
+        Ok(_) => {
+            println!("{}", attr_id);
+            std::process::exit(0);
+        }
+        Err(e) => {
+            eprintln!("Error adding attribute: {:?}", e);
+            std::process::exit(1);
+        }
+    }
+}
+
+fn handle_add_parameter(param_json: &str, class_id: CardId) {
+    // Parse the JSON into AttributeInput (parameters use the same structure)
+    let input: AttributeInput = match serde_json::from_str(param_json) {
+        Ok(input) => input,
+        Err(e) => {
+            eprintln!("Error parsing parameter JSON: {}", e);
+            eprintln!("Expected format: '{{\"pattern\":\"question text\",\"back_type\":{{\"Text\":null}}}}'");
+            std::process::exit(1);
+        }
+    };
+
+    // Generate a new parameter ID
+    let param_id = uuid::Uuid::new_v4();
+
+    // Create the Attrv2 (parameters use the same struct)
+    let param = Attrv2 {
+        id: param_id,
+        pattern: input.pattern,
+        back_type: input.back_type,
+    };
+
+    // Create the action
+    let action = CardAction::InsertParam(param);
+    let item_action = ItemAction::new_modify(class_id, action);
+
+    // Apply the action
+    match APP.read().0.apply_action(item_action) {
+        Ok(_) => {
+            println!("{}", param_id);
+            std::process::exit(0);
+        }
+        Err(e) => {
+            eprintln!("Error adding parameter: {:?}", e);
+            std::process::exit(1);
+        }
+    }
+}
+
+fn handle_show_class_info(class_id: CardId) {
+    let path = Config::load().storage_path.clone();
+    let app = speki_core::App::new(path);
+
+    let Some(card) = app.card_provider.load(class_id) else {
+        eprintln!("Card not found: {}", class_id);
+        std::process::exit(1);
+    };
+
+    if !card.is_class() {
+        eprintln!("Error: Card {} is not a class", class_id);
+        std::process::exit(1);
+    }
+
+    let direct_attrs = card.attributes_on_class().unwrap();
+
+    // Get all attributes including inherited ones
+    let all_attrs = card.attributes().unwrap();
+
+    // Get parent class
+    let parent = card.parent_class();
+
+    // Build output
+    let mut output = serde_json::json!({
+        "id": class_id,
+        "name": card.front_side().to_string(),
+        "parent_class": parent,
+    });
+
+    // Add attributes info
+    let mut attrs_info = vec![];
+    for attr in &all_attrs {
+        let is_direct = direct_attrs.contains(attr);
+        attrs_info.push(serde_json::json!({
+            "id": attr.id,
+            "pattern": attr.pattern,
+            "back_type": attr.back_type,
+            "inherited": !is_direct,
+        }));
+    }
+
+    output["attributes"] = serde_json::json!(attrs_info);
+
+    serde_json::to_writer_pretty(std::io::stdout(), &output).unwrap();
+    println!(); // Add newline at end
     std::process::exit(0);
 }
 
@@ -466,6 +696,31 @@ pub fn TheApp() -> Element {
 
     if let Some(args) = cli.add {
         handle_add_card(&args);
+    }
+
+    if let Some(action_json) = cli.action {
+        handle_card_action(&action_json, cli.card, cli.set);
+    }
+
+    if let Some(attr_json) = cli.add_attribute {
+        let class_id = cli
+            .card
+            .expect("--add-attribute requires --card to specify the class");
+        handle_add_attribute(&attr_json, class_id);
+    }
+
+    if let Some(param_json) = cli.add_parameter {
+        let class_id = cli
+            .card
+            .expect("--add-parameter requires --card to specify the class");
+        handle_add_parameter(&param_json, class_id);
+    }
+
+    if cli.show_class_info {
+        let class_id = cli
+            .card
+            .expect("--show-class-info requires --card to specify the class");
+        handle_show_class_info(class_id);
     }
 
     if let Some(id) = cli.view_front {
@@ -766,4 +1021,21 @@ mt-2 inline-flex items-center text-white \
 bg-red-600 border-0 py-1 px-3 focus:outline-none hover:bg-red-700 \
 disabled:bg-red-400 disabled:cursor-not-allowed disabled:opacity-50 \
 rounded text-base md:mt-0";
+}
+
+/// Generate a UUID from the SHA-256 hash of the input data
+///
+/// Kinda hacky, since uuids are supposed to be random.
+pub fn uuid_from_hash(input: impl AsRef<[u8]>) -> Uuid {
+    let hash = Sha256::digest(input.as_ref());
+
+    let mut bytes = [0u8; 16];
+    bytes.copy_from_slice(&hash[..16]);
+
+    // RFC 4122 variant
+    bytes[8] = (bytes[8] & 0x3f) | 0x80;
+    // Version 4 layout
+    bytes[6] = (bytes[6] & 0x0f) | 0x40;
+
+    Uuid::from_bytes(bytes)
 }

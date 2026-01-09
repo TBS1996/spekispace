@@ -30,6 +30,7 @@ clap.workspace = true
 rfd.workspace = true
 semver.workspace = true
 simpletime.workspace = true
+sha2.workspace = true
 
 
 #ledgerstore = "0.1.2"
