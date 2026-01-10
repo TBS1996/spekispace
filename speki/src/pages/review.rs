@@ -31,7 +31,7 @@ pub struct ReviewPage {
     filter: FilterEditor,
     sets: Signal<Vec<SetEditor>>,
     cardfilter: Memo<CardFilter>,
-    pub prev_set_state: Option<String>,
+    pub prev_set_state: Signal<Option<String>>,
 }
 
 fn load_sets() -> Vec<SetEditor> {
@@ -53,7 +53,7 @@ impl ReviewPage {
 
         let sets: Signal<Vec<SetEditor>> = Signal::new_in_scope(load_sets(), ScopeId::APP);
 
-        let prev_set_state = APP.read().set_ledger_hash();
+        let prev_set_state = Signal::new_in_scope(APP.read().set_ledger_hash(), ScopeId::APP);
 
         Self {
             filter,
@@ -75,9 +75,9 @@ pub fn Review() -> Element {
 
     let current_set_state = APP.read().set_ledger_hash();
 
-    if state.prev_set_state.as_ref() != current_set_state.as_ref() {
+    if state.prev_set_state.read().as_ref() != current_set_state.as_ref() {
         state.sets.set(load_sets());
-        state.prev_set_state = current_set_state;
+        state.prev_set_state.set(current_set_state);
     }
 
     rsx! {
@@ -413,7 +413,6 @@ fn RenderSet(
                         let event = SetEvent::new_modify(id, SetAction::SetExpr(expr));
                         APP.read().modify_set(event).unwrap();
                         set.name.write();
-
                     },
                     "save"
                 }
