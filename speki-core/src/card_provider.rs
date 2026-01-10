@@ -264,11 +264,9 @@ impl CardProvider {
         let mut out: Vec<Arc<Card>> = vec![];
         let ids = self.load_all_card_ids();
 
-        let mut guard = self.cache.write().unwrap();
-
         for id in ids {
             let card = self.load(id).unwrap();
-            guard.insert(id, card.clone());
+            self.cache.write().unwrap().insert(id, card.clone());
             out.push(card);
         }
         out
