@@ -391,7 +391,7 @@ fn handle_card_action(action_json: &str, card_id: Option<CardId>, set: Option<St
                 APP.read().modify_set(event).unwrap();
             }
 
-            change.print_terse();
+            println!("{}", change.print_terse());
             std::process::exit(0);
         }
         Err(e) => {
