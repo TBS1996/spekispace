@@ -26,6 +26,8 @@ pub enum CardAction {
     /// Sets answer side to a given card.
     SetBackRef(CardId),
     /// Sets answer to be of type boolean.
+    SetBackText(TextData),
+    /// Sets answer to be of type boolean.
     SetBackBool(bool),
     /// Set answer to card to a given timestamp.
     SetBackTime(TimeStamp),

@@ -1585,6 +1585,10 @@ impl LedgerItem for RawCard {
             CardAction::SetTrivial(flag) => {
                 self.trivial = flag;
             }
+            CardAction::SetBackText(text) => {
+                let backside = BackSide::Text(text);
+                self = self.set_backside(backside);
+            }
             CardAction::SetBackBool(b) => {
                 let backside = BackSide::Bool(b);
                 self = self.set_backside(backside);
