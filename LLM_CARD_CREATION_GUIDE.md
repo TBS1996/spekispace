@@ -61,14 +61,14 @@ Front: "Which country is to the south of [[<macedonia-card-id>]]?"
 3. More precise references - No ambiguity about which "Macedonia" you mean
 4. Less need for explicit dependencies
 
-**When the answer is a single card, use `CardRef` backside type:**
+**When the answer is a single card, use `Card` backside type:**
 
 ```bash
-# Instead of {"Text": "Greece"}, use CardRef if Greece is a card:
+# Instead of {"Text": "Greece"}, use Card if Greece is a card:
 speki-app --action '{
   "NormalType": {
     "front": "Which country is south of [[<macedonia-id>]]?",
-    "back": {"CardRef": "<greece-card-id>"}
+    "back": {"Card": "<greece-card-id>"}
   }
 }'
 ```
@@ -209,14 +209,22 @@ The `--action` flag accepts JSON matching the `CardAction` enum.
 #### Creating a Class
 
 ```bash
-speki-app --action '{
+# Step 1: Create the class (no backside in creation)
+CLASS_ID=$(speki-app --action '{
   "ClassType": {
     "front": "programming language"
   }
+}')
+
+# Step 2: Set the backside (optional, in a follow-up action)
+speki-app --card "$CLASS_ID" --action '{
+  "SetBackside": {"Text": "A formal language for instructing computers"}
 }'
 ```
 
-This outputs the new card's UUID. Save it for creating instances!
+**Important:** Unlike Normal and Attribute cards, Class cards do NOT include the backside in the creation action. You must use a separate `SetBackside` action if you want to set a backside.
+
+Save the returned UUID for creating instances and child classes!
 
 #### Creating an Instance
 
@@ -224,13 +232,21 @@ This outputs the new card's UUID. Save it for creating instances!
 # First, get the class ID (search or from previous creation)
 CLASS_ID="<uuid-of-programming-language-class>"
 
-speki-app --action '{
+# Step 1: Create the instance (no backside in creation)
+INSTANCE_ID=$(speki-app --action '{
   "InstanceType": {
     "front": "Rust",
     "class": "'$CLASS_ID'"
   }
+}')
+
+# Step 2: Set the backside (optional, in a follow-up action)
+speki-app --card "$INSTANCE_ID" --action '{
+  "SetBackside": {"Text": "A systems programming language focused on safety and performance"}
 }'
 ```
+
+**Important:** Like Class cards, Instance cards do NOT include the backside in the creation action. You must use a separate `SetBackside` action if you want to set a backside. If no backside is set, the instance will display its class as the default answer.
 
 #### Creating a Normal Card
 
@@ -242,6 +258,44 @@ speki-app --action '{
   }
 }'
 ```
+
+**Important:** Normal cards DO require the `back` field in the creation action (unlike Class and Instance cards).
+
+#### Setting Backsides: Typed Actions vs Generic SetBackside
+
+For Class and Instance cards (which require backside to be set after creation), you have two options:
+
+**Option 1: Generic `SetBackside` action** (works for all backside types):
+```bash
+# Text backside
+speki-app --card "$CARD_ID" --action '{"SetBackside": {"Text": "answer text"}}'
+
+# Bool backside
+speki-app --card "$CARD_ID" --action '{"SetBackside": {"Bool": true}}'
+
+# Card reference backside
+speki-app --card "$CARD_ID" --action '{"SetBackside": {"Card": "'$OTHER_CARD_ID'"}}'
+
+# Timestamp backside
+speki-app --card "$CARD_ID" --action '{"SetBackside": {"Time": "2024-01-01T00:00:00Z"}}'
+```
+
+**Option 2: Typed setter actions** (alternative, type-specific):
+```bash
+# SetBackText - for text backsides
+speki-app --card "$CARD_ID" --action '{"SetBackText": "answer text"}'
+
+# SetBackBool - for boolean backsides
+speki-app --card "$CARD_ID" --action '{"SetBackBool": true}'
+
+# SetBackRef - for card reference backsides
+speki-app --card "$CARD_ID" --action '{"SetBackRef": "'$OTHER_CARD_ID'"}'
+
+# SetBackTime - for timestamp backsides
+speki-app --card "$CARD_ID" --action '{"SetBackTime": "2024-01-01T00:00:00Z"}'
+```
+
+Both options are equivalent - use whichever is more convenient. The generic `SetBackside` is more consistent, while the typed actions are more explicit about the type being set.
 
 #### Adding Attributes to a Class
 
@@ -527,37 +581,58 @@ Rust instance will answer existing release_year attribute from programming_langu
   Front: "memory management concept"
   Returns: class ID → $1
 
-[ ] Step 2: Create "Rust" instance
+[ ] Step 2: Set backside for memory_management_concept class (optional)
+  Type: SetBackside (on card $1)
+  Back: {"Text": "A technique for managing computer memory"}
+  Returns: nothing
+
+[ ] Step 3: Create "Rust" instance
   Type: InstanceType
   Front: "Rust"
   Class: abc-def-123... (existing programming_language class)
   Returns: instance ID → $2
 
-[ ] Step 3: Answer "release_year" attribute for Rust
+[ ] Step 4: Set backside for Rust instance (optional)
+  Type: SetBackside (on card $2)
+  Back: {"Text": "A systems programming language focused on safety and performance"}
+  Returns: nothing
+
+[ ] Step 3: Create "Rust" instance
+  Type: InstanceType
+  Front: "Rust"
+  Class: abc-def-123... (existing programming_language class)
+  Returns: instance ID → $2
+
+[ ] Step 4: Set backside for Rust instance (optional)
+  Type: SetBackside (on card $2)
+  Back: {"Text": "A systems programming language focused on safety and performance"}
+  Returns: nothing
+
+[ ] Step 5: Answer "release_year" attribute for Rust
   Type: AttributeType (on card $2)
   Attribute: existing-attr-id-456... (release_year from programming_language)
   Instance: $2 (Rust)
   Back: {"Time": "2010-01-01T00:00:00Z"}
   Returns: attribute card ID → $3
 
-[ ] Step 4: Create "ownership" instance
+[ ] Step 6: Create "ownership" instance
   Type: InstanceType
   Front: "ownership"
   Class: $1 (memory_management_concept)
   Returns: instance ID → $4
 
-[ ] Step 5: Set namespace for ownership
+[ ] Step 7: Set namespace for ownership
   Type: SetNamespace (on card $4)
   Namespace: $2 (Rust instance)
   Returns: nothing
 
-[ ] Step 6: Create normal card about ownership rules
+[ ] Step 8: Create normal card about ownership rules
   Type: NormalType
   Front: "What are the three ownership rules?"
   Back: {"Text": "1. Each value has an owner. 2. Only one owner at a time. 3. Value dropped when owner goes out of scope."}
   Returns: card ID → $6
 
-[ ] Step 7: Add dependency to ownership rules card
+[ ] Step 9: Add dependency to ownership rules card
   Type: AddDependency (on card $6)
   Dependency: $4 (ownership instance)
   Returns: nothing
@@ -679,9 +754,13 @@ Once the plan is approved, execute the steps mechanically:
 ```bash
 # Step 1: Create "memory management concept" class (from plan)
 MMC_CLASS=$(speki-app --action '{"ClassType":{"front":"memory management concept"}}')
+# Set backside for the class (if needed)
+speki-app --card "$MMC_CLASS" --action '{"SetBackside":{"Text":"A technique for managing computer memory"}}'
 
 # Step 2: Create "Rust" instance using EXISTING programming_language class
 RUST=$(speki-app --action '{"InstanceType":{"front":"Rust","class":"abc-123..."}}')
+# Set backside for the instance (if needed)
+speki-app --card "$RUST" --action '{"SetBackside":{"Text":"A systems programming language"}}'
 
 # Step 3: Answer release_year attribute using EXISTING attribute ID
 speki-app --card "$RUST" --action '{"AttributeType":{"attribute":"existing-attr-id...","back":{"Time":"2010-01-01T00:00:00Z"},"instance":"'$RUST'"}}'
@@ -726,7 +805,7 @@ Notice how during execution:
 12. **Follow best practices** - See `best_practices` file for principles on card structure, namespaces, atomic cards, etc.
 13. **Show your plan before executing** - Always get user approval on the execution plan before creating any cards
 14. **Use card links `[[id]]` liberally** - When referring to other cards in question/answer text, use `[[card-id]]` or `[[card-id|alias]]` syntax instead of plain text. This creates automatic dependencies and reduces need for explicit `AddDependency` actions
-15. **Use `CardRef` backsides when appropriate** - If the answer is simply another card (not descriptive text), use `{"CardRef": "card-id"}` instead of `{"Text": "..."}`. This creates a navigable link and automatic dependency
+15. **Use `Card` backsides when appropriate** - If the answer is simply another card (not descriptive text), use `{"Card": "card-id"}` instead of `{"Text": "..."}`. This creates a navigable link and automatic dependency
 16. **Keep instance names minimal** - The class system provides context during review, so don't repeat type information in the instance name. Use "Macedonian" not "ethnic Macedonian" when it's an instance of "ethnicity". Use "Rust" not "Rust programming language" when it's an instance of "programming_language"
 
 ## JSON Structure Reference
@@ -779,23 +858,35 @@ The answer side of a card can be one of several types:
 {"Text": "answer text"}
 {"Bool": true}
 {"Time": "2024-01-01T00:00:00Z"}
-{"CardRef": "card-uuid-here"}
+{"Card": "card-uuid-here"}
 ```
+
+**When to include backside in creation vs follow-up action:**
+
+- **Normal cards** (`NormalType`): Back is REQUIRED in the creation action
+- **Attribute cards** (`AttributeType`): Back is REQUIRED in the creation action
+- **Class cards** (`ClassType`): Back is NOT included in creation, use `SetBackside` action afterward (optional)
+- **Instance cards** (`InstanceType`): Back is NOT included in creation, use `SetBackside` action afterward (optional)
+- **Statement cards** (`StatementType`): No backside (statements are not questions)
 
 Note: `Text` backsides also support the `[[id]]` and `[[id|alias]]` link syntax for embedding card references.
 
 ### Common Actions
 
 **Create cards:**
-- `ClassType` - New class
-- `InstanceType` - New instance  
-- `NormalType` - New normal card
-- `StatementType` - New statement
-- `AttributeType` - Answer an attribute for an instance
+- `ClassType` - New class (backside NOT included, set separately)
+- `InstanceType` - New instance (backside NOT included, set separately)
+- `NormalType` - New normal card (backside IS required in creation)
+- `StatementType` - New statement (no backside)
+- `AttributeType` - Answer an attribute for an instance (backside IS required in creation)
 
 **Modify cards:**
 - `SetFront` - Change question
-- `SetBackside` - Change answer
+- `SetBackside` - Change answer (generic, works for all types)
+- `SetBackText` - Set text backside (type-specific alternative to SetBackside)
+- `SetBackBool` - Set boolean backside (type-specific alternative to SetBackside)
+- `SetBackRef` - Set card reference backside (type-specific alternative to SetBackside)
+- `SetBackTime` - Set timestamp backside (type-specific alternative to SetBackside)
 - `AddDependency` / `RemoveDependency` - Manage dependencies
 - `SetNamespace` - Set/unset namespace
 - `SetParentClass` - Set class hierarchy
