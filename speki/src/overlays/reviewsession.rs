@@ -2,7 +2,7 @@ use dioxus::prelude::*;
 use either::Either;
 use ledgerstore::LedgerEvent;
 use nonempty::NonEmpty;
-use std::{collections::BTreeSet, rc::Rc, sync::Arc};
+use std::{rc::Rc, sync::Arc};
 
 use speki_core::{
     Card, card::{CardId, EvalText}, cardfilter::CardFilter, ledger::CardAction, recall_rate::Recall, reviewable_cards, set::{Input, SetExpr}
@@ -205,15 +205,17 @@ pub struct Queue {
     upcoming: Vec<CardId>,
     pub expr: SetExpr,
     pub filter: Option<CardFilter>,
+    pub ordered: bool,
 }
 
 impl Queue {
-    fn new(cards: NonEmpty<CardId>, expr: SetExpr, filter: Option<CardFilter>) -> Self {
+    fn new(cards: NonEmpty<CardId>, expr: SetExpr, filter: Option<CardFilter>, ordered: bool) -> Self {
         Self {
             passed: vec![],
             upcoming: cards.into(),
             expr,
             filter,
+            ordered,
         }
     }
 
@@ -221,7 +223,7 @@ impl Queue {
         if !self.upcoming.is_empty() {
             self.passed.push(self.upcoming.remove(0));
             if self.upcoming.is_empty() {
-                match reviewable_cards(APP.read().card_provider(), self.expr.clone(), self.filter.clone()) {
+                match reviewable_cards(APP.read().card_provider(), self.expr.clone(), self.filter.clone(), self.ordered) {
                     Some(cards) => {
                         self.upcoming = cards.into();
                     },
@@ -255,10 +257,10 @@ pub struct ReviewState {
 }
 
 impl ReviewState {
-    pub fn new(thecards: NonEmpty<CardId>, expr: SetExpr, filter: Option<CardFilter>) -> Self {
+    pub fn new(thecards: NonEmpty<CardId>, expr: SetExpr, filter: Option<CardFilter>, ordered: bool) -> Self {
         info!("start review for {} cards", thecards.len());
 
-        let queue: Signal<Queue> = Signal::new_in_scope(Queue::new(thecards, expr, filter), ScopeId::APP);
+        let queue: Signal<Queue> = Signal::new_in_scope(Queue::new(thecards, expr, filter, ordered), ScopeId::APP);
 
         let is_done: Memo<bool> =
             ScopeId::APP.in_runtime(|| Memo::new(move || queue.read().current().is_none()));
@@ -297,7 +299,7 @@ fn Infobar(
             button {
                 class: "text-2xl text-gray-700",
                 onclick: move |_| {
-                    let passed: BTreeSet<Input> = queue.read().passed.clone()
+                    let passed: Vec<Input> = queue.read().passed.clone()
                         .into_iter()
                         .map(Input::Card)
                         .collect();
@@ -314,11 +316,11 @@ fn Infobar(
                 class: "text-2xl text-gray-700",
                 onclick: move |_| {
                     let total = {
-                        let mut passed: BTreeSet<Input> = queue.read().passed.clone()
+                        let mut passed: Vec<Input> = queue.read().passed.clone()
                             .into_iter()
                             .map(Input::Card)
                             .collect();
-                        let upcoming: BTreeSet<Input> = queue.read().upcoming.clone()
+                        let upcoming: Vec<Input> = queue.read().upcoming.clone()
                             .into_iter()
                             .map(Input::Card)
                             .collect();

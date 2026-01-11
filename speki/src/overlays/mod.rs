@@ -88,8 +88,8 @@ impl OverlayEnum {
         append_overlay(self);
     }
 
-    pub fn new_review(thecards: NonEmpty<CardId>, expr: SetExpr, filter: Option<CardFilter>) -> Self {
-        Self::Review(ReviewState::new(thecards, expr, filter))
+    pub fn new_review(thecards: NonEmpty<CardId>, expr: SetExpr, filter: Option<CardFilter>, ordered: bool) -> Self {
+        Self::Review(ReviewState::new(thecards, expr, filter, ordered))
     }
 
     pub fn new_edit_card(id: CardId) -> Self {

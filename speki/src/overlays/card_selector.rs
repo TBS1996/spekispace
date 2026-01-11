@@ -491,8 +491,8 @@ pub fn CardSelectorRender(
                             title: review_title,
                             onclick: move |_| {
                                 if let Ok(expr) = expr.clone() {
-                                    if let Some(cards) = reviewable_cards(APP.read().card_provider(), expr.clone(), Some(review_filter.clone())) {
-                                        OverlayEnum::new_review(cards, expr, Some(review_filter.clone())).append();
+                                    if let Some(cards) = reviewable_cards(APP.read().card_provider(), expr.clone(), Some(review_filter.clone()), false) {
+                                        OverlayEnum::new_review(cards, expr, Some(review_filter.clone()), false).append();
                                     } else {
                                         debug_assert!(false);
                                     }

@@ -379,13 +379,13 @@ pub fn ImportCards(viewer: CardViewer) -> Element {
                         let set_id = SetId::new_v4();
                         let event = SetEvent::new_modify(set_id, SetAction::SetName(filename));
                         APP.read().modify_set(event).unwrap();
-                        let mut saved_cards: BTreeSet<Input> = Default::default();
+                        let mut saved_cards: Vec<Input> = Default::default();
 
                         let mut new_events: Vec<EventResult> = vec![];
 
                         for rep in reps {
                             if let Ok(event_res) = save_cardrep(rep, None) {
-                                saved_cards.insert(Input::Card(event_res.id()));
+                                saved_cards.push(Input::Card(event_res.id()));
                                 new_events.push(event_res);
                             }
                         }
@@ -395,7 +395,7 @@ pub fn ImportCards(viewer: CardViewer) -> Element {
                             handle_event_error(e);
                         }
 
-                        let cards_imported =saved_cards.len();
+                        let cards_imported = saved_cards.len();
 
                         let expr = SetExpr::Union(saved_cards);
                         let event = SetEvent::new_modify(set_id, SetAction::SetExpr(expr));

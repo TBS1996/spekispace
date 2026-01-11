@@ -1,4 +1,4 @@
-use std::{collections::BTreeSet, fmt::Display};
+use std::fmt::Display;
 
 use ledgerstore::{ItemExpr, LedgerEvent, LedgerItem};
 use serde::{Deserialize, Serialize};
@@ -22,6 +22,7 @@ pub enum SetAction {
     SetName(String),
     SetExpr(SetExpr),
     AddInput(Input),
+    SetOrdered(bool),
 }
 
 pub type SetEvent = LedgerEvent<Set>;
@@ -37,30 +38,31 @@ impl LedgerItem for Set {
 
     fn inner_run_event(mut self, event: SetAction) -> Result<Self, Self::Error> {
         match event {
+            SetAction::SetOrdered(ordered) => self.ordered = ordered,
             SetAction::SetName(name) => self.name = name,
             SetAction::SetExpr(expr) => self.expr = expr,
             SetAction::AddInput(input) => {
                 let new_set = match self.expr {
                     SetExpr::Union(mut set) => {
-                        set.insert(input);
+                        set.push(input);
                         SetExpr::Union(set)
                     }
                     SetExpr::Intersection(set) => {
-                        let mut union: BTreeSet<Input> = Default::default();
-                        union.insert(input);
-                        union.insert(Input::Expr(Box::new(SetExpr::Intersection(set))));
+                        let mut union: Vec<Input> = Default::default();
+                        union.push(input);
+                        union.push(Input::Expr(Box::new(SetExpr::Intersection(set))));
                         SetExpr::Union(union)
                     }
                     SetExpr::Difference(diff1, diff2) => {
-                        let mut union: BTreeSet<Input> = Default::default();
-                        union.insert(input);
-                        union.insert(Input::Expr(Box::new(SetExpr::Difference(diff1, diff2))));
+                        let mut union: Vec<Input> = Default::default();
+                        union.push(input);
+                        union.push(Input::Expr(Box::new(SetExpr::Difference(diff1, diff2))));
                         SetExpr::Union(union)
                     }
                     SetExpr::Complement(cmp) => {
-                        let mut union: BTreeSet<Input> = Default::default();
-                        union.insert(input);
-                        union.insert(Input::Expr(Box::new(SetExpr::Complement(cmp))));
+                        let mut union: Vec<Input> = Default::default();
+                        union.push(input);
+                        union.push(Input::Expr(Box::new(SetExpr::Complement(cmp))));
                         SetExpr::Union(union)
                     }
                     SetExpr::All => SetExpr::All,
@@ -78,6 +80,7 @@ impl LedgerItem for Set {
             id,
             name: "...".to_string(),
             expr: SetExpr::Union(Default::default()),
+            ordered: false,
         }
     }
 
@@ -93,6 +96,10 @@ pub struct Set {
     pub id: SetId,
     pub name: String,
     pub expr: SetExpr,
+    /// If true, for inputs A, B, C, will only show B when the filter expression is valid for A. 
+    /// As if B was dependent on A.
+    #[serde(default)]
+    pub ordered: bool,
 }
 
 impl Set {
@@ -104,6 +111,7 @@ impl Set {
             id: Uuid::nil(),
             name: "all cards".to_string(),
             expr: SetExpr::All,
+            ordered: false,
         }
     }
 }
@@ -188,8 +196,8 @@ impl From<Input> for ItemExpr<RawCard> {
     Ord
 ))]
 pub enum SetExpr {
-    Union(BTreeSet<Input>),
-    Intersection(BTreeSet<Input>),
+    Union(Vec<Input>),
+    Intersection(Vec<Input>),
     Difference(Input, Input),
     Complement(Input),
     All,
@@ -232,7 +240,7 @@ impl SetExpr {
     }
 
     pub fn union_with(dyns: impl IntoIterator<Item = DynCard>) -> Self {
-        let leafs: BTreeSet<Input> = dyns.into_iter().map(Input::Leaf).collect();
+        let leafs: Vec<Input> = dyns.into_iter().map(Input::Leaf).collect();
         Self::Union(leafs)
     }
 

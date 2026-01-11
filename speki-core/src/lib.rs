@@ -311,8 +311,9 @@ pub fn reviewable_cards(
     provider: CardProvider,
     expr: SetExpr,
     filter: Option<CardFilter>,
+    ordered: bool,
 ) -> Option<NonEmpty<CardId>> {
-    let ReviewableCards { mut seen, unseen } = the_reviewable_cards(provider, expr, filter);
+    let ReviewableCards { mut seen, unseen } = the_reviewable_cards(provider, expr, filter, ordered);
     seen.extend(unseen);
 
     NonEmpty::from_vec(seen)
@@ -322,6 +323,7 @@ pub fn the_reviewable_cards(
     provider: CardProvider,
     expr: SetExpr,
     filter: Option<CardFilter>,
+    ordered: bool,
 ) -> ReviewableCards {
     info!("getting reviewable cards");
     let card_ids = provider.eval_expr(&expr);
@@ -343,9 +345,9 @@ pub fn the_reviewable_cards(
 
     info!("start eval nodes");
     let randomize = Config::load().randomize;
-    for node in nodes {
+    for node in &nodes {
         RecallState::eval_card(
-            &node,
+            node,
             &mut recalls,
             &hisledge,
             &card_ledger,
@@ -360,14 +362,20 @@ pub fn the_reviewable_cards(
     let mut unseen_cards: Vec<CardId> = vec![];
 
     info!("start filter cards");
-    for (id, recstate) in recalls {
-        let reviewable = recstate.reviewable;
+
+    for node in nodes {
+        let id = node.id();
+        let recstate = recalls.get(&id).unwrap();
+
+        if !recstate.reviewable {
+            continue;
+        }
+
         let metadata = provider.load_metadata(id).map(|m| (*m).clone());
 
-        if reviewable
-            && filter
+        let top_pass = if filter
                 .as_ref()
-                .map(|filter| filter.filter(recstate, metadata))
+                .map(|filter| filter.filter(*recstate, metadata))
                 .unwrap_or(true)
         {
             if recstate.pending {
@@ -375,8 +383,34 @@ pub fn the_reviewable_cards(
             } else {
                 seen_cards.push(id);
             }
+            true
+        } else {
+            false
+        };
+
+        for dep in node.all_dependencies() {
+            let dep_recstate = recalls.get(&dep).unwrap();
+            if !dep_recstate.reviewable {
+                continue;
+            }
+
+            if filter
+                .as_ref()
+                .map(|filter| filter.filter(*dep_recstate, provider.load_metadata(dep).map(|m| (*m).clone())))
+                .unwrap_or(true) {
+                if dep_recstate.pending {
+                    unseen_cards.push(dep);
+                } else {
+                    seen_cards.push(dep);
+                }
+            }
         }
+
+        if ordered && top_pass {
+            break;
+         }
     }
+
     info!("finish filter cards");
 
     use rand::prelude::SliceRandom;
@@ -990,6 +1024,7 @@ impl App {
             self.card_provider.clone(),
             SetExpr::All,
             Some(CardFilter::default_filter()),
+            false,
         );
 
         let cards = if !reviewable.seen.is_empty() {

@@ -1,7 +1,7 @@
 use crate::{
     components::{
         dropdown::{ActionDropdown, DropComponent, DropdownAction},
-        FilterComp, FilterEditor, SectionWithTitle,
+        FilterComp, FilterEditor, SectionWithTitle, Toggle,
     },
     overlays::{
         card_selector::{CardSelector, MyClosure},
@@ -345,6 +345,7 @@ fn RenderSet(
         expr,
         to_delete: mut delete_atomic,
         show_edit,
+        ordered,
     } = set.clone();
 
     let filter2 = filter.clone();
@@ -432,8 +433,8 @@ fn RenderSet(
                         };
 
 
-                        match reviewable_cards(APP.read().card_provider(), expr.clone(), Some(filter2.clone())) {
-                            Some(cards) => OverlayEnum::new_review(cards, expr.clone(), Some(filter2.clone())).append(),
+                        match reviewable_cards(APP.read().card_provider(), expr.clone(), Some(filter2.clone()), ordered.cloned()) {
+                            Some(cards) => OverlayEnum::new_review(cards, expr.clone(), Some(filter2.clone()), ordered.cloned()).append(),
                             None => OverlayEnum::new_notice("no cards to review!").append(),
                         }
 
@@ -483,6 +484,14 @@ fn RenderSet(
 
             }
             if editable && show_edit() {
+                Toggle {
+                    text: "ordered",
+                    b: ordered,
+                    on_toggle: Some(Callback::new(move |new_val: bool| {
+                        let event = SetEvent::new_modify(id, SetAction::SetOrdered(new_val));
+                        APP.read().modify_set(event).unwrap();
+                    })),
+                }
                 RenderExpr { filter, inputs: set.expr.cloned().inputs.clone(), ty: set.expr.cloned().ty.clone(), depth: depth + 1}
             }
         }
@@ -496,6 +505,7 @@ struct SetEditor {
     expr: Signal<ExprEditor>,
     to_delete: Signal<bool>,
     show_edit: Signal<bool>,
+    ordered: Signal<bool>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -606,11 +616,11 @@ impl TryFrom<ExprEditor> for SetExpr {
     type Error = String;
 
     fn try_from(value: ExprEditor) -> Result<Self, Self::Error> {
-        let mut inputs: BTreeSet<Input> = Default::default();
+        let mut inputs: Vec<Input> = Default::default();
 
         for input in value.inputs.cloned() {
             let input: Input = Input::try_from(input)?;
-            inputs.insert(input);
+            inputs.push(input);
         }
 
         let ty = value.ty;
@@ -682,6 +692,7 @@ impl SetEditor {
             expr: Signal::new_in_scope(set.expr.clone().into(), ScopeId::APP),
             to_delete: Signal::new_in_scope(false, ScopeId::APP),
             show_edit: Signal::new_in_scope(show_edit, ScopeId::APP),
+            ordered: Signal::new_in_scope(set.ordered, ScopeId::APP),
         }
     }
 }
