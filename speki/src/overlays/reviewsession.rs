@@ -5,11 +5,7 @@ use nonempty::NonEmpty;
 use std::{collections::BTreeSet, rc::Rc, sync::Arc};
 
 use speki_core::{
-    card::{CardId, EvalText},
-    ledger::CardAction,
-    recall_rate::Recall,
-    set::{Input, SetExpr},
-    Card,
+    Card, card::{CardId, EvalText}, cardfilter::CardFilter, ledger::CardAction, recall_rate::Recall, reviewable_cards, set::{Input, SetExpr}
 };
 use tracing::info;
 
@@ -207,13 +203,17 @@ pub fn ReviewRender(
 pub struct Queue {
     passed: Vec<CardId>,
     upcoming: Vec<CardId>,
+    pub expr: SetExpr,
+    pub filter: Option<CardFilter>,
 }
 
 impl Queue {
-    fn new(cards: NonEmpty<CardId>) -> Self {
+    fn new(cards: NonEmpty<CardId>, expr: SetExpr, filter: Option<CardFilter>) -> Self {
         Self {
             passed: vec![],
             upcoming: cards.into(),
+            expr,
+            filter,
         }
     }
 
@@ -221,7 +221,12 @@ impl Queue {
         if !self.upcoming.is_empty() {
             self.passed.push(self.upcoming.remove(0));
             if self.upcoming.is_empty() {
-                pop_overlay();
+                match reviewable_cards(APP.read().card_provider(), self.expr.clone(), self.filter.clone()) {
+                    Some(cards) => {
+                        self.upcoming = cards.into();
+                    },
+                    None => pop_overlay(),
+                }
             }
         } else {
             pop_overlay();
@@ -250,10 +255,10 @@ pub struct ReviewState {
 }
 
 impl ReviewState {
-    pub fn new(thecards: NonEmpty<CardId>) -> Self {
+    pub fn new(thecards: NonEmpty<CardId>, expr: SetExpr, filter: Option<CardFilter>) -> Self {
         info!("start review for {} cards", thecards.len());
 
-        let queue: Signal<Queue> = Signal::new_in_scope(Queue::new(thecards), ScopeId::APP);
+        let queue: Signal<Queue> = Signal::new_in_scope(Queue::new(thecards, expr, filter), ScopeId::APP);
 
         let is_done: Memo<bool> =
             ScopeId::APP.in_runtime(|| Memo::new(move || queue.read().current().is_none()));

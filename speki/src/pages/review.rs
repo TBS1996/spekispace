@@ -432,8 +432,8 @@ fn RenderSet(
                         };
 
 
-                        match reviewable_cards(APP.read().card_provider(), expr, Some(filter2.clone())) {
-                            Some(cards) => OverlayEnum::new_review(cards).append(),
+                        match reviewable_cards(APP.read().card_provider(), expr.clone(), Some(filter2.clone())) {
+                            Some(cards) => OverlayEnum::new_review(cards, expr.clone(), Some(filter2.clone())).append(),
                             None => OverlayEnum::new_notice("no cards to review!").append(),
                         }
 

@@ -17,7 +17,7 @@ use cardviewer::CardViewerRender;
 use dioxus::prelude::*;
 use nonempty::NonEmpty;
 use reviewsession::ReviewRender;
-use speki_core::card::CardId;
+use speki_core::{card::CardId, cardfilter::CardFilter, set::SetExpr};
 use std::{fmt::Debug, sync::Arc};
 
 #[derive(Clone)]
@@ -88,8 +88,8 @@ impl OverlayEnum {
         append_overlay(self);
     }
 
-    pub fn new_review(thecards: NonEmpty<CardId>) -> Self {
-        Self::Review(ReviewState::new(thecards))
+    pub fn new_review(thecards: NonEmpty<CardId>, expr: SetExpr, filter: Option<CardFilter>) -> Self {
+        Self::Review(ReviewState::new(thecards, expr, filter))
     }
 
     pub fn new_edit_card(id: CardId) -> Self {
