@@ -315,17 +315,40 @@ pub fn RenderExpr(
             }
 
 
-            for input in inputs.cloned() {
-                div {
-                    class: "flex flex-row items-start {class}",
-                    button {
-                        class: "mt-1", // optional: fine-tune vertical alignment
-                        onclick: move |_| {
-                            inputs.write().retain(|x|x != &input);
-                        },
-                        "🗑️"
+            {
+                let len = inputs.read().len();
+                rsx! {
+                    for (idx, input) in inputs.cloned().into_iter().enumerate() {
+                        div {
+                            class: "flex flex-row items-start {class}",
+                            button {
+                                class: "mt-1",
+                                onclick: move |_| {
+                                    inputs.write().retain(|x|x != &input);
+                                },
+                                "🗑️"
+                            }
+                            button {
+                                class: "mt-1",
+                                disabled: idx == 0,
+                                onclick: move |_| {
+                                    let mut v = inputs.write();
+                                    v.swap(idx, idx - 1);
+                                },
+                                "↑"
+                            }
+                            button {
+                                class: "mt-1",
+                                disabled: idx >= len - 1,
+                                onclick: move |_| {
+                                    let mut v = inputs.write();
+                                    v.swap(idx, idx + 1);
+                                },
+                                "↓"
+                            }
+                            RenderInput { filter: filter.clone(), input: input.clone(), depth: depth + 1 }
+                        }
                     }
-                    RenderInput { filter: filter.clone(), input: input.clone(), depth: depth + 1 }
                 }
             }
         }
