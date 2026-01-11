@@ -9,8 +9,9 @@ use std::ops::Deref;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::AtomicBool;
 use std::vec::Vec;
+use indexmap::IndexSet;
 use std::{
-    collections::{HashMap, HashSet},
+    collections::HashMap,
     fmt::Debug,
     hash::Hash,
     sync::{Arc, RwLock},
@@ -177,7 +178,7 @@ pub enum EventError<T: LedgerItem> {
     /// Event references an item not found in state.
     ItemNotFound(T::Key),
     /// Cannot delete item because it is referenced by other items.
-    DeletingWithDependencies(HashSet<T::Key>),
+    DeletingWithDependencies(IndexSet<T::Key>),
     /// Remote ledger cannot be modified.
     Remote,
 }
@@ -206,7 +207,7 @@ impl<T: LedgerItem> LedgerType<T> {
         }
     }
 
-    pub fn dependents(&self, key: T::Key) -> HashSet<T::Key> {
+    pub fn dependents(&self, key: T::Key) -> IndexSet<T::Key> {
         match self {
             LedgerType::OverRide(ledger) => ledger.dependents(key),
             LedgerType::Normal(ledger) => ledger.dependents_recursive(key),
@@ -256,11 +257,11 @@ impl<T: LedgerItem> OverrideLedger<T> {
         }
     }
 
-    pub fn dependencies(&self, key: T::Key) -> HashSet<T::Key> {
+    pub fn dependencies(&self, key: T::Key) -> IndexSet<T::Key> {
         self.load(key).unwrap().dependencies()
     }
 
-    pub fn dependents(&self, key: T::Key) -> HashSet<T::Key> {
+    pub fn dependents(&self, key: T::Key) -> IndexSet<T::Key> {
         let mut dependents = self.inner.dependents_recursive(key);
 
         for (dep_key, val) in self.new.iter() {
@@ -280,16 +281,16 @@ use crate::remote::Remote;
 #[derive(Debug, Clone)]
 struct ActionEvalResult<T: LedgerItem> {
     item: CardChange<T>,
-    added_caches: HashSet<(CacheKey<T>, T::Key)>,
-    removed_caches: HashSet<(CacheKey<T>, T::Key)>,
+    added_caches: IndexSet<(CacheKey<T>, T::Key)>,
+    removed_caches: IndexSet<(CacheKey<T>, T::Key)>,
     is_no_op: bool,
 }
 
 #[derive(Debug, Clone)]
 struct BatchActionEvalResult<T: LedgerItem> {
     items: Vec<CardChange<T>>,
-    added_caches: HashSet<(CacheKey<T>, T::Key)>,
-    removed_caches: HashSet<(CacheKey<T>, T::Key)>,
+    added_caches: IndexSet<(CacheKey<T>, T::Key)>,
+    removed_caches: IndexSet<(CacheKey<T>, T::Key)>,
     is_no_op: bool,
 }
 
@@ -369,12 +370,12 @@ impl<T: LedgerItem> Node<T> {
         &self.deps
     }
 
-    pub fn direct_dependencies(&self) -> HashSet<T::Key> {
+    pub fn direct_dependencies(&self) -> IndexSet<T::Key> {
         self.deps.clone().into_iter().map(|n| n.id()).collect()
     }
 
-    pub fn all_dependencies(&self) -> HashSet<T::Key> {
-        let mut out: HashSet<T::Key> = Default::default();
+    pub fn all_dependencies(&self) -> IndexSet<T::Key> {
+        let mut out: IndexSet<T::Key> = Default::default();
 
         for dep in &self.deps {
             out.insert(dep.id());
@@ -451,7 +452,7 @@ impl<T: LedgerItem> Ledger<T> {
 
     /// Sorts all the cards so that no item in the output vector depends on a item to "the right".
     pub fn topological_sort(&self, items: Vec<T::Key>) -> Vec<T::Key> {
-        let in_set: HashSet<T::Key> = items.iter().cloned().collect();
+        let in_set: IndexSet<T::Key> = items.iter().cloned().collect();
         let mut indeg: HashMap<T::Key, usize> = items.iter().cloned().map(|k| (k, 0)).collect();
         let mut adj: HashMap<T::Key, Vec<T::Key>> = HashMap::new();
 
@@ -636,7 +637,7 @@ impl<T: LedgerItem> Ledger<T> {
         }
     }
 
-    pub fn load_ids(&self) -> HashSet<T::Key> {
+    pub fn load_ids(&self) -> IndexSet<T::Key> {
         if self.full_cache() {
             return self.cache.read().unwrap().keys().cloned().collect();
         }
@@ -647,7 +648,7 @@ impl<T: LedgerItem> Ledger<T> {
         ids
     }
 
-    pub fn all_dependents_with_ty(&self, key: T::Key) -> HashSet<(T::RefType, T::Key)> {
+    pub fn all_dependents_with_ty(&self, key: T::Key) -> IndexSet<(T::RefType, T::Key)> {
         let mut items = self.local.all_dependents_with_ty(key);
         items.extend(self.remote.all_dependents_with_ty(key));
 
@@ -662,7 +663,7 @@ impl<T: LedgerItem> Ledger<T> {
         }
     }
 
-    pub fn get_prop_cache(&self, key: PropertyCache<T>) -> HashSet<T::Key> {
+    pub fn get_prop_cache(&self, key: PropertyCache<T>) -> IndexSet<T::Key> {
         let mut items = self.local.get_property_cache(key.clone());
         items.extend(self.remote.get_property_cache(key));
 
@@ -675,7 +676,7 @@ impl<T: LedgerItem> Ledger<T> {
         ty: Option<T::RefType>,
         reversed: bool,
         recursive: bool,
-    ) -> HashSet<T::Key> {
+    ) -> IndexSet<T::Key> {
         let mut items = self
             .local
             .get_reference_cache(key, ty.clone(), reversed, recursive);
@@ -694,7 +695,7 @@ impl<T: LedgerItem> Ledger<T> {
         ty: Option<T::RefType>,
         reversed: bool,
         recursive: bool,
-    ) -> HashSet<(T::RefType, T::Key)> {
+    ) -> IndexSet<(T::RefType, T::Key)> {
         let mut items =
             self.local
                 .get_reference_cache_with_ty(key, ty.clone(), reversed, recursive);
@@ -717,9 +718,9 @@ impl<T: LedgerItem> Ledger<T> {
     }
 
     /// Returns all the dependencies of all the items in the set that are not in the set itself.
-    pub fn dependents_recursive_set(&self, set: ItemExpr<T>) -> HashSet<T::Key> {
+    pub fn dependents_recursive_set(&self, set: ItemExpr<T>) -> IndexSet<T::Key> {
         let items = self.load_expr(set);
-        let mut dependencies: HashSet<T::Key> = HashSet::new();
+        let mut dependencies: IndexSet<T::Key> = IndexSet::new();
 
         for item in &items {
             let item_deps = self.dependents_recursive(*item);
@@ -733,26 +734,26 @@ impl<T: LedgerItem> Ledger<T> {
         dependencies
     }
 
-    pub fn dependencies_recursive(&self, key: T::Key) -> HashSet<T::Key> {
+    pub fn dependencies_recursive(&self, key: T::Key) -> IndexSet<T::Key> {
         let mut items = self.local.recursive_dependencies(key);
         items.extend(self.remote.recursive_dependencies(key));
 
         items
     }
 
-    pub fn dependents_direct(&self, key: T::Key) -> HashSet<T::Key> {
+    pub fn dependents_direct(&self, key: T::Key) -> IndexSet<T::Key> {
         let mut items = self.local.direct_dependents(key);
         items.extend(self.remote.direct_dependents(key));
         items
     }
 
-    pub fn dependents_recursive(&self, key: T::Key) -> HashSet<T::Key> {
+    pub fn dependents_recursive(&self, key: T::Key) -> IndexSet<T::Key> {
         let mut items = self.local.recursive_dependents(key);
         items.extend(self.remote.recursive_dependents(key));
         items
     }
 
-    pub fn load_expr(&self, expr: ItemExpr<T>) -> HashSet<T::Key> {
+    pub fn load_expr(&self, expr: ItemExpr<T>) -> IndexSet<T::Key> {
         let mut items = self.local.load_expr(expr.clone());
         items.extend(self.remote.load_expr(expr));
         items
@@ -762,7 +763,7 @@ impl<T: LedgerItem> Ledger<T> {
         self.full_cache.load(std::sync::atomic::Ordering::SeqCst)
     }
 
-    pub fn load_all(&self) -> HashSet<T> {
+    pub fn load_all(&self) -> IndexSet<T> {
         if self.full_cache() {
             return self
                 .cache
@@ -965,7 +966,7 @@ impl<T: LedgerItem> Ledger<T> {
 
     fn apply_caches(&self, items: HashMap<T::Key, Arc<T>>) {
         info!("applying caches");
-        let mut the_caches: HashMap<CacheKey<T>, HashSet<T::Key>> = Default::default();
+        let mut the_caches: HashMap<CacheKey<T>, IndexSet<T::Key>> = Default::default();
 
         info!("fetching caches");
         for item in items.values() {
@@ -1151,7 +1152,7 @@ impl<T: LedgerItem> Ledger<T> {
             }
         }
 
-        let mut dependents: HashSet<T::Key> = HashSet::default();
+        let mut dependents: IndexSet<T::Key> = IndexSet::default();
 
         for item in &modified {
             dependents.extend(self.local.direct_dependents(*item));
@@ -1227,7 +1228,7 @@ impl<T: LedgerItem> Ledger<T> {
 
                 let item = Arc::new(item);
 
-                (HashSet::default(), caches, CardChange::Created(item), false)
+                (IndexSet::default(), caches, CardChange::Created(item), false)
             }
             LedgerAction::Delete => {
                 let old_item = self.load(key).unwrap();
@@ -1325,14 +1326,14 @@ impl<T: LedgerItem> ReadLedger for Ledger<T> {
         self.load(key).map(|x| (*x).clone())
     }
 
-    fn load_ids(&self) -> HashSet<<Self::Item as LedgerItem>::Key> {
+    fn load_ids(&self) -> IndexSet<<Self::Item as LedgerItem>::Key> {
         self.load_ids()
     }
 
     fn get_property_cache(
         &self,
         cache: PropertyCache<Self::Item>,
-    ) -> HashSet<<Self::Item as LedgerItem>::Key> {
+    ) -> IndexSet<<Self::Item as LedgerItem>::Key> {
         self.get_prop_cache(cache)
     }
 
@@ -1342,7 +1343,7 @@ impl<T: LedgerItem> ReadLedger for Ledger<T> {
         ty: Option<<Self::Item as LedgerItem>::RefType>,
         reversed: bool,
         recursive: bool,
-    ) -> HashSet<<Self::Item as LedgerItem>::Key> {
+    ) -> IndexSet<<Self::Item as LedgerItem>::Key> {
         self.get_reference_cache(key, ty, reversed, recursive)
     }
 
@@ -1352,7 +1353,7 @@ impl<T: LedgerItem> ReadLedger for Ledger<T> {
         ty: Option<<Self::Item as LedgerItem>::RefType>,
         reversed: bool,
         recursive: bool,
-    ) -> HashSet<(
+    ) -> IndexSet<(
         <Self::Item as LedgerItem>::RefType,
         <Self::Item as LedgerItem>::Key,
     )> {

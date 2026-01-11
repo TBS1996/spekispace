@@ -1,7 +1,7 @@
 use chrono::{DateTime, Utc};
 use git2::build::CheckoutBuilder;
 use git2::{Delta, DiffFindOptions, DiffOptions, ObjectType, Oid, Repository, ResetType};
-use std::collections::HashSet;
+use indexmap::IndexSet;
 use std::path::{Path, PathBuf};
 
 use crate::read_ledger::{FsReadLedger, ReadLedger};
@@ -36,14 +36,14 @@ impl<T: LedgerItem> ReadLedger for Remote<T> {
         self.state.load(key)
     }
 
-    fn load_ids(&self) -> HashSet<<Self::Item as LedgerItem>::Key> {
+    fn load_ids(&self) -> IndexSet<<Self::Item as LedgerItem>::Key> {
         self.state.load_ids()
     }
 
     fn get_property_cache(
         &self,
         cache: PropertyCache<Self::Item>,
-    ) -> HashSet<<Self::Item as LedgerItem>::Key> {
+    ) -> IndexSet<<Self::Item as LedgerItem>::Key> {
         self.state.get_property_cache(cache)
     }
 
@@ -61,7 +61,7 @@ impl<T: LedgerItem> ReadLedger for Remote<T> {
         ty: Option<<Self::Item as LedgerItem>::RefType>,
         reversed: bool,
         recursive: bool,
-    ) -> HashSet<<Self::Item as LedgerItem>::Key> {
+    ) -> IndexSet<<Self::Item as LedgerItem>::Key> {
         self.state.get_reference_cache(key, ty, reversed, recursive)
     }
 
@@ -71,7 +71,7 @@ impl<T: LedgerItem> ReadLedger for Remote<T> {
         ty: Option<<Self::Item as LedgerItem>::RefType>,
         reversed: bool,
         recursive: bool,
-    ) -> HashSet<(
+    ) -> IndexSet<(
         <Self::Item as LedgerItem>::RefType,
         <Self::Item as LedgerItem>::Key,
     )> {

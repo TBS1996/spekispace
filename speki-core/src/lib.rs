@@ -13,9 +13,9 @@ use recall_rate::History;
 use serde::Deserialize;
 use serde::Serialize;
 use set::Set;
+use indexmap::IndexSet;
 use std::collections::BTreeMap;
 use std::collections::HashMap;
-use std::collections::HashSet;
 use std::fmt::Display;
 use std::fs;
 use std::path::Path;
@@ -274,7 +274,7 @@ impl TimeProvider for FsTime {
     }
 }
 
-pub fn duplicates(provider: &CardProvider) -> HashSet<String> {
+pub fn duplicates(provider: &CardProvider) -> IndexSet<String> {
     info!("finding duplicates!");
     let mut cards: Vec<String> = provider
         .load_all()
@@ -284,7 +284,7 @@ pub fn duplicates(provider: &CardProvider) -> HashSet<String> {
 
     cards.sort();
 
-    let mut duplicates: HashSet<String> = Default::default();
+    let mut duplicates: IndexSet<String> = Default::default();
 
     let mut prev = String::new();
     for card in cards.into_iter() {
@@ -363,9 +363,12 @@ pub fn the_reviewable_cards(
 
     info!("start filter cards");
 
-    for node in nodes {
+    for (idx, node) in nodes.into_iter().enumerate() {
         let id = node.id();
         let recstate = recalls.get(&id).unwrap();
+
+        let card_display = provider.load(id).unwrap().display_card(true, true).to_string();
+        println!("card: {card_display}");
 
         if !recstate.reviewable {
             continue;
@@ -398,15 +401,22 @@ pub fn the_reviewable_cards(
                 .as_ref()
                 .map(|filter| filter.filter(*dep_recstate, provider.load_metadata(dep).map(|m| (*m).clone())))
                 .unwrap_or(true) {
+                dbg!("adding dep");
                 if dep_recstate.pending {
                     unseen_cards.push(dep);
                 } else {
                     seen_cards.push(dep);
                 }
+            } else {
+                dbg!("not adding dep");
             }
         }
 
+        dbg!(ordered, top_pass);
+
         if ordered && top_pass {
+            let card_breaks = provider.load(id).unwrap().display_card(true, true).to_string();
+            println!("breaking at node idx {idx}, card: {card_breaks}");
             break;
          }
     }
@@ -1156,13 +1166,13 @@ pub fn as_graph(app: &App) -> String {
 }
 
 pub mod graphviz {
-    use std::collections::BTreeSet;
+    use indexmap::IndexSet;
 
     use super::*;
 
     pub fn export_cards(cards: impl IntoIterator<Item = Arc<Card>>) -> String {
         let mut dot = String::from("digraph G {\nranksep=2.0;\nrankdir=BT;\n");
-        let mut relations = BTreeSet::default();
+        let mut relations: IndexSet<String> = IndexSet::default();
 
         for card in cards {
             let label = card

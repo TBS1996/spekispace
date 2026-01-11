@@ -1,5 +1,6 @@
+use indexmap::IndexSet;
 use std::{
-    collections::{BTreeMap, BTreeSet, HashSet},
+    collections::BTreeMap,
     fs,
     ops::ControlFlow,
     sync::Arc,
@@ -55,15 +56,15 @@ pub struct CardSelector {
     pub collection: ExprEditor,
     pub edit_collection: bool,
     pub cards: Memo<Vec<Arc<Card>>>,
-    pub col_cards: Memo<BTreeSet<Uuid>>,
+    pub col_cards: Memo<IndexSet<Uuid>>,
     pub default_search: Signal<Option<String>>,
-    pub forbidden_cards: Signal<BTreeSet<CardId>>,
+    pub forbidden_cards: Signal<IndexSet<CardId>>,
     pub instance_of: Option<CardId>,
 }
 
 struct CardFilteringState {
     allowed_cards: Vec<CardTy>,
-    forbidden_cards: BTreeSet<Uuid>,
+    forbidden_cards: IndexSet<Uuid>,
     filtered_cards: Vec<(u32, Arc<Card>)>,
     filter: Option<CardFilter>,
     app: App,
@@ -73,7 +74,7 @@ struct CardFilteringState {
 impl CardFilteringState {
     fn new(
         allowed_cards: Vec<CardTy>,
-        forbidden_cards: BTreeSet<Uuid>,
+        forbidden_cards: IndexSet<Uuid>,
         filter: Option<CardFilter>,
     ) -> Self {
         Self {
@@ -155,7 +156,7 @@ impl CardSelector {
     pub fn new_with_filter(with_memo: bool, allowed_cards: Vec<CardTy>, filter: SetExpr) -> Self {
         let allowed_cards = Signal::new_in_scope(allowed_cards, ScopeId::APP);
         let default_search: Signal<Option<String>> = Signal::new_in_scope(None, ScopeId::APP);
-        let forbidden_cards: Signal<BTreeSet<CardId>> =
+        let forbidden_cards: Signal<IndexSet<CardId>> =
             Signal::new_in_scope(Default::default(), ScopeId::APP);
 
         let filtereditor = FilterEditor::new_permissive();
@@ -521,9 +522,9 @@ pub fn CardSelectorRender(
                                 title: review_title,
                                 onclick: move |_| {
                                     if let Ok(expr) = expr2.clone() {
-                                        let card_ids: HashSet<CardId> = APP.read().eval_expr(&expr).into_iter().collect();
+                                        let card_ids: IndexSet<CardId> = APP.read().eval_expr(&expr).into_iter().collect();
 
-                                        let mut all_recursive_dependencies: HashSet<CardId> = card_ids
+                                        let mut all_recursive_dependencies: IndexSet<CardId> = card_ids
                                             .iter()
                                             .map(|id| APP.read().dependencies_recursive(*id))
                                             .flatten()

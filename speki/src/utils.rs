@@ -1,5 +1,5 @@
+use indexmap::IndexSet;
 use std::{
-    collections::{BTreeSet, HashSet},
     fmt::Debug,
     sync::Arc,
     time::Duration,
@@ -70,7 +70,7 @@ impl App {
         self.0.card_provider.load(id)
     }
 
-    pub fn all_dependents_with_ty(&self, key: CardId) -> HashSet<(CardRefType, CardId)> {
+    pub fn all_dependents_with_ty(&self, key: CardId) -> IndexSet<(CardRefType, CardId)> {
         self.0.provider.cards.all_dependents_with_ty(key)
     }
 
@@ -86,15 +86,15 @@ impl App {
         self.0.provider.cards.has_item(id)
     }
 
-    pub fn load_all_histories(&self) -> HashSet<History> {
+    pub fn load_all_histories(&self) -> IndexSet<History> {
         self.0.provider.reviews.load_all()
     }
 
-    pub fn dependencies_recursive(&self, key: CardId) -> HashSet<CardId> {
+    pub fn dependencies_recursive(&self, key: CardId) -> IndexSet<CardId> {
         self.0.provider.cards.dependencies_recursive(key)
     }
 
-    pub fn load_attrs(&self, id: CardId) -> HashSet<CardId> {
+    pub fn load_attrs(&self, id: CardId) -> IndexSet<CardId> {
         let expr = ItemExpr::Property {
             property: CardProperty::AttrId,
             value: id.to_string(),
@@ -103,7 +103,7 @@ impl App {
         self.0.provider.cards.load_expr(expr).into_iter().collect()
     }
 
-    pub fn load_all_sets(&self) -> HashSet<Set> {
+    pub fn load_all_sets(&self) -> IndexSet<Set> {
         self.0.provider.sets.load_all()
     }
 
@@ -118,7 +118,7 @@ impl App {
         self.0.provider.sets.currently_applied_ledger_hash()
     }
 
-    pub fn get_prop_cache(&self, key: PropertyCache<RawCard>) -> HashSet<CardId> {
+    pub fn get_prop_cache(&self, key: PropertyCache<RawCard>) -> IndexSet<CardId> {
         self.0.provider.cards.get_prop_cache(key.clone())
     }
 
@@ -126,7 +126,7 @@ impl App {
         self.0.card_provider.clone()
     }
 
-    pub fn eval_expr(&self, expr: &SetExpr) -> BTreeSet<CardId> {
+    pub fn eval_expr(&self, expr: &SetExpr) -> IndexSet<CardId> {
         self.0.card_provider.eval_expr(expr)
     }
 
@@ -134,7 +134,7 @@ impl App {
         dyncard.display(self.0.card_provider.clone())
     }
 
-    pub fn duplicates(&self) -> HashSet<String> {
+    pub fn duplicates(&self) -> IndexSet<String> {
         self.0.card_provider.duplicates()
     }
 

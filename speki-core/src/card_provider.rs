@@ -10,8 +10,9 @@ use crate::{
 };
 use dioxus_logger::tracing::{info, trace};
 use ledgerstore::{EventError, ItemExpr, LedgerEvent, PropertyCache};
+use indexmap::IndexSet;
 use std::{
-    collections::{BTreeSet, HashMap, HashSet},
+    collections::HashMap,
     fmt::Debug,
     sync::{Arc, RwLock},
 };
@@ -43,7 +44,7 @@ impl CardProvider {
     }
 
     /// Finds cards whose display names are the same as another card's display name.
-    pub fn duplicates(&self) -> HashSet<String> {
+    pub fn duplicates(&self) -> IndexSet<String> {
         info!("finding duplicates!");
         let mut cards: Vec<String> = self
             .load_all()
@@ -53,7 +54,7 @@ impl CardProvider {
 
         cards.sort();
 
-        let mut duplicates: HashSet<String> = Default::default();
+        let mut duplicates: IndexSet<String> = Default::default();
 
         let mut prev = String::new();
         for card in cards.into_iter() {
@@ -116,7 +117,7 @@ impl CardProvider {
         }
     }
 
-    pub fn eval_expr(&self, expr: &SetExpr) -> BTreeSet<CardId> {
+    pub fn eval_expr(&self, expr: &SetExpr) -> IndexSet<CardId> {
         self.providers
             .cards
             .load_expr(expr.to_set().into())
@@ -128,7 +129,7 @@ impl CardProvider {
         self.providers.sets.modify(event)
     }
 
-    fn load_set(&self, set: impl Into<ItemExpr<RawCard>>) -> HashSet<CardId> {
+    fn load_set(&self, set: impl Into<ItemExpr<RawCard>>) -> IndexSet<CardId> {
         self.providers.cards.load_expr(set.into())
     }
 
@@ -272,7 +273,7 @@ impl CardProvider {
         out
     }
 
-    pub fn dependents(&self, id: CardId) -> BTreeSet<CardId> {
+    pub fn dependents(&self, id: CardId) -> IndexSet<CardId> {
         trace!("dependents of: {}", id);
 
         self.providers

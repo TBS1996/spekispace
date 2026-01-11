@@ -1,7 +1,8 @@
 use core::f32;
+use indexmap::IndexSet;
 use std::{
     cmp::{Ord, Ordering, PartialEq},
-    collections::{BTreeMap, BTreeSet, HashSet, VecDeque},
+    collections::{BTreeMap, BTreeSet, VecDeque},
     fmt::Debug,
     ops::Deref,
     sync::Arc,
@@ -379,8 +380,8 @@ impl Card {
         let mut q: VecDeque<Self> = list.into_iter().collect();
         let mut out: Vec<Self> = Vec::with_capacity(q.len());
 
-        let present: HashSet<CardId> = q.iter().map(|c| c.id()).collect();
-        let mut placed: HashSet<CardId> = HashSet::with_capacity(q.len());
+        let present: IndexSet<CardId> = q.iter().map(|c| c.id()).collect();
+        let mut placed: IndexSet<CardId> = IndexSet::with_capacity(q.len());
 
         let mut misses = 0usize;
         while let Some(card) = q.pop_front() {
@@ -480,7 +481,7 @@ impl Card {
 
     pub fn params_on_parent_classes(&self) -> BTreeMap<CardId, Vec<Attrv2>> {
         let mut parents = self.parent_classes();
-        parents.remove(&self.id());
+        parents.shift_remove(&self.id());
         let mut out: BTreeMap<CardId, Vec<Attrv2>> = Default::default();
 
         for parent in parents {
@@ -564,7 +565,7 @@ impl Card {
         }
     }
 
-    pub fn parent_classes(&self) -> HashSet<CardId> {
+    pub fn parent_classes(&self) -> IndexSet<CardId> {
         let key = match self.base.data {
             CardType::Instance { class, .. } => class,
             CardType::Class { .. } => self.id,
@@ -630,7 +631,7 @@ impl Card {
         self.base.data.fieldless()
     }
 
-    pub fn direct_dependent_ids(&self) -> BTreeSet<CardId> {
+    pub fn direct_dependent_ids(&self) -> IndexSet<CardId> {
         self.card_provider
             .providers
             .cards
@@ -639,7 +640,7 @@ impl Card {
             .collect()
     }
 
-    pub fn recursive_dependent_ids(&self) -> BTreeSet<CardId> {
+    pub fn recursive_dependent_ids(&self) -> IndexSet<CardId> {
         self.card_provider
             .providers
             .cards
@@ -794,7 +795,7 @@ impl Card {
     }
 
     /// which attribute cards describe this instance?
-    pub fn attribute_cards(&self) -> HashSet<CardId> {
+    pub fn attribute_cards(&self) -> IndexSet<CardId> {
         if !self.is_instance() {
             dbg!(self);
             debug_assert!(false);
@@ -843,7 +844,7 @@ impl Card {
         self.base.data.backside()
     }
 
-    pub fn recursive_dependents(&self) -> HashSet<CardId> {
+    pub fn recursive_dependents(&self) -> IndexSet<CardId> {
         self.card_provider
             .providers
             .cards
@@ -863,7 +864,7 @@ impl Card {
             .collect()
     }
 
-    pub fn recursive_dependencies_ids(&self) -> HashSet<CardId> {
+    pub fn recursive_dependencies_ids(&self) -> IndexSet<CardId> {
         self.card_provider
             .providers
             .cards
@@ -1047,7 +1048,7 @@ impl Card {
         self.id
     }
 
-    pub fn explicit_dependencies(&self) -> HashSet<CardId> {
+    pub fn explicit_dependencies(&self) -> IndexSet<CardId> {
         self.base
             .explicit_dependencies
             .clone()
@@ -1055,7 +1056,7 @@ impl Card {
             .collect()
     }
 
-    pub fn dependencies(&self) -> HashSet<CardId> {
+    pub fn dependencies(&self) -> IndexSet<CardId> {
         use ledgerstore::LedgerItem;
 
         self.base.dependencies()

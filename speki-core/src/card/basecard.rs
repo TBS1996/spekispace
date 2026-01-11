@@ -4,7 +4,8 @@ use either::Either;
 use ledgerstore::{ItemReference, LedgerItem, PropertyCache, ReadLedger};
 use omtrent::TimeStamp;
 use serde::{Deserialize, Serialize, Serializer};
-use std::{collections::HashSet, fmt::Display, str::FromStr};
+use indexmap::IndexSet;
+use std::{collections::BTreeSet, fmt::Display, str::FromStr};
 
 pub type CardId = Uuid;
 
@@ -1316,12 +1317,12 @@ impl LedgerItem for RawCard {
         Ok(())
     }
 
-    fn ref_cache(&self) -> HashSet<ItemReference<Self>> {
+    fn ref_cache(&self) -> IndexSet<ItemReference<Self>> {
         let from = self.id;
-        let mut out: HashSet<ItemReference<Self>> = Default::default();
+        let mut out: IndexSet<ItemReference<Self>> = Default::default();
 
-        fn refs_from_backside(from: CardId, back: &BackSide) -> HashSet<ItemReference<RawCard>> {
-            let mut out: HashSet<ItemReference<RawCard>> = Default::default();
+        fn refs_from_backside(from: CardId, back: &BackSide) -> IndexSet<ItemReference<RawCard>> {
+            let mut out: IndexSet<ItemReference<RawCard>> = Default::default();
             match back {
                 BackSide::Text(txt) => {
                     for id in txt.card_ids() {
@@ -1438,8 +1439,8 @@ impl LedgerItem for RawCard {
     fn properties_cache(
         &self,
         cache: &impl ReadLedger<Item = Self>,
-    ) -> HashSet<PropertyCache<Self>> {
-        let mut out: HashSet<PropertyCache<Self>> = Default::default();
+    ) -> IndexSet<PropertyCache<Self>> {
+        let mut out: IndexSet<PropertyCache<Self>> = Default::default();
 
         let resolved_text = resolve_card(self, cache);
 

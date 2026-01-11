@@ -3,8 +3,9 @@ use std::fmt::Display;
 use std::str::FromStr;
 use std::sync::Arc;
 use std::vec::Vec;
+use indexmap::IndexSet;
 use std::{
-    collections::{HashMap, HashSet},
+    collections::HashMap,
     fmt::Debug,
     hash::Hash,
 };
@@ -111,8 +112,8 @@ pub trait LedgerItem:
         fn dfs<T: LedgerItem>(
             current: T::Key,
             ledger: &impl ReadLedger<Item = T>,
-            visiting: &mut HashSet<T::Key>,
-            visited: &mut HashSet<T::Key>,
+            visiting: &mut IndexSet<T::Key>,
+            visited: &mut IndexSet<T::Key>,
             parent: &mut HashMap<T::Key, (T::Key, T::RefType)>,
             selv: (T::Key, &T),
         ) -> Option<Vec<(T::Key, T::RefType)>> {
@@ -161,13 +162,13 @@ pub trait LedgerItem:
                 }
             }
 
-            visiting.remove(&current);
+            visiting.shift_remove(&current);
             visited.insert(current);
             None
         }
 
-        let mut visited = HashSet::new();
-        let mut visiting = HashSet::new();
+        let mut visited = IndexSet::new();
+        let mut visiting = IndexSet::new();
         let mut parent = HashMap::new();
 
         dfs(
@@ -191,29 +192,29 @@ pub trait LedgerItem:
     ///
     /// Used to create a index, like if item A references item B, we cache that item B is referenced by item A,
     /// so that we don't need to search through all the items to find out or store it double in the item itself.
-    fn ref_cache(&self) -> HashSet<ItemReference<Self>> {
+    fn ref_cache(&self) -> IndexSet<ItemReference<Self>> {
         Default::default()
     }
 
-    fn dependencies(&self) -> HashSet<Self::Key> {
+    fn dependencies(&self) -> IndexSet<Self::Key> {
         self.ref_cache()
             .into_iter()
             .map(|itemref| itemref.to)
             .collect()
     }
 
-    fn recursive_dependents(&self, ledger: &impl ReadLedger<Item = Self>) -> HashSet<Arc<Self>>
+    fn recursive_dependents(&self, ledger: &impl ReadLedger<Item = Self>) -> IndexSet<Arc<Self>>
     where
         Self: Sized,
     {
-        let mut out: HashSet<Arc<Self>> = HashSet::new();
-        let mut visited: HashSet<Self::Key> = HashSet::new();
+        let mut out: IndexSet<Arc<Self>> = IndexSet::new();
+        let mut visited: IndexSet<Self::Key> = IndexSet::new();
 
         fn visit<T: LedgerItem>(
             key: T::Key,
             ledger: &impl ReadLedger<Item = T>,
-            out: &mut HashSet<Arc<T>>,
-            visited: &mut HashSet<T::Key>,
+            out: &mut IndexSet<Arc<T>>,
+            visited: &mut IndexSet<T::Key>,
         ) where
             T: Sized,
         {
@@ -248,7 +249,7 @@ pub trait LedgerItem:
     fn properties_cache(
         &self,
         ledger: &impl ReadLedger<Item = Self>,
-    ) -> HashSet<PropertyCache<Self>>
+    ) -> IndexSet<PropertyCache<Self>>
     where
         Self: LedgerItem,
     {
@@ -259,8 +260,8 @@ pub trait LedgerItem:
     fn listed_cache(
         &self,
         ledger: &impl ReadLedger<Item = Self>,
-    ) -> HashMap<CacheKey<Self>, HashSet<Self::Key>> {
-        let mut out: HashMap<CacheKey<Self>, HashSet<Self::Key>> = HashMap::default();
+    ) -> HashMap<CacheKey<Self>, IndexSet<Self::Key>> {
+        let mut out: HashMap<CacheKey<Self>, IndexSet<Self::Key>> = HashMap::default();
 
         for (key, id) in self.caches(ledger) {
             out.entry(key).or_default().insert(id);
@@ -269,13 +270,13 @@ pub trait LedgerItem:
         out
     }
 
-    fn caches(&self, ledger: &impl ReadLedger<Item = Self>) -> HashSet<(CacheKey<Self>, Self::Key)>
+    fn caches(&self, ledger: &impl ReadLedger<Item = Self>) -> IndexSet<(CacheKey<Self>, Self::Key)>
     where
         Self: LedgerItem,
     {
         trace!("fetching caches for item: {:?}", self.item_id());
 
-        let mut out: HashSet<(CacheKey<Self>, Self::Key)> = Default::default();
+        let mut out: IndexSet<(CacheKey<Self>, Self::Key)> = Default::default();
         let id = self.item_id();
 
         for property_cache in self.properties_cache(ledger) {

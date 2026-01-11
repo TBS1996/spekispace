@@ -40,6 +40,7 @@ ureq = "2"
 textplots = "0.8.7"
 simpletime = "0.1.0"
 sha2 = "0.10.8"
+indexmap = "2"
 
 [profile]
 

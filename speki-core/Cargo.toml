@@ -24,6 +24,7 @@ textplots.workspace = true
 dirs.workspace = true
 rand.workspace = true
 simpletime.workspace = true
+indexmap.workspace = true
 
 
 omtrent.workspace = true

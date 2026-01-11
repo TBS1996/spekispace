@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use indexmap::IndexSet;
 use std::path::PathBuf;
 
 use crate::read_ledger::{FsReadLedger, ReadLedger};
@@ -26,14 +26,14 @@ impl<T: LedgerItem> ReadLedger for Local<T> {
         self.inner.load(key)
     }
 
-    fn load_ids(&self) -> HashSet<<Self::Item as LedgerItem>::Key> {
+    fn load_ids(&self) -> IndexSet<<Self::Item as LedgerItem>::Key> {
         self.inner.load_ids()
     }
 
     fn get_property_cache(
         &self,
         cache: PropertyCache<Self::Item>,
-    ) -> HashSet<<Self::Item as LedgerItem>::Key> {
+    ) -> IndexSet<<Self::Item as LedgerItem>::Key> {
         self.inner.get_property_cache(cache)
     }
 
@@ -51,7 +51,7 @@ impl<T: LedgerItem> ReadLedger for Local<T> {
         ty: Option<<Self::Item as LedgerItem>::RefType>,
         reversed: bool,
         recursive: bool,
-    ) -> HashSet<<Self::Item as LedgerItem>::Key> {
+    ) -> IndexSet<<Self::Item as LedgerItem>::Key> {
         self.inner.get_reference_cache(key, ty, reversed, recursive)
     }
 
@@ -61,7 +61,7 @@ impl<T: LedgerItem> ReadLedger for Local<T> {
         ty: Option<<Self::Item as LedgerItem>::RefType>,
         reversed: bool,
         recursive: bool,
-    ) -> HashSet<(
+    ) -> IndexSet<(
         <Self::Item as LedgerItem>::RefType,
         <Self::Item as LedgerItem>::Key,
     )> {

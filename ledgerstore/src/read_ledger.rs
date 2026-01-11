@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use indexmap::IndexSet;
 use std::fs::{self};
 use std::io::ErrorKind;
 use std::path::PathBuf;
@@ -16,13 +16,13 @@ pub trait ReadLedger {
     fn load(&self, key: <Self::Item as LedgerItem>::Key) -> Option<Self::Item>;
 
     /// Get all item keys that exist in the ledger
-    fn load_ids(&self) -> HashSet<<Self::Item as LedgerItem>::Key>;
+    fn load_ids(&self) -> IndexSet<<Self::Item as LedgerItem>::Key>;
 
     /// Get all items that have a specific property value
     fn get_property_cache(
         &self,
         cache: PropertyCache<Self::Item>,
-    ) -> HashSet<<Self::Item as LedgerItem>::Key>;
+    ) -> IndexSet<<Self::Item as LedgerItem>::Key>;
 
     /// Get items related via references
     /// - reversed=false: items that `key` depends on (dependencies)
@@ -36,7 +36,7 @@ pub trait ReadLedger {
         ty: Option<<Self::Item as LedgerItem>::RefType>,
         reversed: bool,
         recursive: bool,
-    ) -> HashSet<<Self::Item as LedgerItem>::Key>;
+    ) -> IndexSet<<Self::Item as LedgerItem>::Key>;
 
     /// Same as get_reference_cache but returns (RefType, Key) tuples
     fn get_reference_cache_with_ty(
@@ -45,16 +45,16 @@ pub trait ReadLedger {
         ty: Option<<Self::Item as LedgerItem>::RefType>,
         reversed: bool,
         recursive: bool,
-    ) -> HashSet<(
+    ) -> IndexSet<(
         <Self::Item as LedgerItem>::RefType,
         <Self::Item as LedgerItem>::Key,
     )>;
 
     // Provided methods that compose from the primitives above:
 
-    fn load_all(&self) -> HashSet<Self::Item> {
+    fn load_all(&self) -> IndexSet<Self::Item> {
         let ids = self.load_ids();
-        let mut out = HashSet::with_capacity(ids.len());
+        let mut out = IndexSet::with_capacity(ids.len());
 
         for id in ids {
             if let Some(item) = self.load(id) {
@@ -81,35 +81,35 @@ pub trait ReadLedger {
     fn direct_dependencies(
         &self,
         key: <Self::Item as LedgerItem>::Key,
-    ) -> HashSet<<Self::Item as LedgerItem>::Key> {
+    ) -> IndexSet<<Self::Item as LedgerItem>::Key> {
         self.get_reference_cache(key, None, false, false)
     }
 
     fn recursive_dependencies(
         &self,
         key: <Self::Item as LedgerItem>::Key,
-    ) -> HashSet<<Self::Item as LedgerItem>::Key> {
+    ) -> IndexSet<<Self::Item as LedgerItem>::Key> {
         self.get_reference_cache(key, None, false, true)
     }
 
     fn direct_dependents(
         &self,
         key: <Self::Item as LedgerItem>::Key,
-    ) -> HashSet<<Self::Item as LedgerItem>::Key> {
+    ) -> IndexSet<<Self::Item as LedgerItem>::Key> {
         self.get_reference_cache(key, None, true, false)
     }
 
     fn recursive_dependents(
         &self,
         key: <Self::Item as LedgerItem>::Key,
-    ) -> HashSet<<Self::Item as LedgerItem>::Key> {
+    ) -> IndexSet<<Self::Item as LedgerItem>::Key> {
         self.get_reference_cache(key, None, true, true)
     }
 
     fn all_dependents_with_ty(
         &self,
         key: <Self::Item as LedgerItem>::Key,
-    ) -> HashSet<(
+    ) -> IndexSet<(
         <Self::Item as LedgerItem>::RefType,
         <Self::Item as LedgerItem>::Key,
     )> {
@@ -137,7 +137,7 @@ pub trait ReadLedger {
         node
     }
 
-    fn load_expr(&self, set: ItemExpr<Self::Item>) -> HashSet<<Self::Item as LedgerItem>::Key> {
+    fn load_expr(&self, set: ItemExpr<Self::Item>) -> IndexSet<<Self::Item as LedgerItem>::Key> {
         match set {
             ItemExpr::Union(nodes) => nodes.into_iter().flat_map(|n| self.load_expr(n)).collect(),
             ItemExpr::Intersection(nodes) => {
@@ -176,7 +176,7 @@ pub trait ReadLedger {
                 recursive,
                 include_self,
             } => {
-                let mut out = HashSet::new();
+                let mut out = IndexSet::new();
                 let items = self.load_expr(*items);
 
                 for item in items {
@@ -289,11 +289,11 @@ impl<T: LedgerItem> FsReadLedger<T> {
         prefix.join(key_str)
     }
 
-    fn item_keys_from_dir(path: PathBuf) -> HashSet<T::Key> {
+    fn item_keys_from_dir(path: PathBuf) -> IndexSet<T::Key> {
         if !path.exists() {
             Default::default()
         } else {
-            let mut out = HashSet::default();
+            let mut out = IndexSet::default();
             for entry in fs::read_dir(&path).unwrap() {
                 match entry
                     .unwrap()
@@ -313,12 +313,12 @@ impl<T: LedgerItem> FsReadLedger<T> {
         }
     }
 
-    fn item_keys_from_dir_recursive(path: PathBuf) -> HashSet<T::Key> {
+    fn item_keys_from_dir_recursive(path: PathBuf) -> IndexSet<T::Key> {
         if !path.exists() {
             return Default::default();
         }
 
-        let mut out = HashSet::new();
+        let mut out = IndexSet::new();
 
         for entry in WalkDir::new(&path)
             .follow_links(false)
@@ -344,7 +344,7 @@ impl<T: LedgerItem> FsReadLedger<T> {
         &self,
         key: T::Key,
         ty: Option<T::RefType>,
-        out: &mut HashSet<T::Key>,
+        out: &mut IndexSet<T::Key>,
         reversed: bool,
     ) {
         let dep_dir = match reversed {
@@ -384,7 +384,7 @@ impl<T: LedgerItem> FsReadLedger<T> {
         &self,
         key: T::Key,
         ty: Option<T::RefType>,
-        out: &mut HashSet<(T::RefType, T::Key)>,
+        out: &mut IndexSet<(T::RefType, T::Key)>,
         reversed: bool,
     ) {
         let dep_dir = match reversed {
@@ -457,14 +457,14 @@ impl<T: LedgerItem> ReadLedger for FsReadLedger<T> {
         }
     }
 
-    fn load_ids(&self) -> HashSet<T::Key> {
+    fn load_ids(&self) -> IndexSet<T::Key> {
         let mut entries: Vec<PathBuf> = vec![];
 
         for entry in fs::read_dir(&*self.items_path()).unwrap() {
             let entry = entry.unwrap().path();
             entries.push(entry);
         }
-        let mut keys: HashSet<T::Key> = HashSet::default();
+        let mut keys: IndexSet<T::Key> = IndexSet::default();
 
         for entry in entries {
             for entry in fs::read_dir(entry).unwrap() {
@@ -484,7 +484,7 @@ impl<T: LedgerItem> ReadLedger for FsReadLedger<T> {
         keys
     }
 
-    fn get_property_cache(&self, cache: PropertyCache<T>) -> HashSet<T::Key> {
+    fn get_property_cache(&self, cache: PropertyCache<T>) -> IndexSet<T::Key> {
         let path = self
             .properties_path()
             .join(cache.property.to_string())
@@ -506,9 +506,9 @@ impl<T: LedgerItem> ReadLedger for FsReadLedger<T> {
         ty: Option<T::RefType>,
         reversed: bool,
         recursive: bool,
-    ) -> HashSet<T::Key> {
+    ) -> IndexSet<T::Key> {
         if recursive {
-            let mut out = HashSet::new();
+            let mut out = IndexSet::new();
             self.collect_references_recursive(key, ty, &mut out, reversed);
             out
         } else {
@@ -536,13 +536,13 @@ impl<T: LedgerItem> ReadLedger for FsReadLedger<T> {
         ty: Option<T::RefType>,
         reversed: bool,
         recursive: bool,
-    ) -> HashSet<(T::RefType, T::Key)> {
+    ) -> IndexSet<(T::RefType, T::Key)> {
         if recursive {
-            let mut out = HashSet::new();
+            let mut out = IndexSet::new();
             self.collect_references_recursive_with_ty(key, ty, &mut out, reversed);
             out
         } else {
-            let mut out: HashSet<(T::RefType, T::Key)> = Default::default();
+            let mut out: IndexSet<(T::RefType, T::Key)> = Default::default();
             let dep_dir = match reversed {
                 true => self.root_dependents_dir(key),
                 false => self.root_dependencies_dir(key),

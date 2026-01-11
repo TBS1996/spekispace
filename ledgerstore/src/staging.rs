@@ -1,5 +1,6 @@
+use indexmap::IndexSet;
 use std::{
-    collections::{HashMap, HashSet},
+    collections::HashMap,
     sync::Arc,
 };
 
@@ -11,10 +12,10 @@ use crate::{
 
 /// Tracks changes to reference caches (dependencies/dependents) in a staging area
 struct ReferenceCacheDelta<T: LedgerItem> {
-    added_dependencies: HashMap<T::Key, HashMap<T::RefType, HashSet<T::Key>>>,
-    removed_dependencies: HashMap<T::Key, HashMap<T::RefType, HashSet<T::Key>>>,
-    added_dependents: HashMap<T::Key, HashMap<T::RefType, HashSet<T::Key>>>,
-    removed_dependents: HashMap<T::Key, HashMap<T::RefType, HashSet<T::Key>>>,
+    added_dependencies: HashMap<T::Key, HashMap<T::RefType, IndexSet<T::Key>>>,
+    removed_dependencies: HashMap<T::Key, HashMap<T::RefType, IndexSet<T::Key>>>,
+    added_dependents: HashMap<T::Key, HashMap<T::RefType, IndexSet<T::Key>>>,
+    removed_dependents: HashMap<T::Key, HashMap<T::RefType, IndexSet<T::Key>>>,
 }
 
 impl<T: LedgerItem> ReferenceCacheDelta<T> {
@@ -44,14 +45,14 @@ impl<T: LedgerItem> ReferenceCacheDelta<T> {
             .or_default()
             .entry(ty.clone())
             .or_default()
-            .remove(&to);
+            .shift_remove(&to);
 
         self.removed_dependents
             .entry(to)
             .or_default()
             .entry(ty)
             .or_default()
-            .remove(&from);
+            .shift_remove(&from);
     }
 
     fn remove(
@@ -80,14 +81,14 @@ impl<T: LedgerItem> ReferenceCacheDelta<T> {
             .or_default()
             .entry(ty.clone())
             .or_default()
-            .remove(&to);
+            .shift_remove(&to);
 
         self.added_dependents
             .entry(to)
             .or_default()
             .entry(ty)
             .or_default()
-            .remove(&from);
+            .shift_remove(&from);
     }
 
     /// Get added references (dependencies or dependents) with type information - direct only
@@ -96,8 +97,8 @@ impl<T: LedgerItem> ReferenceCacheDelta<T> {
         key: T::Key,
         ty: Option<&T::RefType>,
         reversed: bool,
-    ) -> HashSet<(T::RefType, T::Key)> {
-        let mut result = HashSet::new();
+    ) -> IndexSet<(T::RefType, T::Key)> {
+        let mut result = IndexSet::new();
         let types_map = if reversed {
             self.added_dependents.get(&key)
         } else {
@@ -132,8 +133,8 @@ impl<T: LedgerItem> ReferenceCacheDelta<T> {
         key: T::Key,
         ty: Option<&T::RefType>,
         reversed: bool,
-    ) -> HashSet<(T::RefType, T::Key)> {
-        let mut result = HashSet::new();
+    ) -> IndexSet<(T::RefType, T::Key)> {
+        let mut result = IndexSet::new();
         let types_map = if reversed {
             self.removed_dependents.get(&key)
         } else {
@@ -172,8 +173,8 @@ pub struct StagingLedger<T: LedgerItem> {
     events: Vec<(ItemAction<T>, CardChange<T>)>,
     // How the staged events will modify items in base ledger.
     pub modified_items: HashMap<T::Key, Option<Arc<T>>>, // None means deleted
-    added_properties: HashMap<PropertyCache<T>, HashSet<T::Key>>,
-    removed_properties: HashMap<PropertyCache<T>, HashSet<T::Key>>,
+    added_properties: HashMap<PropertyCache<T>, IndexSet<T::Key>>,
+    removed_properties: HashMap<PropertyCache<T>, IndexSet<T::Key>>,
     reference_deltas: ReferenceCacheDelta<T>,
 }
 
@@ -315,7 +316,7 @@ impl<T: LedgerItem> StagingLedger<T> {
                     self.removed_properties
                         .entry(prop)
                         .or_default()
-                        .remove(&key);
+                        .shift_remove(&key);
                 }
                 either::Either::Right(reff) => {
                     self.reference_deltas.add(reff, key);
@@ -330,7 +331,7 @@ impl<T: LedgerItem> StagingLedger<T> {
                         .entry(prop.clone())
                         .or_default()
                         .insert(key);
-                    self.added_properties.entry(prop).or_default().remove(&key);
+                    self.added_properties.entry(prop).or_default().shift_remove(&key);
                 }
                 either::Either::Right(reff) => {
                     self.reference_deltas.remove(reff, key);
@@ -391,7 +392,7 @@ impl<T: LedgerItem> StagingLedger<T> {
 
                 let item = Arc::new(item);
 
-                (HashSet::default(), caches, CardChange::Created(item), false)
+                (IndexSet::default(), caches, CardChange::Created(item), false)
             }
             LedgerAction::Delete => {
                 let old_item = self.load(key).unwrap();
@@ -420,7 +421,7 @@ impl<T: LedgerItem> StagingLedger<T> {
         &self,
         key: T::Key,
         ty: Option<T::RefType>,
-        out: &mut HashSet<T::Key>,
+        out: &mut IndexSet<T::Key>,
         reversed: bool,
     ) {
         // Get direct references (non-recursive) considering staged changes
@@ -438,7 +439,7 @@ impl<T: LedgerItem> StagingLedger<T> {
         &self,
         key: T::Key,
         ty: Option<T::RefType>,
-        out: &mut HashSet<(T::RefType, T::Key)>,
+        out: &mut IndexSet<(T::RefType, T::Key)>,
         reversed: bool,
     ) {
         // Get direct references (non-recursive) considering staged changes
@@ -467,14 +468,14 @@ impl<T: LedgerItem> ReadLedger for StagingLedger<T> {
         }
     }
 
-    fn load_ids(&self) -> HashSet<<Self::Item as LedgerItem>::Key> {
+    fn load_ids(&self) -> IndexSet<<Self::Item as LedgerItem>::Key> {
         let mut ids = self.base.load_ids();
 
         for (id, item) in self.modified_items.iter() {
             if item.is_some() {
                 ids.insert(*id);
             } else {
-                ids.remove(id);
+                ids.shift_remove(id);
             }
         }
 
@@ -484,7 +485,7 @@ impl<T: LedgerItem> ReadLedger for StagingLedger<T> {
     fn get_property_cache(
         &self,
         cache: PropertyCache<Self::Item>,
-    ) -> HashSet<<Self::Item as LedgerItem>::Key> {
+    ) -> IndexSet<<Self::Item as LedgerItem>::Key> {
         let mut out = self.base.get_prop_cache(cache.clone());
 
         if let Some(added) = self.added_properties.get(&cache) {
@@ -493,7 +494,7 @@ impl<T: LedgerItem> ReadLedger for StagingLedger<T> {
 
         if let Some(removed) = self.removed_properties.get(&cache) {
             for key in removed.iter() {
-                out.remove(key);
+                out.shift_remove(key);
             }
         }
 
@@ -506,9 +507,9 @@ impl<T: LedgerItem> ReadLedger for StagingLedger<T> {
         ty: Option<<Self::Item as LedgerItem>::RefType>,
         reversed: bool,
         recursive: bool,
-    ) -> HashSet<<Self::Item as LedgerItem>::Key> {
+    ) -> IndexSet<<Self::Item as LedgerItem>::Key> {
         if recursive {
-            let mut result = HashSet::new();
+            let mut result = IndexSet::new();
             self.collect_references_recursive(key, ty, &mut result, reversed);
             result
         } else {
@@ -530,7 +531,7 @@ impl<T: LedgerItem> ReadLedger for StagingLedger<T> {
                 .reference_deltas
                 .get_removed(key, ty.as_ref(), reversed)
             {
-                refs.remove(&removed_key);
+                refs.shift_remove(&removed_key);
             }
 
             refs
@@ -543,12 +544,12 @@ impl<T: LedgerItem> ReadLedger for StagingLedger<T> {
         ty: Option<<Self::Item as LedgerItem>::RefType>,
         reversed: bool,
         recursive: bool,
-    ) -> HashSet<(
+    ) -> IndexSet<(
         <Self::Item as LedgerItem>::RefType,
         <Self::Item as LedgerItem>::Key,
     )> {
         if recursive {
-            let mut result = HashSet::new();
+            let mut result = IndexSet::new();
             self.collect_references_recursive_with_ty(key, ty, &mut result, reversed);
             result
         } else {
@@ -570,7 +571,7 @@ impl<T: LedgerItem> ReadLedger for StagingLedger<T> {
                 .reference_deltas
                 .get_removed(key, ty.as_ref(), reversed)
             {
-                refs.remove(&removed);
+                refs.shift_remove(&removed);
             }
 
             refs

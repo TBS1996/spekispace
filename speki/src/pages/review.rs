@@ -21,7 +21,8 @@ use speki_core::{
     reviewable_cards,
     set::{Input, Set, SetAction, SetEvent, SetExpr, SetExprDiscriminants, SetId},
 };
-use std::{cmp::Ordering, collections::BTreeSet, fmt::Debug, sync::Arc};
+use indexmap::IndexSet;
+use std::{cmp::Ordering, fmt::Debug, sync::Arc};
 use strum::IntoEnumIterator;
 use tracing::info;
 use uuid::Uuid;
@@ -570,7 +571,7 @@ pub struct ExprEditor {
 }
 
 impl ExprEditor {
-    pub fn expanded(&self) -> Memo<BTreeSet<Uuid>> {
+    pub fn expanded(&self) -> Memo<IndexSet<Uuid>> {
         info!("lets expand!");
         let selv = self.clone();
         ScopeId::APP.in_runtime(|| {
