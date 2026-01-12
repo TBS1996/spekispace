@@ -1,15 +1,15 @@
 use chrono::{DateTime, Utc};
 use either::Either;
+use indexmap::IndexSet;
 use nonempty::NonEmpty;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use std::collections::VecDeque;
-use std::fs::{self, hard_link};
+use std::fs::{self};
 use std::io::{self, Write};
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::AtomicBool;
 use std::vec::Vec;
-use indexmap::IndexSet;
 use std::{
     collections::HashMap,
     fmt::Debug,
@@ -1062,10 +1062,7 @@ impl<T: LedgerItem> WriteLedger for Ledger<T> {
             fs::create_dir_all(&dir).unwrap();
             let original = self.item_path(to); // Uses Ledger's item_path for remote+local
             let link = dir.join(to.to_string());
-            if let Err(e) = hard_link(&original, &link) {
-                dbg!(e, original, link);
-                panic!();
-            }
+            my_hard_link(&original, &link);
         }
     }
 
@@ -1090,7 +1087,7 @@ impl<T: LedgerItem> WriteLedger for Ledger<T> {
         fs::create_dir_all(&dir).unwrap();
         let original = self.item_path(key); // Uses Ledger's item_path for remote+local
         let link = dir.join(key.to_string());
-        hard_link(original, link).unwrap();
+        my_hard_link(&original, &link);
     }
 
     fn insert_reference(&self, reference: ItemReference<T>) {
@@ -1106,7 +1103,7 @@ impl<T: LedgerItem> WriteLedger for Ledger<T> {
         fs::create_dir_all(&dir).unwrap();
         let original = self.item_path(from); // Uses Ledger's item_path for remote+local
         let link = dir.join(from.to_string());
-        hard_link(original, link).unwrap();
+        my_hard_link(&original, &link);
     }
 
     fn remove_reference(&self, reference: ItemReference<T>) {
@@ -1228,7 +1225,12 @@ impl<T: LedgerItem> Ledger<T> {
 
                 let item = Arc::new(item);
 
-                (IndexSet::default(), caches, CardChange::Created(item), false)
+                (
+                    IndexSet::default(),
+                    caches,
+                    CardChange::Created(item),
+                    false,
+                )
             }
             LedgerAction::Delete => {
                 let old_item = self.load(key).unwrap();
@@ -1358,5 +1360,18 @@ impl<T: LedgerItem> ReadLedger for Ledger<T> {
         <Self::Item as LedgerItem>::Key,
     )> {
         self.get_reference_cache_with_ty(key, ty, reversed, recursive)
+    }
+}
+
+fn my_hard_link(src: &Path, dst: &Path) {
+    match std::fs::hard_link(src, dst) {
+        Ok(()) => {}
+        Err(e) => match e.kind() {
+            io::ErrorKind::AlreadyExists => {}
+            e => {
+                dbg!(src, dst);
+                panic!("Error creating reference link: {:?}", e);
+            }
+        },
     }
 }

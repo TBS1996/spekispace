@@ -1,10 +1,10 @@
 use super::*;
 use crate::{audio::AudioId, card_provider::CardProvider, CardProperty, CardRefType};
 use either::Either;
+use indexmap::IndexSet;
 use ledgerstore::{ItemReference, LedgerItem, PropertyCache, ReadLedger};
 use omtrent::TimeStamp;
 use serde::{Deserialize, Serialize, Serializer};
-use indexmap::IndexSet;
 use std::{collections::BTreeSet, fmt::Display, str::FromStr};
 
 pub type CardId = Uuid;
@@ -1076,12 +1076,14 @@ pub fn bigrams(text: &str) -> Vec<[char; 2]> {
         .collect()
 }
 
-pub fn normalize_string(str: &str) -> String {
-    deunicode::deunicode(str)
+pub fn normalize_string(s: &str) -> String {
+    let s: String = deunicode::deunicode(s.trim())
         .to_lowercase()
         .chars()
         .filter(|c| c.is_ascii_alphanumeric())
-        .collect()
+        .collect();
+
+    format!("^{}$", s)
 }
 
 use fancy_regex::Regex;
