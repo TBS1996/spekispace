@@ -1,11 +1,5 @@
 use indexmap::IndexSet;
-use std::{
-    collections::BTreeMap,
-    fs,
-    ops::ControlFlow,
-    sync::Arc,
-    time::Duration,
-};
+use std::{collections::BTreeMap, fs, ops::ControlFlow, sync::Arc, time::Duration};
 
 use dioxus::prelude::*;
 use ledgerstore::{LedgerEvent, PropertyCache};
@@ -593,10 +587,17 @@ pub fn CardSelectorRender(
                     NewcardButton { on_card_selected: on_card_selected.clone(), allowed_cards: allowed_cards.cloned(), search, instance_of }
                 }
 
-                input {
-                    class: "bg-white w-full max-w-md border border-gray-300 rounded-md p-2 mb-4 text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent",
-                    value: "{search}",
-                    oninput: move |evt| search.set(evt.value().clone()),
+                div {
+                    class: "flex flex-row items-center gap-4 mb-4",
+                    input {
+                        class: "bg-white w-full max-w-md border border-gray-300 rounded-md p-2 text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent",
+                        value: "{search}",
+                        oninput: move |evt| search.set(evt.value().clone()),
+                    }
+                    div {
+                        class: "text-gray-600 text-sm whitespace-nowrap",
+                        "{collection.expanded().read().len()} cards total"
+                    }
                 }
             }
 
