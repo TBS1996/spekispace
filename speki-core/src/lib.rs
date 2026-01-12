@@ -1,6 +1,7 @@
 use card::{CardId, RawCard};
 use card_provider::CardProvider;
 use dioxus_logger::tracing::info;
+use indexmap::IndexSet;
 use ledgerstore::CardChange;
 use ledgerstore::EventError;
 use ledgerstore::ItemAction;
@@ -13,7 +14,6 @@ use recall_rate::History;
 use serde::Deserialize;
 use serde::Serialize;
 use set::Set;
-use indexmap::IndexSet;
 use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::fmt::Display;
@@ -313,12 +313,14 @@ pub fn reviewable_cards(
     filter: Option<CardFilter>,
     ordered: bool,
 ) -> Option<NonEmpty<CardId>> {
-    let ReviewableCards { mut seen, unseen } = the_reviewable_cards(provider, expr, filter, ordered);
+    let ReviewableCards { mut seen, unseen } =
+        the_reviewable_cards(provider, expr, filter, ordered);
     seen.extend(unseen);
 
     NonEmpty::from_vec(seen)
 }
 
+/// Gets a list of cards to be reviewed based on the provided expression and filter.
 pub fn the_reviewable_cards(
     provider: CardProvider,
     expr: SetExpr,
@@ -367,28 +369,24 @@ pub fn the_reviewable_cards(
         let id = node.id();
         let recstate = recalls.get(&id).unwrap();
 
-        let card_display = provider.load(id).unwrap().display_card(true, true).to_string();
-        println!("card: {card_display}");
-
         if !recstate.reviewable {
             continue;
         }
 
         let metadata = provider.load_metadata(id).map(|m| (*m).clone());
+        let mut ordered_terminate = false;
 
-        let top_pass = if filter
-                .as_ref()
-                .map(|filter| filter.filter(*recstate, metadata))
-                .unwrap_or(true)
+        if filter
+            .as_ref()
+            .map(|filter| filter.filter(*recstate, metadata))
+            .unwrap_or(true)
         {
             if recstate.pending {
                 unseen_cards.push(id);
             } else {
                 seen_cards.push(id);
             }
-            true
-        } else {
-            false
+            ordered_terminate = true;
         };
 
         for dep in node.all_dependencies() {
@@ -399,26 +397,33 @@ pub fn the_reviewable_cards(
 
             if filter
                 .as_ref()
-                .map(|filter| filter.filter(*dep_recstate, provider.load_metadata(dep).map(|m| (*m).clone())))
-                .unwrap_or(true) {
+                .map(|filter| {
+                    filter.filter(
+                        *dep_recstate,
+                        provider.load_metadata(dep).map(|m| (*m).clone()),
+                    )
+                })
+                .unwrap_or(true)
+            {
                 dbg!("adding dep");
                 if dep_recstate.pending {
                     unseen_cards.push(dep);
                 } else {
                     seen_cards.push(dep);
                 }
-            } else {
-                dbg!("not adding dep");
+                ordered_terminate = true;
             }
         }
 
-        dbg!(ordered, top_pass);
-
-        if ordered && top_pass {
-            let card_breaks = provider.load(id).unwrap().display_card(true, true).to_string();
+        if ordered && ordered_terminate {
+            let card_breaks = provider
+                .load(id)
+                .unwrap()
+                .display_card(true, true)
+                .to_string();
             println!("breaking at node idx {idx}, card: {card_breaks}");
             break;
-         }
+        }
     }
 
     info!("finish filter cards");

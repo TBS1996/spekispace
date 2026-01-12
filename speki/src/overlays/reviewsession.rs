@@ -141,10 +141,10 @@ pub fn ReviewRender(
             }
             _ => return,
         };
-        queue.clone().write().next();
         show_backside.clone().set(false);
         let card = Arc::unwrap_or_clone(card);
         card.add_review(recall);
+        queue.clone().write().next();
     };
 
     rsx! {
