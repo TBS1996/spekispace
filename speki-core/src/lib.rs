@@ -324,12 +324,16 @@ pub fn reviewable_cards(
 pub fn the_reviewable_cards(
     provider: CardProvider,
     expr: SetExpr,
-    filter: Option<CardFilter>,
+    mut filter: Option<CardFilter>,
     ordered: bool,
 ) -> ReviewableCards {
     info!("getting reviewable cards");
     let card_ids = provider.eval_expr(&expr);
     info!("{} cards loaded", card_ids.len());
+
+    if ordered {
+        filter.as_mut().map(|f| f.history.rec_stability = None);
+    }
 
     let mut nodes: Vec<Node<RawCard>> = Vec::with_capacity(card_ids.len());
 
