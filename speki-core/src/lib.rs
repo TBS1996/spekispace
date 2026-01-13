@@ -333,6 +333,7 @@ pub fn the_reviewable_cards(
 
     if ordered {
         filter.as_mut().map(|f| f.history.rec_stability = None);
+        filter.as_mut().map(|f| f.history.lapses = None);
     }
 
     let mut nodes: Vec<Node<RawCard>> = Vec::with_capacity(card_ids.len());

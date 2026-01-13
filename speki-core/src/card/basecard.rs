@@ -1378,7 +1378,6 @@ impl LedgerItem for RawCard {
                     }
 
                     // Check that no attributes in this class duplicate parent attributes
-                    // Check that no attributes in this class duplicate parent attributes
                     for attr in attrs {
                         if parent_attr_ids.contains(&attr.id) {
                             return Err(CardError::DuplicateAttribute {
