@@ -1132,6 +1132,8 @@ pub enum CardError {
     AnswerMustBeBool,
     SubClassOfNonClass,
     BackTypeMustBeClass,
+    DuplicateAttribute,
+    DuplicateParam,
 }
 
 fn instance_is_of_type(
@@ -1290,11 +1292,64 @@ impl LedgerItem for RawCard {
                 parent_class,
                 default_question: _,
                 attrs,
-                params: _,
+                params,
             } => {
                 if let Some(parent) = parent_class {
                     if !ledger.load(*parent).unwrap().data.is_class() {
                         return Err(CardError::SubClassOfNonClass);
+                    }
+
+                    // Collect all attribute IDs from parent classes
+                    let mut parent_attr_ids = std::collections::BTreeSet::new();
+                    let mut current_parent = Some(*parent);
+                    while let Some(parent_id) = current_parent {
+                        let parent_card = ledger.load(parent_id).unwrap();
+                        if let CardType::Class {
+                            attrs: parent_attrs,
+                            parent_class: grandparent,
+                            ..
+                        } = &parent_card.data
+                        {
+                            for attr in parent_attrs {
+                                parent_attr_ids.insert(attr.id);
+                            }
+                            current_parent = *grandparent;
+                        } else {
+                            break;
+                        }
+                    }
+
+                    // Check that no attributes in this class duplicate parent attributes
+                    for attr in attrs {
+                        if parent_attr_ids.contains(&attr.id) {
+                            return Err(CardError::DuplicateAttribute);
+                        }
+                    }
+
+                    // Check that no params in this class duplicate parent params
+                    let mut parent_param_ids = std::collections::BTreeSet::new();
+                    let mut current_parent = Some(*parent);
+                    while let Some(parent_id) = current_parent {
+                        let parent_card = ledger.load(parent_id).unwrap();
+                        if let CardType::Class {
+                            params: parent_params,
+                            parent_class: grandparent,
+                            ..
+                        } = &parent_card.data
+                        {
+                            for param in parent_params.values() {
+                                parent_param_ids.insert(param.id);
+                            }
+                            current_parent = *grandparent;
+                        } else {
+                            break;
+                        }
+                    }
+
+                    for param in params.values() {
+                        if parent_param_ids.contains(&param.id) {
+                            return Err(CardError::DuplicateParam);
+                        }
                     }
                 }
 
@@ -1692,8 +1747,8 @@ impl LedgerItem for RawCard {
                     back: self.ref_backside().cloned(),
                     parent_class: self.parent_class(),
                     default_question: None,
-                    attrs: self.attrs(),
-                    params: self.params(),
+                    attrs: Default::default(),
+                    params: Default::default(),
                 };
             }
             CardAction::UnfinishedType { front } => {
