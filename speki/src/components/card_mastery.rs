@@ -65,13 +65,31 @@ fn DisplayHistory(
         })
         .collect();
 
+    // Calculate recall and stability
+    let recall_pct = history.recall_rate(now).map(|r| (r * 100.0) as i32);
+    let stability_days = history.maturity_days(now).map(|d| d as i32);
+
     rsx! {
         div {
             class: "space-y-2",
-            h3 {
-                class: "text-sm font-semibold text-gray-600 uppercase tracking-wide",
-                "Past reviews"
+
+            // Display recall and stability
+            div {
+                class: "flex gap-3 text-xs mb-1",
+                if let Some(recall) = recall_pct {
+                    div {
+                        span { class: "text-gray-500", "Recall: " }
+                        span { class: "font-semibold", "{recall}%" }
+                    }
+                }
+                if let Some(stab) = stability_days {
+                    div {
+                        span { class: "text-gray-500", "Stability: " }
+                        span { class: "font-semibold", "{stab} days" }
+                    }
+                }
             }
+
             div {
                 class: "overflow-y-auto pr-2",
                 style: "height: {height_px}px;",
