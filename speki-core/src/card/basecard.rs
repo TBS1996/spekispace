@@ -301,31 +301,53 @@ impl AttrBackType {
     ) -> Result<(), CardError> {
         match (self, back_side) {
             (AttrBackType::InstanceOfClass(instance), BackSide::Card(answer)) => {
-                let mut parent_class: CardId = match ledger.load(*answer).unwrap().data {
-                    CardType::Instance { class, .. } => class,
-                    _ => return Err(CardError::WrongCardType),
+                let answer_card = ledger.load(*answer).unwrap();
+                let mut parent_class: CardId = match &answer_card.data {
+                    CardType::Instance { class, .. } => *class,
+                    _ => {
+                        return Err(CardError::WrongCardType {
+                            expected: CType::Instance,
+                            actual: answer_card.data.fieldless(),
+                        })
+                    }
                 };
 
                 while parent_class != *instance {
-                    parent_class = match ledger.load(parent_class).unwrap().data {
+                    let parent_card = ledger.load(parent_class).unwrap();
+                    parent_class = match &parent_card.data {
                         CardType::Class {
                             parent_class: Some(class),
                             ..
-                        } => class,
+                        } => *class,
                         CardType::Class {
                             parent_class: None, ..
-                        } => return Err(CardError::InstanceOfNonClass),
-                        _ => return Err(CardError::WrongCardType),
+                        } => {
+                            return Err(CardError::InstanceOfNonClass {
+                                actual_type: parent_card.data.fieldless(),
+                            })
+                        }
+                        _ => {
+                            return Err(CardError::WrongCardType {
+                                expected: CType::Class,
+                                actual: parent_card.data.fieldless(),
+                            })
+                        }
                     };
                 }
 
                 Ok(())
             }
-            (AttrBackType::InstanceOfClass(_), _) => Err(CardError::AnswerMustBeCard),
+            (AttrBackType::InstanceOfClass(_), _) => Err(CardError::AnswerMustBeCard {
+                attribute_id: AttributeId::nil(),
+            }),
             (AttrBackType::TimeStamp, BackSide::Time(_)) => Ok(()),
-            (AttrBackType::TimeStamp, _) => Err(CardError::AnswerMustBeTime),
+            (AttrBackType::TimeStamp, _) => Err(CardError::AnswerMustBeTime {
+                attribute_id: AttributeId::nil(),
+            }),
             (AttrBackType::Boolean, BackSide::Bool(_)) => Ok(()),
-            (AttrBackType::Boolean, _) => Err(CardError::AnswerMustBeBool),
+            (AttrBackType::Boolean, _) => Err(CardError::AnswerMustBeBool {
+                attribute_id: AttributeId::nil(),
+            }),
         }
     }
 }
@@ -930,14 +952,6 @@ impl RawCard {
         }
     }
 
-    fn params(&self) -> BTreeMap<AttributeId, Attrv2> {
-        if let CardType::Class { ref params, .. } = &self.data {
-            return params.clone();
-        } else {
-            Default::default()
-        }
-    }
-
     pub fn attrs(&self) -> BTreeSet<Attrv2> {
         if let CardType::Class { ref attrs, .. } = &self.data {
             return attrs.clone();
@@ -1121,19 +1135,43 @@ fn resolve_card(card: &RawCard, ledger: &impl ReadLedger<Item = RawCard>) -> Str
 
 #[derive(Debug)]
 pub enum CardError {
-    MissingParam,
-    InstanceOfNonClass,
+    MissingParam {
+        param_id: AttributeId,
+    },
+    InstanceOfNonClass {
+        actual_type: CType,
+    },
     AttributeOfNonInstance,
-    MissingAttribute,
+    MissingAttribute {
+        attribute_id: AttributeId,
+    },
     DefaultQuestionNotClass,
-    WrongCardType,
-    AnswerMustBeCard,
-    AnswerMustBeTime,
-    AnswerMustBeBool,
-    SubClassOfNonClass,
-    BackTypeMustBeClass,
-    DuplicateAttribute,
-    DuplicateParam,
+    WrongCardType {
+        expected: CType,
+        actual: CType,
+    },
+    AnswerMustBeCard {
+        attribute_id: AttributeId,
+    },
+    AnswerMustBeTime {
+        attribute_id: AttributeId,
+    },
+    AnswerMustBeBool {
+        attribute_id: AttributeId,
+    },
+    SubClassOfNonClass {
+        parent_id: CardId,
+    },
+    BackTypeMustBeClass {
+        back_type_id: CardId,
+        actual_type: CType,
+    },
+    DuplicateAttribute {
+        attribute_id: AttributeId,
+    },
+    DuplicateParam {
+        param_id: AttributeId,
+    },
 }
 
 fn instance_is_of_type(
@@ -1203,7 +1241,9 @@ impl LedgerItem for RawCard {
                         ..
                     } = &the_class.data
                     else {
-                        return Err(CardError::InstanceOfNonClass);
+                        return Err(CardError::InstanceOfNonClass {
+                            actual_type: the_class.data.fieldless(),
+                        });
                     };
 
                     recursive_params.extend(params.clone());
@@ -1220,7 +1260,7 @@ impl LedgerItem for RawCard {
                                 back_type.is_valid(&val_ans.answer, ledger)?;
                             }
                         }
-                        None => return Err(CardError::MissingParam),
+                        None => return Err(CardError::MissingParam { param_id: *key_ans }),
                     }
                 }
             }
@@ -1239,13 +1279,18 @@ impl LedgerItem for RawCard {
                     answered_params: _,
                 } = ledger.load(*instance).unwrap().data.clone()
                 else {
-                    return Err(CardError::InstanceOfNonClass);
+                    let inst = ledger.load(*instance).unwrap();
+                    return Err(CardError::InstanceOfNonClass {
+                        actual_type: inst.data.fieldless(),
+                    });
                 };
 
                 let class = {
                     let class = ledger.load(class).unwrap();
                     if !class.data.is_class() {
-                        return Err(CardError::InstanceOfNonClass);
+                        return Err(CardError::InstanceOfNonClass {
+                            actual_type: class.data.fieldless(),
+                        });
                     }
                     class
                 };
@@ -1254,24 +1299,35 @@ impl LedgerItem for RawCard {
                     .into_iter()
                     .find(|attr| attr.id == *attribute)
                 else {
-                    return Err(CardError::MissingAttribute);
+                    return Err(CardError::MissingAttribute {
+                        attribute_id: *attribute,
+                    });
                 };
 
                 match back_type {
                     Some(AttrBackType::Boolean) => {
                         if !matches!(attr_back, BackSide::Bool(_)) {
-                            return Err(CardError::AnswerMustBeBool);
+                            return Err(CardError::AnswerMustBeBool {
+                                attribute_id: *attribute,
+                            });
                         }
                     }
                     Some(AttrBackType::TimeStamp) => {
                         if !matches!(attr_back, BackSide::Time(_)) {
-                            return Err(CardError::AnswerMustBeTime);
+                            return Err(CardError::AnswerMustBeTime {
+                                attribute_id: *attribute,
+                            });
                         }
                     }
                     Some(AttrBackType::InstanceOfClass(back_class)) => {
                         if let BackSide::Card(answer) = attr_back {
                             if !instance_is_of_type(*answer, back_class, ledger) {
-                                return Err(CardError::WrongCardType);
+                                let answer_card = ledger.load(*answer).unwrap();
+                                let expected_card = ledger.load(back_class).unwrap();
+                                return Err(CardError::WrongCardType {
+                                    expected: expected_card.data.fieldless(),
+                                    actual: answer_card.data.fieldless(),
+                                });
                             }
                         } else {
                             dbg!(name);
@@ -1279,7 +1335,9 @@ impl LedgerItem for RawCard {
                             dbg!(&attr_back);
                             dbg!(ledger.load(*instance));
                             dbg!(self);
-                            let err = dbg!(CardError::AnswerMustBeCard);
+                            let err = dbg!(CardError::AnswerMustBeCard {
+                                attribute_id: *attribute
+                            });
                             return Err(err);
                         }
                     }
@@ -1296,7 +1354,7 @@ impl LedgerItem for RawCard {
             } => {
                 if let Some(parent) = parent_class {
                     if !ledger.load(*parent).unwrap().data.is_class() {
-                        return Err(CardError::SubClassOfNonClass);
+                        return Err(CardError::SubClassOfNonClass { parent_id: *parent });
                     }
 
                     // Collect all attribute IDs from parent classes
@@ -1320,9 +1378,12 @@ impl LedgerItem for RawCard {
                     }
 
                     // Check that no attributes in this class duplicate parent attributes
+                    // Check that no attributes in this class duplicate parent attributes
                     for attr in attrs {
                         if parent_attr_ids.contains(&attr.id) {
-                            return Err(CardError::DuplicateAttribute);
+                            return Err(CardError::DuplicateAttribute {
+                                attribute_id: attr.id,
+                            });
                         }
                     }
 
@@ -1348,15 +1409,26 @@ impl LedgerItem for RawCard {
 
                     for param in params.values() {
                         if parent_param_ids.contains(&param.id) {
-                            return Err(CardError::DuplicateParam);
+                            return Err(CardError::DuplicateParam { param_id: param.id });
                         }
                     }
                 }
 
                 for attr in attrs {
                     if let Some(AttrBackType::InstanceOfClass(back_type)) = attr.back_type {
-                        if !ledger.load(back_type).unwrap().data.is_class() {
-                            return Err(CardError::BackTypeMustBeClass);
+                        if back_type == self.id {
+                            continue;
+                        }
+
+                        let Some(back_card) = ledger.load(back_type) else {
+                            dbg!("could not load backtype", back_type);
+                            panic!();
+                        };
+                        if !back_card.data.is_class() {
+                            return Err(CardError::BackTypeMustBeClass {
+                                back_type_id: back_type,
+                                actual_type: back_card.data.fieldless(),
+                            });
                         }
                     }
                 }
@@ -1580,7 +1652,10 @@ impl LedgerItem for RawCard {
         match event {
             CardAction::InsertParam(param) => {
                 let CardType::Class { ref mut params, .. } = &mut self.data else {
-                    return Err(CardError::WrongCardType);
+                    return Err(CardError::WrongCardType {
+                        expected: CType::Class,
+                        actual: self.data.fieldless(),
+                    });
                 };
 
                 params.insert(param.id, param);
@@ -1602,7 +1677,10 @@ impl LedgerItem for RawCard {
                     params.into_iter().map(|attr| (attr.id, attr)).collect();
 
                 let CardType::Class { ref mut params, .. } = &mut self.data else {
-                    return Err(CardError::WrongCardType);
+                    return Err(CardError::WrongCardType {
+                        expected: CType::Class,
+                        actual: self.data.fieldless(),
+                    });
                 };
 
                 *params = new_params;
@@ -1613,7 +1691,10 @@ impl LedgerItem for RawCard {
                     ..
                 } = &mut self.data
                 else {
-                    return Err(CardError::WrongCardType);
+                    return Err(CardError::WrongCardType {
+                        expected: CType::Instance,
+                        actual: self.data.fieldless(),
+                    });
                 };
 
                 answered_params.insert(id, answer);
@@ -1624,7 +1705,10 @@ impl LedgerItem for RawCard {
                     ..
                 } = &mut self.data
                 else {
-                    return Err(CardError::WrongCardType);
+                    return Err(CardError::WrongCardType {
+                        expected: CType::Instance,
+                        actual: self.data.fieldless(),
+                    });
                 };
 
                 answered_params.remove(&id).unwrap();
@@ -1635,7 +1719,10 @@ impl LedgerItem for RawCard {
                     ..
                 } = &mut self.data
                 else {
-                    return Err(CardError::WrongCardType);
+                    return Err(CardError::WrongCardType {
+                        expected: CType::Instance,
+                        actual: self.data.fieldless(),
+                    });
                 };
 
                 *answered_params = new_answered_params;
@@ -1692,9 +1779,11 @@ impl LedgerItem for RawCard {
                 if let CardType::Class { ref mut attrs, .. } = self.data {
                     let attr_len = attrs.len();
                     attrs.retain(|attr| attr.id != attr_id);
-                    assert_eq!(attr_len - 1, attrs.len());
+                    if attr_len == attrs.len() {
+                        dbg!("attribute to remove not found");
+                    }
                 } else {
-                    panic!("expeted class");
+                    panic!("expected class");
                 }
             }
             CardAction::SetParentClass(new_parent_class) => {

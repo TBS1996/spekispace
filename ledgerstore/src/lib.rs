@@ -889,7 +889,7 @@ impl<T: LedgerItem> Ledger<T> {
         let mut latest_upstream: Option<SetUpstream> = None;
 
         for (idx, entry) in self.entries.chain().into_iter() {
-            if idx % 50 == 0 {
+            if idx % 1 == 0 {
                 dbg!(idx);
             };
 
@@ -897,7 +897,7 @@ impl<T: LedgerItem> Ledger<T> {
                 match event.event.clone() {
                     LedgerEvent::ItemAction { id, action } => {
                         let evaluation =
-                            match self.evaluate_action(id, action.clone(), false, apply_cache) {
+                            match self.evaluate_action(id, action.clone(), true, apply_cache) {
                                 Ok(eval) => eval,
                                 Err(e) => {
                                     dbg!(e);
