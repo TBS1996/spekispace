@@ -520,9 +520,7 @@ impl RecallState {
         }
 
         let history = ledger.load_or_default(card.id());
-        let mut recall = recaller
-            .eval(card.id(), &history.reviews, time)
-            .unwrap_or_default();
+        let mut recall = history.recall_rate(time).unwrap_or_default();
         let mut stability = history.maturity_days(time).unwrap_or_default();
 
         if randomize {

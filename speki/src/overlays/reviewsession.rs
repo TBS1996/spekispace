@@ -5,7 +5,13 @@ use nonempty::NonEmpty;
 use std::{rc::Rc, sync::Arc};
 
 use speki_core::{
-    Card, card::{CardId, EvalText}, cardfilter::CardFilter, ledger::CardAction, recall_rate::Recall, reviewable_cards, set::{Input, SetExpr}
+    card::{CardId, EvalText},
+    cardfilter::CardFilter,
+    ledger::CardAction,
+    recall_rate::Recall,
+    reviewable_cards,
+    set::{Input, SetExpr},
+    Card,
 };
 use tracing::info;
 
@@ -209,7 +215,12 @@ pub struct Queue {
 }
 
 impl Queue {
-    fn new(cards: NonEmpty<CardId>, expr: SetExpr, filter: Option<CardFilter>, ordered: bool) -> Self {
+    fn new(
+        cards: NonEmpty<CardId>,
+        expr: SetExpr,
+        filter: Option<CardFilter>,
+        ordered: bool,
+    ) -> Self {
         Self {
             passed: vec![],
             upcoming: cards.into(),
@@ -223,10 +234,15 @@ impl Queue {
         if !self.upcoming.is_empty() {
             self.passed.push(self.upcoming.remove(0));
             if self.upcoming.is_empty() {
-                match reviewable_cards(APP.read().card_provider(), self.expr.clone(), self.filter.clone(), self.ordered) {
+                match reviewable_cards(
+                    APP.read().card_provider(),
+                    self.expr.clone(),
+                    self.filter.clone(),
+                    self.ordered,
+                ) {
                     Some(cards) => {
                         self.upcoming = cards.into();
-                    },
+                    }
                     None => pop_overlay(),
                 }
             }
@@ -257,10 +273,16 @@ pub struct ReviewState {
 }
 
 impl ReviewState {
-    pub fn new(thecards: NonEmpty<CardId>, expr: SetExpr, filter: Option<CardFilter>, ordered: bool) -> Self {
+    pub fn new(
+        thecards: NonEmpty<CardId>,
+        expr: SetExpr,
+        filter: Option<CardFilter>,
+        ordered: bool,
+    ) -> Self {
         info!("start review for {} cards", thecards.len());
 
-        let queue: Signal<Queue> = Signal::new_in_scope(Queue::new(thecards, expr, filter, ordered), ScopeId::APP);
+        let queue: Signal<Queue> =
+            Signal::new_in_scope(Queue::new(thecards, expr, filter, ordered), ScopeId::APP);
 
         let is_done: Memo<bool> =
             ScopeId::APP.in_runtime(|| Memo::new(move || queue.read().current().is_none()));

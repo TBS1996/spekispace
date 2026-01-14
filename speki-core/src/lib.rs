@@ -411,6 +411,13 @@ pub fn the_reviewable_cards(
                 .unwrap_or(true)
             {
                 dbg!("adding dep");
+                let depview = provider
+                    .load(dep)
+                    .unwrap()
+                    .display_card(true, true)
+                    .to_string();
+                dbg!(&depview);
+                dbg!(dep_recstate);
                 if dep_recstate.pending {
                     unseen_cards.push(dep);
                 } else {
