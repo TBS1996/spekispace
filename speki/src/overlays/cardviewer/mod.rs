@@ -114,10 +114,7 @@ pub fn CardViewerRender(props: CardViewer) -> Element {
         }
     });
 
-    let history = props
-        .old_card
-        .as_ref()
-        .map(|card| card.history().to_owned());
+    let history = props.old_card.as_ref().map(|card| card.history_fresh());
 
     let props_for_clear = props.clone();
     let clear_enabled = props.old_card.is_none() && props.editor.has_data();

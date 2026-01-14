@@ -119,7 +119,7 @@ pub fn ReviewRender(
         deps
     };
 
-    let history = card.history().to_owned();
+    let history = card.history_fresh();
 
     let front = card.display_card(true, true);
     let back = card.backside().to_owned();

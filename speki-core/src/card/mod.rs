@@ -926,6 +926,15 @@ impl Card {
         }
     }
 
+    pub fn history_fresh(&self) -> History {
+        self.card_provider
+            .providers
+            .reviews
+            .load(self.id)
+            .map(Arc::unwrap_or_clone)
+            .unwrap_or_else(|| History::new_default(self.id))
+    }
+
     pub fn history(&self) -> &History {
         &self.history
     }
