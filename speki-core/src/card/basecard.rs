@@ -2,7 +2,7 @@ use super::*;
 use crate::{audio::AudioId, card_provider::CardProvider, CardProperty, CardRefType};
 use either::Either;
 use indexmap::IndexSet;
-use ledgerstore::{ItemReference, LedgerItem, PropertyCache, ReadLedger};
+use ledgerstore::{ItemReference, LedgerEvent, LedgerItem, PropertyCache, ReadLedger};
 use omtrent::TimeStamp;
 use serde::{Deserialize, Serialize, Serializer};
 use std::{collections::BTreeSet, fmt::Display, str::FromStr};
@@ -814,6 +814,43 @@ pub struct RawCard {
 }
 
 impl RawCard {
+    /// Verifies that into_events correctly reproduce the same card.
+    pub fn check_into_events(&self) -> Result<(), (Self, Self)> {
+        let mut cloned = self.clone();
+        cloned.front_audio = None;
+        cloned.back_audio = None;
+        cloned.trivial = false;
+
+        if let CardType::Class {
+            ref mut default_question,
+            ..
+        } = cloned.data
+        {
+            *default_question = None;
+        }
+
+        let events = self.clone().into_events();
+
+        let mut new: RawCard = LedgerItem::new_default(self.id);
+        for event in events {
+            let LedgerEvent::ItemAction {
+                id: _,
+                action: LedgerAction::Modify(action),
+            } = event
+            else {
+                panic!();
+            };
+
+            new = new.inner_run_event(action).unwrap();
+        }
+
+        if cloned != new {
+            Err((cloned, new))
+        } else {
+            Ok(())
+        }
+    }
+
     pub fn into_events(self) -> Vec<CardEvent> {
         let mut actions: Vec<CardAction> = vec![];
 

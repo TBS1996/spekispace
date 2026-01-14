@@ -92,6 +92,8 @@ struct Cli {
     #[arg(long)]
     review: bool,
     #[arg(long)]
+    check_into_events: bool,
+    #[arg(long)]
     rebuild_state: bool,
     #[arg(long)]
     load_cards: bool,
@@ -265,6 +267,32 @@ fn main() {
 
         timed!("rebuilding card state", cards.apply());
         info!("state rebuilt!");
+        return;
+    } else if cli.check_into_events {
+        let path = Config::load().storage_path.clone();
+        let app = speki_core::App::new(path);
+
+        for (idx, card) in app
+            .card_provider
+            .providers
+            .cards
+            .load_all()
+            .into_iter()
+            .enumerate()
+        {
+            if idx % 100 == 0 {
+                info!("checking card {}", idx);
+            }
+            match card.check_into_events() {
+                Ok(()) => {}
+                Err((old, new)) => {
+                    dbg!(old, new);
+                }
+            }
+        }
+
+        println!("all cards checked into events");
+
         return;
     }
 

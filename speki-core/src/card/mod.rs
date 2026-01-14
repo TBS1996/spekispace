@@ -13,7 +13,7 @@ pub mod basecard;
 pub use basecard::*;
 
 use either::Either;
-use ledgerstore::{EventError, ItemExpr, LedgerAction, TimeProvider};
+use ledgerstore::{EventError, ItemExpr, LedgerAction, LedgerItem, TimeProvider};
 use nonempty::NonEmpty;
 use serde::Deserializer;
 use serde_json::Value;
