@@ -193,6 +193,7 @@ impl CardSelector {
         let col_cards = collection.expanded();
 
         let allowed = allowed_cards.clone();
+        let card_limit = 100;
         let cards = ScopeId::APP.in_runtime(|| {
             let allowed = allowed.clone();
             let cards = col_cards.clone();
@@ -206,10 +207,19 @@ impl CardSelector {
                 let cards = cards.read();
 
                 info!("so many cards! {}", cards.len());
+                debug_assert!(search.len() >= 2); // By default ^ and $ are added to search
 
-                let sorted_cards: Vec<(u32, CardId)> = if search.chars().count() < 2 {
-                    cards.iter().map(|x| (0, *x)).collect()
+                let sorted_cards: Vec<(u32, CardId)> = if search.len() == 2 {
+                    dbg!("no search, simple sort");
+                    // Use inverted index so evaluate_cards' descending sort preserves order
+                    cards
+                        .iter()
+                        .enumerate()
+                        .take(card_limit)
+                        .map(|(idx, card)| (u32::MAX - idx as u32, *card))
+                        .collect()
                 } else {
+                    dbg!("searching for {}", &search);
                     let mut matching_cards: BTreeMap<Uuid, u32> = BTreeMap::new();
                     let bigrams = bigrams(search.as_ref());
 
@@ -226,8 +236,8 @@ impl CardSelector {
                         }
                     }
 
-                    if matching_cards.len() < 100 {
-                        for card in cards.iter().take(100) {
+                    if matching_cards.len() < card_limit {
+                        for card in cards.iter().take(card_limit) {
                             if !matching_cards.contains_key(card) {
                                 matching_cards.insert(card.to_owned(), 0);
                             }

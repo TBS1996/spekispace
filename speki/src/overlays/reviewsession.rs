@@ -324,9 +324,10 @@ fn Infobar(
                     let passed: Vec<Input> = queue.read().passed.clone()
                         .into_iter()
                         .map(Input::Card)
+                        .rev()
                         .collect();
                     let set = SetExpr::Union(passed);
-                    let props = CardSelector::new(false, Default::default()).with_set(set).with_edit_collection(false);
+                    let props = CardSelector::new_with_filter(false, Default::default(), set).with_edit_collection(false);
                     OverlayEnum::CardSelector(props).append();
                 },
                 "{pos}"
