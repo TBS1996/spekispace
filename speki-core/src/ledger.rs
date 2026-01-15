@@ -85,6 +85,11 @@ pub enum CardAction {
     ///
     /// Non-optional as every instance must have a class.
     SetInstanceClass(CardId),
+
+    /// Replaces all references to `current` with `other` in this card.
+    /// Useful when merging duplicate cards.
+    ReplaceDependency { current: CardId, other: CardId },
+
     /// Creates an attribute type card.
     ///
     /// Attribute cards are the answers to an attribute of an instance card.

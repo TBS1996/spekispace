@@ -26,6 +26,19 @@ impl TextData {
         }
     }
 
+    pub fn replace_card_id(&mut self, current: CardId, other: CardId) {
+        for cmp in self.inner_mut() {
+            match cmp {
+                Either::Left(_) => {}
+                Either::Right(link) => {
+                    if link.id == current {
+                        link.id = other;
+                    }
+                }
+            }
+        }
+    }
+
     pub fn push_eval(&mut self, eval: EvalText) {
         let mut x: Vec<Either<String, TextLink>> = Default::default();
 
@@ -476,6 +489,101 @@ pub enum CardType {
 }
 
 impl CardType {
+    pub fn replace_card_id(&mut self, current: CardId, other: CardId) {
+        match self {
+            CardType::Instance {
+                back,
+                answered_params,
+                name,
+                class,
+            } => {
+                if let Some(back) = back {
+                    back.replace_card_id(current, other);
+                }
+
+                name.replace_card_id(current, other);
+                if class == &current {
+                    *class = other;
+                }
+
+                for ans in answered_params.values_mut() {
+                    ans.answer.replace_card_id(current, other);
+                }
+            }
+            CardType::Normal { back, front } => {
+                back.replace_card_id(current, other);
+                front.replace_card_id(current, other);
+            }
+            CardType::Unfinished { front } => {
+                front.replace_card_id(current, other);
+            }
+            CardType::Attribute {
+                back,
+                attribute: _,
+                instance,
+            } => {
+                back.replace_card_id(current, other);
+                if instance == &current {
+                    *instance = other;
+                }
+            }
+            CardType::Class {
+                back,
+                name,
+                parent_class,
+                default_question: _,
+                ref mut attrs,
+                params,
+            } => {
+                if let Some(back) = back {
+                    back.replace_card_id(current, other);
+                }
+                name.replace_card_id(current, other);
+                if let Some(parent_class) = parent_class {
+                    if *parent_class == current {
+                        *parent_class = other;
+                    }
+                }
+
+                let updated_attrs: BTreeSet<Attrv2> = attrs
+                    .iter()
+                    .map(|attr| {
+                        let mut attr = attr.clone();
+                        if let Some(AttrBackType::InstanceOfClass(id)) = &mut attr.back_type {
+                            if *id == current {
+                                *id = other;
+                            }
+                        }
+                        attr
+                    })
+                    .collect();
+
+                *attrs = updated_attrs;
+
+                let updated_params: BTreeMap<AttributeId, Attrv2> = params
+                    .iter()
+                    .map(|(attr_id, attr)| {
+                        let mut attr = attr.clone();
+                        if let Some(AttrBackType::InstanceOfClass(id)) = &mut attr.back_type {
+                            if *id == current {
+                                *id = other;
+                            }
+                        }
+                        (*attr_id, attr)
+                    })
+                    .collect();
+
+                *params = updated_params;
+            }
+            CardType::Statement { front } => {
+                front.replace_card_id(current, other);
+            }
+            CardType::Event { .. } => {
+                panic!()
+            }
+        }
+    }
+
     pub fn class(&self) -> Option<CardId> {
         match self {
             CardType::Instance { class, .. } => Some(*class),
@@ -1780,6 +1888,16 @@ impl LedgerItem for RawCard {
             CardAction::SetBackAudio(audio) => {
                 self.back_audio = audio;
             }
+            CardAction::ReplaceDependency { current, other } => {
+                if self.explicit_dependencies.remove(&current) {
+                    self.explicit_dependencies.insert(other);
+                }
+                self.data.replace_card_id(current, other);
+
+                if self.namespace.is_some_and(|id| id == current) {
+                    self.namespace = Some(other);
+                }
+            }
             #[allow(deprecated)]
             CardAction::UpsertCard(ty) => {
                 self.data = ty;
@@ -2032,6 +2150,32 @@ impl From<String> for BackSide {
 
 impl BackSide {
     pub const INVALID_STR: &'static str = "__INVALID__";
+
+    pub fn replace_card_id(&mut self, current: CardId, other: CardId) {
+        match self {
+            BackSide::Text(ref mut text) => {
+                text.replace_card_id(current, other);
+            }
+            BackSide::Card(id) => {
+                if *id == current {
+                    *id = other;
+                }
+            }
+            BackSide::List(ids) => {
+                for id in ids.iter_mut() {
+                    if *id == current {
+                        *id = other;
+                    }
+                }
+            }
+            BackSide::Bool(_) => {}
+            BackSide::Time(_) => {}
+            #[allow(deprecated)]
+            BackSide::Trivial => {}
+            #[allow(deprecated)]
+            BackSide::Invalid => {}
+        }
+    }
 
     pub fn is_empty_text(&self) -> bool {
         if let Self::Text(s) = self {
