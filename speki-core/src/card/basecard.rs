@@ -1212,6 +1212,69 @@ pub fn bigrams_expression_and(text: &str) -> ItemExpr<RawCard> {
     ItemExpr::Intersection(exprs)
 }
 
+/// Search for cards by text content using bigram matching.
+/// Returns cards sorted by relevance (number of matching bigrams).
+/// 
+/// This matches the exact algorithm used in card_selector.rs.
+/// 
+/// # Arguments
+/// * `normalized_search` - The normalized search string (already processed by normalize_string, includes ^ and $)
+/// * `candidate_cards` - The set of cards to search within
+/// * `ledger` - The ledger to query for property cache
+/// * `limit` - Maximum number of results to return
+pub fn search_cards_by_text(
+    normalized_search: &str,
+    candidate_cards: &indexmap::IndexSet<CardId>,
+    ledger: &impl ledgerstore::ReadLedger<Item = RawCard>,
+    limit: usize,
+) -> Vec<(u32, CardId)> {
+    use std::collections::BTreeMap;
+    use ledgerstore::PropertyCache;
+    
+    debug_assert!(normalized_search.len() >= 2); // By default ^ and $ are added to search
+    
+    // If search is empty (just ^$), return all candidate cards
+    if normalized_search.len() == 2 {
+        return candidate_cards
+            .iter()
+            .take(limit)
+            .enumerate()
+            .map(|(idx, card)| (u32::MAX - idx as u32, *card))
+            .collect();
+    }
+    
+    let search_bigrams = bigrams(normalized_search);
+    let mut matching_cards: BTreeMap<CardId, u32> = BTreeMap::new();
+    
+    // For each bigram, find cards that contain it
+    for bigram in search_bigrams {
+        let bigram_value = format!("{}{}", bigram[0], bigram[1]);
+        let prop_cache = PropertyCache::new(CardProperty::Bigram, bigram_value);
+        let matching_ids = ledger.get_property_cache(prop_cache);
+        
+        // Count how many bigrams match for each card
+        for id in matching_ids {
+            if candidate_cards.contains(&id) {
+                *matching_cards.entry(id).or_insert(0) += 1;
+            }
+        }
+    }
+    
+    // If we have few matches, add remaining candidates with score 0
+    if matching_cards.len() < limit {
+        for card in candidate_cards.iter().take(limit) {
+            if !matching_cards.contains_key(card) {
+                matching_cards.insert(*card, 0);
+            }
+        }
+    }
+    
+    // Sort by match count (descending) and return
+    let mut sorted_cards: Vec<_> = matching_cards.into_iter().collect();
+    sorted_cards.sort_by(|a, b| b.1.cmp(&a.1));
+    sorted_cards.into_iter().map(|(id, score)| (score, id)).collect()
+}
+
 pub fn bigrams_expression_or(text: &str) -> ItemExpr<RawCard> {
     let bigrams = bigrams(text);
     let mut exprs: Vec<ItemExpr<RawCard>> = vec![];

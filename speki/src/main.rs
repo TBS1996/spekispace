@@ -12,6 +12,7 @@ use std::{
 use clap::{Args, Parser, ValueEnum};
 use dioxus::prelude::*;
 use dioxus_logger::tracing::{info, Level};
+use indexmap::IndexSet;
 use ledgerstore::{ItemAction, ItemExpr, Ledger};
 use pages::ReviewPage;
 use serde::Deserialize;
@@ -594,10 +595,6 @@ fn handle_load_cards(
     let path = Config::load().storage_path.clone();
     let app = speki_core::App::new(path);
 
-    let expr = filter.as_expression();
-
-    let cards = app.card_provider.providers.cards.load_expr(expr);
-    let qty = cards.len();
     let limit = limit
         .map(|limit| {
             if limit == 0 {
@@ -608,9 +605,35 @@ fn handle_load_cards(
         })
         .unwrap_or(10);
 
-    let overflow = if qty > limit { qty - limit } else { 0 };
-
     let format = format.unwrap_or_default();
+
+    let cards = if filter.contains.is_some() {
+        let other_filters = CardFilters {
+            contains: None,
+            card_type: filter.card_type.clone(),
+            trivial: filter.trivial,
+        };
+        let base_expr = other_filters.as_expression();
+        let candidate_cards: IndexSet<speki_core::card::CardId> = 
+            app.card_provider.providers.cards.load_expr(base_expr).into_iter().collect();
+        
+        let search_text = filter.contains.as_ref().unwrap();
+        let normalized_search = speki_core::card::normalize_string(search_text);
+        let search_results = speki_core::card::search_cards_by_text(
+            &normalized_search,
+            &candidate_cards,
+            &app.card_provider.providers.cards,
+            limit,
+        );
+        
+        search_results.into_iter().map(|(_, id)| id).collect()
+    } else {
+        let expr = filter.as_expression();
+        app.card_provider.providers.cards.load_expr(expr)
+    };
+
+    let qty = cards.len();
+    let overflow = if qty > limit { qty - limit } else { 0 };
 
     for (idx, card) in cards.into_iter().enumerate() {
         if idx >= limit {

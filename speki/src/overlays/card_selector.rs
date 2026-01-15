@@ -1,17 +1,17 @@
 use indexmap::IndexSet;
-use std::{collections::BTreeMap, fs, ops::ControlFlow, sync::Arc, time::Duration};
+use std::{fs, ops::ControlFlow, sync::Arc, time::Duration};
 
 use dioxus::prelude::*;
-use ledgerstore::{LedgerEvent, PropertyCache};
+use ledgerstore::LedgerEvent;
 use simpletime::timed;
 use speki_core::{
-    card::{bigrams, normalize_string, CardId},
+    card::{normalize_string, CardId},
     cardfilter::{CardFilter, HistoryFilter, MetaFilter},
     current_time,
     ledger::CardEvent,
     reviewable_cards,
     set::SetExpr,
-    Card, CardProperty, Config,
+    Card, Config,
 };
 use tracing::info;
 use uuid::Uuid;
@@ -209,45 +209,16 @@ impl CardSelector {
                 info!("so many cards! {}", cards.len());
                 debug_assert!(search.len() >= 2); // By default ^ and $ are added to search
 
-                let sorted_cards: Vec<(u32, CardId)> = if search.len() == 2 {
-                    dbg!("no search, simple sort");
-                    // Use inverted index so evaluate_cards' descending sort preserves order
-                    cards
-                        .iter()
-                        .enumerate()
-                        .take(card_limit)
-                        .map(|(idx, card)| (u32::MAX - idx as u32, *card))
-                        .collect()
-                } else {
-                    dbg!("searching for {}", &search);
-                    let mut matching_cards: BTreeMap<Uuid, u32> = BTreeMap::new();
-                    let bigrams = bigrams(search.as_ref());
-
-                    for bigram in bigrams {
-                        let indices = APP.read().get_prop_cache(PropertyCache::new(
-                            CardProperty::Bigram,
-                            format!("{}{}", bigram[0], bigram[1]),
-                        ));
-
-                        for id in indices {
-                            if cards.contains(&id) {
-                                *matching_cards.entry(id).or_insert(0) += 1;
-                            }
-                        }
-                    }
-
-                    if matching_cards.len() < card_limit {
-                        for card in cards.iter().take(card_limit) {
-                            if !matching_cards.contains_key(card) {
-                                matching_cards.insert(card.to_owned(), 0);
-                            }
-                        }
-                    }
-
-                    info!("sorting cards");
-                    let mut sorted_cards: Vec<_> = matching_cards.into_iter().collect();
-                    sorted_cards.sort_by(|a, b| b.1.cmp(&a.1));
-                    sorted_cards.into_iter().map(|c| (c.1, c.0)).collect()
+                let sorted_cards: Vec<(u32, CardId)> = {
+                    use speki_core::card::search_cards_by_text;
+                    
+                    let ledger = &APP.read().0.provider.cards;
+                    search_cards_by_text(
+                        search.as_ref(),
+                        &cards,
+                        ledger,
+                        card_limit,
+                    )
                 };
 
                 info!("{} cards sorted", sorted_cards.len());
