@@ -535,6 +535,21 @@ impl<T: LedgerItem> Ledger<T> {
     /// Modify the ledger with multiple actions in one go.
     ///
     /// Uses stagingledger for efficiency.
+    pub fn modify_action(
+        &self,
+        id: T::Key,
+        action: T::Modifier,
+    ) -> Result<CardChange<T>, EventError<T>> {
+        let action = ItemAction {
+            id,
+            action: LedgerAction::Modify(action),
+        };
+        Ok(self.modify_actions(vec![action])?.remove(0))
+    }
+
+    /// Modify the ledger with multiple actions in one go.
+    ///
+    /// Uses stagingledger for efficiency.
     pub fn modify_actions(
         &self,
         actions: Vec<ItemAction<T>>,

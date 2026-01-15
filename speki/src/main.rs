@@ -27,7 +27,7 @@ use speki_core::{
         ml::classic::Trained, AvgRecall, History, Recall, Review as TheReview, ReviewAction,
         ReviewEvent, FSRS,
     },
-    set::{Input, Set, SetAction, SetEvent},
+    set::{Input, Set, SetAction, SetEvent, SetId},
     CardProperty, Config, RecallChoice, SimpleRecall,
 };
 use std::fs;
@@ -233,7 +233,8 @@ fn main() {
         || cli.import_cards.is_some()
         || cli.grade.is_some()
         || cli.load_cards
-        || cli.action.is_some();
+        || cli.action.is_some()
+        || cli.set.is_some();
 
     if headless {
         log_level = Level::ERROR;
@@ -293,6 +294,30 @@ fn main() {
 
         println!("all cards checked into events");
 
+        return;
+    } else if cli.card.is_some() && cli.set.is_some() && cli.action.is_none() {
+        let path = Config::load().storage_path.clone();
+        let app = speki_core::App::new(path);
+        let set: SetId = match cli.set.clone().unwrap().parse() {
+            Ok(set) => set,
+            Err(_) => {
+                let set = cli.set.clone().unwrap();
+                let id = uuid_from_hash(&set);
+                if app.provider.sets.load(id).is_none() {
+                    let action = SetAction::SetName(set);
+                    app.provider.sets.modify_action(id, action).unwrap();
+                }
+                id
+            }
+        };
+        let card = cli.card.unwrap();
+
+        let res = app
+            .provider
+            .sets
+            .modify_action(set, SetAction::AddInput(Input::Card(card)));
+
+        println!("{:?}", res);
         return;
     }
 
