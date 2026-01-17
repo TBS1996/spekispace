@@ -213,23 +213,6 @@ pub fn RenderExpr(
         let attr_cards = card_choice(CType::Attribute, inputs.clone());
         let unfinished_cards = card_choice(CType::Unfinished, inputs.clone());
 
-        let trivial: OverlayChoice = {
-            let f: Arc<Box<dyn Fn() -> Option<OverlayEnum>>> = {
-                let f = move || {
-                    let leaf = DynCard::Trivial(true);
-                    let input = InputEditor::Leaf(leaf);
-                    inputs.clone().write().push(input);
-                    None
-                };
-                Arc::new(Box::new(f))
-            };
-
-            OverlayChoice {
-                display: format!("trivial cards"),
-                overlay: f,
-            }
-        };
-
         let instances = {
             let f: Arc<Box<dyn Fn() -> Option<OverlayEnum>>> = {
                 let f = move || {
@@ -284,7 +267,6 @@ pub fn RenderExpr(
                 instance_cards,
                 attr_cards,
                 unfinished_cards,
-                trivial,
             ],
             chosen: None,
         };

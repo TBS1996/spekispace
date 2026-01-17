@@ -823,7 +823,6 @@ fn save_cardrep(rep: CardRep, old_card: Option<Arc<Card>>) -> Result<EventResult
     }
 
     actions.push(CardAction::SetNamespace(namespace));
-    actions.push(CardAction::SetTrivial(meta.trivial.cloned()));
 
     for dep in deps {
         actions.push(CardAction::AddDependency(dep));

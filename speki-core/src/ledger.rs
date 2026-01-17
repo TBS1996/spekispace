@@ -74,8 +74,6 @@ pub enum CardAction {
     /// Removes a parameter value from an instance card.
     RemoveParamAnswer(AttributeId),
 
-    /// Sets the card to be trivial or not.
-    SetTrivial(bool),
     /// Sets (or unsets) the parent class of a given class.
     ///
     /// Any class may have a parent class from which it will inherit attributes and parameters.

@@ -163,10 +163,6 @@ impl From<DynCard> for ItemExpr<RawCard> {
                 property: CardProperty::CardType,
                 value: ty.to_string(),
             },
-            DynCard::Trivial(flag) => ItemExpr::Property {
-                property: CardProperty::Trivial,
-                value: flag.to_string(),
-            },
         }
     }
 }

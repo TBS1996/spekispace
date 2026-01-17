@@ -15,8 +15,6 @@ pub enum DynCard {
     RecDependents(CardId),
     /// Get all cards of a specific type.
     CardType(CType),
-    /// Get all trivial cards.
-    Trivial(bool),
 }
 
 impl DynCard {
@@ -29,7 +27,6 @@ impl DynCard {
         };
 
         match self {
-            DynCard::Trivial(flag) => format!("trivial: {}", flag),
             DynCard::Instances(id) => format!("instances: {}", name(id)),
             DynCard::Dependents(id) => format!("dependents: {}", name(id)),
             DynCard::RecDependents(id) => format!("dependents: {}", name(id)),

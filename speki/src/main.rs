@@ -151,8 +151,6 @@ struct CardFilters {
     contains: Option<String>,
     #[arg(long)]
     card_type: Option<String>,
-    #[arg(long)]
-    trivial: Option<bool>,
 }
 
 impl CardFilters {
@@ -170,13 +168,6 @@ impl CardFilters {
 
         if let Some(ref search_str) = self.contains {
             exprs.push(bigrams_expression_and(&search_str));
-        }
-
-        if let Some(trivial) = self.trivial {
-            exprs.push(ItemExpr::Property {
-                property: CardProperty::Trivial,
-                value: trivial.to_string(),
-            });
         }
 
         if exprs.is_empty() {
@@ -646,7 +637,6 @@ fn handle_load_cards(
         let other_filters = CardFilters {
             contains: None,
             card_type: filter.card_type.clone(),
-            trivial: filter.trivial,
         };
         let base_expr = other_filters.as_expression();
         let candidate_cards: IndexSet<speki_core::card::CardId> = app

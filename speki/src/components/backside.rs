@@ -301,8 +301,6 @@ impl BackPut {
             BackSide::List(_) => BackOpts::Text,
             BackSide::Time(_) => BackOpts::Time,
             #[allow(deprecated)]
-            BackSide::Trivial => BackOpts::Text,
-            #[allow(deprecated)]
             BackSide::Invalid => BackOpts::Text,
         };
 

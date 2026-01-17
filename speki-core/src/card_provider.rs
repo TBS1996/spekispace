@@ -156,12 +156,6 @@ impl CardProvider {
 
                 self.providers.cards.load_expr(expr).into_iter().collect()
             }
-            DynCard::Trivial(flag) => self
-                .providers
-                .cards
-                .get_prop_cache(PropertyCache::new(CardProperty::Trivial, flag.to_string()))
-                .into_iter()
-                .collect(),
             DynCard::CardType(ty) => self
                 .providers
                 .cards

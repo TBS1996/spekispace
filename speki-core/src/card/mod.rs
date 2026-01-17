@@ -133,8 +133,6 @@ impl EvalText {
                 }
             }
             #[allow(deprecated)]
-            BackSide::Trivial => Self::just_some_string("<trivial>".to_string(), provider),
-            #[allow(deprecated)]
             BackSide::Invalid => Self::just_some_string("<invalid>".to_string(), provider),
             BackSide::Bool(b) => Self::just_some_string(
                 if hint {
@@ -420,10 +418,6 @@ impl std::fmt::Display for Card {
 }
 
 impl Card {
-    pub fn trivial(&self) -> bool {
-        self.base.trivial
-    }
-
     pub fn ref_backside(&self) -> Option<&BackSide> {
         self.base.ref_backside()
     }
@@ -508,7 +502,7 @@ impl Card {
     }
 
     pub fn reviewable(&self) -> bool {
-        self.is_finished() && !self.trivial() && self.back_side().is_some()
+        self.is_finished() && self.back_side().is_some()
     }
 
     pub fn clone_base(&self) -> Arc<RawCard> {
@@ -902,8 +896,6 @@ impl Card {
                 BackSide::List(ids) => Some(NonEmpty::from_vec(ids.clone()).unwrap()),
                 BackSide::Text(_) => None,
                 BackSide::Time(_) => None,
-                #[allow(deprecated)]
-                BackSide::Trivial => None,
                 #[allow(deprecated)]
                 BackSide::Invalid => None,
                 BackSide::Bool(_) => None,

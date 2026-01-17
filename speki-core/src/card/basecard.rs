@@ -796,10 +796,6 @@ impl CardType {
     }
 }
 
-fn bool_is_false(b: &bool) -> bool {
-    *b == false
-}
-
 #[derive(Serialize, Deserialize, Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub struct RawCard {
     pub id: Uuid,
@@ -810,8 +806,6 @@ pub struct RawCard {
     pub data: CardType,
     #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
     pub explicit_dependencies: BTreeSet<Uuid>,
-    #[serde(default, skip_serializing_if = "bool_is_false")]
-    pub trivial: bool,
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub tags: BTreeMap<String, String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -826,7 +820,6 @@ impl RawCard {
         let mut cloned = self.clone();
         cloned.front_audio = None;
         cloned.back_audio = None;
-        cloned.trivial = false;
 
         if let CardType::Class {
             ref mut default_question,
@@ -889,7 +882,6 @@ impl RawCard {
             namespace,
             data,
             explicit_dependencies,
-            trivial: _,
             tags: _,
             front_audio: _,
             back_audio: _,
@@ -1593,8 +1585,6 @@ impl LedgerItem for RawCard {
                 }
                 BackSide::Time(_) => {}
                 #[allow(deprecated)]
-                BackSide::Trivial => {}
-                #[allow(deprecated)]
                 BackSide::Invalid => {}
                 BackSide::Bool(_) => {}
             }
@@ -1606,7 +1596,6 @@ impl LedgerItem for RawCard {
             namespace,
             data,
             explicit_dependencies,
-            trivial: _,
             tags: _,
             front_audio: _,
             back_audio: _,
@@ -1757,13 +1746,6 @@ impl LedgerItem for RawCard {
             out.insert(prop);
         }
 
-        if self.trivial {
-            out.insert(PropertyCache {
-                property: CardProperty::Trivial,
-                value: self.trivial.to_string(),
-            });
-        }
-
         if self.data.backside().is_some_and(|b| !b.is_empty_text())
             && !matches!(&self.data, CardType::Unfinished { .. })
         {
@@ -1815,7 +1797,6 @@ impl LedgerItem for RawCard {
             data: CardType::Unfinished {
                 front: TextData::from_raw("uninit"),
             },
-            trivial: false,
             tags: Default::default(),
             explicit_dependencies: Default::default(),
             front_audio: Default::default(),
@@ -1901,9 +1882,6 @@ impl LedgerItem for RawCard {
                 };
 
                 *answered_params = new_answered_params;
-            }
-            CardAction::SetTrivial(flag) => {
-                self.trivial = flag;
             }
             CardAction::SetBackText(text) => {
                 let backside = BackSide::Text(text);
@@ -2125,8 +2103,6 @@ pub enum BackSide {
     Card(CardId),
     List(Vec<CardId>),
     Time(TimeStamp),
-    #[deprecated]
-    Trivial, // Answer is obvious, used when card is more of a dependency anchor
     #[deprecated(note = "Ledger validation should prevent this state")]
     Invalid, // A reference card was deleted
 }
@@ -2174,8 +2150,6 @@ impl BackSide {
             }
             BackSide::Bool(_) => {}
             BackSide::Time(_) => {}
-            #[allow(deprecated)]
-            BackSide::Trivial => {}
             #[allow(deprecated)]
             BackSide::Invalid => {}
         }
@@ -2233,8 +2207,6 @@ impl BackSide {
             BackSide::List(ids) => format!("{ids:?}"),
             BackSide::Time(ts) => dbg!(ts.serialize()),
             #[allow(deprecated)]
-            BackSide::Trivial => "<trivial>".to_string(),
-            #[allow(deprecated)]
             BackSide::Invalid => "<invalid>".to_string(),
         }
     }
@@ -2252,8 +2224,6 @@ impl BackSide {
                 set.extend(vec.iter());
             }
             BackSide::Time(_) => {}
-            #[allow(deprecated)]
-            BackSide::Trivial => {}
             #[allow(deprecated)]
             BackSide::Invalid => {}
             BackSide::Bool(_) => {}
