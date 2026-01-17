@@ -339,7 +339,7 @@ fn print_card_with_format(card: &speki_core::card::Card, format: OutputFormat) -
         OutputFormat::Id => card.id().to_string(),
         OutputFormat::Json => json!({
             "id": card.id().to_string(),
-            "front": card.front_side().to_string(),
+            "front": card.name().to_string(),
             "back": card.back_side().as_ref().map(|x| x.to_string())
         })
         .to_string(),

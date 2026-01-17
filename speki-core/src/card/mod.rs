@@ -205,26 +205,84 @@ pub struct DisplayData {
 }
 
 impl DisplayData {
-    fn display(&self, provider: &CardProvider, with_namespace: bool, with_class: bool) -> EvalText {
+    fn new(
+        card_provider: CardProvider,
+        namespace: Option<CardId>,
+        data: &CardType,
+        name: EvalText,
+    ) -> Self {
+        let data: Data = match data {
+            CardType::Instance {
+                class: class_id,
+                answered_params: _,
+                ..
+            } => {
+                let class_name = card_provider.load(*class_id).unwrap().name().to_string();
+                let mut params: Vec<(String, String)> = vec![];
+
+                for (attr, ans) in data.param_to_ans(&card_provider) {
+                    if let Some(ans) = ans {
+                        let back =
+                            EvalText::from_backside(&ans.answer, &card_provider, false, true)
+                                .to_string();
+
+                        params.push((attr.pattern, back));
+                    }
+                }
+
+                params.sort();
+
+                Data::Instance {
+                    class: (class_name, *class_id),
+                    params,
+                }
+            }
+            CardType::Normal { .. } => Data::Normal,
+            CardType::Unfinished { .. } => Data::Unfinished,
+            CardType::Attribute { instance, .. } => {
+                match card_provider.load(*instance).map(|x| x.name().to_owned()) {
+                    Some(instance_name) => Data::Attribute {
+                        instance: (instance_name.to_string(), *instance),
+                    },
+                    None => Data::Invalid,
+                }
+            }
+            CardType::Class { parent_class, .. } => match parent_class {
+                Some(parent) => match card_provider.load(*parent).map(|x| x.name().to_owned()) {
+                    Some(parent_class_name) => Data::Class {
+                        parent_class: Some((parent_class_name.to_string(), *parent)),
+                    },
+                    None => Data::Invalid,
+                },
+                None => Data::Class { parent_class: None },
+            },
+            CardType::Statement { .. } => Data::Statement,
+            CardType::Event { .. } => Data::Event,
+        };
+
+        DisplayData {
+            data,
+            name,
+            namespace,
+        }
+    }
+
+    fn display(&self, provider: &CardProvider) -> EvalText {
         let mut text = TextData::default();
 
         // 1) Namespace (leftmost)
-        if with_namespace {
-            if let Some(ns) = self.namespace.as_ref() {
-                text.push_link(*ns, None);
-                text.push_string("::".to_string());
-            }
+        if let Some(ns) = self.namespace.as_ref() {
+            text.push_link(*ns, None);
+            text.push_string("::".to_string());
         }
 
         match &self.data {
             // 2a) Attribute cards:  <Class>::instance[attribute]
             Data::Attribute { instance } => {
-                if with_class {
-                    if let Some(class_id) = provider.load(instance.1).unwrap().class() {
-                        text.push_string("<".to_string());
-                        text.push_link(class_id, None);
-                        text.push_string(">::".to_string());
-                    }
+                if let Some(class_id) = provider.load(instance.1).unwrap().class() {
+                    text.push_string("<".to_string());
+                    text.push_link(class_id, None);
+                    text.push_string(">::".to_string());
                 }
                 text.push_link(instance.1, None);
                 text.push_string("[".to_string());
@@ -234,44 +292,38 @@ impl DisplayData {
 
             // 2b) Instance cards:   <Class>::instance
             Data::Instance { class, params } => {
-                if with_class {
+                text.push_string("<".to_string());
+                text.push_link(class.1, None);
+                if !params.is_empty() {
                     text.push_string("<".to_string());
-                    text.push_link(class.1, None);
-                    if !params.is_empty() {
-                        text.push_string("<".to_string());
-                        for (i, param) in params.iter().enumerate() {
-                            if i > 0 {
-                                text.push_string(", ".to_string());
-                            }
-                            text.push_string(param.1.to_string());
+                    for (i, param) in params.iter().enumerate() {
+                        if i > 0 {
+                            text.push_string(", ".to_string());
                         }
-                        text.push_string(">".to_string());
+                        text.push_string(param.1.to_string());
                     }
-                    text.push_string(">::".to_string());
+                    text.push_string(">".to_string());
                 }
+                text.push_string(">::".to_string());
                 // instance name (you had this in `self.name`)
                 text.push_eval(self.name.clone());
             }
 
             // 2c) Class cards:      <Class> (optionally show parent as subtype)
             Data::Class { parent_class } => {
-                if with_class {
-                    text.push_string("<".to_string());
-                    // class name is `self.name`
-                    text.push_eval(self.name.clone());
-                    text.push_string(">".to_string());
+                text.push_string("<".to_string());
+                // class name is `self.name`
+                text.push_eval(self.name.clone());
+                text.push_string(">".to_string());
 
-                    if let Some(parent) = parent_class {
-                        text.push_string(" <: ".to_string());
-                        text.push_link(parent.1, None);
-                    }
-                } else {
-                    text.push_eval(self.name.clone());
+                if let Some(parent) = parent_class {
+                    text.push_string(" <: ".to_string());
+                    text.push_link(parent.1, None);
                 }
             }
 
             // 2d) Everything else: just render the name
-            _ => {
+            Data::Normal | Data::Statement | Data::Unfinished | Data::Event | Data::Invalid => {
                 text.push_eval(self.name.clone());
             }
         }
@@ -363,7 +415,7 @@ impl Debug for Card {
 
 impl std::fmt::Display for Card {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.display_card(true, true).to_string())
+        write!(f, "{}", self.display_card().to_string())
     }
 }
 
@@ -409,70 +461,8 @@ impl Card {
         Arc::unwrap_or_clone(self.metadata.clone())
     }
 
-    pub fn display_card(&self, namespace: bool, class: bool) -> EvalText {
-        self.displaying()
-            .display(&self.card_provider, namespace, class)
-    }
-
-    fn displaying(&self) -> DisplayData {
-        let card_provider = self.card_provider.clone();
-
-        let data: Data = match &self.base.data {
-            CardType::Instance {
-                class: class_id,
-                answered_params: _,
-                ..
-            } => {
-                let class_name = card_provider.load(*class_id).unwrap().name().to_string();
-                let mut params: Vec<(String, String)> = vec![];
-
-                for (attr, ans) in self.param_to_ans() {
-                    if let Some(ans) = ans {
-                        let back =
-                            EvalText::from_backside(&ans.answer, &card_provider, false, true)
-                                .to_string();
-
-                        params.push((attr.pattern, back));
-                    }
-                }
-
-                params.sort();
-
-                Data::Instance {
-                    class: (class_name, *class_id),
-                    params,
-                }
-            }
-            CardType::Normal { .. } => Data::Normal,
-            CardType::Unfinished { .. } => Data::Unfinished,
-            CardType::Attribute { instance, .. } => {
-                match card_provider.load(*instance).map(|x| x.name().to_owned()) {
-                    Some(instance_name) => Data::Attribute {
-                        instance: (instance_name.to_string(), *instance),
-                    },
-                    None => Data::Invalid,
-                }
-            }
-            CardType::Class { parent_class, .. } => match parent_class {
-                Some(parent) => match card_provider.load(*parent).map(|x| x.name().to_owned()) {
-                    Some(parent_class_name) => Data::Class {
-                        parent_class: Some((parent_class_name.to_string(), *parent)),
-                    },
-                    None => Data::Invalid,
-                },
-                None => Data::Class { parent_class: None },
-            },
-            CardType::Statement { .. } => Data::Statement,
-            CardType::Event { .. } => Data::Event,
-        };
-
-        let namespace = self.namespace();
-
-        DisplayData {
-            data,
-            name: self.name.clone(),
-            namespace,
-        }
+    pub fn display_card(&self) -> EvalText {
+        self.frontside.clone()
     }
 
     pub fn param_to_ans(&self) -> BTreeMap<Attrv2, Option<ParamAnswer>> {
@@ -751,19 +741,15 @@ impl Card {
             }
         };
 
-        let mut frontside = base.data.display_front(&card_provider);
-
-        if let Some(namespace) = base.namespace {
-            let txt = TextLink::new(namespace);
-            frontside
-                .inner_mut()
-                .insert(0, Either::Left("::".to_string()));
-            frontside.inner_mut().insert(0, Either::Right(txt));
-        }
-
-        let frontside = EvalText::from_textdata(frontside, &card_provider);
-
         let name = EvalText::from_textdata(base.data.name(&card_provider), &card_provider);
+
+        let frontside = DisplayData::new(
+            card_provider.clone(),
+            base.namespace,
+            &base.data,
+            name.clone(),
+        )
+        .display(&card_provider);
 
         Self {
             namespace: base.namespace,

@@ -753,107 +753,6 @@ impl CardType {
         }
     }
 
-    fn class_stuff(&self, class: CardId, provider: &CardProvider) -> String {
-        let mut class_name = match provider.providers.cards.load(class).unwrap().data.clone() {
-            CardType::Class { name, .. } => name,
-            other => {
-                dbg!(class);
-                dbg!(other);
-                panic!();
-            }
-        };
-
-        let mut segments: Vec<String> = Default::default();
-
-        let mut params: Vec<(Attrv2, Option<ParamAnswer>)> =
-            self.param_to_ans(provider).into_iter().collect();
-
-        params.sort_by_key(|p| p.0.id);
-
-        for (_, answer) in self.param_to_ans(provider) {
-            let val = match answer {
-                Some(p) => EvalText::from_backside(&p.answer, provider, false, true).to_string(),
-                None => EvalText::just_some_string("_".to_owned(), provider).to_string(),
-            };
-
-            let segment = format!("{}", val);
-            segments.push(segment);
-        }
-
-        if !segments.is_empty() {
-            let segments: String = segments.join(", ");
-            class_name.push_string(format!("<{}>", segments));
-        }
-
-        class_name.evaluate(provider)
-    }
-
-    fn class_stuff_from_instance(&self, instance: CardId, provider: &CardProvider) -> String {
-        let class = provider.load(instance).unwrap().class().unwrap();
-        self.class_stuff(class, provider)
-    }
-
-    pub fn display_front(&self, provider: &CardProvider) -> TextData {
-        match self {
-            CardType::Instance { name, class, .. } => {
-                let thename = &name.evaluate(provider);
-                let class_name = self.class_stuff(*class, provider);
-                let s = format!("{thename} ({class_name})");
-                TextData::from_raw(&s)
-            }
-            CardType::Normal { front, .. } => front.clone(),
-            CardType::Unfinished { front, .. } => front.clone(),
-            CardType::Attribute {
-                attribute,
-                instance,
-                ..
-            } => {
-                let class: CardId = provider
-                    .providers
-                    .cards
-                    .get_prop_cache(PropertyCache::new(
-                        CardProperty::Attr,
-                        attribute.to_string(),
-                    ))
-                    .into_iter()
-                    .next()
-                    .unwrap();
-
-                let class = provider.load(class).unwrap();
-
-                let attr = class.get_attr(*attribute).unwrap();
-
-                let class_name = self.class_stuff_from_instance(*instance, provider);
-
-                let new = if attr.pattern.contains("{}") {
-                    attr.pattern.replace("{}", &format!("[[{instance}]]"))
-                } else {
-                    format!("[[{instance}]]({}): {}", class_name, attr.pattern)
-                };
-
-                TextData::from_raw(&new)
-            }
-            CardType::Class {
-                name, parent_class, ..
-            } => match parent_class {
-                Some(class) => {
-                    let mut name = name.clone();
-
-                    if self.backside().is_some() {
-                        name.push_string(" ( ".to_string());
-                        name.push_link(*class, None);
-                        name.push_string(")".to_string());
-                    }
-
-                    name
-                }
-                None => name.clone(),
-            },
-            CardType::Statement { front, .. } => front.clone(),
-            CardType::Event { front, .. } => front.clone(),
-        }
-    }
-
     pub fn type_name(&self) -> &str {
         match self {
             CardType::Unfinished { .. } => "unfinished",
@@ -1214,9 +1113,9 @@ pub fn bigrams_expression_and(text: &str) -> ItemExpr<RawCard> {
 
 /// Search for cards by text content using bigram matching.
 /// Returns cards sorted by relevance (number of matching bigrams).
-/// 
+///
 /// This matches the exact algorithm used in card_selector.rs.
-/// 
+///
 /// # Arguments
 /// * `normalized_search` - The normalized search string (already processed by normalize_string, includes ^ and $)
 /// * `candidate_cards` - The set of cards to search within
@@ -1228,11 +1127,11 @@ pub fn search_cards_by_text(
     ledger: &impl ledgerstore::ReadLedger<Item = RawCard>,
     limit: usize,
 ) -> Vec<(u32, CardId)> {
-    use std::collections::BTreeMap;
     use ledgerstore::PropertyCache;
-    
+    use std::collections::BTreeMap;
+
     debug_assert!(normalized_search.len() >= 2); // By default ^ and $ are added to search
-    
+
     // If search is empty (just ^$), return all candidate cards
     if normalized_search.len() == 2 {
         return candidate_cards
@@ -1242,16 +1141,16 @@ pub fn search_cards_by_text(
             .map(|(idx, card)| (u32::MAX - idx as u32, *card))
             .collect();
     }
-    
+
     let search_bigrams = bigrams(normalized_search);
     let mut matching_cards: BTreeMap<CardId, u32> = BTreeMap::new();
-    
+
     // For each bigram, find cards that contain it
     for bigram in search_bigrams {
         let bigram_value = format!("{}{}", bigram[0], bigram[1]);
         let prop_cache = PropertyCache::new(CardProperty::Bigram, bigram_value);
         let matching_ids = ledger.get_property_cache(prop_cache);
-        
+
         // Count how many bigrams match for each card
         for id in matching_ids {
             if candidate_cards.contains(&id) {
@@ -1259,7 +1158,7 @@ pub fn search_cards_by_text(
             }
         }
     }
-    
+
     // If we have few matches, add remaining candidates with score 0
     if matching_cards.len() < limit {
         for card in candidate_cards.iter().take(limit) {
@@ -1268,11 +1167,14 @@ pub fn search_cards_by_text(
             }
         }
     }
-    
+
     // Sort by match count (descending) and return
     let mut sorted_cards: Vec<_> = matching_cards.into_iter().collect();
     sorted_cards.sort_by(|a, b| b.1.cmp(&a.1));
-    sorted_cards.into_iter().map(|(id, score)| (score, id)).collect()
+    sorted_cards
+        .into_iter()
+        .map(|(id, score)| (score, id))
+        .collect()
 }
 
 pub fn bigrams_expression_or(text: &str) -> ItemExpr<RawCard> {

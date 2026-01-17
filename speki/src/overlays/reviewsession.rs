@@ -127,7 +127,7 @@ pub fn ReviewRender(
 
     let history = card.history_fresh();
 
-    let front = card.display_card(true, true);
+    let front = card.display_card();
     let back = card.backside().to_owned();
 
     let card2 = card.clone();

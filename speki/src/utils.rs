@@ -1,13 +1,9 @@
 use indexmap::IndexSet;
-use std::{
-    fmt::Debug,
-    sync::Arc,
-    time::Duration,
-};
+use std::{fmt::Debug, sync::Arc, time::Duration};
 
 use clap::Parser;
 use dioxus::prelude::*;
-use ledgerstore::{EventError, ItemExpr, PropertyCache};
+use ledgerstore::{EventError, ItemExpr};
 use speki_core::{
     card::{CardId, RawCard},
     card_provider::CardProvider,
@@ -116,10 +112,6 @@ impl App {
 
     pub fn set_ledger_hash(&self) -> Option<String> {
         self.0.provider.sets.currently_applied_ledger_hash()
-    }
-
-    pub fn get_prop_cache(&self, key: PropertyCache<RawCard>) -> IndexSet<CardId> {
-        self.0.provider.cards.get_prop_cache(key.clone())
     }
 
     pub fn card_provider(&self) -> CardProvider {

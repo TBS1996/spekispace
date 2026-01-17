@@ -9,8 +9,8 @@ use crate::{
     ArcRecall, Card, CardProperty, CardRefType, FsTime, MyEventError, Provider,
 };
 use dioxus_logger::tracing::{info, trace};
-use ledgerstore::{EventError, ItemExpr, LedgerEvent, PropertyCache};
 use indexmap::IndexSet;
+use ledgerstore::{EventError, ItemExpr, LedgerEvent, PropertyCache};
 use std::{
     collections::HashMap,
     fmt::Debug,
@@ -49,7 +49,7 @@ impl CardProvider {
         let mut cards: Vec<String> = self
             .load_all()
             .into_iter()
-            .map(|c| c.display_card(true, true).to_lowercase())
+            .map(|c| c.display_card().to_lowercase())
             .collect();
 
         cards.sort();

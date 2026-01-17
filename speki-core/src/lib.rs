@@ -279,7 +279,7 @@ pub fn duplicates(provider: &CardProvider) -> IndexSet<String> {
     let mut cards: Vec<String> = provider
         .load_all()
         .into_iter()
-        .map(|c| c.display_card(true, true).to_lowercase())
+        .map(|c| c.display_card().to_lowercase())
         .collect();
 
     cards.sort();
@@ -411,11 +411,7 @@ pub fn the_reviewable_cards(
                 .unwrap_or(true)
             {
                 dbg!("adding dep");
-                let depview = provider
-                    .load(dep)
-                    .unwrap()
-                    .display_card(true, true)
-                    .to_string();
+                let depview = provider.load(dep).unwrap().display_card().to_string();
                 dbg!(&depview);
                 dbg!(dep_recstate);
                 if dep_recstate.pending {
@@ -428,11 +424,7 @@ pub fn the_reviewable_cards(
         }
 
         if ordered && ordered_terminate {
-            let card_breaks = provider
-                .load(id)
-                .unwrap()
-                .display_card(true, true)
-                .to_string();
+            let card_breaks = provider.load(id).unwrap().display_card().to_string();
             println!("breaking at node idx {idx}, card: {card_breaks}");
             break;
         }
@@ -1070,7 +1062,7 @@ impl App {
 
             // FRONT
             print!("\x1b[2J\x1b[H"); // clear + home
-            let front = card.display_card(true, true).to_string();
+            let front = card.display_card().to_string();
             println!("Card {}/{}\n", idx + 1, qty);
             println!("{front}");
             io::stdout().flush().ok();
