@@ -253,7 +253,6 @@ impl DisplayData {
                 None => Data::Class { parent_class: None },
             },
             CardType::Statement { .. } => Data::Statement,
-            CardType::Event { .. } => Data::Event,
         };
 
         DisplayData {
@@ -319,7 +318,7 @@ impl DisplayData {
             }
 
             // 2d) Everything else: just render the name
-            Data::Normal | Data::Statement | Data::Unfinished | Data::Event | Data::Invalid => {
+            Data::Normal | Data::Statement | Data::Unfinished | Data::Invalid => {
                 text.push_eval(self.name.clone());
             }
         }
@@ -342,7 +341,6 @@ enum Data {
     },
     Statement,
     Unfinished,
-    Event,
     Invalid,
 }
 
@@ -727,9 +725,6 @@ impl Card {
             },
             CardType::Statement { .. } => {
                 EvalText::just_some_string("<statement>".to_string(), &card_provider)
-            }
-            CardType::Event { .. } => {
-                EvalText::just_some_string("<event>".to_string(), &card_provider)
             }
         };
 

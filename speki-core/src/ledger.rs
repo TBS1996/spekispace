@@ -120,13 +120,6 @@ pub enum CardAction {
     #[deprecated(note = "Use more specific actions, e.g., NormalType, AttributeType, etc.")]
     UpsertCard(CardType),
 
-    #[deprecated(
-        note = "Not sure if I want this. It might be enough to have a normal event class instead."
-    )]
-    EventType {
-        front: TextData,
-        start_time: TimeStamp,
-    },
     #[deprecated(note = "Realized this was a silly idea")]
     SetDefaultQuestion(Option<String>),
 }

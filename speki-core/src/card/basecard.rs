@@ -478,14 +478,6 @@ pub enum CardType {
     Statement {
         front: TextData,
     },
-
-    /// gotta figure out if i want this to be a thing in itself or it can be handled with just attributes of an event class
-    Event {
-        front: TextData,
-        start_time: TimeStamp,
-        end_time: Option<TimeStamp>,
-        parent_event: Option<CardId>,
-    },
 }
 
 impl CardType {
@@ -578,9 +570,6 @@ impl CardType {
             CardType::Statement { front } => {
                 front.replace_card_id(current, other);
             }
-            CardType::Event { .. } => {
-                panic!()
-            }
         }
     }
 
@@ -592,7 +581,6 @@ impl CardType {
             CardType::Attribute { .. } => None,
             CardType::Class { parent_class, .. } => *parent_class,
             CardType::Statement { .. } => None,
-            CardType::Event { .. } => None,
         }
     }
 
@@ -620,7 +608,6 @@ impl CardType {
             } => Some(back),
             CardType::Class { back: None, .. } => None,
             CardType::Statement { .. } => None,
-            CardType::Event { .. } => None,
         }
     }
 
@@ -632,7 +619,6 @@ impl CardType {
             CardType::Attribute { .. } => "attr card".to_string(),
             CardType::Class { name, .. } => name.to_raw(),
             CardType::Statement { front } => front.to_raw(),
-            CardType::Event { front, .. } => front.to_raw(),
         }
     }
 
@@ -672,7 +658,6 @@ impl CardType {
                 dependencies
             }
             CardType::Statement { .. } => Default::default(),
-            CardType::Event { .. } => todo!(),
         }
     }
 
@@ -686,7 +671,6 @@ impl CardType {
             }
             CardType::Class { name, .. } => name.clone(),
             CardType::Statement { front, .. } => front.clone(),
-            CardType::Event { front, .. } => front.clone(),
         }
     }
 
@@ -722,7 +706,6 @@ impl CardType {
             }
             CardType::Class { name, .. } => name.clone(),
             CardType::Statement { front, .. } => front.clone(),
-            CardType::Event { front, .. } => front.clone(),
         }
     }
 
@@ -761,7 +744,6 @@ impl CardType {
             CardType::Instance { .. } => "instance",
             CardType::Normal { .. } => "normal",
             CardType::Class { .. } => "class",
-            CardType::Event { .. } => "event",
         }
     }
 
@@ -774,7 +756,6 @@ impl CardType {
             CardType::Attribute { .. } => CType::Attribute,
             CardType::Class { .. } => CType::Class,
             CardType::Statement { .. } => CType::Statement,
-            CardType::Event { .. } => CType::Event,
         }
     }
 
@@ -935,15 +916,6 @@ impl RawCard {
             CardType::Statement { front } => {
                 actions.push(CardAction::StatementType { front });
             }
-            CardType::Event {
-                front,
-                start_time,
-                end_time: _,
-                parent_event: _,
-            } => {
-                #[allow(deprecated)]
-                actions.push(CardAction::EventType { front, start_time });
-            }
         }
 
         actions.push(CardAction::SetNamespace(namespace));
@@ -975,7 +947,6 @@ impl RawCard {
             }
             CardType::Class { name, .. } => name.to_raw(),
             CardType::Statement { front } => front.to_raw(),
-            CardType::Event { front, .. } => front.to_raw(),
         }
     }
 
@@ -988,7 +959,6 @@ impl RawCard {
             CardType::Attribute { .. } => None,
             CardType::Class { parent_class, .. } => parent_class,
             CardType::Statement { .. } => None,
-            CardType::Event { .. } => None,
         }
     }
 
@@ -1000,7 +970,6 @@ impl RawCard {
             CardType::Attribute { back, .. } => Some(back),
             CardType::Class { back, .. } => back.as_ref(),
             CardType::Statement { .. } => None,
-            CardType::Event { .. } => None,
         }
     }
 
@@ -1052,7 +1021,6 @@ impl RawCard {
 
     pub fn set_backside(mut self, new_back: BackSide) -> Self {
         let data = match self.data.clone() {
-            x @ CardType::Event { .. } => x,
             CardType::Instance {
                 name,
                 back: _,
@@ -1551,13 +1519,6 @@ impl LedgerItem for RawCard {
                 }
             }
             CardType::Statement { front: _ } => {}
-            // todo lol
-            CardType::Event {
-                front: _,
-                start_time: _,
-                end_time: _,
-                parent_event: _,
-            } => {}
         }
 
         Ok(())
@@ -1708,16 +1669,6 @@ impl LedgerItem for RawCard {
                     out.insert(ItemReference::new(from, id, CardRefType::LinkRef));
                 }
             }
-            CardType::Event {
-                front,
-                start_time: _,
-                end_time: _,
-                parent_event: _,
-            } => {
-                for id in front.card_ids() {
-                    out.insert(ItemReference::new(from, id, CardRefType::LinkRef));
-                }
-            }
         };
 
         if let Some(back) = data.backside() {
@@ -1774,7 +1725,6 @@ impl LedgerItem for RawCard {
                 }
             }
             CardType::Statement { .. } => {}
-            CardType::Event { .. } => {}
         };
 
         let val = format!("{:?}", self.data.fieldless());
@@ -2004,15 +1954,7 @@ impl LedgerItem for RawCard {
             CardAction::UnfinishedType { front } => {
                 self.data = CardType::Unfinished { front };
             }
-            #[allow(deprecated)]
-            CardAction::EventType { front, start_time } => {
-                self.data = CardType::Event {
-                    front,
-                    start_time,
-                    end_time: None,
-                    parent_event: None,
-                };
-            }
+
             CardAction::SetBackside(back_side) => match &mut self.data {
                 CardType::Instance { ref mut back, .. } => {
                     *back = back_side;
@@ -2038,7 +1980,6 @@ impl LedgerItem for RawCard {
                     *back = back_side;
                 }
                 CardType::Statement { .. } => panic!("no back on statement"),
-                CardType::Event { .. } => panic!("no back on event"),
             },
             CardAction::SetAttrs(new_attrs) => {
                 if let CardType::Class { ref mut attrs, .. } = self.data {
@@ -2064,9 +2005,6 @@ impl LedgerItem for RawCard {
                     *name = new_front;
                 }
                 CardType::Statement { front } => *front = new_front,
-                CardType::Event { front, .. } => {
-                    *front = new_front;
-                }
             },
         };
 
@@ -2232,7 +2170,6 @@ pub enum CType {
     Attribute,
     Class,
     Statement,
-    Event,
 }
 
 impl Display for CType {
@@ -2252,7 +2189,6 @@ impl FromStr for CType {
             "attribute" | "a" => Ok(CType::Attribute),
             "class" | "c" => Ok(CType::Class),
             "statement" | "s" => Ok(CType::Statement),
-            "event" | "e" => Ok(CType::Event),
             _ => Err(()),
         }
     }
@@ -2267,7 +2203,6 @@ impl CType {
             CType::Class => "C",
             CType::Unfinished => "U",
             CType::Statement => "S",
-            CType::Event => "E",
         }
     }
 }

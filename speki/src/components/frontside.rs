@@ -34,7 +34,6 @@ impl CardTy {
             CType::Attribute => Self::Normal,
             CType::Class => Self::Class,
             CType::Statement => Self::Unfinished,
-            CType::Event => Self::Normal,
         }
     }
 }

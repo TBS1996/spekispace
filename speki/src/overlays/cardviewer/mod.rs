@@ -817,9 +817,6 @@ fn save_cardrep(rep: CardRep, old_card: Option<Arc<Card>>) -> Result<EventResult
         (CardType::Statement { front }, false) => {
             actions.push(CardAction::StatementType { front });
         }
-        (CardType::Event { .. }, _) => {
-            todo!()
-        }
     }
 
     actions.push(CardAction::SetNamespace(namespace));
