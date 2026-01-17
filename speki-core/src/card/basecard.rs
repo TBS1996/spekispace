@@ -1584,8 +1584,6 @@ impl LedgerItem for RawCard {
                     }
                 }
                 BackSide::Time(_) => {}
-                #[allow(deprecated)]
-                BackSide::Invalid => {}
                 BackSide::Bool(_) => {}
             }
             out
@@ -2103,8 +2101,6 @@ pub enum BackSide {
     Card(CardId),
     List(Vec<CardId>),
     Time(TimeStamp),
-    #[deprecated(note = "Ledger validation should prevent this state")]
-    Invalid, // A reference card was deleted
 }
 
 impl Default for BackSide {
@@ -2119,9 +2115,6 @@ impl From<String> for BackSide {
             Self::Card(uuid)
         } else if let Ok(timestamp) = TimeStamp::from_str(&s) {
             Self::Time(timestamp)
-        } else if s.as_str() == Self::INVALID_STR {
-            #[allow(deprecated)]
-            Self::Invalid
         } else {
             Self::Text(s.into())
         }
@@ -2150,8 +2143,6 @@ impl BackSide {
             }
             BackSide::Bool(_) => {}
             BackSide::Time(_) => {}
-            #[allow(deprecated)]
-            BackSide::Invalid => {}
         }
     }
 
@@ -2206,8 +2197,6 @@ impl BackSide {
             BackSide::Card(id) => id.to_string(),
             BackSide::List(ids) => format!("{ids:?}"),
             BackSide::Time(ts) => dbg!(ts.serialize()),
-            #[allow(deprecated)]
-            BackSide::Invalid => "<invalid>".to_string(),
         }
     }
 
@@ -2224,8 +2213,6 @@ impl BackSide {
                 set.extend(vec.iter());
             }
             BackSide::Time(_) => {}
-            #[allow(deprecated)]
-            BackSide::Invalid => {}
             BackSide::Bool(_) => {}
         }
 

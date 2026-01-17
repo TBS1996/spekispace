@@ -300,8 +300,6 @@ impl BackPut {
             BackSide::Card(_) => BackOpts::Card,
             BackSide::List(_) => BackOpts::Text,
             BackSide::Time(_) => BackOpts::Time,
-            #[allow(deprecated)]
-            BackSide::Invalid => BackOpts::Text,
         };
 
         Self {

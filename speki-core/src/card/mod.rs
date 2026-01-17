@@ -132,8 +132,6 @@ impl EvalText {
                     Self::just_some_string(format!("{}", ts.to_string()), provider)
                 }
             }
-            #[allow(deprecated)]
-            BackSide::Invalid => Self::just_some_string("<invalid>".to_string(), provider),
             BackSide::Bool(b) => Self::just_some_string(
                 if hint {
                     format!(
@@ -896,8 +894,6 @@ impl Card {
                 BackSide::List(ids) => Some(NonEmpty::from_vec(ids.clone()).unwrap()),
                 BackSide::Text(_) => None,
                 BackSide::Time(_) => None,
-                #[allow(deprecated)]
-                BackSide::Invalid => None,
                 BackSide::Bool(_) => None,
             },
             None => None,
