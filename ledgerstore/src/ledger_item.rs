@@ -1,14 +1,10 @@
+use indexmap::IndexSet;
 use serde::{de::DeserializeOwned, Serialize};
 use std::fmt::Display;
 use std::str::FromStr;
 use std::sync::Arc;
 use std::vec::Vec;
-use indexmap::IndexSet;
-use std::{
-    collections::HashMap,
-    fmt::Debug,
-    hash::Hash,
-};
+use std::{collections::HashMap, fmt::Debug, hash::Hash};
 use tracing::trace;
 
 use crate::ItemReference;

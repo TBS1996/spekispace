@@ -121,6 +121,10 @@ struct Cli {
     #[arg(long)]
     show_class_info: bool,
 
+    /// Get id of card that exactly matches the given string.
+    #[arg(long)]
+    exact_match: Option<String>,
+
     #[command(flatten)]
     load_card_args: LoadCardsArgs,
 }
@@ -235,7 +239,8 @@ fn main() {
         || cli.grade.is_some()
         || cli.load_cards
         || cli.action.is_some()
-        || cli.set.is_some();
+        || cli.set.is_some()
+        || cli.exact_match.is_some();
 
     if headless {
         log_level = Level::ERROR;
@@ -320,6 +325,20 @@ fn main() {
 
         println!("{:?}", res);
         return;
+    } else if let Some(s) = cli.exact_match {
+        let path = Config::load().storage_path.clone();
+        let app = speki_core::App::new(path);
+
+        match app.card_provider.exact_match(&s) {
+            Some(card_id) => {
+                println!("{}", card_id);
+                std::process::exit(0);
+            }
+            None => {
+                eprintln!("No exact match found for: {}", s);
+                std::process::exit(1);
+            }
+        }
     }
 
     info!("starting speki");
@@ -614,9 +633,14 @@ fn handle_load_cards(
             trivial: filter.trivial,
         };
         let base_expr = other_filters.as_expression();
-        let candidate_cards: IndexSet<speki_core::card::CardId> = 
-            app.card_provider.providers.cards.load_expr(base_expr).into_iter().collect();
-        
+        let candidate_cards: IndexSet<speki_core::card::CardId> = app
+            .card_provider
+            .providers
+            .cards
+            .load_expr(base_expr)
+            .into_iter()
+            .collect();
+
         let search_text = filter.contains.as_ref().unwrap();
         let normalized_search = speki_core::card::normalize_string(search_text);
         let search_results = speki_core::card::search_cards_by_text(
@@ -625,7 +649,7 @@ fn handle_load_cards(
             &app.card_provider.providers.cards,
             limit,
         );
-        
+
         search_results.into_iter().map(|(_, id)| id).collect()
     } else {
         let expr = filter.as_expression();

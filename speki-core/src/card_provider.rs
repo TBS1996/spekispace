@@ -321,6 +321,51 @@ impl CardProvider {
         self.time_provider.clone()
     }
 
+    /// Find a card by exact name match.
+    /// Returns the best match using this priority:
+    /// 1. Exact string match (case-sensitive)
+    /// 2. Case-insensitive match
+    /// 3. Normalized bigram match (handles punctuation/spacing differences)
+    pub fn exact_match(&self, search_str: &str) -> Option<CardId> {
+        use crate::card::{normalize_string, search_cards_by_text};
+
+        let search_str = search_str.trim();
+        let normalized_search = normalize_string(search_str);
+        let candidate_cards: IndexSet<CardId> = self.providers.cards.load_expr(ItemExpr::All);
+
+        let search_results = search_cards_by_text(
+            &normalized_search,
+            &candidate_cards,
+            &self.providers.cards,
+            10,
+        );
+
+        let exact_string = search_str.to_string();
+        let lowercase = search_str.to_lowercase();
+
+        // Find exact match - check card name with different matching levels
+        let mut exact_match: Option<CardId> = None;
+        let mut case_match: Option<CardId> = None;
+        let mut bigram_match: Option<CardId> = None;
+
+        for (_score, card_id) in search_results {
+            if let Some(card) = self.load(card_id) {
+                let name = card.name().to_string();
+
+                if exact_string == name {
+                    exact_match = Some(card_id);
+                    break;
+                } else if case_match.is_none() && lowercase == name.to_lowercase() {
+                    case_match = Some(card_id);
+                } else if bigram_match.is_none() && normalized_search == normalize_string(&name) {
+                    bigram_match = Some(card_id);
+                }
+            }
+        }
+
+        exact_match.or(case_match).or(bigram_match)
+    }
+
     pub fn new(provider: Provider, time_provider: FsTime, recaller: ArcRecall) -> Self {
         Self {
             time_provider,

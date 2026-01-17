@@ -96,7 +96,7 @@ pub struct Set {
     pub id: SetId,
     pub name: String,
     pub expr: SetExpr,
-    /// If true, for inputs A, B, C, will only show B when the filter expression is valid for A. 
+    /// If true, for inputs A, B, C, will only show B when the filter expression is valid for A.
     /// As if B was dependent on A.
     #[serde(default)]
     pub ordered: bool,

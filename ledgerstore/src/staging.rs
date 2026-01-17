@@ -1,8 +1,5 @@
 use indexmap::IndexSet;
-use std::{
-    collections::HashMap,
-    sync::Arc,
-};
+use std::{collections::HashMap, sync::Arc};
 
 use crate::{
     blockchain::ItemAction, ledger_item::LedgerItem, read_ledger::ReadLedger, ActionEvalResult,
@@ -331,7 +328,10 @@ impl<T: LedgerItem> StagingLedger<T> {
                         .entry(prop.clone())
                         .or_default()
                         .insert(key);
-                    self.added_properties.entry(prop).or_default().shift_remove(&key);
+                    self.added_properties
+                        .entry(prop)
+                        .or_default()
+                        .shift_remove(&key);
                 }
                 either::Either::Right(reff) => {
                     self.reference_deltas.remove(reff, key);
@@ -392,7 +392,12 @@ impl<T: LedgerItem> StagingLedger<T> {
 
                 let item = Arc::new(item);
 
-                (IndexSet::default(), caches, CardChange::Created(item), false)
+                (
+                    IndexSet::default(),
+                    caches,
+                    CardChange::Created(item),
+                    false,
+                )
             }
             LedgerAction::Delete => {
                 let old_item = self.load(key).unwrap();

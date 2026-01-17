@@ -211,14 +211,9 @@ impl CardSelector {
 
                 let sorted_cards: Vec<(u32, CardId)> = {
                     use speki_core::card::search_cards_by_text;
-                    
+
                     let ledger = &APP.read().0.provider.cards;
-                    search_cards_by_text(
-                        search.as_ref(),
-                        &cards,
-                        ledger,
-                        card_limit,
-                    )
+                    search_cards_by_text(search.as_ref(), &cards, ledger, card_limit)
                 };
 
                 info!("{} cards sorted", sorted_cards.len());
