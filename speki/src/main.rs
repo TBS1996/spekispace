@@ -100,6 +100,10 @@ struct Cli {
     load_cards: bool,
     #[arg(long)]
     set: Option<String>,
+    #[arg(long)]
+    rewrite: bool,
+    #[arg(long)]
+    verify: bool,
 
     /// Create or modify a card by passing a JSON CardAction. Can be combined with --card to modify an existing card.
     /// Example: --action '{"NormalType":{"front":{"Raw":"What is Rust?"},"back":{"Text":{"Raw":"A systems programming language"}}}}'
@@ -240,7 +244,8 @@ fn main() {
         || cli.load_cards
         || cli.action.is_some()
         || cli.set.is_some()
-        || cli.exact_match.is_some();
+        || cli.exact_match.is_some()
+        || cli.rewrite;
 
     if headless {
         log_level = Level::ERROR;
@@ -339,6 +344,17 @@ fn main() {
                 std::process::exit(1);
             }
         }
+    } else if cli.rewrite {
+        let path = Config::load().storage_path.clone();
+        let app = speki_core::App::new(path.clone());
+        let path = PathBuf::from("/home/tor/.local/share/speki/rawcard/rewrite");
+        app.card_provider.rewrite_ledger(path).unwrap();
+        return;
+    } else if cli.verify {
+        let path = Config::load().storage_path.clone();
+        let app = speki_core::App::new(path.clone());
+        app.card_provider.providers.cards.verify_all().unwrap();
+        return;
     }
 
     info!("starting speki");

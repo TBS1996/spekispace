@@ -10,10 +10,12 @@ use crate::{
 };
 use dioxus_logger::tracing::{info, trace};
 use indexmap::IndexSet;
-use ledgerstore::{EventError, ItemExpr, LedgerEvent, PropertyCache};
+use ledgerstore::{entry_thing::EventNode, EventError, ItemExpr, LedgerEvent, PropertyCache};
+use nonempty::NonEmpty;
 use std::{
     collections::HashMap,
     fmt::Debug,
+    path::PathBuf,
     sync::{Arc, RwLock},
 };
 
@@ -37,6 +39,71 @@ impl CardProvider {
     pub fn load_all_card_ids(&self) -> Vec<CardId> {
         info!("x1");
         self.providers.cards.load_ids().into_iter().collect()
+    }
+
+    pub fn rewrite_ledger(&self, path: PathBuf) -> Result<(), std::io::Error> {
+        std::fs::create_dir_all(&path)?;
+
+        // Check if directory is not empty
+        if path.read_dir()?.next().is_some() {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::AlreadyExists,
+                "Directory already exists and is not empty",
+            ));
+        }
+
+        let cards = self.providers.cards.local_load_expr(ItemExpr::All);
+        let cards: Vec<CardId> = cards.into_iter().collect();
+        let ordered = self.providers.cards.topological_sort(cards);
+        let qty = ordered.len();
+
+        let mut event_nodes: Vec<EventNode<RawCard>> = vec![];
+
+        // Add SetUpstream as first node if commit and upstream are available from ledger
+        let commit = self.providers.cards.current_commit();
+        let upstream_url = self.providers.cards.current_upstream_url();
+
+        if let (Some(commit), Some(upstream_url)) = (commit, upstream_url) {
+            let upstream_event = LedgerEvent::SetUpstream {
+                commit,
+                upstream_url,
+            };
+            event_nodes.push(EventNode::new_leaf(upstream_event));
+        }
+
+        // Each card's events live in its own node
+        for (idx, card) in ordered.into_iter().enumerate() {
+            if idx % 100 == 0 {
+                println!("Processing card {}/{}", idx + 1, qty);
+            }
+
+            let card = Arc::unwrap_or_clone(self.providers.cards.load(card).unwrap());
+            let evs = card.into_events();
+
+            if evs.is_empty() {
+                continue;
+            }
+
+            if evs.len() == 1 {
+                let event: LedgerEvent<RawCard> = evs.into_iter().next().unwrap().into();
+                event_nodes.push(EventNode::new_leaf(event));
+            } else {
+                let events: Vec<LedgerEvent<RawCard>> = evs.into_iter().map(|e| e.into()).collect();
+                let entries = NonEmpty::from_vec(events).unwrap();
+                event_nodes.push(EventNode::new_branch(entries));
+            }
+        }
+
+        // Save all event nodes
+        if !event_nodes.is_empty() {
+            let mut prev: Option<ledgerstore::LedgerEntry<RawCard>> = None;
+            for (idx, node) in event_nodes.into_iter().enumerate() {
+                let entry_node = node.save(&path, idx, prev.clone());
+                prev = Some(entry_node.last().clone());
+            }
+        }
+
+        Ok(())
     }
 
     pub fn load_metadata(&self, id: CardId) -> Option<Arc<Metadata>> {

@@ -848,7 +848,7 @@ impl RawCard {
                 panic!();
             };
 
-            new = new.inner_run_event(action).unwrap();
+            new = new.inner_run_action(action).unwrap();
         }
 
         if cloned != new {
@@ -859,10 +859,33 @@ impl RawCard {
     }
 
     pub fn into_events(self) -> Vec<CardEvent> {
+        let id = self.id;
+        let mut new = Self::new_default(id);
+        let mut prev = new.clone();
+        let actions = self.into_actions();
+
+        let mut events: Vec<CardEvent> = vec![];
+        for action in actions {
+            new = new.inner_run_action(action.clone()).unwrap();
+            if new != prev {
+                let event = LedgerEvent::ItemAction {
+                    id,
+                    action: LedgerAction::Modify(action),
+                };
+                events.push(event);
+            }
+
+            prev = new.clone();
+        }
+
+        events
+    }
+
+    pub fn into_actions(self) -> Vec<CardAction> {
         let mut actions: Vec<CardAction> = vec![];
 
         let Self {
-            id,
+            id: _,
             namespace,
             data,
             explicit_dependencies,
@@ -937,14 +960,7 @@ impl RawCard {
             actions.push(CardAction::AddDependency(dep));
         }
 
-        let mut events: Vec<CardEvent> = vec![];
-
-        for action in actions {
-            let event = CardEvent::new_modify(id, action);
-            events.push(event);
-        }
-
-        events
+        actions
     }
 
     pub fn cache_front(&self, ledger: &impl ReadLedger<Item = RawCard>) -> String {
@@ -1585,11 +1601,22 @@ impl LedgerItem for RawCard {
             out
         }
 
-        if let Some(ns) = self.namespace {
-            out.insert(ItemReference::new(from, ns, CardRefType::LinkRef));
+        let Self {
+            id: _,
+            namespace,
+            data,
+            explicit_dependencies,
+            trivial: _,
+            tags: _,
+            front_audio: _,
+            back_audio: _,
+        } = self;
+
+        if let Some(ns) = namespace {
+            out.insert(ItemReference::new(from, *ns, CardRefType::LinkRef));
         }
 
-        for dep in &self.explicit_dependencies {
+        for dep in explicit_dependencies {
             out.insert(ItemReference::new(
                 from,
                 *dep,
@@ -1597,13 +1624,13 @@ impl LedgerItem for RawCard {
             ));
         }
 
-        match &self.data {
-            CardType::Normal { front, .. } => {
+        match &data {
+            CardType::Normal { front, back: _ } => {
                 for id in front.card_ids() {
                     out.insert(ItemReference::new(from, id, CardRefType::LinkRef));
                 }
             }
-            CardType::Unfinished { front, .. } => {
+            CardType::Unfinished { front } => {
                 for id in front.card_ids() {
                     out.insert(ItemReference::new(from, id, CardRefType::LinkRef));
                 }
@@ -1612,7 +1639,7 @@ impl LedgerItem for RawCard {
                 name,
                 class,
                 answered_params,
-                ..
+                back: _,
             } => {
                 for id in name.card_ids() {
                     out.insert(ItemReference::new(from, id, CardRefType::LinkRef));
@@ -1628,7 +1655,11 @@ impl LedgerItem for RawCard {
                     out.extend(refs_from_backside(from, &ans.answer));
                 }
             }
-            CardType::Attribute { instance, .. } => {
+            CardType::Attribute {
+                instance,
+                attribute: _,
+                back: _,
+            } => {
                 out.insert(ItemReference::new(
                     from,
                     *instance,
@@ -1639,8 +1670,38 @@ impl LedgerItem for RawCard {
                 name,
                 default_question,
                 parent_class,
-                ..
+                back: _,
+                attrs,
+                params,
             } => {
+                for Attrv2 {
+                    id: _,
+                    pattern: _,
+                    back_type,
+                } in attrs
+                {
+                    match back_type {
+                        Some(AttrBackType::InstanceOfClass(class_id)) => {
+                            out.insert(ItemReference::new(from, *class_id, CardRefType::LinkRef));
+                        }
+                        None | Some(AttrBackType::Boolean | AttrBackType::TimeStamp) => {}
+                    }
+                }
+
+                for Attrv2 {
+                    id: _,
+                    pattern: _,
+                    back_type,
+                } in params.values()
+                {
+                    match back_type {
+                        Some(AttrBackType::InstanceOfClass(class_id)) => {
+                            out.insert(ItemReference::new(from, *class_id, CardRefType::LinkRef));
+                        }
+                        None | Some(AttrBackType::Boolean | AttrBackType::TimeStamp) => {}
+                    }
+                }
+
                 for id in name.card_ids() {
                     out.insert(ItemReference::new(from, id, CardRefType::LinkRef));
                 }
@@ -1655,19 +1716,24 @@ impl LedgerItem for RawCard {
                     out.insert(ItemReference::new(from, *class, CardRefType::ParentClass));
                 }
             }
-            CardType::Statement { front, .. } => {
+            CardType::Statement { front } => {
                 for id in front.card_ids() {
                     out.insert(ItemReference::new(from, id, CardRefType::LinkRef));
                 }
             }
-            CardType::Event { front, .. } => {
+            CardType::Event {
+                front,
+                start_time: _,
+                end_time: _,
+                parent_event: _,
+            } => {
                 for id in front.card_ids() {
                     out.insert(ItemReference::new(from, id, CardRefType::LinkRef));
                 }
             }
         };
 
-        if let Some(back) = &self.data.backside() {
+        if let Some(back) = data.backside() {
             out.extend(refs_from_backside(from, back));
         }
 
@@ -1757,8 +1823,8 @@ impl LedgerItem for RawCard {
         }
     }
 
-    fn inner_run_event(mut self, event: CardAction) -> Result<Self, Self::Error> {
-        match event {
+    fn inner_run_action(mut self, action: CardAction) -> Result<Self, Self::Error> {
+        match action {
             CardAction::InsertParam(param) => {
                 let CardType::Class { ref mut params, .. } = &mut self.data else {
                     return Err(CardError::WrongCardType {

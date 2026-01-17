@@ -428,7 +428,7 @@ impl LedgerItem for History {
     type RefType = String;
     type Modifier = ReviewAction;
 
-    fn inner_run_event(mut self, event: ReviewAction) -> Result<Self, ()> {
+    fn inner_run_action(mut self, event: ReviewAction) -> Result<Self, ()> {
         let review = match event {
             ReviewAction::Insert(review) => Review {
                 timestamp: review.timestamp,

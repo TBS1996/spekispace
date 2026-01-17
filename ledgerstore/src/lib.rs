@@ -444,6 +444,19 @@ impl<T: LedgerItem> Ledger<T> {
         self.remote.current_commit()
     }
 
+    /// Returns the current upstream URL from the most recent SetUpstream event.
+    /// The remote is fetched anonymously and not stored as a git remote.
+    pub fn current_upstream_url(&self) -> Option<String> {
+        for (_idx, entry) in self.entries.chain().into_iter().rev() {
+            for event in &entry {
+                if let LedgerEvent::SetUpstream { upstream_url, .. } = &event.event {
+                    return Some(upstream_url.clone());
+                }
+            }
+        }
+        None
+    }
+
     /// Returns a set where all the keys are sorted so that no item depends on a item to its right.
     pub fn load_set_topologically_sorted(&self, set: ItemExpr<T>) -> Vec<T::Key> {
         let keys = self.load_expr(set);
@@ -459,6 +472,10 @@ impl<T: LedgerItem> Ledger<T> {
         // Build graph (dep -> dependents) and indegrees within the induced subgraph.
         for item in &in_set {
             for d in self.dependencies_recursive(*item) {
+                // Skip self-loops - items are allowed to depend on themselves
+                if d == *item {
+                    continue;
+                }
                 if in_set.contains(&d) {
                     adj.entry(d.clone()).or_default().push(item.clone());
                     *indeg.get_mut(item).unwrap() += 1;
@@ -768,6 +785,12 @@ impl<T: LedgerItem> Ledger<T> {
         items
     }
 
+    pub fn local_load_expr(&self, expr: ItemExpr<T>) -> IndexSet<T::Key> {
+        let local = self.local.load_expr(expr.clone());
+        let remote = self.remote.load_expr(expr.clone());
+        local.difference(&remote).into_iter().cloned().collect()
+    }
+
     pub fn load_expr(&self, expr: ItemExpr<T>) -> IndexSet<T::Key> {
         let mut items = self.local.load_expr(expr.clone());
         items.extend(self.remote.load_expr(expr));
@@ -870,14 +893,21 @@ impl<T: LedgerItem> Ledger<T> {
         name.split("::").last().unwrap().to_lowercase()
     }
 
-    fn verify_all(&self) -> Result<(), EventError<T>> {
+    pub fn verify_all(&self) -> Result<(), EventError<T>> {
         let all = self.load_all();
+        let qty = all.len();
+        println!("Verifying {} items...", qty);
 
         for item in all {
-            if let Err(e) = item.validate(self) {
-                return Err(EventError::Invariant(e));
+            let id = item.item_id();
+            let res = item.verify(self);
+            if res.is_err() {
+                dbg!(id);
+                res.unwrap();
             }
         }
+
+        println!("All items verified successfully.");
 
         Ok(())
     }

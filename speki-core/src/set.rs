@@ -36,7 +36,7 @@ impl LedgerItem for Set {
 
     type PropertyType = String;
 
-    fn inner_run_event(mut self, event: SetAction) -> Result<Self, Self::Error> {
+    fn inner_run_action(mut self, event: SetAction) -> Result<Self, Self::Error> {
         match event {
             SetAction::SetOrdered(ordered) => self.ordered = ordered,
             SetAction::SetName(name) => self.name = name,

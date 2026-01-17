@@ -58,7 +58,7 @@ pub trait LedgerItem:
     type Modifier: Clone + Debug + Hash + Serialize + DeserializeOwned + Send + Sync;
 
     /// Modifies `Self`.
-    fn inner_run_event(self, event: Self::Modifier) -> Result<Self, Self::Error>;
+    fn inner_run_action(self, event: Self::Modifier) -> Result<Self, Self::Error>;
 
     fn verify(self, ledger: &impl ReadLedger<Item = Self>) -> Result<Self, EventError<Self>> {
         if let Some(cycle) = self.find_cycle(ledger) {
@@ -85,7 +85,7 @@ pub trait LedgerItem:
         ledger: &impl ReadLedger<Item = Self>,
         verify: bool,
     ) -> Result<Self, EventError<Self>> {
-        let new = match self.inner_run_event(event) {
+        let new = match self.inner_run_action(event) {
             Ok(item) => item,
             Err(e) => return Err(EventError::Invariant(e)),
         };
@@ -115,16 +115,32 @@ pub trait LedgerItem:
         ) -> Option<Vec<(T::Key, T::RefType)>> {
             if !visiting.insert(current.clone()) {
                 // Cycle detected
-                let mut path = Vec::new();
-                let mut cur = current.clone();
-
-                // Backtrack the path
-                while let Some((p_key, p_ref)) = parent.get(&cur) {
-                    path.push((cur.clone(), p_ref.clone()));
+                // Check if this is a self-loop (node depends on itself)
+                if let Some((p_key, _)) = parent.get(&current) {
                     if *p_key == current {
+                        // Self-loop detected - this is allowed
+                        return None;
+                    }
+                }
+
+                // Build the cycle path by backtracking through parent pointers
+                let mut path = Vec::new();
+                let cycle_start = current.clone();
+
+                // Backtrack to build the full cycle
+                let mut cur = current.clone();
+                loop {
+                    if let Some((p_key, p_ref)) = parent.get(&cur) {
+                        path.push((cur.clone(), p_ref.clone()));
+                        if p_key == &cycle_start {
+                            // We've completed the cycle back to the start
+                            break;
+                        }
+                        cur = p_key.clone();
+                    } else {
+                        // Shouldn't happen in a proper cycle
                         break;
                     }
-                    cur = p_key.clone();
                 }
 
                 path.reverse();
@@ -149,6 +165,11 @@ pub trait LedgerItem:
                 ty: dep_type,
             } in dependencies
             {
+                // Skip self-loops - items are allowed to depend on themselves
+                if dep_key == current {
+                    continue;
+                }
+
                 if visited.contains(&dep_key) {
                     continue;
                 }
@@ -167,14 +188,16 @@ pub trait LedgerItem:
         let mut visiting = IndexSet::new();
         let mut parent = HashMap::new();
 
-        dfs(
+        let cycle = dfs(
             self.item_id(),
             ledger,
             &mut visiting,
             &mut visited,
             &mut parent,
             (self.item_id(), self),
-        )
+        );
+
+        cycle
     }
 
     /// Assertions that should hold true. Like invariants with other cards that it references.
