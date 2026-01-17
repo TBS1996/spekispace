@@ -2118,7 +2118,7 @@ impl LedgerItem for RawCard {
     }
 }
 
-#[derive(Serialize, Ord, PartialOrd, Eq, Hash, PartialEq, Debug, Clone)]
+#[derive(Deserialize, Serialize, Ord, PartialOrd, Eq, Hash, PartialEq, Debug, Clone)]
 pub enum BackSide {
     Bool(bool),
     Text(TextData),
@@ -2129,33 +2129,6 @@ pub enum BackSide {
     Trivial, // Answer is obvious, used when card is more of a dependency anchor
     #[deprecated(note = "Ledger validation should prevent this state")]
     Invalid, // A reference card was deleted
-}
-
-#[derive(Serialize, Deserialize, Ord, PartialOrd, Eq, Hash, PartialEq, Debug, Clone)]
-pub enum BarSide {
-    Bool(bool),
-    Text(String),
-    Card(CardId),
-    List(Vec<CardId>),
-    Time(TimeStamp),
-    Trivial,
-    Invalid,
-}
-
-impl From<BarSide> for BackSide {
-    fn from(value: BarSide) -> Self {
-        match value {
-            BarSide::Text(val) => BackSide::Text(val.into()),
-            BarSide::Bool(val) => BackSide::Bool(val),
-            BarSide::Card(val) => BackSide::Card(val),
-            BarSide::List(val) => BackSide::List(val),
-            BarSide::Time(val) => BackSide::Time(val),
-            #[allow(deprecated)]
-            BarSide::Trivial => BackSide::Trivial,
-            #[allow(deprecated)]
-            BarSide::Invalid => BackSide::Invalid,
-        }
-    }
 }
 
 impl Default for BackSide {
@@ -2287,37 +2260,6 @@ impl BackSide {
         }
 
         set
-    }
-}
-
-impl<'de> Deserialize<'de> for BackSide {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        let value = Value::deserialize(deserializer)?;
-
-        match value {
-            Value::Array(arr) => {
-                let mut ids = Vec::new();
-                for item in arr {
-                    if let Value::String(ref s) = item {
-                        if let Ok(uuid) = Uuid::parse_str(s) {
-                            ids.push(uuid);
-                        } else {
-                            return Err(serde::de::Error::custom("Invalid UUID in array"));
-                        }
-                    } else {
-                        return Err(serde::de::Error::custom("Expected string in array"));
-                    }
-                }
-                Ok(BackSide::List(ids))
-            }
-            #[allow(deprecated)]
-            Value::Bool(_) => Ok(BackSide::Trivial),
-            Value::String(s) => Ok(s.into()),
-            val => Ok(serde_json::from_value::<BarSide>(val).unwrap().into()),
-        }
     }
 }
 
