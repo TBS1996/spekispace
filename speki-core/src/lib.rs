@@ -422,7 +422,7 @@ pub fn the_reviewable_cards(
         }
 
         if ordered && ordered_terminate {
-            let card_breaks = provider.load(id).unwrap().display_card().to_string();
+            let card_breaks = provider.load(id).unwrap().front_side().to_string();
             println!("breaking at node idx {idx}, card: {card_breaks}");
             break;
         }

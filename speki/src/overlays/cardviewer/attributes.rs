@@ -394,9 +394,8 @@ pub fn load_attr_qa_for_class(card: CardId) -> Vec<AttrQandA> {
 
     let mut output: Vec<AttrQandA> = vec![];
 
+    let instance = card.name();
     for attr in attrs {
-        let instance = card.name_textdata().to_raw();
-
         let question = attr.pattern.replace("{}", &instance);
 
         let val = AttrQandA::New {
@@ -561,9 +560,8 @@ pub fn load_attr_qa(card: CardId) -> Vec<AttrQandA> {
         output.push(val);
     }
 
+    let instance = card.name();
     for attr in attrs {
-        let instance = card.name_textdata().to_raw();
-
         let question = attr.pattern.replace("{}", &instance);
 
         let val = AttrQandA::New {

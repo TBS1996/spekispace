@@ -13,7 +13,7 @@ pub mod basecard;
 pub use basecard::*;
 
 use either::Either;
-use ledgerstore::{EventError, ItemExpr, LedgerAction, LedgerItem, TimeProvider};
+use ledgerstore::{EventError, ItemExpr, LedgerAction, LedgerItem, ReadLedger, TimeProvider};
 use nonempty::NonEmpty;
 use serde::Deserializer;
 use serde_json::Value;
@@ -75,25 +75,41 @@ impl EvalText {
         &self.cmps
     }
 
-    pub fn just_some_ref(id: CardId, provider: &CardProvider) -> Self {
+    pub fn just_some_ref(id: CardId, provider: &impl ReadLedger<Item = RawCard>) -> Self {
         let mut txt = TextData::default();
         txt.push_link(id, None);
 
         Self::from_textdata(txt, provider)
     }
 
-    pub fn just_some_string(s: String, provider: &CardProvider) -> Self {
+    pub fn just_some_string(s: String, provider: &impl ReadLedger<Item = RawCard>) -> Self {
         Self::from_textdata(TextData::from_raw(&s), provider)
     }
 
-    pub fn from_backside(b: &BackSide, provider: &CardProvider, hint: bool, name: bool) -> Self {
+    pub fn from_backside(
+        b: &BackSide,
+        ledger: &impl ReadLedger<Item = RawCard>,
+        hint: bool,
+        name: bool,
+    ) -> Self {
         match b {
-            BackSide::Text(txt) => Self::from_textdata(txt.clone(), provider),
+            BackSide::Text(txt) => Self::from_textdata(txt.clone(), ledger),
             BackSide::Card(id) => {
                 let eval = if name {
-                    provider.load(*id).unwrap().name.to_string()
+                    ledger
+                        .load(*id)
+                        .unwrap()
+                        .data
+                        .name_textdata(ledger)
+                        .to_raw()
                 } else {
-                    provider.load(*id).unwrap().frontside.to_string()
+                    let card = ledger.load(*id).unwrap();
+                    let textdata = card.data.name_textdata(ledger);
+                    let text = Self::from_textdata(textdata, ledger);
+
+                    DisplayData::new(ledger, card.namespace, &card.data, text)
+                        .display(ledger)
+                        .to_string()
                 };
                 Self {
                     cmps: if hint {
@@ -120,16 +136,16 @@ impl EvalText {
 
                 txt.inner_mut().pop();
 
-                Self::from_textdata(txt, provider)
+                Self::from_textdata(txt, ledger)
             }
             BackSide::Time(ts) => {
                 if hint {
                     Self::just_some_string(
                         format!("{} {}", ts.clock_emoji(), ts.to_string()),
-                        provider,
+                        ledger,
                     )
                 } else {
-                    Self::just_some_string(format!("{}", ts.to_string()), provider)
+                    Self::just_some_string(format!("{}", ts.to_string()), ledger)
                 }
             }
             BackSide::Bool(b) => Self::just_some_string(
@@ -152,27 +168,25 @@ impl EvalText {
                         }
                     )
                 },
-                provider,
+                ledger,
             ),
         }
     }
 
-    pub fn from_textdata(txt: TextData, provider: &CardProvider) -> Self {
+    pub fn from_textdata(txt: TextData, ledger: &impl ReadLedger<Item = RawCard>) -> Self {
         let mut cmps = vec![];
 
-        let eval = txt.evaluate(provider);
+        let eval = txt.evaluate(ledger);
 
         for cmp in txt.inner() {
             match cmp {
                 Either::Left(s) => cmps.push(TextComponent::new_text(s)),
                 Either::Right(TextLink { id, alias }) => match alias {
-                    Some(alias) => {
-                        cmps.push(TextComponent::new_link(alias, *id));
-                    }
+                    Some(alias) => cmps.push(TextComponent::new_link(alias, *id)),
                     None => {
-                        match provider.load(*id) {
+                        match ledger.load(*id) {
                             Some(card) => {
-                                let name = card.name.to_string();
+                                let name = card.name_eval(ledger).to_string();
                                 cmps.push(TextComponent::new_link(name, *id));
                             }
                             None => panic!(),
@@ -194,6 +208,7 @@ impl Deref for EvalText {
     }
 }
 
+#[derive(Debug)]
 pub struct DisplayData {
     data: Data,
     name: EvalText,
@@ -202,7 +217,7 @@ pub struct DisplayData {
 
 impl DisplayData {
     fn new(
-        card_provider: CardProvider,
+        ledger: &impl ReadLedger<Item = RawCard>,
         namespace: Option<CardId>,
         data: &CardType,
         name: EvalText,
@@ -213,14 +228,17 @@ impl DisplayData {
                 answered_params: _,
                 ..
             } => {
-                let class_name = card_provider.load(*class_id).unwrap().name().to_string();
+                let class_name = ledger
+                    .load(*class_id)
+                    .unwrap()
+                    .name_eval(ledger)
+                    .to_string();
                 let mut params: Vec<(String, String)> = vec![];
 
-                for (attr, ans) in data.param_to_ans(&card_provider) {
+                for (attr, ans) in data.param_to_ans(ledger) {
                     if let Some(ans) = ans {
                         let back =
-                            EvalText::from_backside(&ans.answer, &card_provider, false, true)
-                                .to_string();
+                            EvalText::from_backside(&ans.answer, ledger, false, true).to_string();
 
                         params.push((attr.pattern, back));
                     }
@@ -236,7 +254,10 @@ impl DisplayData {
             CardType::Normal { .. } => Data::Normal,
             CardType::Unfinished { .. } => Data::Unfinished,
             CardType::Attribute { instance, .. } => {
-                match card_provider.load(*instance).map(|x| x.name().to_owned()) {
+                match ledger
+                    .load(*instance)
+                    .map(|x| x.data.name_textdata(ledger).to_raw())
+                {
                     Some(instance_name) => Data::Attribute {
                         instance: (instance_name.to_string(), *instance),
                     },
@@ -244,7 +265,10 @@ impl DisplayData {
                 }
             }
             CardType::Class { parent_class, .. } => match parent_class {
-                Some(parent) => match card_provider.load(*parent).map(|x| x.name().to_owned()) {
+                Some(parent) => match ledger
+                    .load(*parent)
+                    .map(|x| x.data.name_textdata(ledger).to_raw())
+                {
                     Some(parent_class_name) => Data::Class {
                         parent_class: Some((parent_class_name.to_string(), *parent)),
                     },
@@ -262,7 +286,7 @@ impl DisplayData {
         }
     }
 
-    fn display(&self, provider: &CardProvider) -> EvalText {
+    fn display(&self, ledger: &impl ReadLedger<Item = RawCard>) -> EvalText {
         let mut text = TextData::default();
 
         // 1) Namespace (leftmost)
@@ -274,7 +298,7 @@ impl DisplayData {
         match &self.data {
             // 2a) Attribute cards:  <Class>::instance[attribute]
             Data::Attribute { instance } => {
-                if let Some(class_id) = provider.load(instance.1).unwrap().class() {
+                if let Some(class_id) = ledger.load(instance.1).unwrap().data.class() {
                     text.push_string("<".to_string());
                     text.push_link(class_id, None);
                     text.push_string(">::".to_string());
@@ -323,10 +347,11 @@ impl DisplayData {
             }
         }
 
-        EvalText::from_textdata(text, provider)
+        EvalText::from_textdata(text, ledger)
     }
 }
 
+#[derive(Debug)]
 enum Data {
     Normal,
     Class {
@@ -456,7 +481,9 @@ impl Card {
     }
 
     pub fn param_to_ans(&self) -> BTreeMap<Attrv2, Option<ParamAnswer>> {
-        self.base.data.param_to_ans(&self.card_provider)
+        self.base
+            .data
+            .param_to_ans(&self.card_provider.providers.cards)
     }
 
     pub fn params_on_parent_classes(&self) -> BTreeMap<CardId, Vec<Attrv2>> {
@@ -479,22 +506,11 @@ impl Card {
     }
 
     pub fn params_on_class(&self) -> Vec<Attrv2> {
-        if let CardType::Class { params, .. } = &self.base.data {
-            params.values().cloned().collect()
-        } else {
-            Default::default()
-        }
+        self.base.params_on_class()
     }
 
     pub fn param_answers(&self) -> BTreeMap<AttributeId, ParamAnswer> {
-        if let CardType::Instance {
-            answered_params, ..
-        } = &self.base.data
-        {
-            answered_params.clone()
-        } else {
-            Default::default()
-        }
+        self.base.param_answers()
     }
 
     pub fn reviewable(&self) -> bool {
@@ -539,30 +555,12 @@ impl Card {
     }
 
     pub fn parent_class(&self) -> Option<CardId> {
-        match &self.base.data {
-            CardType::Class { parent_class, .. } => *parent_class,
-            _ => None,
-        }
+        self.base.parent_class()
     }
 
     pub fn parent_classes(&self) -> IndexSet<CardId> {
-        let key = match self.base.data {
-            CardType::Instance { class, .. } => class,
-            CardType::Class { .. } => self.id,
-            _ => panic!(),
-        };
-
-        let expr = ItemExpr::Reference {
-            items: Box::new(ItemExpr::Item(key)),
-            ty: Some(CardRefType::ParentClass),
-            reversed: false,
-            recursive: true,
-            include_self: false,
-        };
-
-        let mut classes = self.card_provider.providers.cards.load_expr(expr);
-        classes.insert(key);
-        classes
+        self.base
+            .parent_classes(&self.card_provider.providers.cards)
     }
 
     pub fn get_attr(&self, id: AttributeId) -> Option<Attrv2> {
@@ -689,54 +687,11 @@ impl Card {
         back_audio: Option<Audio>,
     ) -> Self {
         let id = base.id;
+        let ledger = &card_provider.providers.cards;
 
-        let from_back = |back: &BackSide| -> EvalText {
-            EvalText::from_backside(back, &card_provider, true, false)
-        };
-
-        let backside = match &base.data {
-            CardType::Instance { back, class, .. } => match back.as_ref() {
-                Some(back) => from_back(back),
-                None => EvalText::just_some_ref(*class, &card_provider),
-            },
-            CardType::Normal { back, .. } => from_back(back),
-            CardType::Unfinished { .. } => {
-                EvalText::just_some_string("<unfinished>".to_string(), &card_provider)
-            }
-            CardType::Attribute { back, .. } => from_back(back),
-            CardType::Class {
-                back, parent_class, ..
-            } => match (back, parent_class) {
-                (Some(theback), Some(pcl)) if theback.is_empty_text() => {
-                    EvalText::just_some_string(
-                        card_provider
-                            .providers
-                            .cards
-                            .load(*pcl)
-                            .unwrap()
-                            .data
-                            .raw_front(),
-                        &card_provider,
-                    )
-                }
-                (None, Some(pcl)) => EvalText::just_some_ref(*pcl, &card_provider),
-                (Some(back), _) => from_back(back),
-                (_, _) => EvalText::default(),
-            },
-            CardType::Statement { .. } => {
-                EvalText::just_some_string("<statement>".to_string(), &card_provider)
-            }
-        };
-
-        let name = EvalText::from_textdata(base.data.name(&card_provider), &card_provider);
-
-        let frontside = DisplayData::new(
-            card_provider.clone(),
-            base.namespace,
-            &base.data,
-            name.clone(),
-        )
-        .display(&card_provider);
+        let name = base.name_eval(ledger);
+        let frontside = base.frontside_eval(ledger);
+        let backside = base.backside_eval(ledger);
 
         Self {
             namespace: base.namespace,
@@ -992,10 +947,6 @@ impl Card {
     }
     pub fn name(&self) -> &EvalText {
         &self.name
-    }
-
-    pub fn name_textdata(&self) -> TextData {
-        self.base.data.name(&self.card_provider)
     }
 
     pub fn front_side(&self) -> &EvalText {

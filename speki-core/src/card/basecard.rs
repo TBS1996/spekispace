@@ -1,5 +1,5 @@
 use super::*;
-use crate::{audio::AudioId, card_provider::CardProvider, CardProperty, CardRefType};
+use crate::{audio::AudioId, CardProperty, CardRefType};
 use either::Either;
 use indexmap::IndexSet;
 use ledgerstore::{ItemReference, LedgerEvent, LedgerItem, PropertyCache, ReadLedger};
@@ -84,18 +84,24 @@ impl TextData {
         &mut self.0
     }
 
-    pub fn evaluate(&self, provider: &CardProvider) -> String {
+    pub fn evaluate(&self, ledger: &impl ReadLedger<Item = RawCard>) -> String {
         let mut out = String::new();
 
         for cmp in &self.0 {
             match cmp {
                 Either::Left(s) => out.push_str(&s),
-                Either::Right(TextLink { id, alias }) => match alias {
-                    Some(alias) => out.push_str(&alias),
-                    None => match provider.load(*id) {
-                        Some(card) => out.push_str(&card.name),
-                        None => out.push_str("<invalid card ref>"),
-                    },
+                Either::Right(TextLink {
+                    id: _,
+                    alias: Some(alias),
+                }) => {
+                    out.push_str(alias);
+                }
+                Either::Right(TextLink { id, alias: None }) => match ledger
+                    .load(*id)
+                    .map(|card| card.name_eval(ledger).to_string())
+                {
+                    Some(name) => out.push_str(&name),
+                    None => out.push_str("<invalid card ref>"),
                 },
             }
         }
@@ -674,7 +680,7 @@ impl CardType {
         }
     }
 
-    pub fn name(&self, provider: &CardProvider) -> TextData {
+    pub fn name_textdata(&self, ledger: &impl ReadLedger<Item = RawCard>) -> TextData {
         match self {
             CardType::Instance { name, .. } => name.clone(),
             CardType::Normal { front, .. } => front.clone(),
@@ -684,10 +690,8 @@ impl CardType {
                 instance,
                 ..
             } => {
-                let class: CardId = provider
-                    .providers
-                    .cards
-                    .get_prop_cache(PropertyCache::new(
+                let class: CardId = ledger
+                    .get_property_cache(PropertyCache::new(
                         CardProperty::Attr,
                         attribute.to_string(),
                     ))
@@ -695,9 +699,9 @@ impl CardType {
                     .next()
                     .unwrap();
 
-                let class = provider.load(class).unwrap();
+                let class = ledger.load(class).unwrap();
                 let attr = class.get_attr(*attribute).unwrap();
-                let instance = provider.load(*instance).unwrap().name_textdata();
+                let instance = ledger.load(*instance).unwrap().data.name_textdata(ledger);
                 let instance = instance.to_raw();
 
                 let new = attr.pattern.replace("{}", &instance);
@@ -709,17 +713,26 @@ impl CardType {
         }
     }
 
-    pub fn param_to_ans(&self, provider: &CardProvider) -> BTreeMap<Attrv2, Option<ParamAnswer>> {
+    pub fn param_to_ans(
+        &self,
+        ledger: &impl ReadLedger<Item = RawCard>,
+    ) -> BTreeMap<Attrv2, Option<ParamAnswer>> {
         if let CardType::Instance {
             answered_params,
             class,
             ..
         } = self
         {
-            let class = provider.load(*class).unwrap();
+            let class = ledger.load(*class).unwrap();
 
             let mut params = class.params_on_class();
-            params.extend(class.params_on_parent_classes().values().flatten().cloned());
+            params.extend(
+                class
+                    .params_on_parent_classes(ledger)
+                    .values()
+                    .flatten()
+                    .cloned(),
+            );
 
             let mut out: BTreeMap<Attrv2, Option<ParamAnswer>> = Default::default();
 
@@ -925,6 +938,107 @@ impl RawCard {
         }
 
         actions
+    }
+
+    pub fn parent_classes(&self, ledger: &impl ReadLedger<Item = RawCard>) -> IndexSet<CardId> {
+        let key = match self.data {
+            CardType::Instance { class, .. } => class,
+            CardType::Class { .. } => self.id,
+            _ => panic!(),
+        };
+
+        let expr = ItemExpr::Reference {
+            items: Box::new(ItemExpr::Item(key)),
+            ty: Some(CardRefType::ParentClass),
+            reversed: false,
+            recursive: true,
+            include_self: false,
+        };
+
+        let mut classes = ledger.load_expr(expr);
+        classes.insert(key);
+        classes
+    }
+
+    pub fn params_on_parent_classes(
+        &self,
+        ledger: &impl ReadLedger<Item = RawCard>,
+    ) -> BTreeMap<CardId, Vec<Attrv2>> {
+        let mut parents = self.parent_classes(ledger);
+        parents.shift_remove(&self.id);
+        let mut out: BTreeMap<CardId, Vec<Attrv2>> = Default::default();
+
+        for parent in parents {
+            let params = ledger.load(parent).unwrap().params_on_class();
+            out.insert(parent, params);
+        }
+
+        out
+    }
+
+    pub fn params_on_class(&self) -> Vec<Attrv2> {
+        if let CardType::Class { params, .. } = &self.data {
+            params.values().cloned().collect()
+        } else {
+            Default::default()
+        }
+    }
+
+    pub fn param_answers(&self) -> BTreeMap<AttributeId, ParamAnswer> {
+        if let CardType::Instance {
+            answered_params, ..
+        } = &self.data
+        {
+            answered_params.clone()
+        } else {
+            Default::default()
+        }
+    }
+
+    pub fn frontside_eval(&self, ledger: &impl ReadLedger<Item = RawCard>) -> EvalText {
+        DisplayData::new(ledger, self.namespace, &self.data, self.name_eval(ledger)).display(ledger)
+    }
+
+    pub fn name_eval(&self, ledger: &impl ReadLedger<Item = RawCard>) -> EvalText {
+        EvalText::from_textdata(self.data.name_textdata(ledger), ledger)
+    }
+
+    pub fn backside_eval(&self, ledger: &impl ReadLedger<Item = RawCard>) -> EvalText {
+        let from_back =
+            |back: &BackSide| -> EvalText { EvalText::from_backside(back, ledger, true, false) };
+
+        match &self.data {
+            CardType::Instance { back, class, .. } => match back.as_ref() {
+                Some(back) => from_back(back),
+                None => EvalText::just_some_ref(*class, ledger),
+            },
+            CardType::Normal { back, .. } => from_back(back),
+            CardType::Unfinished { .. } => {
+                EvalText::just_some_string("<unfinished>".to_string(), ledger)
+            }
+            CardType::Attribute { back, .. } => from_back(back),
+            CardType::Class {
+                back, parent_class, ..
+            } => match (back, parent_class) {
+                (Some(theback), Some(pcl)) if theback.is_empty_text() => {
+                    EvalText::just_some_string(
+                        ledger
+                            .load(*pcl)
+                            .unwrap()
+                            .data
+                            .name_textdata(ledger)
+                            .to_raw(),
+                        ledger,
+                    )
+                }
+                (None, Some(pcl)) => EvalText::just_some_ref(*pcl, ledger),
+                (Some(back), _) => from_back(back),
+                (_, _) => EvalText::default(),
+            },
+            CardType::Statement { .. } => {
+                EvalText::just_some_string("<statement>".to_string(), ledger)
+            }
+        }
     }
 
     pub fn cache_front(&self, ledger: &impl ReadLedger<Item = RawCard>) -> String {
@@ -1184,39 +1298,6 @@ pub fn normalize_string(s: &str) -> String {
         .collect();
 
     format!("^{}$", s)
-}
-
-use fancy_regex::Regex;
-fn resolve_text(txt: String, ledger: &impl ReadLedger<Item = RawCard>, re: &Regex) -> String {
-    let uuids: Vec<CardId> = re
-        .find_iter(&txt)
-        .filter_map(Result::ok)
-        .map(|m| m.as_str().parse().unwrap())
-        .collect();
-
-    let mut s: String = re.replace_all(&txt, "").to_string();
-    for id in uuids {
-        let Some(card) = ledger.load(id) else {
-            dbg!(id);
-            panic!();
-        };
-
-        let txt = card.cache_front(ledger);
-        s.push_str(&resolve_text(txt, ledger, re));
-    }
-
-    s
-}
-
-/// replaces all uuids on frontside of card with the frontside of the card referenced by uuid.
-/// just appends it, doesn't preserve order, this is just to collect bigrams.
-fn resolve_card(card: &RawCard, ledger: &impl ReadLedger<Item = RawCard>) -> String {
-    let uuid_regex = Regex::new(
-        r"\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\b",
-    )
-    .unwrap();
-
-    resolve_text(card.cache_front(ledger), ledger, &uuid_regex)
 }
 
 #[derive(Debug)]
@@ -1680,11 +1761,11 @@ impl LedgerItem for RawCard {
 
     fn properties_cache(
         &self,
-        cache: &impl ReadLedger<Item = Self>,
+        ledger: &impl ReadLedger<Item = Self>,
     ) -> IndexSet<PropertyCache<Self>> {
         let mut out: IndexSet<PropertyCache<Self>> = Default::default();
 
-        let resolved_text = resolve_card(self, cache);
+        let resolved_text = self.name_eval(ledger);
 
         for bigram in bigrams(&resolved_text) {
             let value = format!("{}{}", bigram[0], bigram[1]);
