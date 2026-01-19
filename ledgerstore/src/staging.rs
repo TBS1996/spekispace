@@ -4,7 +4,7 @@ use std::{collections::HashMap, sync::Arc};
 use crate::{
     blockchain::ItemAction, ledger_item::LedgerItem, read_ledger::ReadLedger, ActionEvalResult,
     CardChange, EventError, ItemRefCache, ItemReference, Ledger, LedgerAction, PropertyCache,
-    WriteLedger,
+    SavedItem, WriteLedger,
 };
 
 /// Tracks changes to reference caches (dependencies/dependents) in a staging area
@@ -227,8 +227,12 @@ impl<T: LedgerItem> StagingLedger<T> {
         for (key, item) in items {
             match item {
                 Some(item) => {
-                    base.cache.write().unwrap().insert(key, item.clone());
-                    base.save(Arc::unwrap_or_clone(item));
+                    let item = Arc::unwrap_or_clone(item);
+                    base.save(item.clone());
+                    base.cache
+                        .write()
+                        .unwrap()
+                        .insert(key, SavedItem::new(item));
                 }
                 None => {
                     base.cache.write().unwrap().remove(&key);

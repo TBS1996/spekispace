@@ -24,7 +24,8 @@ pub trait LedgerItem:
         + DeserializeOwned
         + FromStr
         + Send
-        + Sync;
+        + Sync
+        + Ord;
     type Error: Debug;
 
     /// The different ways an item can reference another item

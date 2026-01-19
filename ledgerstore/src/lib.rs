@@ -28,12 +28,14 @@ mod remote;
 mod staging;
 use blockchain::{BlockChain, SetUpstream};
 pub mod entry_thing;
+mod item;
 mod node;
 mod write_ledger;
 
 pub use blockchain::{ItemAction, LedgerAction, LedgerEntry, LedgerEvent};
 pub use remote::ChangeSet;
 
+pub use item::SavedItem;
 pub use ledger_item::LedgerItem;
 pub use read_ledger::ReadLedger;
 pub use staging::StagingLedger;
@@ -145,14 +147,6 @@ pub enum ItemExpr<T: LedgerItem> {
     },
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Hash)]
-pub struct RefGetter<T: LedgerItem> {
-    pub reversed: bool, // whether it fetches links from the item to other items or the way this item being referenced
-    pub key: T::Key,    // item in question
-    pub ty: Option<T::RefType>, // the way of linking. None means all.
-    pub recursive: bool, // recursively get all cards that link
-}
-
 /// Represents a reference to another item.
 /// Does not contain information on which item contains this reference.
 #[derive(Debug, Clone, Hash, Eq, PartialEq, Ord, PartialOrd)]
@@ -193,86 +187,6 @@ pub type Hashed = String;
 pub type StateHash = Hashed;
 pub type LedgerHash = Hashed;
 pub type CacheHash = Hashed;
-
-pub enum LedgerType<T: LedgerItem> {
-    OverRide(OverrideLedger<T>),
-    Normal(Ledger<T>),
-}
-
-impl<T: LedgerItem> LedgerType<T> {
-    pub fn load(&self, key: T::Key) -> Option<Arc<T>> {
-        match self {
-            LedgerType::OverRide(ledger) => ledger.load(key),
-            LedgerType::Normal(ledger) => ledger.load(key),
-        }
-    }
-
-    pub fn dependents(&self, key: T::Key) -> IndexSet<T::Key> {
-        match self {
-            LedgerType::OverRide(ledger) => ledger.dependents(key),
-            LedgerType::Normal(ledger) => ledger.dependents_recursive(key),
-        }
-    }
-}
-
-impl<T: LedgerItem> From<Ledger<T>> for LedgerType<T> {
-    fn from(value: Ledger<T>) -> Self {
-        Self::Normal(value)
-    }
-}
-
-impl<T: LedgerItem> From<OverrideLedger<T>> for LedgerType<T> {
-    fn from(value: OverrideLedger<T>) -> Self {
-        Self::OverRide(value)
-    }
-}
-
-/// Before inserting an item into the state, we want to check if all invariants are still upheld.
-/// This struct therefore contain the new item we want to validate.
-/// This allows us to pass in this in validation functions so when we check the new/modified items dependencies it'll use the current state for other items,
-/// but when it checks invariants based on the new item it'll load the new/modified item from memory
-#[derive(Clone)]
-pub struct OverrideLedger<T: LedgerItem> {
-    inner: Ledger<T>,
-    new: HashMap<T::Key, Arc<T>>,
-}
-
-impl<T: LedgerItem> OverrideLedger<T> {
-    pub fn new(inner: &Ledger<T>, new: T) -> Self {
-        let new_id = new.item_id();
-        let mut map = HashMap::default();
-        map.insert(new_id, Arc::new(new));
-
-        Self {
-            inner: inner.clone(),
-            new: map,
-        }
-    }
-
-    pub fn load(&self, key: T::Key) -> Option<Arc<T>> {
-        if let Some(val) = self.new.get(&key).cloned() {
-            return Some(val);
-        } else {
-            self.inner.load(key)
-        }
-    }
-
-    pub fn dependencies(&self, key: T::Key) -> IndexSet<T::Key> {
-        self.load(key).unwrap().dependencies()
-    }
-
-    pub fn dependents(&self, key: T::Key) -> IndexSet<T::Key> {
-        let mut dependents = self.inner.dependents_recursive(key);
-
-        for (dep_key, val) in self.new.iter() {
-            if val.dependencies().contains(&key) {
-                dependents.insert(*dep_key);
-            }
-        }
-
-        dependents
-    }
-}
 
 use crate::entry_thing::EventNode;
 use crate::read_ledger::FsReadLedger;
@@ -392,7 +306,7 @@ pub struct Ledger<T: LedgerItem> {
     ledger_hash: Arc<PathBuf>,
     remote: Arc<Remote<T>>,
     local: Local<T>,
-    cache: Arc<RwLock<HashMap<T::Key, Arc<T>>>>,
+    cache: Arc<RwLock<HashMap<T::Key, SavedItem<T>>>>,
     full_cache: Arc<AtomicBool>,
 }
 
@@ -801,30 +715,28 @@ impl<T: LedgerItem> Ledger<T> {
         self.full_cache.load(std::sync::atomic::Ordering::SeqCst)
     }
 
-    pub fn load_all(&self) -> IndexSet<T> {
+    pub fn load_all(&self) -> IndexSet<SavedItem<T>> {
         if self.full_cache() {
-            return self
-                .cache
-                .read()
-                .unwrap()
-                .values()
-                .map(|v| Arc::unwrap_or_clone(v.clone()))
-                .collect();
+            return self.cache.read().unwrap().values().cloned().collect();
         }
 
-        let mut items = self.local.load_all();
-        items.extend(self.remote.load_all());
+        // We want to give precedense to remote items. When there are duplicates,
+        // extend will keep the items already in place. So it's important we load remote first and extend with local.
+        let mut items = self.remote.load_all();
+        items.extend(self.local.load_all());
 
         let mut cache_guard = self.cache.write().unwrap();
 
         for item in items.clone() {
-            cache_guard.insert(item.item_id(), Arc::new(item));
+            cache_guard.insert(item.item_id(), SavedItem::new(item));
         }
 
         self.full_cache
             .store(true, std::sync::atomic::Ordering::SeqCst);
 
-        items
+        drop(cache_guard);
+
+        self.load_all()
     }
 
     pub fn load_with_remote_info(&self, key: T::Key) -> Option<(Arc<T>, bool)> {
@@ -840,15 +752,16 @@ impl<T: LedgerItem> Ledger<T> {
     }
 
     pub fn load(&self, key: T::Key) -> Option<Arc<T>> {
-        if let Some(item) = self.cache.read().unwrap().get(&key).cloned() {
-            return Some(item);
+        if let Some(saved_item) = self.cache.read().unwrap().get(&key).cloned() {
+            return Some(saved_item.item().clone());
         }
 
         match self.remote.load(key).or_else(|| self.local.load(key)) {
             Some(item) => {
-                let item = Arc::new(item);
-                self.cache.write().unwrap().insert(key, item.clone());
-                Some(item)
+                let saved_item = SavedItem::new(item);
+                let arc_item = saved_item.item().clone();
+                self.cache.write().unwrap().insert(key, saved_item);
+                Some(arc_item)
             }
             None => None,
         }
@@ -900,7 +813,7 @@ impl<T: LedgerItem> Ledger<T> {
 
         for item in all {
             let id = item.item_id();
-            let res = item.verify(self);
+            let res = item.clone_inner().verify(self);
             if res.is_err() {
                 dbg!(id);
                 res.unwrap();
@@ -1321,12 +1234,13 @@ impl<T: LedgerItem> Ledger<T> {
         for item in items {
             match item {
                 CardChange::Created(item) | CardChange::Modified(item) => {
+                    let saved_item = SavedItem::new(Arc::unwrap_or_clone(item));
                     self.cache
                         .write()
                         .unwrap()
-                        .insert(item.item_id(), item.clone());
+                        .insert(saved_item.item_id(), saved_item.clone());
 
-                    self.save(Arc::unwrap_or_clone(item));
+                    self.save(saved_item.clone_inner());
                 }
                 CardChange::Deleted(key) => {
                     self.cache.write().unwrap().remove(&key);

@@ -3,7 +3,7 @@ use std::{fmt::Debug, sync::Arc, time::Duration};
 
 use clap::Parser;
 use dioxus::prelude::*;
-use ledgerstore::{EventError, ItemExpr};
+use ledgerstore::{EventError, ItemExpr, SavedItem};
 use speki_core::{
     card::{CardId, RawCard},
     card_provider::CardProvider,
@@ -83,7 +83,13 @@ impl App {
     }
 
     pub fn load_all_histories(&self) -> IndexSet<History> {
-        self.0.provider.reviews.load_all()
+        self.0
+            .provider
+            .reviews
+            .load_all()
+            .into_iter()
+            .map(SavedItem::into_inner)
+            .collect()
     }
 
     pub fn dependencies_recursive(&self, key: CardId) -> IndexSet<CardId> {
@@ -100,7 +106,13 @@ impl App {
     }
 
     pub fn load_all_sets(&self) -> IndexSet<Set> {
-        self.0.provider.sets.load_all()
+        self.0
+            .provider
+            .sets
+            .load_all()
+            .into_iter()
+            .map(SavedItem::into_inner)
+            .collect()
     }
 
     pub fn card_ledger_hash(&self) -> Option<String> {
