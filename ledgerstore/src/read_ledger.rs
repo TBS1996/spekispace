@@ -130,6 +130,10 @@ pub trait ReadLedger {
         let refs = self.get_reference_cache(key, None, reversed, false);
 
         for ref_key in refs {
+            if ref_key == key {
+                continue;
+            }
+
             let child_node = self.collect_all_dependents_recursive_struct(ref_key, reversed);
             node.deps.push(child_node);
         }
