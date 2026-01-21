@@ -1,5 +1,5 @@
 [package]
-name = "speki-app"
+name = "speki"
 version = "0.1.0"
 authors = ["tor <torberge@outlook.com>"]
 edition = "2021"

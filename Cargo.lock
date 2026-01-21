@@ -4580,7 +4580,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "speki-app"
+name = "speki"
 version = "0.1.0"
 dependencies = [
  "chrono",
