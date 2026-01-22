@@ -1405,7 +1405,7 @@ pub enum CardError {
     DuplicateParam {
         param_id: AttributeId,
     },
-    SimilarFront(NonEmpty<CardId>),
+    SimilarFront(CardId),
 }
 
 fn instance_is_of_type(
@@ -1458,7 +1458,7 @@ impl LedgerItem for RawCard {
     type Modifier = CardAction;
 
     fn validate(&self, ledger: &impl ReadLedger<Item = Self>) -> Result<(), Self::Error> {
-        if let Some(similar) = NonEmpty::from_vec(self.similar_frontside(ledger)) {
+        if let Some(similar) = self.similar_frontside(ledger).into_iter().next() {
             return Err(CardError::SimilarFront(similar));
         }
 

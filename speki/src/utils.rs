@@ -5,7 +5,7 @@ use clap::Parser;
 use dioxus::prelude::*;
 use ledgerstore::{EventError, ItemExpr, SavedItem};
 use speki_core::{
-    card::{CardId, RawCard},
+    card::{CardError, CardId, RawCard},
     card_provider::CardProvider,
     collection::DynCard,
     ledger::{CardEvent, MetaEvent},
@@ -176,6 +176,7 @@ pub fn handle_event_error(err: MyEventError) {
 }
 
 pub fn handle_card_event_error(err: EventError<RawCard>) {
+    let provider = APP.read().0.card_provider.clone();
     let text = match err {
         EventError::Cycle(items) => {
             dbg!(&items);
@@ -193,8 +194,8 @@ pub fn handle_card_event_error(err: EventError<RawCard>) {
 
             let mut s = format!("cycle detected!\n");
             for (from, to, ty) in foobar {
-                let from = APP.read().load(from).unwrap().name().to_string();
-                let to = APP.read().load(to).unwrap().name().to_string();
+                let from = provider.load(from).unwrap().name().to_string();
+                let to = provider.load(to).unwrap().name().to_string();
                 use speki_core::CardRefType as TY;
 
                 let line = match ty {
@@ -209,10 +210,97 @@ pub fn handle_card_event_error(err: EventError<RawCard>) {
             }
             s
         }
-        EventError::Invariant(inv) => format!("invariant broken: {inv:?}"),
-        EventError::Remote => format!("remote card cannot be modified"),
-        EventError::ItemNotFound(card) => format!("card not found: {card}"),
-        EventError::DeletingWithDependencies(_) => format!("cannot delete card with dependencies"),
+        EventError::Remote => format!("Remote card cannot be modified"),
+        EventError::ItemNotFound(card) => format!("Card not found: {card}"),
+        EventError::DeletingWithDependencies(_) => {
+            format!("Cannot delete card: it has dependencies")
+        }
+        EventError::Invariant(card_error) => {
+            let error_msg = match card_error {
+                CardError::MissingParam { param_id } => {
+                    let param_name = provider
+                        .load(param_id)
+                        .map(|c| c.name().to_string())
+                        .unwrap_or_else(|| param_id.to_string());
+                    format!("Missing required parameter: {param_name}")
+                }
+                CardError::InstanceOfNonClass { actual_type } => {
+                    format!("Cannot create instance: card is of type {actual_type:?}, not a class")
+                }
+                CardError::AttributeOfNonInstance => {
+                    format!("Cannot create attribute answer: card is not an instance")
+                }
+                CardError::MissingAttribute { attribute_id } => {
+                    let attr_name = provider
+                        .load(attribute_id)
+                        .map(|c| c.name().to_string())
+                        .unwrap_or_else(|| attribute_id.to_string());
+                    format!("Missing required attribute: {attr_name}")
+                }
+                CardError::DefaultQuestionNotClass => {
+                    format!("Default question can only be set on class cards")
+                }
+                CardError::WrongCardType { expected, actual } => {
+                    format!("Wrong card type: expected {expected:?}, but got {actual:?}")
+                }
+                CardError::AnswerMustBeCard { attribute_id } => {
+                    let attr_name = provider
+                        .load(attribute_id)
+                        .map(|c| c.name().to_string())
+                        .unwrap_or_else(|| attribute_id.to_string());
+                    format!("Attribute '{attr_name}' requires a card as answer, not text")
+                }
+                CardError::AnswerMustBeTime { attribute_id } => {
+                    let attr_name = provider
+                        .load(attribute_id)
+                        .map(|c| c.name().to_string())
+                        .unwrap_or_else(|| attribute_id.to_string());
+                    format!("Attribute '{attr_name}' requires a timestamp as answer")
+                }
+                CardError::AnswerMustBeBool { attribute_id } => {
+                    let attr_name = provider
+                        .load(attribute_id)
+                        .map(|c| c.name().to_string())
+                        .unwrap_or_else(|| attribute_id.to_string());
+                    format!("Attribute '{attr_name}' requires a boolean (true/false) as answer")
+                }
+                CardError::SubClassOfNonClass { parent_id } => {
+                    let parent_name = provider
+                        .load(parent_id)
+                        .map(|c| c.name().to_string())
+                        .unwrap_or_else(|| parent_id.to_string());
+                    format!("Cannot set parent: '{parent_name}' is not a class")
+                }
+                CardError::BackTypeMustBeClass {
+                    back_type_id,
+                    actual_type,
+                } => {
+                    let back_name = provider
+                        .load(back_type_id)
+                        .map(|c| c.name().to_string())
+                        .unwrap_or_else(|| back_type_id.to_string());
+                    format!("Attribute back type must be a class: '{back_name}' is {actual_type:?}")
+                }
+                CardError::DuplicateAttribute { attribute_id } => {
+                    let attr_name = provider
+                        .load(attribute_id)
+                        .map(|c| c.name().to_string())
+                        .unwrap_or_else(|| attribute_id.to_string());
+                    format!("Duplicate attribute: '{attr_name}' is already defined")
+                }
+                CardError::DuplicateParam { param_id } => {
+                    let param_name = provider
+                        .load(param_id)
+                        .map(|c| c.name().to_string())
+                        .unwrap_or_else(|| param_id.to_string());
+                    format!("Duplicate parameter: '{param_name}' is already defined")
+                }
+                CardError::SimilarFront(card_id) => {
+                    format!("Card front is too similar to existing card: {card_id}")
+                }
+            };
+            error_msg
+        }
     };
 
     OverlayEnum::new_notice(text).append();
