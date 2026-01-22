@@ -1133,6 +1133,72 @@ impl RawCard {
         get_attributes(self.id, ledger)
     }
 
+    fn similar_frontside(&self, ledger: &impl ReadLedger<Item = Self>) -> Vec<CardId> {
+        let mut out = vec![];
+        let front = self.frontside_eval(ledger);
+
+        for candidate in self.similar_names(ledger) {
+            if ledger
+                .load(candidate)
+                .unwrap()
+                .frontside_eval(ledger)
+                .to_string()
+                .to_lowercase()
+                == front.to_string().to_lowercase()
+            {
+                out.push(candidate);
+            }
+        }
+
+        out
+    }
+
+    fn similar_names(&self, ledger: &impl ReadLedger<Item = Self>) -> Vec<CardId> {
+        let mut out = vec![];
+
+        let mut inner: Vec<ItemExpr<Self>> = vec![];
+
+        for prop in self.bigram_properties(ledger) {
+            inner.push(ItemExpr::Property {
+                property: prop.property,
+                value: prop.value,
+            });
+        }
+
+        let name = self.name_eval(ledger).to_string().to_lowercase();
+        let expr = ItemExpr::Intersection(inner);
+        for candidate in ledger.load_expr(expr) {
+            if ledger
+                .load(candidate)
+                .unwrap()
+                .name_eval(ledger)
+                .to_string()
+                .to_lowercase()
+                == name
+            {
+                out.push(candidate);
+            }
+        }
+
+        out
+    }
+
+    fn bigram_properties(&self, ledger: &impl ReadLedger<Item = Self>) -> Vec<PropertyCache<Self>> {
+        let resolved_text = self.name_eval(ledger);
+        let mut out: Vec<PropertyCache<Self>> = vec![];
+
+        for bigram in bigrams(&resolved_text) {
+            let value = format!("{}{}", bigram[0], bigram[1]);
+            let prop = PropertyCache {
+                property: CardProperty::Bigram,
+                value,
+            };
+            out.push(prop);
+        }
+
+        out
+    }
+
     pub fn set_backside(mut self, new_back: BackSide) -> Self {
         let data = match self.data.clone() {
             CardType::Instance {
@@ -1339,6 +1405,7 @@ pub enum CardError {
     DuplicateParam {
         param_id: AttributeId,
     },
+    SimilarFront(NonEmpty<CardId>),
 }
 
 fn instance_is_of_type(
@@ -1391,6 +1458,10 @@ impl LedgerItem for RawCard {
     type Modifier = CardAction;
 
     fn validate(&self, ledger: &impl ReadLedger<Item = Self>) -> Result<(), Self::Error> {
+        if let Some(similar) = NonEmpty::from_vec(self.similar_frontside(ledger)) {
+            return Err(CardError::SimilarFront(similar));
+        }
+
         match &self.data {
             CardType::Instance {
                 name: _,
@@ -1765,16 +1836,7 @@ impl LedgerItem for RawCard {
     ) -> IndexSet<PropertyCache<Self>> {
         let mut out: IndexSet<PropertyCache<Self>> = Default::default();
 
-        let resolved_text = self.name_eval(ledger);
-
-        for bigram in bigrams(&resolved_text) {
-            let value = format!("{}{}", bigram[0], bigram[1]);
-            let prop = PropertyCache {
-                property: CardProperty::Bigram,
-                value,
-            };
-            out.insert(prop);
-        }
+        out.extend(self.bigram_properties(ledger));
 
         if self.data.backside().is_some_and(|b| !b.is_empty_text())
             && !matches!(&self.data, CardType::Unfinished { .. })
