@@ -1908,14 +1908,6 @@ impl LedgerItem for RawCard {
                 params.insert(param.id, param);
             }
 
-            #[allow(deprecated)]
-            CardAction::SetDefaultQuestion(default) => match &mut self.data {
-                CardType::Class {
-                    ref mut default_question,
-                    ..
-                } => *default_question = default.map(|s| TextData::from_raw(&s)),
-                _ => return Err(CardError::DefaultQuestionNotClass),
-            },
             CardAction::SetBackTime(ts) => {
                 self = self.set_backside(BackSide::Time(ts));
             }
@@ -1997,10 +1989,6 @@ impl LedgerItem for RawCard {
                 if self.namespace.is_some_and(|id| id == current) {
                     self.namespace = Some(other);
                 }
-            }
-            #[allow(deprecated)]
-            CardAction::UpsertCard(ty) => {
-                self.data = ty;
             }
             CardAction::SetNamespace(ns) => {
                 self.namespace = ns;

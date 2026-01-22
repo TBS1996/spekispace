@@ -5,7 +5,6 @@ use crate::{
     card::{AttributeId, Attrv2, BackSide, CardId, ParamAnswer, RawCard, TextData},
     metadata::Metadata,
     recall_rate::{Review, ReviewEvent},
-    CardType,
 };
 use ledgerstore::LedgerEvent;
 use omtrent::TimeStamp;
@@ -39,7 +38,6 @@ pub enum CardAction {
     /// Inserts an attribute to a class card.
     InsertAttr(Attrv2),
     /// Inserts multiple attributes to a class card. Will override existing attributes.
-    #[serde(rename = "SetAttrs", alias = "InsertAttrs")]
     SetAttrs(BTreeSet<Attrv2>),
     /// Removes an attribute from a class card.
     RemoveAttr(AttributeId),
@@ -53,7 +51,6 @@ pub enum CardAction {
     /// But for example, if you have a class `Rust module`, you need to know in which rust crate this module is defined in. So this would be a parameter.
     /// As the crate a module is defined by is an essential part of this module's identity.
     /// We do however use the same underlying struct `Attrv2` just from coincidentally they need the same data.
-    #[serde(rename = "SetParams", alias = "InsertParams")]
     SetParams(BTreeSet<Attrv2>),
     /// Removes a param from a class card.
     RemoveParam(AttributeId),
@@ -63,7 +60,6 @@ pub enum CardAction {
     /// Sets parameter values to an instance card. Will override existing param values.
     ///
     /// The class of this instance must have a parameter with the given attributeId, and the answer must be of correct type if the parameter has a backtype constraint.
-    #[serde(rename = "SetParamAnswers", alias = "InsertParamAnswers")]
     SetParamAnswers(BTreeMap<AttributeId, ParamAnswer>),
 
     /// Inserts an answer to a parameter.
@@ -115,13 +111,6 @@ pub enum CardAction {
 
     /// Creates an unfinished card.
     UnfinishedType { front: TextData },
-
-    /// Creates or updates card.
-    #[deprecated(note = "Use more specific actions, e.g., NormalType, AttributeType, etc.")]
-    UpsertCard(CardType),
-
-    #[deprecated(note = "Realized this was a silly idea")]
-    SetDefaultQuestion(Option<String>),
 }
 
 pub enum HistoryEvent {
