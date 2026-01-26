@@ -887,6 +887,53 @@ impl<T: LedgerItem> Ledger<T> {
         name.split("::").last().unwrap().to_lowercase()
     }
 
+    /// Diagnostic: Returns items grouped by their cluster (weakly connected component).
+    ///
+    /// Each inner Vec represents one cluster of interconnected items.
+    pub fn get_clusters(&self) -> Vec<Vec<T::Key>> {
+        let all_ids = self.load_ids();
+        if all_ids.is_empty() {
+            return vec![];
+        }
+
+        let mut visited: IndexSet<T::Key> = IndexSet::new();
+        let mut clusters: Vec<Vec<T::Key>> = vec![];
+
+        for id in all_ids.iter() {
+            if visited.contains(id) {
+                continue;
+            }
+
+            // Found a new cluster
+            let mut cluster = vec![];
+            let mut queue = VecDeque::new();
+            queue.push_back(*id);
+            visited.insert(*id);
+
+            while let Some(current) = queue.pop_front() {
+                cluster.push(current);
+
+                // Follow dependencies (outgoing edges)
+                for dep in self.get_reference_cache(current, None, false, false) {
+                    if visited.insert(dep) {
+                        queue.push_back(dep);
+                    }
+                }
+
+                // Follow dependents (incoming edges)
+                for dependent in self.get_reference_cache(current, None, true, false) {
+                    if visited.insert(dependent) {
+                        queue.push_back(dependent);
+                    }
+                }
+            }
+
+            clusters.push(cluster);
+        }
+
+        clusters
+    }
+
     pub fn verify_all(&self) -> Result<(), EventError<T>> {
         let all = self.load_all();
         let qty = all.len();

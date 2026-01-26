@@ -104,6 +104,10 @@ struct Cli {
     rewrite: bool,
     #[arg(long)]
     verify: bool,
+    #[arg(long)]
+    test: bool, // just whatever im testing atm
+    #[arg(long)]
+    cluster_count: bool,
 
     /// Create or modify a card by passing a JSON CardAction. Can be combined with --card to modify an existing card.
     /// Example: --action '{"NormalType":{"front":{"Raw":"What is Rust?"},"back":{"Text":{"Raw":"A systems programming language"}}}}'
@@ -345,6 +349,40 @@ fn main() {
         let path = Config::load().storage_path.clone();
         let app = speki_core::App::new(path.clone());
         app.card_provider.providers.cards.verify_all().unwrap();
+        return;
+    } else if cli.cluster_count {
+        let path = Config::load().storage_path.clone();
+        let app = speki_core::App::new(path.clone());
+        let provider = app.card_provider.clone();
+        let clusters: Vec<String> = app
+            .card_provider
+            .providers
+            .cards
+            .get_clusters()
+            .into_iter()
+            .map(|v| {
+                if v.len() > 100 {
+                    format!("{} ({} cards)", v[0], v.len())
+                } else if v.len() < 10 {
+                    let mut s = String::new();
+                    for id in &v {
+                        let card = provider
+                            .load(*id)
+                            .map(|c| c.front_side().to_string())
+                            .unwrap_or(id.to_string());
+                        s.push_str(&format!("{}, ", card));
+                    }
+                    s
+                } else {
+                    format!("{:?}", v)
+                }
+            })
+            .collect();
+        let qty = clusters.len();
+        for cluster in clusters {
+            println!("{}", cluster);
+        }
+        println!("Total clusters: {qty}");
         return;
     }
 
