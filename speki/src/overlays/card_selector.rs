@@ -210,10 +210,20 @@ impl CardSelector {
                 debug_assert!(search.len() >= 2); // By default ^ and $ are added to search
 
                 let sorted_cards: Vec<(u32, CardId)> = {
-                    use speki_core::card::search_cards_by_text;
+                    // Special case: if search is a valid UUID, return just that card if it exists
+                    let raw_search = search.trim_matches(|c| c == '^' || c == '$');
+                    if let Ok(uuid) = Uuid::parse_str(raw_search) {
+                        if cards.contains(&uuid) {
+                            vec![(1, uuid)]
+                        } else {
+                            vec![]
+                        }
+                    } else {
+                        use speki_core::card::search_cards_by_text;
 
-                    let ledger = &APP.read().0.provider.cards;
-                    search_cards_by_text(search.as_ref(), &cards, ledger, card_limit)
+                        let ledger = &APP.read().0.provider.cards;
+                        search_cards_by_text(search.as_ref(), &cards, ledger, card_limit)
+                    }
                 };
 
                 info!("{} cards sorted", sorted_cards.len());
