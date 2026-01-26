@@ -2,9 +2,9 @@ use indexmap::IndexSet;
 use std::{collections::HashMap, sync::Arc};
 
 use crate::{
-    blockchain::ItemAction, ledger_item::LedgerItem, read_ledger::ReadLedger, ActionEvalResult,
-    CardChange, EventError, ItemRefCache, ItemReference, Ledger, LedgerAction, PropertyCache,
-    SavedItem, WriteLedger,
+    blockchain::ItemAction, entry_thing::EventNode, ledger_item::LedgerItem,
+    read_ledger::ReadLedger, ActionEvalResult, CardChange, EventError, ItemExpr, ItemRefCache,
+    ItemReference, Ledger, LedgerAction, LedgerEvent, PropertyCache, SavedItem, WriteLedger,
 };
 
 /// Tracks changes to reference caches (dependencies/dependents) in a staging area
@@ -192,8 +192,49 @@ impl<T: LedgerItem> StagingLedger<T> {
         }
     }
 
+    fn verify_actions(&self) -> Result<(), EventError<T>> {
+        for (id, item) in self.modified_items.iter() {
+            if item.is_none() {
+                let dependents = self.load_expr(crate::ItemExpr::Reference {
+                    items: Box::new(ItemExpr::Item(*id)),
+                    ty: None,
+                    reversed: true,
+                    recursive: false,
+                    include_self: false,
+                });
+
+                if !dependents.is_empty() {
+                    return Err(EventError::DeletingWithDependencies(dependents.into()));
+                }
+            }
+
+            let item = self.load(*id).unwrap();
+            item.verify(self)?;
+        }
+
+        Ok(())
+    }
+
+    pub fn push_commit_node(
+        base: Ledger<T>,
+        node: EventNode<T>,
+        persist: bool,
+        verify: bool,
+    ) -> Result<Vec<CardChange<T>>, EventError<T>> {
+        let mut staging = StagingLedger::new(base);
+        for entry in node.iter() {
+            let LedgerEvent::ItemAction { id, action } = entry.clone() else {
+                panic!();
+            };
+
+            staging.push_event(ItemAction { id, action })?;
+        }
+
+        staging.commit_events(persist, verify)
+    }
+
     pub fn push_event(&mut self, event: ItemAction<T>) -> Result<(), EventError<T>> {
-        let res = self.evaluate_action(event.clone(), true, true)?;
+        let res = self.evaluate_action(event.clone(), false, true)?;
 
         if res.is_no_op {
             // Sanity check: if it's a no-op, caches shouldn't have changed
@@ -214,7 +255,15 @@ impl<T: LedgerItem> StagingLedger<T> {
         Ok(())
     }
 
-    pub fn commit_events(self) -> Result<Vec<CardChange<T>>, EventError<T>> {
+    pub fn commit_events(
+        self,
+        persist: bool,
+        verify: bool,
+    ) -> Result<Vec<CardChange<T>>, EventError<T>> {
+        if verify {
+            self.verify_actions()?;
+        }
+
         let Self {
             modified_items: items,
             added_properties,
@@ -283,7 +332,9 @@ impl<T: LedgerItem> StagingLedger<T> {
 
         let (events, changes) = events.into_iter().unzip();
 
-        base.save_events(events);
+        if persist {
+            base.save_actions(events);
+        }
 
         Ok(changes)
     }

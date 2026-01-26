@@ -9,7 +9,7 @@ use nonempty::NonEmpty;
 
 use crate::{
     node::{Node, NodeIterRef},
-    Hashed, LedgerEntry, LedgerEvent, LedgerItem,
+    Hashed, ItemAction, LedgerEntry, LedgerEvent, LedgerItem,
 };
 
 #[derive(Clone, Hash, Debug)]
@@ -35,6 +35,19 @@ impl<'a, T: LedgerItem> IntoIterator for &'a EntryNode<T> {
 impl<T: LedgerItem> EntryNode<T> {
     pub fn data_hash(&self) -> Hashed {
         self.0.last().data_hash()
+    }
+
+    pub fn to_event_node(&self) -> EventNode<T> {
+        fn convert<T: LedgerItem>(node: Node<LedgerEntry<T>>) -> Node<LedgerEvent<T>> {
+            match node {
+                Node::Leaf(entry) => Node::Leaf(entry.event),
+                Node::Branch(children) => {
+                    let converted = children.map(convert);
+                    Node::Branch(Box::new(converted))
+                }
+            }
+        }
+        EventNode(convert(self.0.clone()))
     }
 
     fn load_entry(path: &Path) -> Self
@@ -191,8 +204,13 @@ impl<T: LedgerItem> EventNode<T> {
         Self(Node::new_leaf(entry))
     }
 
-    pub fn new_branch(entries: NonEmpty<LedgerEvent<T>>) -> Self {
-        let multiple: NonEmpty<Node<LedgerEvent<T>>> = entries.map(|entry| Node::new_leaf(entry));
+    pub fn new_branch(entries: NonEmpty<ItemAction<T>>) -> Self {
+        let multiple: NonEmpty<Node<LedgerEvent<T>>> = entries.map(|entry| {
+            Node::new_leaf(LedgerEvent::ItemAction {
+                id: entry.id,
+                action: entry.action,
+            })
+        });
         Self(Node::new_branch(multiple))
     }
 }

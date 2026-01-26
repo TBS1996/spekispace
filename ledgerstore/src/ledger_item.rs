@@ -61,7 +61,10 @@ pub trait LedgerItem:
     /// Modifies `Self`.
     fn inner_run_action(self, event: Self::Modifier) -> Result<Self, Self::Error>;
 
-    fn verify(self, ledger: &impl ReadLedger<Item = Self>) -> Result<Self, EventError<Self>> {
+    fn verify_with_deps(
+        self,
+        ledger: &impl ReadLedger<Item = Self>,
+    ) -> Result<(Self, Vec<Self::Key>), EventError<Self>> {
         if let Some(cycle) = self.find_cycle(ledger) {
             return Err(EventError::Cycle(cycle));
         }
@@ -70,13 +73,19 @@ pub trait LedgerItem:
             return Err(EventError::Invariant(e));
         }
 
+        let mut deps: Vec<Self::Key> = vec![];
         for dep in self.recursive_dependents(ledger) {
+            deps.push(dep.item_id());
             if let Err(e) = dep.validate(ledger) {
                 return Err(EventError::Invariant(e));
             }
         }
 
-        Ok(self)
+        Ok((self, deps))
+    }
+
+    fn verify(self, ledger: &impl ReadLedger<Item = Self>) -> Result<Self, EventError<Self>> {
+        self.verify_with_deps(ledger).map(|(selv, _)| selv)
     }
 
     /// Modifies `Self` and checks for cycles and invariants.

@@ -10,7 +10,9 @@ use crate::{
 };
 use dioxus_logger::tracing::{info, trace};
 use indexmap::IndexSet;
-use ledgerstore::{entry_thing::EventNode, EventError, ItemExpr, LedgerEvent, PropertyCache};
+use ledgerstore::{
+    entry_thing::EventNode, EventError, ItemAction, ItemExpr, LedgerEvent, PropertyCache,
+};
 use nonempty::NonEmpty;
 use std::{
     collections::HashMap,
@@ -88,7 +90,14 @@ impl CardProvider {
                 let event: LedgerEvent<RawCard> = evs.into_iter().next().unwrap().into();
                 event_nodes.push(EventNode::new_leaf(event));
             } else {
-                let events: Vec<LedgerEvent<RawCard>> = evs.into_iter().map(|e| e.into()).collect();
+                let events: Vec<ItemAction<RawCard>> = evs
+                    .into_iter()
+                    .map(|e| match e {
+                        LedgerEvent::ItemAction { id, action } => ItemAction { id, action },
+                        LedgerEvent::SetUpstream { .. } => panic!(),
+                        LedgerEvent::DeleteSet { .. } => panic!(),
+                    })
+                    .collect();
                 let entries = NonEmpty::from_vec(events).unwrap();
                 event_nodes.push(EventNode::new_branch(entries));
             }

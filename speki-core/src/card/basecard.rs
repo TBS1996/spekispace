@@ -1135,17 +1135,15 @@ impl RawCard {
 
     fn similar_frontside(&self, ledger: &impl ReadLedger<Item = Self>) -> Vec<CardId> {
         let mut out = vec![];
+        if true {
+            return out;
+        }
         let front = self.frontside_eval(ledger);
 
         for candidate in self.similar_names(ledger) {
-            if ledger
-                .load(candidate)
-                .unwrap()
-                .frontside_eval(ledger)
-                .to_string()
-                .to_lowercase()
-                == front.to_string().to_lowercase()
-            {
+            let candidate_front = ledger.load(candidate).unwrap().frontside_eval(ledger);
+            if candidate_front.to_string().to_lowercase() == front.to_string().to_lowercase() {
+                dbg!(&candidate_front, &front);
                 out.push(candidate);
             }
         }
@@ -1168,6 +1166,9 @@ impl RawCard {
         let name = self.name_eval(ledger).to_string().to_lowercase();
         let expr = ItemExpr::Intersection(inner);
         for candidate in ledger.load_expr(expr) {
+            if candidate == self.id {
+                continue;
+            }
             if ledger
                 .load(candidate)
                 .unwrap()

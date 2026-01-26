@@ -66,6 +66,12 @@ pub enum LedgerEvent<T: LedgerItem> {
     },
 }
 
+impl<T: LedgerItem> LedgerEvent<T> {
+    pub fn is_action(&self) -> bool {
+        matches!(self, LedgerEvent::ItemAction { .. })
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct ItemAction<T: LedgerItem> {
     pub id: T::Key,

@@ -3,7 +3,7 @@ use either::Either;
 use indexmap::IndexSet;
 use nonempty::NonEmpty;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
-use std::collections::VecDeque;
+use std::collections::{BTreeSet, VecDeque};
 use std::fs::{self};
 use std::io::{self, Write};
 use std::ops::Deref;
@@ -460,7 +460,35 @@ impl<T: LedgerItem> Ledger<T> {
     /// 2. Apply evaluation result to state.
     /// 3. Save entry in list of entries.
     pub fn modify(&self, event: LedgerEvent<T>) -> Result<(), EventError<T>> {
-        self.modify_many(vec![event])
+        match event.clone() {
+            LedgerEvent::ItemAction { id, action } => {
+                let evaluation = self.evaluate_action(id, action.clone(), true, true)?;
+
+                tracing::debug!("res: {:?}", &evaluation);
+
+                if !evaluation.is_no_op {
+                    self.apply_evaluation(evaluation.clone(), true).unwrap();
+                    self.save_event(event);
+                }
+            }
+            LedgerEvent::SetUpstream {
+                commit,
+                upstream_url,
+            } => {
+                let set_upstream = SetUpstream {
+                    commit,
+                    upstream_url,
+                };
+
+                self.apply_and_save_upstream_commit(set_upstream)?;
+                self.save_event(event);
+            }
+            LedgerEvent::DeleteSet { set } => {
+                self.modify_delete_set(set)?;
+            }
+        };
+
+        Ok(())
     }
 
     /// Modify the ledger with multiple actions in one go.
@@ -491,7 +519,43 @@ impl<T: LedgerItem> Ledger<T> {
             staging.push_event(action)?;
         }
 
-        staging.commit_events()
+        staging.commit_events(true, true)
+    }
+
+    pub fn modify_delete_set(&self, set: ItemExpr<T>) -> Result<(), EventError<T>> {
+        let dependencies = self.dependents_recursive_set(set.clone());
+
+        if !dependencies.is_empty() {
+            return Err(EventError::DeletingWithDependencies(dependencies));
+        }
+
+        // Reversed because we must delete dependencies before the dependents.
+        let mut keys = self
+            .load_set_topologically_sorted(set.clone().into())
+            .into_iter()
+            .rev();
+
+        let Some(key) = keys.next() else {
+            return Ok(());
+        };
+
+        let eval_res = self.evaluate_action(key, LedgerAction::Delete, true, true)?;
+        let mut batch = BatchActionEvalResult::new(eval_res);
+
+        // todo: handle potential bug here, if an error occurs in this loop
+        // we will exit the function having modified state without saving any entries
+        // causing a mismatch between state and entries
+        for key in keys {
+            let res = self.evaluate_action(key, LedgerAction::Delete, true, true)?;
+            batch = batch.merge(res);
+        }
+
+        if !batch.is_no_op {
+            self.apply_evaluation(batch.clone(), true).unwrap();
+            self.save_event(LedgerEvent::DeleteSet { set });
+        }
+
+        Ok(())
     }
 
     pub fn modify_many(&self, events: Vec<LedgerEvent<T>>) -> Result<(), EventError<T>> {
@@ -565,21 +629,38 @@ impl<T: LedgerItem> Ledger<T> {
         Ok(())
     }
 
+    pub fn save_actions(&self, actions: Vec<ItemAction<T>>) {
+        if actions.is_empty() {
+            return;
+        }
+        let entries = NonEmpty::from_vec(actions).unwrap();
+        let entry = EventNode::new_branch(entries);
+        let hash = self.entries.save_entry(entry);
+        self.set_ledger_hash(hash);
+    }
+
     pub fn save_events(&self, events: Vec<impl Into<LedgerEvent<T>>>) {
         let events: Vec<LedgerEvent<T>> = events.into_iter().map(|e| e.into()).collect();
-
         if events.is_empty() {
             return;
-        } else if events.len() == 1 {
-            let entry = events.into_iter().next().unwrap();
-            let entry = EventNode::new_leaf(entry);
-            let hashed = self.entries.save_entry(entry);
-            self.set_ledger_hash(hashed);
-        } else {
-            let entries = NonEmpty::from_vec(events).unwrap();
-            let entry = EventNode::new_branch(entries);
-            let hash = self.entries.save_entry(entry);
-            self.set_ledger_hash(hash);
+        }
+        let mut actions: Vec<ItemAction<T>> = vec![];
+
+        for event in events {
+            if !event.is_action() && !actions.is_empty() {
+                let taken = std::mem::take(&mut actions);
+                self.save_actions(taken);
+            } else if let LedgerEvent::ItemAction { id, action } = event {
+                actions.push(ItemAction { id, action });
+            } else {
+                let entry = EventNode::new_leaf(event);
+                let hashed = self.entries.save_entry(entry);
+                self.set_ledger_hash(hashed);
+            }
+        }
+
+        if !actions.is_empty() {
+            self.save_actions(actions);
         }
     }
 
@@ -811,12 +892,24 @@ impl<T: LedgerItem> Ledger<T> {
         let qty = all.len();
         println!("Verifying {} items...", qty);
 
-        for item in all {
+        let mut seen: BTreeSet<T::Key> = BTreeSet::new();
+        for (idx, item) in all.into_iter().enumerate() {
+            if seen.contains(&item.item_id()) {
+                println!("skipping..");
+                continue;
+            }
+
             let id = item.item_id();
-            let res = item.clone_inner().verify(self);
-            if res.is_err() {
-                dbg!(id);
-                res.unwrap();
+            dbg!(id, idx);
+            match item.clone_inner().verify_with_deps(self) {
+                Ok((_, deps)) => {
+                    seen.extend(deps);
+                }
+                Err(e) => {
+                    dbg!(id);
+                    dbg!(e);
+                    panic!();
+                }
             }
         }
 
@@ -851,11 +944,30 @@ impl<T: LedgerItem> Ledger<T> {
                 dbg!(idx);
             };
 
+            if entry.is_branch() {
+                let event_node = entry.to_event_node();
+                for ch in
+                    StagingLedger::push_commit_node(self.clone(), event_node, false, false).unwrap()
+                {
+                    match ch {
+                        CardChange::Created(item) | CardChange::Modified(item) => {
+                            let key = item.item_id();
+                            items.insert(key, item);
+                        }
+                        CardChange::Deleted(key) => {
+                            items.remove(&key);
+                        }
+                        CardChange::Unchanged(_) => {}
+                    }
+                }
+                continue;
+            }
+
             for event in &entry {
                 match event.event.clone() {
                     LedgerEvent::ItemAction { id, action } => {
                         let evaluation =
-                            match self.evaluate_action(id, action.clone(), true, apply_cache) {
+                            match self.evaluate_action(id, action.clone(), false, apply_cache) {
                                 Ok(eval) => eval,
                                 Err(e) => {
                                     dbg!(e);
@@ -914,7 +1026,7 @@ impl<T: LedgerItem> Ledger<T> {
             self.apply_caches(items);
         }
 
-        self.verify_all().unwrap();
+        simpletime::timed!(self.verify_all().unwrap());
 
         if let Some(hash) = self.entries.current_hash() {
             info!("{} ledger hash after apply: {}", Self::item_name(), hash);

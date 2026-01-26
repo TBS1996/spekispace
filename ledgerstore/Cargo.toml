@@ -19,3 +19,4 @@ ureq.workspace = true
 semver.workspace = true
 nonempty.workspace = true
 indexmap.workspace = true
+simpletime.workspace = true
