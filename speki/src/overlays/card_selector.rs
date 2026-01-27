@@ -210,15 +210,49 @@ impl CardSelector {
                 debug_assert!(search.len() >= 2); // By default ^ and $ are added to search
 
                 let sorted_cards: Vec<(u32, CardId)> = {
-                    // Special case: if search is a valid UUID, return just that card if it exists
                     let raw_search = search.trim_matches(|c| c == '^' || c == '$');
+
+                    // Special case 1: if search is a valid UUID, return just that card if it exists
                     if let Ok(uuid) = Uuid::parse_str(raw_search) {
                         if cards.contains(&uuid) {
                             vec![(1, uuid)]
                         } else {
                             vec![]
                         }
-                    } else {
+                    }
+                    // Special case 2: if search is empty, show recent items first
+                    else if raw_search.is_empty() {
+                        let ledger = &APP.read().0.provider.cards;
+                        let recent_items = ledger.load_recent_items();
+
+                        // Filter to only include items in the collection
+                        let mut recent_in_collection: Vec<(u32, CardId)> = recent_items
+                            .into_iter()
+                            .filter(|id| cards.contains(id))
+                            .take(card_limit)
+                            .enumerate()
+                            .map(|(idx, id)| ((card_limit - idx) as u32, id))
+                            .collect();
+
+                        // If we have fewer than card_limit, fill with remaining cards from collection
+                        if recent_in_collection.len() < card_limit {
+                            let recent_ids: indexmap::IndexSet<_> =
+                                recent_in_collection.iter().map(|(_, id)| *id).collect();
+
+                            let remaining: Vec<(u32, CardId)> = cards
+                                .iter()
+                                .filter(|id| !recent_ids.contains(*id))
+                                .take(card_limit - recent_in_collection.len())
+                                .map(|id| (0, *id))
+                                .collect();
+
+                            recent_in_collection.extend(remaining);
+                        }
+
+                        recent_in_collection
+                    }
+                    // Normal text search
+                    else {
                         use speki_core::card::search_cards_by_text;
 
                         let ledger = &APP.read().0.provider.cards;

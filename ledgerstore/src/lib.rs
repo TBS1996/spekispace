@@ -308,6 +308,7 @@ pub struct Ledger<T: LedgerItem> {
     local: Local<T>,
     cache: Arc<RwLock<HashMap<T::Key, SavedItem<T>>>>,
     full_cache: Arc<AtomicBool>,
+    recent_items_path: Arc<PathBuf>,
 }
 
 impl<T: LedgerItem> Ledger<T> {
@@ -334,6 +335,7 @@ impl<T: LedgerItem> Ledger<T> {
         let entries = BlockChain::new(entries);
         let root = root.join("state");
         let ledger_hash = root.join("applied");
+        let recent_items_path = root.join("recent_items");
 
         let remote = Remote::new(&root);
         //let _ = remote.hard_reset_current();
@@ -344,6 +346,7 @@ impl<T: LedgerItem> Ledger<T> {
             remote: Arc::new(remote),
             cache: Default::default(),
             full_cache: Arc::new(AtomicBool::new(false)),
+            recent_items_path: Arc::new(recent_items_path),
             local: Local {
                 inner: FsReadLedger::new(root),
             },
@@ -469,6 +472,12 @@ impl<T: LedgerItem> Ledger<T> {
                 if !evaluation.is_no_op {
                     self.apply_evaluation(evaluation.clone(), true).unwrap();
                     self.save_event(event);
+
+                    // Track recently modified item and its direct dependencies
+                    let mut recent_items = vec![id];
+                    let deps = self.get_reference_cache(id, None, false, false);
+                    recent_items.extend(deps);
+                    self.append_recent_items(recent_items);
                 }
             }
             LedgerEvent::SetUpstream {
@@ -519,7 +528,21 @@ impl<T: LedgerItem> Ledger<T> {
             staging.push_event(action)?;
         }
 
-        staging.commit_events(true, true)
+        let changes = staging.commit_events(true, true)?;
+
+        // Track recently modified items and their direct dependencies
+        let mut recent_items = Vec::new();
+        for change in &changes {
+            let id = change.key();
+            recent_items.push(id);
+
+            // Add direct dependencies of modified items
+            let deps = self.get_reference_cache(id, None, false, false);
+            recent_items.extend(deps);
+        }
+        self.append_recent_items(recent_items);
+
+        Ok(changes)
     }
 
     pub fn modify_delete_set(&self, set: ItemExpr<T>) -> Result<(), EventError<T>> {
@@ -885,6 +908,41 @@ impl<T: LedgerItem> Ledger<T> {
 
     fn formatter(name: &str) -> String {
         name.split("::").last().unwrap().to_lowercase()
+    }
+
+    /// Track recently modified/referenced items for quick access.
+    /// Keeps the last 100 items that were either modified or referenced as dependencies.
+    fn append_recent_items(&self, items: impl IntoIterator<Item = T::Key>) {
+        let items: Vec<T::Key> = items.into_iter().collect();
+        if items.is_empty() {
+            return;
+        }
+
+        // Load existing recent items
+        let mut recent = self.load_recent_items();
+
+        // Add new items to the front (most recent first)
+        for item in items.into_iter().rev() {
+            // Remove if already exists to avoid duplicates
+            recent.retain(|&x| x != item);
+            recent.insert(0, item);
+        }
+
+        // Keep only last 100
+        recent.truncate(100);
+
+        // Write back
+        if let Ok(content) = serde_json::to_string(&recent) {
+            let _ = fs::write(&*self.recent_items_path, content);
+        }
+    }
+
+    /// Load the list of recently modified/referenced items (most recent first).
+    pub fn load_recent_items(&self) -> Vec<T::Key> {
+        fs::read_to_string(&*self.recent_items_path)
+            .ok()
+            .and_then(|content| serde_json::from_str(&content).ok())
+            .unwrap_or_default()
     }
 
     /// Diagnostic: Returns items grouped by their cluster (weakly connected component).
