@@ -5,7 +5,7 @@ use crate::read_ledger::{FsReadLedger, ReadLedger};
 use crate::{LedgerItem, PropertyCache};
 
 #[derive(Clone)]
-pub(crate) struct Local<T: LedgerItem> {
+pub struct Local<T: LedgerItem> {
     pub inner: FsReadLedger<T>,
 }
 

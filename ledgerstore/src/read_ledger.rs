@@ -1,4 +1,5 @@
 use indexmap::IndexSet;
+use std::collections::{HashMap, VecDeque};
 use std::fs::{self};
 use std::io::ErrorKind;
 use std::path::PathBuf;
@@ -195,6 +196,67 @@ pub trait ReadLedger {
                 out
             }
         }
+    }
+
+    /// Returns a set where all the keys are sorted so that no item depends on a item to its right.
+    fn load_set_topologically_sorted(
+        &self,
+        set: ItemExpr<Self::Item>,
+    ) -> Vec<<Self::Item as LedgerItem>::Key> {
+        let keys = self.load_expr(set);
+        self.topological_sort(keys.into_iter().collect())
+    }
+
+    /// Sorts all the cards so that no item in the output vector depends on a item to "the right".
+    fn topological_sort(
+        &self,
+        items: Vec<<Self::Item as LedgerItem>::Key>,
+    ) -> Vec<<Self::Item as LedgerItem>::Key> {
+        let in_set: IndexSet<<Self::Item as LedgerItem>::Key> = items.iter().cloned().collect();
+        let mut indeg: HashMap<<Self::Item as LedgerItem>::Key, usize> =
+            items.iter().cloned().map(|k| (k, 0)).collect();
+        let mut adj: HashMap<
+            <Self::Item as LedgerItem>::Key,
+            Vec<<Self::Item as LedgerItem>::Key>,
+        > = HashMap::new();
+
+        // Build graph (dep -> dependents) and indegrees within the induced subgraph.
+        for item in &in_set {
+            for d in self.recursive_dependencies(*item) {
+                // Skip self-loops - items are allowed to depend on themselves
+                if d == *item {
+                    continue;
+                }
+                if in_set.contains(&d) {
+                    adj.entry(d.clone()).or_default().push(item.clone());
+                    *indeg.get_mut(item).unwrap() += 1;
+                }
+            }
+        }
+
+        // Stable zero-indegree queue seeded by original order.
+        let mut q: VecDeque<<Self::Item as LedgerItem>::Key> = items
+            .iter()
+            .filter(|k| indeg.get(*k) == Some(&0))
+            .cloned()
+            .collect();
+
+        let mut out = Vec::with_capacity(items.len());
+        while let Some(u) = q.pop_front() {
+            out.push(u.clone());
+            if let Some(dependents) = adj.remove(&u) {
+                for v in dependents {
+                    let e = indeg.get_mut(&v).unwrap();
+                    *e -= 1;
+                    if *e == 0 {
+                        q.push_back(v);
+                    }
+                }
+            }
+        }
+
+        debug_assert_eq!(out.len(), items.len(), "DAG assumed; cycle detected");
+        out
     }
 }
 

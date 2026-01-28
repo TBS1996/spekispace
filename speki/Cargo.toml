@@ -34,7 +34,6 @@ sha2.workspace = true
 indexmap.workspace = true
 
 
-#ledgerstore = "0.1.2"
 ledgerstore.workspace = true
 
 speki-core = { path = "../speki-core" }

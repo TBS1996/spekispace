@@ -37,6 +37,7 @@ pub use remote::ChangeSet;
 
 pub use item::SavedItem;
 pub use ledger_item::LedgerItem;
+pub use read_ledger::FsReadLedger;
 pub use read_ledger::ReadLedger;
 pub use staging::StagingLedger;
 pub use write_ledger::WriteLedger;
@@ -189,7 +190,6 @@ pub type LedgerHash = Hashed;
 pub type CacheHash = Hashed;
 
 use crate::entry_thing::EventNode;
-use crate::read_ledger::FsReadLedger;
 use crate::remote::Remote;
 
 #[derive(Debug, Clone)]
@@ -305,7 +305,7 @@ pub struct Ledger<T: LedgerItem> {
     entries: BlockChain<T>,
     ledger_hash: Arc<PathBuf>,
     remote: Arc<Remote<T>>,
-    local: Local<T>,
+    pub local: Local<T>,
     cache: Arc<RwLock<HashMap<T::Key, SavedItem<T>>>>,
     full_cache: Arc<AtomicBool>,
     recent_items_path: Arc<PathBuf>,
@@ -372,57 +372,6 @@ impl<T: LedgerItem> Ledger<T> {
             }
         }
         None
-    }
-
-    /// Returns a set where all the keys are sorted so that no item depends on a item to its right.
-    pub fn load_set_topologically_sorted(&self, set: ItemExpr<T>) -> Vec<T::Key> {
-        let keys = self.load_expr(set);
-        self.topological_sort(keys.into_iter().collect())
-    }
-
-    /// Sorts all the cards so that no item in the output vector depends on a item to "the right".
-    pub fn topological_sort(&self, items: Vec<T::Key>) -> Vec<T::Key> {
-        let in_set: IndexSet<T::Key> = items.iter().cloned().collect();
-        let mut indeg: HashMap<T::Key, usize> = items.iter().cloned().map(|k| (k, 0)).collect();
-        let mut adj: HashMap<T::Key, Vec<T::Key>> = HashMap::new();
-
-        // Build graph (dep -> dependents) and indegrees within the induced subgraph.
-        for item in &in_set {
-            for d in self.dependencies_recursive(*item) {
-                // Skip self-loops - items are allowed to depend on themselves
-                if d == *item {
-                    continue;
-                }
-                if in_set.contains(&d) {
-                    adj.entry(d.clone()).or_default().push(item.clone());
-                    *indeg.get_mut(item).unwrap() += 1;
-                }
-            }
-        }
-
-        // Stable zero-indegree queue seeded by original order.
-        let mut q: VecDeque<T::Key> = items
-            .iter()
-            .filter(|k| indeg.get(*k) == Some(&0))
-            .cloned()
-            .collect();
-
-        let mut out = Vec::with_capacity(items.len());
-        while let Some(u) = q.pop_front() {
-            out.push(u.clone());
-            if let Some(dependents) = adj.remove(&u) {
-                for v in dependents {
-                    let e = indeg.get_mut(&v).unwrap();
-                    *e -= 1;
-                    if *e == 0 {
-                        q.push_back(v);
-                    }
-                }
-            }
-        }
-
-        debug_assert_eq!(out.len(), items.len(), "DAG assumed; cycle detected");
-        out
     }
 
     pub fn latest_upstream_commit(

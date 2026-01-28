@@ -12,14 +12,84 @@ use dioxus_logger::tracing::{info, trace};
 use indexmap::IndexSet;
 use ledgerstore::{
     entry_thing::EventNode, EventError, ItemAction, ItemExpr, LedgerEvent, PropertyCache,
+    ReadLedger,
 };
 use nonempty::NonEmpty;
 use std::{
     collections::HashMap,
     fmt::Debug,
-    path::PathBuf,
+    path::{Path, PathBuf},
     sync::{Arc, RwLock},
 };
+
+pub fn event_nodes(
+    provider: &impl ReadLedger<Item = RawCard>,
+) -> Result<Vec<EventNode<RawCard>>, std::io::Error> {
+    let cards = provider.load_expr(ItemExpr::All);
+    let cards: Vec<CardId> = cards.into_iter().collect();
+    let ordered = provider.topological_sort(cards);
+    let qty = ordered.len();
+
+    let mut event_nodes: Vec<EventNode<RawCard>> = vec![];
+
+    // Each card's events live in its own node
+    for (idx, card) in ordered.into_iter().enumerate() {
+        if idx % 100 == 0 {
+            println!("Processing card {}/{}", idx + 1, qty);
+        }
+
+        let card = provider.load(card).unwrap();
+        let evs = card.into_events();
+
+        if evs.is_empty() {
+            continue;
+        }
+
+        if evs.len() == 1 {
+            let event: LedgerEvent<RawCard> = evs.into_iter().next().unwrap().into();
+            event_nodes.push(EventNode::new_leaf(event));
+        } else {
+            let events: Vec<ItemAction<RawCard>> = evs
+                .into_iter()
+                .map(|e| match e {
+                    LedgerEvent::ItemAction { id, action } => ItemAction { id, action },
+                    LedgerEvent::SetUpstream { .. } => panic!(),
+                    LedgerEvent::DeleteSet { .. } => panic!(),
+                })
+                .collect();
+            let entries = NonEmpty::from_vec(events).unwrap();
+            event_nodes.push(EventNode::new_branch(entries));
+        }
+    }
+
+    Ok(event_nodes)
+}
+
+pub fn save_event_nodes(
+    event_nodes: Vec<EventNode<RawCard>>,
+    path: &Path,
+) -> Result<(), std::io::Error> {
+    std::fs::create_dir_all(&path)?;
+
+    // Check if directory is not empty
+    if path.read_dir()?.next().is_some() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::AlreadyExists,
+            "Directory already exists and is not empty",
+        ));
+    }
+
+    // Save all event nodes
+    if !event_nodes.is_empty() {
+        let mut prev: Option<ledgerstore::LedgerEntry<RawCard>> = None;
+        for (idx, node) in event_nodes.into_iter().enumerate() {
+            let entry_node = node.save(&path, idx, prev.clone());
+            prev = Some(entry_node.last().clone());
+        }
+    }
+
+    Ok(())
+}
 
 #[derive(Clone)]
 pub struct CardProvider {
@@ -44,21 +114,6 @@ impl CardProvider {
     }
 
     pub fn rewrite_ledger(&self, path: PathBuf) -> Result<(), std::io::Error> {
-        std::fs::create_dir_all(&path)?;
-
-        // Check if directory is not empty
-        if path.read_dir()?.next().is_some() {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::AlreadyExists,
-                "Directory already exists and is not empty",
-            ));
-        }
-
-        let cards = self.providers.cards.local_load_expr(ItemExpr::All);
-        let cards: Vec<CardId> = cards.into_iter().collect();
-        let ordered = self.providers.cards.topological_sort(cards);
-        let qty = ordered.len();
-
         let mut event_nodes: Vec<EventNode<RawCard>> = vec![];
 
         // Add SetUpstream as first node if commit and upstream are available from ledger
@@ -70,49 +125,10 @@ impl CardProvider {
                 commit,
                 upstream_url,
             };
-            event_nodes.push(EventNode::new_leaf(upstream_event));
+            event_nodes.insert(0, EventNode::new_leaf(upstream_event));
         }
 
-        // Each card's events live in its own node
-        for (idx, card) in ordered.into_iter().enumerate() {
-            if idx % 100 == 0 {
-                println!("Processing card {}/{}", idx + 1, qty);
-            }
-
-            let card = Arc::unwrap_or_clone(self.providers.cards.load(card).unwrap());
-            let evs = card.into_events();
-
-            if evs.is_empty() {
-                continue;
-            }
-
-            if evs.len() == 1 {
-                let event: LedgerEvent<RawCard> = evs.into_iter().next().unwrap().into();
-                event_nodes.push(EventNode::new_leaf(event));
-            } else {
-                let events: Vec<ItemAction<RawCard>> = evs
-                    .into_iter()
-                    .map(|e| match e {
-                        LedgerEvent::ItemAction { id, action } => ItemAction { id, action },
-                        LedgerEvent::SetUpstream { .. } => panic!(),
-                        LedgerEvent::DeleteSet { .. } => panic!(),
-                    })
-                    .collect();
-                let entries = NonEmpty::from_vec(events).unwrap();
-                event_nodes.push(EventNode::new_branch(entries));
-            }
-        }
-
-        // Save all event nodes
-        if !event_nodes.is_empty() {
-            let mut prev: Option<ledgerstore::LedgerEntry<RawCard>> = None;
-            for (idx, node) in event_nodes.into_iter().enumerate() {
-                let entry_node = node.save(&path, idx, prev.clone());
-                prev = Some(entry_node.last().clone());
-            }
-        }
-
-        Ok(())
+        save_event_nodes(event_nodes, &path)
     }
 
     pub fn load_metadata(&self, id: CardId) -> Option<Arc<Metadata>> {

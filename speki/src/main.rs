@@ -13,7 +13,7 @@ use clap::{Args, Parser, ValueEnum};
 use dioxus::prelude::*;
 use dioxus_logger::tracing::{info, Level};
 use indexmap::IndexSet;
-use ledgerstore::{ItemAction, ItemExpr, Ledger};
+use ledgerstore::{FsReadLedger, ItemAction, ItemExpr, Ledger};
 use pages::ReviewPage;
 use serde::Deserialize;
 use serde_json::json;
@@ -384,6 +384,14 @@ fn main() {
         }
         println!("Total clusters: {qty}");
         return;
+    } else if cli.test {
+        let p = PathBuf::from("/home/tor/.local/share/speki_graph");
+        let ledger: FsReadLedger<RawCard> = FsReadLedger::new(p);
+
+        let output = PathBuf::from("/home/tor/remote_entries");
+
+        let evs = speki_core::card_provider::event_nodes(&ledger).unwrap();
+        speki_core::card_provider::save_event_nodes(evs, &output).unwrap();
     }
 
     info!("starting speki");
