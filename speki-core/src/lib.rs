@@ -14,6 +14,8 @@ use recall_rate::History;
 use serde::Deserialize;
 use serde::Serialize;
 use set::Set;
+use sha2::Digest;
+use sha2::Sha256;
 use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::fmt::Display;
@@ -26,6 +28,7 @@ use textplots::Chart;
 use textplots::Plot;
 use textplots::Shape;
 use tracing::trace;
+use uuid::Uuid;
 
 pub mod audio;
 pub mod card;
@@ -1173,57 +1176,196 @@ pub fn as_graph(app: &App) -> String {
 }
 
 pub mod graphviz {
-    use indexmap::IndexSet;
+    use ledgerstore::{LedgerItem, ReadLedger};
 
     use super::*;
 
-    pub fn export_cards(cards: impl IntoIterator<Item = Arc<Card>>) -> String {
-        let mut dot = String::from("digraph G {\nranksep=2.0;\nrankdir=BT;\n");
-        let mut relations: IndexSet<String> = IndexSet::default();
+    use std::collections::{HashMap, HashSet};
 
-        for card in cards {
-            let label = card
-                .print()
-                .to_string()
-                .replace(")", "")
-                .replace("(", "")
-                .replace("\"", "");
+    type NodeId = CardId;
 
-            let color = match card.recall_rate() {
-                _ if !card.is_finished() => yellow_color(),
-                Some(rate) => rate_to_color(rate as f64 * 100.),
-                None => cyan_color(),
-            };
+    struct Group {
+        id: Uuid,
+        members: Vec<CardId>,
+    }
 
-            match card.recall_rate() {
-                Some(rate) => {
-                    let recall_rate = rate * 100.;
-                    let maturity = card.maturity_days().unwrap_or_default();
-                    dot.push_str(&format!(
-                        "    \"{}\" [label=\"{} ({:.0}%/{:.0}d)\", style=filled, fillcolor=\"{}\"];\n",
-                        card.id(),
-                        label,
-                        recall_rate,
-                        maturity,
-                        color
-                    ));
-                }
-                None => {
-                    dot.push_str(&format!(
-                        "    \"{}\" [label=\"{} \", style=filled, fillcolor=\"{}\"];\n",
-                        card.id(),
-                        label,
-                        color
-                    ));
-                }
-            }
+    struct Node {
+        id: NodeId,
+        label: String,
+        dependencies: Vec<CardId>,
+        is_group: bool,
+    }
 
-            // Create edges for dependencies, also enclosing IDs in quotes
-            for child_id in card.dependencies() {
-                relations.insert(format!("    \"{}\" -> \"{}\";\n", card.id(), child_id));
+    fn group_nodes(nodes: HashMap<NodeId, Node>) -> (HashMap<NodeId, Node>, bool) {
+        const MAX_DEPENDENTS: usize = 50;
+
+        // Step 1: Count how many nodes have each unique dependency SET
+        let mut depmap: HashMap<Vec<CardId>, usize> = HashMap::new();
+        for node in nodes.values() {
+            *depmap.entry(node.dependencies.clone()).or_default() += 1;
+        }
+
+        // Step 2: Identify dependency sets that should be grouped
+        let mut dep_sets_to_group: HashSet<Vec<CardId>> = HashSet::new();
+        for (dep_set, count) in &depmap {
+            // Don't group nodes with no dependencies (top-level nodes are independent)
+            if !dep_set.is_empty() && *count > MAX_DEPENDENTS {
+                dep_sets_to_group.insert(dep_set.clone());
             }
         }
 
+        // If nothing to group, return unchanged
+        if dep_sets_to_group.is_empty() {
+            return (nodes, false);
+        }
+
+        // Step 3: Create groups (helper struct) and build groups_map
+        let mut groups: HashMap<Vec<CardId>, Group> = HashMap::new();
+        let mut groups_map: HashMap<NodeId, NodeId> = HashMap::new();
+
+        for dep_set in &dep_sets_to_group {
+            let group_id = uuid_from_hash(format!("{:?}", dep_set));
+            let mut members = Vec::new();
+
+            for node in nodes.values() {
+                if &node.dependencies == dep_set {
+                    members.push(node.id);
+                    groups_map.insert(node.id.clone(), group_id);
+                }
+            }
+
+            groups.insert(
+                dep_set.clone(),
+                Group {
+                    id: group_id,
+                    members,
+                },
+            );
+        }
+
+        // Step 4: Build new nodemap
+        let mut new_nodes: HashMap<NodeId, Node> = HashMap::new();
+
+        // Add group nodes (converted to regular Nodes)
+        for (dep_set, group) in groups {
+            // Remap group dependencies too (in case they point to grouped nodes)
+            let mut remapped_deps: HashSet<CardId> = HashSet::new();
+            for dep in &dep_set {
+                if let Some(group_id) = groups_map.get(dep) {
+                    remapped_deps.insert(*group_id);
+                } else {
+                    remapped_deps.insert(*dep);
+                }
+            }
+
+            let mut deps_vec: Vec<CardId> = remapped_deps.into_iter().collect();
+            deps_vec.sort();
+
+            // Check if all dependencies are non-group nodes (for label formatting)
+            let all_deps_are_nodes = deps_vec
+                .iter()
+                .all(|dep| nodes.get(dep).map(|n| !n.is_group).unwrap_or(false));
+
+            let label = if all_deps_are_nodes && !deps_vec.is_empty() {
+                let dep_labels: Vec<String> = deps_vec
+                    .iter()
+                    .filter_map(|dep| nodes.get(dep).map(|n| n.label.clone()))
+                    .collect();
+                if dep_labels.len() > 1 {
+                    format!(
+                        "{} cards with dependencies: {}",
+                        group.members.len(),
+                        dep_labels.join(", ")
+                    )
+                } else {
+                    format!(
+                        "{} cards with dependency: {}",
+                        group.members.len(),
+                        dep_labels.join(", ")
+                    )
+                }
+            } else {
+                format!("{} cards", group.members.len())
+            };
+
+            new_nodes.insert(
+                group.id,
+                Node {
+                    id: group.id,
+                    label,
+                    dependencies: deps_vec,
+                    is_group: true,
+                },
+            );
+        }
+
+        // Add ungrouped nodes with remapped dependencies
+        for node in nodes.values() {
+            if groups_map.contains_key(&node.id) {
+                continue; // Skip nodes that got grouped
+            }
+
+            // Remap dependencies and deduplicate
+            let mut remapped_deps: HashSet<CardId> = HashSet::new();
+            for dep in &node.dependencies {
+                if let Some(group_id) = groups_map.get(dep) {
+                    // Dependency points to a grouped node, use group instead
+                    remapped_deps.insert(*group_id);
+                } else {
+                    // Keep original dependency
+                    remapped_deps.insert(*dep);
+                }
+            }
+
+            let mut deps_vec: Vec<CardId> = remapped_deps.into_iter().collect();
+            deps_vec.sort();
+
+            new_nodes.insert(
+                node.id,
+                Node {
+                    id: node.id,
+                    label: node.label.clone(),
+                    dependencies: deps_vec,
+                    is_group: node.is_group,
+                },
+            );
+        }
+
+        (new_nodes, true)
+    }
+
+    fn create_dotgraph(nodes: &HashMap<NodeId, Node>) -> String {
+        use indexmap::IndexSet;
+
+        let mut dot = String::from("digraph G {\nranksep=2.0;\nrankdir=BT;\n");
+        let mut relations: IndexSet<String> = IndexSet::default();
+
+        // Create nodes in the graph
+        for node in nodes.values() {
+            // Escape label for DOT format
+            let label = node.label.replace("\"", "\\\"").replace("\n", "\\n");
+
+            // Groups have "X cards" label format, regular nodes use their label
+            let (shape, color) = if node.is_group {
+                ("box", "#FFCCCC")
+            } else {
+                ("ellipse", "#CCDDFF")
+            };
+
+            dot.push_str(&format!(
+                "    \"{}\" [label=\"{}\", shape={}, style=filled, fillcolor=\"{}\"];\n",
+                node.id, label, shape, color
+            ));
+        }
+
+        // Create edges (dependencies)
+        for node in nodes.values() {
+            for dep in &node.dependencies {
+                relations.insert(format!("    \"{}\" -> \"{}\";\n", node.id, dep));
+            }
+        }
+
+        // Add all relations to dot string
         for rel in relations {
             dot.push_str(&rel);
         }
@@ -1232,23 +1374,75 @@ pub mod graphviz {
         dot
     }
 
+    pub fn export_cards(ledger: &Ledger<RawCard>) -> String {
+        // ALGORITHM (multi-pass to handle cascading groups):
+        //
+        // group_pass(nodes: HashMap<NodeId, Node>) -> (HashMap<NodeId, Node>, bool):
+        //   1. Count how many nodes have each unique dependency SET
+        //   2. For dependency sets with >MAX_DEPENDENTS occurrences, create groups:
+        //      - group_id = UUID hashed from the dependency set
+        //      - Build groups_map: grouped_node_id -> group_id
+        //   3. Return new nodemap:
+        //      - Group nodes (as regular Nodes): id=group_id, dependencies=shared dep set
+        //      - Ungrouped nodes: dependencies remapped via groups_map (deduplicated)
+        //   4. Return (new_nodemap, groups_were_created)
+        //
+        // Main loop:
+        //   loop:
+        //     (nodes, changed) = group_pass(nodes)
+        //     if !changed: break
+        //
+        // This handles cascading: after german nouns group, their attribute cards
+        // now share dependencies and can be grouped in the next pass.
+
+        info!("exporting graphviz");
+        let mut nodes: HashMap<NodeId, Node> = HashMap::new();
+
+        info!("loading cards into nodes");
+        for card_id in ledger.load_set_topologically_sorted(ledgerstore::ItemExpr::All) {
+            let card = ledger.load(card_id).unwrap();
+            let mut deps: Vec<_> = card.dependencies().into_iter().collect();
+            deps.sort();
+            let node = Node {
+                id: card_id,
+                label: card.frontside_eval(ledger).to_string(),
+                dependencies: deps,
+                is_group: false,
+            };
+            nodes.insert(card_id, node);
+        }
+
+        // Repeatedly group nodes until no more groups are created
+        loop {
+            info!("grouping pass");
+            let (new_nodes, changed) = group_nodes(nodes);
+            nodes = new_nodes;
+            if !changed {
+                info!("no more groups created, finishing");
+                break;
+            }
+        }
+        create_dotgraph(&nodes)
+    }
+
     pub fn export(app: &App) -> String {
-        let cards = app.load_all_cards();
-        export_cards(cards)
+        export_cards(&app.provider.cards)
     }
+}
 
-    // Convert recall rate to a color, from red to green
-    fn rate_to_color(rate: f64) -> String {
-        let red = ((1.0 - rate / 100.0) * 255.0) as u8;
-        let green = (rate / 100.0 * 255.0) as u8;
-        format!("#{red:02X}{green:02X}00") // RGB color in hex
-    }
+/// Generate a UUID from the SHA-256 hash of the input data
+///
+/// Kinda hacky, since uuids are supposed to be random.
+pub fn uuid_from_hash(input: impl AsRef<[u8]>) -> Uuid {
+    let hash = Sha256::digest(input.as_ref());
 
-    fn cyan_color() -> String {
-        String::from("#00FFFF")
-    }
+    let mut bytes = [0u8; 16];
+    bytes.copy_from_slice(&hash[..16]);
 
-    fn yellow_color() -> String {
-        String::from("#FFFF00")
-    }
+    // RFC 4122 variant
+    bytes[8] = (bytes[8] & 0x3f) | 0x80;
+    // Version 4 layout
+    bytes[6] = (bytes[6] & 0x0f) | 0x40;
+
+    Uuid::from_bytes(bytes)
 }

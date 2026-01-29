@@ -7,9 +7,9 @@ use std::vec::Vec;
 use std::{collections::HashMap, fmt::Debug, hash::Hash};
 use tracing::trace;
 
+use crate::ItemReference;
 use crate::ReadLedger;
 use crate::{CacheKey, EventError, ItemRefCache, PropertyCache};
-use crate::{ItemExpr, ItemReference};
 
 /// Represents how a ledger mutates or creates an item.
 pub trait LedgerItem:

@@ -17,7 +17,6 @@ use ledgerstore::{FsReadLedger, ItemAction, ItemExpr, Ledger};
 use pages::ReviewPage;
 use serde::Deserialize;
 use serde_json::json;
-use sha2::{Digest, Sha256};
 use speki_core::{
     card::{
         bigrams_expression_and, AttrBackType, Attrv2, BackSide, CType, CardId, RawCard, TextData,
@@ -29,10 +28,9 @@ use speki_core::{
         ReviewEvent, FSRS,
     },
     set::{Input, Set, SetAction, SetEvent, SetId},
-    CardProperty, Config, RecallChoice, SimpleRecall,
+    uuid_from_hash, CardProperty, Config, RecallChoice, SimpleRecall,
 };
 use std::fs;
-use uuid::Uuid;
 
 use crate::{
     overlays::OverlayEnum,
@@ -108,6 +106,8 @@ struct Cli {
     test: bool, // just whatever im testing atm
     #[arg(long)]
     cluster_count: bool,
+    #[arg(long)]
+    export: bool,
 
     /// Create or modify a card by passing a JSON CardAction. Can be combined with --card to modify an existing card.
     /// Example: --action '{"NormalType":{"front":{"Raw":"What is Rust?"},"back":{"Text":{"Raw":"A systems programming language"}}}}'
@@ -392,6 +392,17 @@ fn main() {
 
         let evs = speki_core::card_provider::event_nodes(&ledger).unwrap();
         speki_core::card_provider::save_event_nodes(evs, &output).unwrap();
+        return;
+    } else if cli.export {
+        let path = Config::load().storage_path.clone();
+        let app = speki_core::App::new(path.clone());
+        let dot = speki_core::as_graph(&app);
+        let output_path = std::env::current_dir()
+            .expect("Failed to get current directory")
+            .join("graph.dot");
+        fs::write(&output_path, dot).expect("Failed to write graph file");
+        println!("Graph exported to: {}", output_path.display());
+        return;
     }
 
     info!("starting speki");
@@ -1173,21 +1184,4 @@ mt-2 inline-flex items-center text-white \
 bg-red-600 border-0 py-1 px-3 focus:outline-none hover:bg-red-700 \
 disabled:bg-red-400 disabled:cursor-not-allowed disabled:opacity-50 \
 rounded text-base md:mt-0";
-}
-
-/// Generate a UUID from the SHA-256 hash of the input data
-///
-/// Kinda hacky, since uuids are supposed to be random.
-pub fn uuid_from_hash(input: impl AsRef<[u8]>) -> Uuid {
-    let hash = Sha256::digest(input.as_ref());
-
-    let mut bytes = [0u8; 16];
-    bytes.copy_from_slice(&hash[..16]);
-
-    // RFC 4122 variant
-    bytes[8] = (bytes[8] & 0x3f) | 0x80;
-    // Version 4 layout
-    bytes[6] = (bytes[6] & 0x0f) | 0x40;
-
-    Uuid::from_bytes(bytes)
 }
