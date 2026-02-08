@@ -1,5 +1,7 @@
 use indexmap::IndexSet;
+use once_cell::sync::Lazy;
 use std::{fmt::Debug, sync::Arc, time::Duration};
+use tokio::sync::mpsc;
 
 use clap::Parser;
 use dioxus::prelude::*;
@@ -349,4 +351,59 @@ pub fn recall_to_emoji(recall: Recall) -> &'static str {
         Recall::Some => "🙂",
         Recall::Perfect => "😃",
     }
+}
+
+// Audio service for managing sound playback
+pub enum AudioCommand {
+    Play(Vec<u8>),
+    #[allow(dead_code)]
+    Stop,
+}
+
+static AUDIO_SERVICE: Lazy<mpsc::UnboundedSender<AudioCommand>> = Lazy::new(|| {
+    let (tx, mut rx) = mpsc::unbounded_channel();
+
+    std::thread::spawn(move || {
+        let (_stream, stream_handle) = match rodio::OutputStream::try_default() {
+            Ok(x) => x,
+            Err(_) => return,
+        };
+
+        let mut current_sink: Option<rodio::Sink> = None;
+
+        while let Some(cmd) = rx.blocking_recv() {
+            match cmd {
+                AudioCommand::Play(audio_data) => {
+                    // Stop current audio if playing
+                    if let Some(sink) = current_sink.take() {
+                        sink.stop();
+                    }
+
+                    // Create new sink and play audio
+                    if let Ok(sink) = rodio::Sink::try_new(&stream_handle) {
+                        if let Ok(source) = rodio::Decoder::new(std::io::Cursor::new(audio_data)) {
+                            sink.append(source);
+                            current_sink = Some(sink);
+                        }
+                    }
+                }
+                AudioCommand::Stop => {
+                    if let Some(sink) = current_sink.take() {
+                        sink.stop();
+                    }
+                }
+            }
+        }
+    });
+
+    tx
+});
+
+pub fn play_audio(audio_data: Vec<u8>) {
+    let _ = AUDIO_SERVICE.send(AudioCommand::Play(audio_data));
+}
+
+#[allow(dead_code)]
+pub fn stop_audio() {
+    let _ = AUDIO_SERVICE.send(AudioCommand::Stop);
 }

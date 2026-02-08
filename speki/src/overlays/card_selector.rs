@@ -453,6 +453,7 @@ pub fn CardSelectorRender(
 
     let secret_export = search.read().contains("!export!");
     let secret_delete = search.read().contains("!delete!");
+    let audio_test = search.read().contains("!audio!");
 
     let update_available = use_context::<RemoteUpdate>().latest_commit();
 
@@ -507,7 +508,7 @@ pub fn CardSelectorRender(
                             onclick: move |_| {
                                 if let Ok(expr) = expr.clone() {
                                     if let Some(cards) = reviewable_cards(APP.read().card_provider(), expr.clone(), Some(review_filter.clone()), false) {
-                                        OverlayEnum::new_review(cards, expr, Some(review_filter.clone()), false).append();
+                                        OverlayEnum::new_review(cards, expr, Some(review_filter.clone()), false, None).append();
                                     } else {
                                         debug_assert!(false);
                                     }
@@ -525,6 +526,14 @@ pub fn CardSelectorRender(
                                             handle_card_event_error(e);
                                         }
                                     }
+                                },
+                                "delete all"
+                            }
+                        }
+                        if audio_test {
+                            button {
+                                class: "{crate::styles::DELETE_BUTTON} w-full",
+                                onclick: move |_| {
                                 },
                                 "delete all"
                             }

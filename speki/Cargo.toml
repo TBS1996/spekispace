@@ -32,6 +32,8 @@ semver.workspace = true
 simpletime.workspace = true
 sha2.workspace = true
 indexmap.workspace = true
+rodio.workspace = true
+once_cell.workspace = true
 
 
 ledgerstore.workspace = true

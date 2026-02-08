@@ -93,8 +93,15 @@ impl OverlayEnum {
         expr: SetExpr,
         filter: Option<CardFilter>,
         ordered: bool,
+        tts_language: Option<speki_core::VoiceLanguage>,
     ) -> Self {
-        Self::Review(ReviewState::new(thecards, expr, filter, ordered))
+        Self::Review(ReviewState::new(
+            thecards,
+            expr,
+            filter,
+            ordered,
+            tts_language,
+        ))
     }
 
     pub fn new_edit_card(id: CardId) -> Self {

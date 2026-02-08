@@ -352,6 +352,7 @@ fn RenderSet(
         to_delete: mut delete_atomic,
         show_edit,
         ordered,
+        mut tts_language,
     } = set.clone();
 
     let filter2 = filter.clone();
@@ -440,7 +441,7 @@ fn RenderSet(
 
 
                         match reviewable_cards(APP.read().card_provider(), expr.clone(), Some(filter2.clone()), ordered.cloned()) {
-                            Some(cards) => OverlayEnum::new_review(cards, expr.clone(), Some(filter2.clone()), ordered.cloned()).append(),
+                            Some(cards) => OverlayEnum::new_review(cards, expr.clone(), Some(filter2.clone()), ordered.cloned(), tts_language.cloned()).append(),
                             None => OverlayEnum::new_notice("no cards to review!").append(),
                         }
 
@@ -498,6 +499,40 @@ fn RenderSet(
                         APP.read().modify_set(event).unwrap();
                     })),
                 }
+
+                div {
+                    class: "flex items-center gap-2 my-2",
+                    label { "TTS Language:" }
+                    select {
+                        class: "px-2 py-1 border rounded",
+                        value: match tts_language.cloned() {
+                            None => "None",
+                            Some(speki_core::VoiceLanguage::English) => "English",
+                            Some(speki_core::VoiceLanguage::Russian) => "Russian",
+                            Some(speki_core::VoiceLanguage::German) => "German",
+                            Some(speki_core::VoiceLanguage::Spanish) => "Spanish",
+                        },
+                        onchange: move |evt| {
+                            let new_lang = match evt.value().as_str() {
+                                "None" => None,
+                                "English" => Some(speki_core::VoiceLanguage::English),
+                                "Russian" => Some(speki_core::VoiceLanguage::Russian),
+                                "German" => Some(speki_core::VoiceLanguage::German),
+                                "Spanish" => Some(speki_core::VoiceLanguage::Spanish),
+                                _ => None,
+                            };
+                            let event = SetEvent::new_modify(id, SetAction::SetLanguage(new_lang));
+                            APP.read().modify_set(event).unwrap();
+                            tts_language.set(new_lang);
+                        },
+                        option { value: "None", "Default" }
+                        option { value: "English", "English" }
+                        option { value: "Russian", "Russian" }
+                        option { value: "German", "German" }
+                        option { value: "Spanish", "Spanish" }
+                    }
+                }
+
                 RenderExpr { filter, inputs: set.expr.cloned().inputs.clone(), ty: set.expr.cloned().ty.clone(), depth: depth + 1}
             }
         }
@@ -512,6 +547,7 @@ struct SetEditor {
     to_delete: Signal<bool>,
     show_edit: Signal<bool>,
     ordered: Signal<bool>,
+    tts_language: Signal<Option<speki_core::VoiceLanguage>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -699,6 +735,7 @@ impl SetEditor {
             to_delete: Signal::new_in_scope(false, ScopeId::APP),
             show_edit: Signal::new_in_scope(show_edit, ScopeId::APP),
             ordered: Signal::new_in_scope(set.ordered, ScopeId::APP),
+            tts_language: Signal::new_in_scope(set.tts_language, ScopeId::APP),
         }
     }
 }

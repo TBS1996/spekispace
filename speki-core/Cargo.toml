@@ -26,6 +26,9 @@ rand.workspace = true
 simpletime.workspace = true
 indexmap.workspace = true
 sha2.workspace = true
+base64.workspace = true
+reqwest.workspace = true
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 
 
 omtrent.workspace = true
@@ -34,8 +37,6 @@ omtrent.workspace = true
 ledgerstore.workspace = true
 #ledgerstore = "0.1.2"
 
-[dev-dependencies]
-tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 
 
 [dependencies.gkquad]

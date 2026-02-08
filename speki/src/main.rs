@@ -13,7 +13,7 @@ use clap::{Args, Parser, ValueEnum};
 use dioxus::prelude::*;
 use dioxus_logger::tracing::{info, Level};
 use indexmap::IndexSet;
-use ledgerstore::{FsReadLedger, ItemAction, ItemExpr, Ledger};
+use ledgerstore::{ItemAction, ItemExpr, Ledger};
 use pages::ReviewPage;
 use serde::Deserialize;
 use serde_json::json;
@@ -28,7 +28,7 @@ use speki_core::{
         ReviewEvent, FSRS,
     },
     set::{Input, Set, SetAction, SetEvent, SetId},
-    uuid_from_hash, CardProperty, Config, RecallChoice, SimpleRecall,
+    uuid_from_hash, CardProperty, Config, RecallChoice, SimpleRecall, TtsConfig,
 };
 use std::fs;
 
@@ -385,13 +385,13 @@ fn main() {
         println!("Total clusters: {qty}");
         return;
     } else if cli.test {
-        let p = PathBuf::from("/home/tor/.local/share/speki_graph");
-        let ledger: FsReadLedger<RawCard> = FsReadLedger::new(p);
-
-        let output = PathBuf::from("/home/tor/remote_entries");
-
-        let evs = speki_core::card_provider::event_nodes(&ledger).unwrap();
-        speki_core::card_provider::save_event_nodes(evs, &output).unwrap();
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        let x = rt
+            .block_on(async {
+                speki_core::tts::tts("hello there its my test lol", &TtsConfig::default()).await
+            })
+            .unwrap();
+        dbg!(x);
         return;
     } else if cli.export {
         let path = Config::load().storage_path.clone();

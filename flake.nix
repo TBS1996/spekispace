@@ -36,6 +36,12 @@
             description = "Shuffle/reorder behaviour (TOML: randomize).";
           };
 
+          googleProjectId = lib.mkOption {
+            type = lib.types.nullOr lib.types.str;
+            default = null;
+            description = "TOML: google_project_id";
+          };
+
           remoteGithubUsername = lib.mkOption {
             type = lib.types.nullOr lib.types.str;
             default = null;
@@ -101,6 +107,7 @@
           xdg.configFile."speki/config.toml".source = let
             base = lib.filterAttrs (_: v: v != null) {
               randomize = cfg.randomize;
+              google_project_id = cfg.googleProjectId;
               remote_github_username = cfg.remoteGithubUsername;
               remote_github_repo = cfg.remoteGithubRepo;
               storage_path =
@@ -166,6 +173,7 @@
             _pkgs.mesa
             _pkgs.libGL
             _pkgs.egl-wayland
+            _pkgs.alsa-lib
           ]
           ++ lib.optionals _pkgs.stdenv.isDarwin (with _pkgs.darwin.apple_sdk.frameworks; [
             IOKit
@@ -209,6 +217,7 @@
               _pkgs.nodejs_20
               _pkgs.tailwindcss
               _pkgs.graphviz
+              _pkgs.google-cloud-sdk
             ];
           nativeBuildInputs = [rustToolchain];
           shellHook = ''

@@ -128,7 +128,25 @@ pub fn ReviewRender(
     let history = card.history_fresh();
 
     let front = card.display_card();
+    let name = card.name().to_string();
     let back = card.backside().to_owned();
+
+    // Auto-play audio when card loads
+    use_effect(move || {
+        let name = name.clone();
+        let tts_lang = queue.read().tts_language;
+        spawn(async move {
+            let mut config = speki_core::TtsConfig::default();
+            if let Some(lang) = tts_lang {
+                config.voice.language = lang;
+            }
+            let Ok(audio_data) = speki_core::tts::tts(&name, &config).await else {
+                return;
+            };
+
+            crate::utils::play_audio(audio_data);
+        });
+    });
 
     let card2 = card.clone();
     let log_event = move |event: Rc<KeyboardData>| {
@@ -212,6 +230,7 @@ pub struct Queue {
     pub expr: SetExpr,
     pub filter: Option<CardFilter>,
     pub ordered: bool,
+    pub tts_language: Option<speki_core::VoiceLanguage>,
 }
 
 impl Queue {
@@ -220,6 +239,7 @@ impl Queue {
         expr: SetExpr,
         filter: Option<CardFilter>,
         ordered: bool,
+        tts_language: Option<speki_core::VoiceLanguage>,
     ) -> Self {
         Self {
             passed: vec![],
@@ -227,6 +247,7 @@ impl Queue {
             expr,
             filter,
             ordered,
+            tts_language,
         }
     }
 
@@ -278,11 +299,14 @@ impl ReviewState {
         expr: SetExpr,
         filter: Option<CardFilter>,
         ordered: bool,
+        tts_language: Option<speki_core::VoiceLanguage>,
     ) -> Self {
         info!("start review for {} cards", thecards.len());
 
-        let queue: Signal<Queue> =
-            Signal::new_in_scope(Queue::new(thecards, expr, filter, ordered), ScopeId::APP);
+        let queue: Signal<Queue> = Signal::new_in_scope(
+            Queue::new(thecards, expr, filter, ordered, tts_language),
+            ScopeId::APP,
+        );
 
         let is_done: Memo<bool> =
             ScopeId::APP.in_runtime(|| Memo::new(move || queue.read().current().is_none()));
@@ -371,6 +395,10 @@ fn Infobar(
                 queue,
                 show_backside,
             }
+            PlayAudio {
+                text: card.name().to_string(),
+                queue,
+            }
         }
     }
 }
@@ -407,6 +435,31 @@ fn Suspend(card: CardId, mut queue: Signal<Queue>, show_backside: Signal<bool>) 
                 }
             },
             "{txt}"
+        }
+    }
+}
+
+#[component]
+fn PlayAudio(text: String, queue: Signal<Queue>) -> Element {
+    rsx! {
+        button {
+            class: "{crate::styles::READ_BUTTON}",
+            title: "Play audio",
+            onclick: move |_| {
+                let text = text.clone();
+                let tts_lang = queue.read().tts_language;
+                spawn(async move {
+                    let mut config = speki_core::TtsConfig::default();
+                    if let Some(lang) = tts_lang {
+                        config.voice.language = lang;
+                    }
+                    let Ok(audio_data) = speki_core::tts::tts(&text, &config).await else {
+                        return;
+                    };
+                    crate::utils::play_audio(audio_data);
+                });
+            },
+            "🔊"
         }
     }
 }

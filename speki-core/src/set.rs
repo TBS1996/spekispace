@@ -23,6 +23,7 @@ pub enum SetAction {
     SetExpr(SetExpr),
     AddInput(Input),
     SetOrdered(bool),
+    SetLanguage(Option<crate::VoiceLanguage>),
 }
 
 pub type SetEvent = LedgerEvent<Set>;
@@ -41,6 +42,7 @@ impl LedgerItem for Set {
             SetAction::SetOrdered(ordered) => self.ordered = ordered,
             SetAction::SetName(name) => self.name = name,
             SetAction::SetExpr(expr) => self.expr = expr,
+            SetAction::SetLanguage(lang) => self.tts_language = lang,
             SetAction::AddInput(input) => {
                 let new_set = match self.expr {
                     SetExpr::Union(mut set) => {
@@ -81,6 +83,7 @@ impl LedgerItem for Set {
             name: "...".to_string(),
             expr: SetExpr::Union(Default::default()),
             ordered: false,
+            tts_language: None,
         }
     }
 
@@ -100,6 +103,9 @@ pub struct Set {
     /// As if B was dependent on A.
     #[serde(default)]
     pub ordered: bool,
+    /// TTS language to use for this set's cards (None = use default)
+    #[serde(default)]
+    pub tts_language: Option<crate::VoiceLanguage>,
 }
 
 impl Set {
@@ -112,6 +118,7 @@ impl Set {
             name: "all cards".to_string(),
             expr: SetExpr::All,
             ordered: false,
+            tts_language: None,
         }
     }
 }

@@ -5,8 +5,10 @@ use indexmap::IndexSet;
 use ledgerstore::CardChange;
 use ledgerstore::EventError;
 use ledgerstore::ItemAction;
+use ledgerstore::ItemExpr;
 use ledgerstore::Ledger;
 use ledgerstore::Node;
+use ledgerstore::ReadLedger;
 use ledgerstore::TimeProvider;
 use metadata::Metadata;
 use nonempty::NonEmpty;
@@ -85,6 +87,23 @@ pub struct Backup {
     strategy: Option<BackupStrategy>,
 }
 
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct TtsOverlay {
+    inner: Vec<TtsConfig>,
+}
+
+impl TtsOverlay {
+    pub fn resolve(&self, card: CardId, ledger: &impl ReadLedger<Item = RawCard>) -> TtsConfig {
+        for cfg in self.inner.iter().rev() {
+            if ledger.load_expr(cfg.cards.clone()).contains(&card) {
+                return cfg.clone();
+            }
+        }
+
+        TtsConfig::default()
+    }
+}
+
 #[derive(Deserialize, Serialize, Debug)]
 pub struct Config {
     #[serde(default)]
@@ -95,13 +114,22 @@ pub struct Config {
     pub remote_github_repo: String,
     #[serde(default = "default_storage_path")]
     pub storage_path: PathBuf,
+    #[serde(default = "default_audio_path")]
+    pub audio_path: PathBuf,
     #[serde(default)]
     pub recaller: RecallChoice,
     pub backup: Option<Backup>,
+    pub google_project_id: Option<String>,
 }
 
 fn default_storage_path() -> PathBuf {
     dirs::data_local_dir().unwrap().join("speki")
+}
+
+fn default_audio_path() -> PathBuf {
+    let f = default_storage_path().join("audio");
+    fs::create_dir_all(&f).unwrap();
+    f
 }
 
 fn default_remote_github_repo() -> String {
@@ -119,8 +147,10 @@ impl Default for Config {
             remote_github_repo: default_remote_github_repo(),
             remote_github_username: default_remote_github_username(),
             storage_path: default_storage_path(),
+            audio_path: default_audio_path(),
             recaller: RecallChoice::default(),
             backup: None,
+            google_project_id: None,
         }
     }
 }
@@ -140,21 +170,25 @@ impl Config {
         f.write_all(s.as_bytes()).unwrap();
     }
 
-    pub fn load() -> Arc<Self> {
+    pub fn load_self() -> Self {
         let path = Self::path();
 
         if path.is_file() {
             let s = fs::read_to_string(&path).unwrap();
             match toml::from_str::<Self>(&s) {
-                Ok(config) => Arc::new(config),
+                Ok(config) => config,
                 Err(e) => {
                     dbg!(e);
-                    Arc::new(Self::default())
+                    Self::default()
                 }
             }
         } else {
-            Arc::new(Self::default())
+            Self::default()
         }
+    }
+
+    pub fn load() -> Arc<Self> {
+        Arc::new(Self::load_self())
     }
 
     pub fn upstream_url() -> String {
@@ -1445,4 +1479,220 @@ pub fn uuid_from_hash(input: impl AsRef<[u8]>) -> Uuid {
     bytes[6] = (bytes[6] & 0x0f) | 0x40;
 
     Uuid::from_bytes(bytes)
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, Hash, PartialEq, Eq)]
+pub enum VoiceLanguage {
+    English,
+    Russian,
+    German,
+    Spanish,
+}
+
+impl VoiceLanguage {
+    pub fn language_code(&self) -> &'static str {
+        match self {
+            VoiceLanguage::English => "en-US",
+            VoiceLanguage::Russian => "ru-RU",
+            VoiceLanguage::German => "de-DE",
+            VoiceLanguage::Spanish => "es-ES",
+        }
+    }
+}
+
+impl Display for VoiceLanguage {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            VoiceLanguage::English => write!(f, "English"),
+            VoiceLanguage::Russian => write!(f, "Russian"),
+            VoiceLanguage::German => write!(f, "German"),
+            VoiceLanguage::Spanish => write!(f, "Spanish"),
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, Hash)]
+pub struct VoiceConfig {
+    pub language: VoiceLanguage,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, Hash)]
+pub struct TtsConfig {
+    pub voice: VoiceConfig,
+    pub cards: ItemExpr<RawCard>,
+}
+
+impl Default for TtsConfig {
+    fn default() -> Self {
+        Self {
+            voice: VoiceConfig {
+                language: VoiceLanguage::English,
+            },
+            cards: ItemExpr::All,
+        }
+    }
+}
+
+impl TtsConfig {
+    pub fn new(voice: VoiceConfig, cards: ItemExpr<RawCard>) -> Self {
+        Self { voice, cards }
+    }
+
+    pub fn file_name(&self, text: &str) -> String {
+        use std::hash::{DefaultHasher, Hash, Hasher};
+        let mut hasher = DefaultHasher::new();
+        self.hash(&mut hasher);
+        text.hash(&mut hasher);
+        format!("{:x}.mp3", hasher.finish())
+    }
+}
+
+pub mod tts {
+    use base64::Engine as _;
+    use serde::{Deserialize, Serialize};
+    use std::{fs, io, process::Command};
+    use tracing::info;
+
+    use crate::{Config, TtsConfig};
+
+    #[derive(Debug, Clone)]
+    pub enum TtsError {
+        MissingProjectId,
+        TokenError,
+    }
+
+    #[derive(Serialize)]
+    struct TtsRequest<'a> {
+        input: Input<'a>,
+        voice: Voice<'a>,
+        #[serde(rename = "audioConfig")]
+        audio_config: AudioConfig<'a>,
+    }
+
+    #[derive(Serialize)]
+    struct Input<'a> {
+        text: &'a str,
+    }
+
+    #[derive(Serialize)]
+    struct Voice<'a> {
+        #[serde(rename = "languageCode")]
+        language_code: &'a str,
+        name: &'a str,
+        #[serde(rename = "model_name")]
+        model_name: &'a str,
+    }
+
+    #[derive(Serialize)]
+    struct AudioConfig<'a> {
+        #[serde(rename = "audioEncoding")]
+        audio_encoding: &'a str, // "LINEAR16" or "MP3"
+    }
+
+    #[derive(Deserialize)]
+    struct TtsResponse {
+        #[serde(rename = "audioContent")]
+        audio_content: String,
+    }
+
+    // Exactly like: gcloud auth application-default print-access-token
+    fn adc_access_token() -> io::Result<String> {
+        // Check env var first
+        if let Ok(token) = std::env::var("SPEKI_GCP_TOKEN") {
+            info!("using cached gcloud token from env");
+            return Ok(token);
+        }
+
+        info!("fetching fresh gcloud token...");
+        let out = Command::new("gcloud")
+            .args(["auth", "application-default", "print-access-token"])
+            .output()?;
+
+        if !out.status.success() {
+            return Err(io::Error::new(
+                io::ErrorKind::Other,
+                format!("gcloud failed: {}", String::from_utf8_lossy(&out.stderr)),
+            ));
+        }
+
+        let token = String::from_utf8_lossy(&out.stdout).trim().to_string();
+
+        // Cache the token in env var (will last for process lifetime)
+        std::env::set_var("SPEKI_GCP_TOKEN", &token);
+        info!("cached new gcloud token in env");
+
+        Ok(token)
+    }
+
+    pub async fn tts(text: &str, config: &TtsConfig) -> Result<Vec<u8>, TtsError> {
+        let path = Config::load().audio_path.join(config.file_name(text));
+        if path.exists() {
+            info!("audio cache hit: {}", path.display());
+            return Ok(fs::read(&path).unwrap());
+        }
+
+        let Some(project_id) = Config::load_self().google_project_id else {
+            return Err(TtsError::MissingProjectId);
+        };
+        let endpoint = "https://texttospeech.googleapis.com/v1/text:synthesize";
+
+        // Get token in blocking task since gcloud command is sync
+        let Ok(token) = tokio::task::spawn_blocking(|| {
+            adc_access_token().expect("Failed to get access token from gcloud")
+        })
+        .await
+        else {
+            return Err(TtsError::TokenError);
+        };
+
+        let req_body = TtsRequest {
+            input: Input { text },
+            voice: Voice {
+                language_code: config.voice.language.language_code(),
+                name: "Kore",
+                model_name: "gemini-2.5-flash-tts",
+            },
+            audio_config: AudioConfig {
+                audio_encoding: "MP3",
+            },
+        };
+
+        let client = reqwest::Client::new();
+        let resp: Result<TtsResponse, _> = client
+            .post(endpoint)
+            .header("Authorization", format!("Bearer {token}"))
+            .header("x-goog-user-project", project_id.clone())
+            .header("Content-Type", "application/json")
+            .json(&req_body)
+            .send()
+            .await
+            .unwrap()
+            .json()
+            .await;
+
+        let resp = match resp {
+            Ok(r) => r,
+            Err(_) => client
+                .post(endpoint)
+                .header("Authorization", format!("Bearer {token}"))
+                .header("x-goog-user-project", project_id)
+                .header("Content-Type", "application/json")
+                .json(&req_body)
+                .send()
+                .await
+                .unwrap()
+                .json()
+                .await
+                .unwrap(),
+        };
+
+        let mp3_data = base64::engine::general_purpose::STANDARD
+            .decode(resp.audio_content)
+            .unwrap();
+
+        fs::write(&path, &mp3_data).unwrap();
+        info!("audio saved to cache: {}", path.display());
+
+        Ok(mp3_data)
+    }
 }
