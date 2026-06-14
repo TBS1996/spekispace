@@ -13,7 +13,12 @@ pub use delete_button::DeleteButton;
 pub use dropdown::DropDownMenu;
 pub use filtereditor::*;
 pub use frontside::{CardTy, FrontPut};
-use speki_core::{card::CardId, collection::DynCard, set::SetExpr, CardRefType};
+use speki_core::{
+    card::{normalize_string, CardId},
+    collection::DynCard,
+    set::SetExpr,
+    CardRefType,
+};
 pub use toggle::Toggle;
 
 use dioxus::prelude::*;
@@ -110,7 +115,7 @@ pub fn RenderDependents(card_id: CardId, hidden: bool) -> Element {
     }
 }
 
-pub fn set_card_link(text: Signal<String>, alias: bool) {
+pub fn set_card_link(text: Signal<String>, alias: bool, direct_match: bool) {
     #[derive(Deserialize)]
     struct SelectionData {
         before: Option<String>,
@@ -166,6 +171,14 @@ pub fn set_card_link(text: Signal<String>, alias: bool) {
                 }
             });
 
+            if direct_match {
+                let app = APP.read().clone();
+                if let Some(card) = unique_direct_match(&app, &selected) {
+                    f.call(card);
+                    return;
+                }
+            }
+
             let props = CardSelector::new(false, vec![])
                 .new_on_card_selected(f, true)
                 .with_default_search(selected)
@@ -173,6 +186,56 @@ pub fn set_card_link(text: Signal<String>, alias: bool) {
             OverlayEnum::CardSelector(props).append();
         }
     });
+}
+
+fn unique_direct_match(app: &crate::utils::App, selected: &str) -> Option<CardId> {
+    let selected = selected.trim();
+    if selected.is_empty() {
+        return None;
+    }
+
+    let lowered = selected.to_lowercase();
+    let normalized = normalize_string(selected);
+    let card_ids = app.eval_expr(&SetExpr::All);
+
+    let mut exact = Vec::new();
+    let mut case_insensitive = Vec::new();
+    let mut normalized_matches = Vec::new();
+
+    for card_id in card_ids {
+        let Some(card) = app.try_load_card(card_id) else {
+            continue;
+        };
+        let name = card.name().to_string();
+
+        if name == selected {
+            exact.push(card_id);
+        } else if name.to_lowercase() == lowered {
+            case_insensitive.push(card_id);
+        } else if normalize_string(&name) == normalized {
+            normalized_matches.push(card_id);
+        }
+    }
+
+    if exact.len() == 1 {
+        return exact.into_iter().next();
+    }
+    if !exact.is_empty() {
+        return None;
+    }
+
+    if case_insensitive.len() == 1 {
+        return case_insensitive.into_iter().next();
+    }
+    if !case_insensitive.is_empty() {
+        return None;
+    }
+
+    if normalized_matches.len() == 1 {
+        return normalized_matches.into_iter().next();
+    }
+
+    None
 }
 
 #[component]

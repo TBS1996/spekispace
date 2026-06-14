@@ -91,7 +91,7 @@ pub fn FrontPutRender(
                     oninput: move |evt| text.set(evt.value()),
                     onmouseup: move |e| {
                         let text = text.clone();
-                        set_card_link(text, e.modifiers().shift());
+                        set_card_link(text, e.modifiers().shift(), e.modifiers().alt());
                     },
                 }
             }

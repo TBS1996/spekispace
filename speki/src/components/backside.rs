@@ -249,8 +249,9 @@ pub fn BackPutRender(
                                     disabled,
                                     onmouseup: move |e| {
                                         let with_alias = e.modifiers().shift();
+                                        let direct_match = e.modifiers().alt();
                                         let text = text.clone();
-                                        set_card_link(text, with_alias);
+                                        set_card_link(text, with_alias, direct_match);
                                     },
                                 }
                             }
