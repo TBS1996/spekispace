@@ -17,6 +17,7 @@ use speki_core::{card::CardId, collection::DynCard, set::SetExpr, CardRefType};
 pub use toggle::Toggle;
 
 use dioxus::prelude::*;
+use serde::Deserialize;
 
 use crate::{
     overlays::{
@@ -110,32 +111,64 @@ pub fn RenderDependents(card_id: CardId, hidden: bool) -> Element {
 }
 
 pub fn set_card_link(text: Signal<String>, alias: bool) {
+    #[derive(Deserialize)]
+    struct SelectionData {
+        before: Option<String>,
+        selected: String,
+        after: Option<String>,
+    }
+
     let mut eval = document::eval(
         r#"
-        const sel = window.getSelection();
-        dioxus.send(sel ? sel.toString() : "NO_SELECTION");
+        const active = document.activeElement;
+        if (active && (active.tagName === "INPUT" || active.tagName === "TEXTAREA")) {
+            const value = active.value ?? "";
+            const start = active.selectionStart ?? 0;
+            const end = active.selectionEnd ?? start;
+            const lo = Math.min(start, end);
+            const hi = Math.max(start, end);
+            dioxus.send({
+                before: value.slice(0, lo),
+                selected: value.slice(lo, hi),
+                after: value.slice(hi),
+            });
+        } else {
+            const sel = window.getSelection();
+            dioxus.send({
+                before: null,
+                selected: sel ? sel.toString() : "",
+                after: null,
+            });
+        }
     "#,
     );
 
     spawn(async move {
-        if let Ok(val) = eval.recv::<String>().await {
-            if val.len() < 2 {
+        if let Ok(selection) = eval.recv::<SelectionData>().await {
+            if selection.selected.len() < 2 {
                 return;
             }
 
-            let theval = val.clone();
+            let selected = selection.selected.clone();
+            let before = selection.before.clone();
+            let after = selection.after.clone();
+            let value = selected.clone();
             let f = MyClosure::new(move |card: CardId| {
                 let s = if alias {
-                    format!("[[{}|{}]]", card, val)
+                    format!("[[{}|{}]]", card, value.clone())
                 } else {
                     format!("[[{}]]", card)
                 };
-                text.clone().set(text.cloned().replace(&val, &s));
+                if let (Some(before), Some(after)) = (before.as_ref(), after.as_ref()) {
+                    text.clone().set(format!("{before}{s}{after}"));
+                } else {
+                    text.clone().set(text.cloned().replacen(&value, &s, 1));
+                }
             });
 
             let props = CardSelector::new(false, vec![])
                 .new_on_card_selected(f, true)
-                .with_default_search(theval)
+                .with_default_search(selected)
                 .with_allow_new(true);
             OverlayEnum::CardSelector(props).append();
         }
