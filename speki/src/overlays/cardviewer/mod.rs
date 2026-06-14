@@ -135,6 +135,12 @@ pub fn CardViewerRender(props: CardViewer) -> Element {
         div {
             class: "flex flex-row mx-auto min-w-0",
             style: "max-width: 100%;",
+            onkeydown: move |event| {
+                let key = event.key().to_string();
+                if event.modifiers().ctrl() && key == "Enter" {
+                    save_card(props.clone());
+                }
+            },
 
             div {
                 class: "p-2 box-border {card_class}",
@@ -1034,42 +1040,7 @@ fn save_button(CardViewer: CardViewer) -> Element {
             title:"{title}",
             disabled: !enabled,
             onclick: move |_| {
-                let Ok(rep) = CardViewer.editor.clone().into_cardrep() else {
-                    return;
-                };
-
-                match save_cardrep(rep, CardViewer.old_card.clone()) {
-                    Ok(mut events) => {
-                        let id = events.id;
-
-                        let card_events = std::mem::take(&mut events.cards);
-
-                        if let Err(e) = APP.read().0.apply_many_actions(card_events) {
-                            handle_card_event_error(e);
-                            return;
-                        }
-
-                        if let Err(e) = APP.read().0.apply_many(events.into_events()) {
-                            handle_event_error(e);
-                            return;
-                        }
-
-                        let Some(card) = APP.read().load(id) else {
-                            dbg!(id);
-                            panic!();
-                        };
-
-                        let inner_card = Arc::unwrap_or_clone(card);
-                        if let Some(hook) = CardViewer.save_hook.clone() {
-                            hook.call(inner_card.id());
-                        } else {
-                            CardViewer.light_reset();
-                            pop_overlay();
-                        }
-
-                    },
-                    Err(()) => {},
-                }
+                save_card(CardViewer.clone());
             },
             if is_new {
                 "create"
@@ -1077,5 +1048,43 @@ fn save_button(CardViewer: CardViewer) -> Element {
                 "save"
             }
         }
+    }
+}
+
+fn save_card(viewer: CardViewer) {
+    let Ok(rep) = viewer.editor.clone().into_cardrep() else {
+        return;
+    };
+
+    match save_cardrep(rep, viewer.old_card.clone()) {
+        Ok(mut events) => {
+            let id = events.id;
+
+            let card_events = std::mem::take(&mut events.cards);
+
+            if let Err(e) = APP.read().0.apply_many_actions(card_events) {
+                handle_card_event_error(e);
+                return;
+            }
+
+            if let Err(e) = APP.read().0.apply_many(events.into_events()) {
+                handle_event_error(e);
+                return;
+            }
+
+            let Some(card) = APP.read().load(id) else {
+                dbg!(id);
+                panic!();
+            };
+
+            let inner_card = Arc::unwrap_or_clone(card);
+            if let Some(hook) = viewer.save_hook.clone() {
+                hook.call(inner_card.id());
+            } else {
+                viewer.light_reset();
+                pop_overlay();
+            }
+        }
+        Err(()) => {}
     }
 }
