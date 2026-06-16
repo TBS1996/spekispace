@@ -1070,13 +1070,13 @@ impl App {
         self.card_provider.many_modify(events)
     }
 
-    pub fn review_cli(&self) {
+    pub fn review_cli(&self, set: SetExpr) {
         use std::io::{self, Write};
         use std::str::FromStr;
 
         let reviewable = the_reviewable_cards(
             self.card_provider.clone(),
-            SetExpr::All,
+            set,
             Some(CardFilter::default_filter()),
             false,
         );

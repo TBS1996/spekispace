@@ -27,7 +27,7 @@ use speki_core::{
         ml::classic::Trained, AvgRecall, History, Recall, Review as TheReview, ReviewAction,
         ReviewEvent, FSRS,
     },
-    set::{Input, Set, SetAction, SetEvent, SetId},
+    set::{Input, Set, SetAction, SetEvent, SetExpr, SetId},
     uuid_from_hash, CardProperty, Config, RecallChoice, SimpleRecall, TtsConfig,
 };
 use std::fs;
@@ -264,7 +264,18 @@ fn main() {
     } else if cli.review {
         let path = Config::load().storage_path.clone();
         let app = speki_core::App::new(path);
-        app.review_cli();
+        let set = cli
+            .set
+            .map(|s| {
+                app.provider
+                    .sets
+                    .load(s.parse().unwrap())
+                    .unwrap()
+                    .expr
+                    .clone()
+            })
+            .unwrap_or(SetExpr::All);
+        app.review_cli(set);
         return;
     } else if cli.rebuild_state {
         let path = Config::load().storage_path.clone();
