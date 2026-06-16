@@ -2,7 +2,7 @@ use dioxus::prelude::*;
 use either::Either;
 use ledgerstore::LedgerEvent;
 use nonempty::NonEmpty;
-use std::{rc::Rc, sync::Arc};
+use std::{collections::BTreeSet, rc::Rc, sync::Arc};
 
 use speki_core::{
     card::{CardId, EvalText},
@@ -302,6 +302,17 @@ impl ReviewState {
         tts_language: Option<speki_core::VoiceLanguage>,
     ) -> Self {
         info!("start review for {} cards", thecards.len());
+        let cards: Vec<CardId> = thecards.into();
+        let mut set: BTreeSet<CardId> = cards.clone().into_iter().collect();
+        let mut deduped: Vec<CardId> = vec![];
+
+        for card in cards {
+            if set.remove(&card) {
+                deduped.push(card);
+            }
+        }
+
+        let thecards = NonEmpty::from_vec(deduped).unwrap();
 
         let queue: Signal<Queue> = Signal::new_in_scope(
             Queue::new(thecards, expr, filter, ordered, tts_language),
