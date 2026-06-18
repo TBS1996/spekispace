@@ -11,7 +11,7 @@ use tracing::info;
 
 use crate::{
     components::{
-        cardref::CardRefRender, dropdown::DropComponent, set_card_link, CardRef, DropDownMenu,
+        cardref::CardRefRender, dropdown::DropComponent, CardRef, DropDownMenu, LinkEditor,
     },
     overlays::card_selector::MyClosure,
 };
@@ -238,21 +238,11 @@ pub fn BackPutRender(
                         }
 
                         BackOpts::Text => {
-                            let mut sig = text.clone();
-
                             rsx! {
-                                input {
-                                    class: "bg-white w-full border border-gray-300 rounded-md p-2 text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent",
-                                    value: "{sig}",
-                                    placeholder: "back side",
-                                    oninput: move |evt| sig.set(evt.value()),
+                                LinkEditor {
+                                    text,
+                                    placeholder: "back side".to_string(),
                                     disabled,
-                                    onmouseup: move |e| {
-                                        let with_alias = e.modifiers().shift();
-                                        let direct_match = e.modifiers().alt();
-                                        let text = text.clone();
-                                        set_card_link(text, with_alias, direct_match);
-                                    },
                                 }
                             }
                         }

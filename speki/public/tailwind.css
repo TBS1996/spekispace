@@ -803,6 +803,10 @@ video {
   max-height: 80vh;
 }
 
+.min-h-\[2\.6rem\] {
+  min-height: 2.6rem;
+}
+
 .min-h-\[7rem\] {
   min-height: 7rem;
 }

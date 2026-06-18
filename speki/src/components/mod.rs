@@ -5,6 +5,7 @@ mod delete_button;
 pub mod dropdown;
 mod filtereditor;
 pub mod frontside;
+pub mod linkeditor;
 mod toggle;
 
 pub use backside::BackPut;
@@ -13,6 +14,7 @@ pub use delete_button::DeleteButton;
 pub use dropdown::DropDownMenu;
 pub use filtereditor::*;
 pub use frontside::{CardTy, FrontPut};
+pub use linkeditor::LinkEditor;
 use speki_core::{
     card::{normalize_string, CardId},
     collection::DynCard,

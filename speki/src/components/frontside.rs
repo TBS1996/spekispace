@@ -66,10 +66,10 @@ impl FrontPut {
 #[component]
 pub fn FrontPutRender(
     dropdown: DropDownMenu<CardTy>,
-    mut text: Signal<String>,
+    text: Signal<String>,
     #[props(default = false)] disabled: bool,
 ) -> Element {
-    use crate::components::set_card_link;
+    use crate::components::LinkEditor;
 
     rsx! {
         div {
@@ -83,16 +83,13 @@ pub fn FrontPutRender(
                     DropComponent {options: dropdown.options.clone(), selected: dropdown.selected.clone(), disabled}
                 }
 
-                input {
-                    class: "bg-white w-full border border-gray-300 rounded-md p-2 text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent",
-                    value: "{text}",
-                    placeholder: "front side",
-                    disabled,
-                    oninput: move |evt| text.set(evt.value()),
-                    onmouseup: move |e| {
-                        let text = text.clone();
-                        set_card_link(text, e.modifiers().shift(), e.modifiers().alt());
-                    },
+                div {
+                    class: "flex-grow overflow-hidden",
+                    LinkEditor {
+                        text,
+                        placeholder: "front side".to_string(),
+                        disabled,
+                    }
                 }
             }
         }
