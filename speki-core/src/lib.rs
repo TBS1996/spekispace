@@ -469,6 +469,11 @@ pub fn the_reviewable_cards(
 
     use rand::prelude::SliceRandom;
 
+    seen_cards.sort();
+    seen_cards.dedup();
+    unseen_cards.sort();
+    unseen_cards.dedup();
+
     info!("start shuffle cards");
     seen_cards.shuffle(&mut rand::thread_rng());
     unseen_cards.shuffle(&mut rand::thread_rng());
