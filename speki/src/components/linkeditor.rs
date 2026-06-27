@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{cell::RefCell, rc::Rc, sync::Arc};
 
 use dioxus::prelude::*;
 use either::Either;
@@ -112,26 +112,55 @@ pub fn LinkEditor(
 ) -> Element {
     let id = use_hook(|| format!("link-editor-{}", uuid::Uuid::new_v4()));
 
-    // `dom_html` is the source for the contenteditable's innerHTML. We only
-    // change it for *programmatic* edits (link insertion, alias edits) so that
-    // ordinary typing never resets the cursor. `last_sync` tracks the raw text
-    // that currently matches the DOM, so the effect below can tell a
-    // programmatic change apart from one the user typed.
-    let mut dom_html = use_signal(|| render_editor_html(&text.peek()));
-    let mut last_sync = use_signal(|| text.peek().clone());
+    // `dom_html` only seeds the *initial* paint of the contenteditable. We never
+    // change it afterwards, because routing live updates through Dioxus's
+    // innerHTML diffing is unreliable here: the DOM is mutated directly by the
+    // browser as the user types (so Dioxus's tracked value goes stale), which
+    // makes it skip a later update whose value happens to match the stale one.
+    // Instead, every programmatic change is written straight to the DOM via a
+    // one-shot JS `innerHTML` assignment from the body below.
+    let dom_html = use_signal(|| render_editor_html(&text.peek()));
 
-    use_effect(move || {
+    // `last_sync` is the raw text currently matching the DOM, used to tell a
+    // programmatic change apart from one the user typed.
+    let last_sync = use_hook(|| Rc::new(RefCell::new(text.peek().clone())));
+
+    // `latest` always points at the *current* `text` signal. Persistent hooks
+    // (the listener loop, alias hook) capture this Rc rather than the signal
+    // directly, so when the parent swaps in a different card's signal without
+    // remounting us, write-backs still target the signal currently on screen.
+    let latest = use_hook(|| Rc::new(RefCell::new(text)));
+
+    // Read `text()` here in the body so we re-subscribe to the *current* signal
+    // on every render. This is what makes navigation between cards work even
+    // when this component is reused (not remounted): the body re-runs with the
+    // new signal, and we push its content to the DOM.
+    {
+        *latest.borrow_mut() = text;
         let current = text();
-        if current != *last_sync.peek() {
-            dom_html.set(render_editor_html(&current));
-            last_sync.set(current);
+        if current != *last_sync.borrow() {
+            *last_sync.borrow_mut() = current.clone();
+            let id = id.clone();
+            spawn(async move {
+                let html = render_editor_html(&current);
+                let payload =
+                    serde_json::to_string(&html).unwrap_or_else(|_| "\"\"".to_string());
+                let script = format!(
+                    r#"const el = document.getElementById("{id}"); if (el) {{ el.innerHTML = {payload}; }}"#
+                );
+                document::eval(&script);
+            });
         }
-    });
+    }
 
     // Attach DOM listeners once, after mount.
     {
         let id = id.clone();
+        let last_sync = last_sync.clone();
+        let latest = latest.clone();
         use_effect(move || {
+            let last_sync = last_sync.clone();
+            let latest = latest.clone();
             let script = format!(
                 r#"
                 const el = document.getElementById("{id}");
@@ -200,12 +229,14 @@ pub fn LinkEditor(
                 loop {
                     match eval.recv::<EditorMsg>().await {
                         Ok(EditorMsg::Sync { raw }) => {
-                            last_sync.set(raw.clone());
+                            *last_sync.borrow_mut() = raw.clone();
+                            let mut text = *latest.borrow();
                             text.set(raw);
                         }
                         Ok(EditorMsg::Edit { id: link_id, alias }) => {
+                            let latest = latest.clone();
                             let hook: Arc<Box<dyn Fn(String)>> = Arc::new(Box::new(move |s: String| {
-                                let mut text = text;
+                                let mut text = *latest.borrow();
                                 let alias = {
                                     let trimmed = s.trim();
                                     if trimmed.is_empty() {

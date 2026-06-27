@@ -546,7 +546,7 @@ fn InputElements(
     dbg!(&attr_answers);
 
     rsx! {
-        FrontPutRender { dropdown: front.dropdown.clone(), text: front.text.clone(), disabled: is_remote}
+        FrontPutRender { dropdown: front.dropdown.clone(), text: front.text.clone(), disabled: is_remote, card_id}
 
         match ty {
             CardTy::Unfinished => rsx! {},
@@ -558,6 +558,7 @@ fn InputElements(
                     ref_card: back.ref_card.clone(),
                     boolean: back.boolean.clone(),
                     disabled: is_remote,
+                    card_id,
                 }
             },
             CardTy::Class => rsx! {
@@ -567,6 +568,7 @@ fn InputElements(
                     ref_card: back.ref_card.clone(),
                     boolean: back.boolean.clone(),
                     disabled: is_remote,
+                    card_id,
                 }
 
 
@@ -607,6 +609,7 @@ fn InputElements(
                     ref_card: back.ref_card.clone(),
                     boolean: back.boolean.clone(),
                     disabled: is_remote,
+                    card_id,
                 }
 
                 div {

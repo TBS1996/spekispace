@@ -5,7 +5,7 @@ use std::{
 
 use dioxus::prelude::*;
 use serde::{Deserialize, Serialize};
-use speki_core::card::BackSide;
+use speki_core::card::{BackSide, CardId};
 use strum::{EnumIter, IntoEnumIterator};
 use tracing::info;
 
@@ -204,6 +204,7 @@ pub fn BackPutRender(
     ref_card: CardRef,
     boolean: Signal<Option<bool>>,
     #[props(default = false)] disabled: bool,
+    #[props(default)] card_id: Option<CardId>,
 ) -> Element {
     rsx! {
         div {
@@ -240,6 +241,7 @@ pub fn BackPutRender(
                         BackOpts::Text => {
                             rsx! {
                                 LinkEditor {
+                                    key: "{card_id:?}",
                                     text,
                                     placeholder: "back side".to_string(),
                                     disabled,

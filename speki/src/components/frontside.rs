@@ -2,7 +2,7 @@ use std::fmt::Display;
 
 use dioxus::prelude::*;
 use serde::{Deserialize, Serialize};
-use speki_core::card::CType;
+use speki_core::card::{CType, CardId};
 use strum::{EnumIter, IntoEnumIterator};
 use tracing::info;
 
@@ -68,6 +68,7 @@ pub fn FrontPutRender(
     dropdown: DropDownMenu<CardTy>,
     text: Signal<String>,
     #[props(default = false)] disabled: bool,
+    #[props(default)] card_id: Option<CardId>,
 ) -> Element {
     use crate::components::LinkEditor;
 
@@ -86,6 +87,7 @@ pub fn FrontPutRender(
                 div {
                     class: "flex-grow overflow-hidden",
                     LinkEditor {
+                        key: "{card_id:?}",
                         text,
                         placeholder: "front side".to_string(),
                         disabled,
