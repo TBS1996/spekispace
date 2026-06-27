@@ -1,7 +1,8 @@
 use ordered_float::OrderedFloat;
-use std::{collections::BTreeMap, sync::Arc};
-
-use uuid::Uuid;
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    sync::Arc,
+};
 
 pub fn add(left: u64, right: u64) -> u64 {
     left + right
@@ -14,7 +15,129 @@ fn prioritize_vec(items: Vec<Item>, cmps: Vec<Cmp>) -> Vec<(Item, Float)> {
 }
 
 fn prioritize(items: Vec<Item>, cmps: Vec<Cmp>) -> PriRes {
-    PriRes(BTreeMap::new())
+    let graph = ItemGraph::new(items);
+    let mut scores = graph.dependency_scores();
+
+    loop {
+        let mut changed = false;
+
+        for cmp in &cmps {
+            let lower = scores[&cmp.lower];
+            let min_higher = lower + float(1.0);
+            let higher = scores.get_mut(&cmp.higher).unwrap();
+            if *higher < min_higher {
+                *higher = min_higher;
+                changed = true;
+            }
+        }
+
+        for (higher_name, lower_names) in &graph.dependents {
+            let higher = scores[higher_name];
+            let min_higher = lower_names
+                .iter()
+                .map(|lower_name| scores[lower_name] + float(1.0))
+                .max()
+                .unwrap_or(float(1.0));
+
+            if higher < min_higher {
+                scores.insert(higher_name.clone(), min_higher);
+                changed = true;
+            }
+        }
+
+        if !changed {
+            break;
+        }
+    }
+
+    PriRes(
+        graph
+            .items
+            .into_iter()
+            .map(|(name, item)| {
+                let score = scores[&name];
+                (name, (item, score))
+            })
+            .collect(),
+    )
+}
+
+struct ItemGraph {
+    items: BTreeMap<String, Item>,
+    /// Edges from an item to the cards which depend on it.
+    dependents: BTreeMap<String, BTreeSet<String>>,
+}
+
+impl ItemGraph {
+    fn new(items: Vec<Item>) -> Self {
+        let mut graph = Self {
+            items: BTreeMap::new(),
+            dependents: BTreeMap::new(),
+        };
+
+        for item in items {
+            graph.add_item(item);
+        }
+
+        graph
+    }
+
+    fn add_item(&mut self, item: Item) {
+        let name = item.name.clone();
+        let dependencies = item.dependencies.clone();
+        let dependents = item.dependents.clone();
+
+        self.items
+            .entry(name.clone())
+            .or_insert_with(|| item.clone());
+        self.dependents.entry(name.clone()).or_default();
+
+        for dependent in dependents {
+            self.dependents
+                .entry(name.clone())
+                .or_default()
+                .insert(dependent.name.clone());
+            self.add_item((*dependent).clone());
+        }
+
+        for dependency in dependencies {
+            self.dependents
+                .entry(dependency.name.clone())
+                .or_default()
+                .insert(name.clone());
+            self.add_item((*dependency).clone());
+        }
+    }
+
+    fn dependency_scores(&self) -> BTreeMap<String, Float> {
+        self.items
+            .keys()
+            .map(|name| {
+                let score = self.recursive_dependents(name).len() as f32 + 1.0;
+                (name.clone(), float(score))
+            })
+            .collect()
+    }
+
+    fn recursive_dependents(&self, name: &str) -> BTreeSet<String> {
+        let mut seen = BTreeSet::new();
+        self.collect_dependents(name, &mut seen);
+        seen
+    }
+
+    fn collect_dependents(&self, name: &str, seen: &mut BTreeSet<String>) {
+        if let Some(dependents) = self.dependents.get(name) {
+            for dependent in dependents {
+                if seen.insert(dependent.clone()) {
+                    self.collect_dependents(dependent, seen);
+                }
+            }
+        }
+    }
+
+    fn is_dependency_order(&self, higher: &str, lower: &str) -> bool {
+        self.recursive_dependents(higher).contains(lower)
+    }
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
@@ -64,25 +187,48 @@ impl State {
 
     /// Returns a list of comparisons that have been fixed.
     fn fixed_entries(&self) -> Vec<Cmp> {
-        let mut seen: BTreeMap<(String, String), Cmp> = Default::default();
+        let mut entries: Vec<Option<Cmp>> = vec![];
+        let mut seen: BTreeMap<(String, String), usize> = Default::default();
 
         for entry in &self.comparisons {
             match entry {
                 CmpEntry::Cmp(cmp) => {
-                    seen.insert(cmp.identity(), cmp.clone());
+                    insert_cmp(&mut entries, &mut seen, cmp.clone());
                 }
                 CmpEntry::Fix(cmp_fix) => {
-                    for chunk in cmp_fix.0.clone().windows(2).into_iter() {
+                    let fixed_items: BTreeSet<String> = cmp_fix.0.iter().cloned().collect();
+                    let kept_identities: BTreeSet<(String, String)> = cmp_fix
+                        .0
+                        .windows(2)
+                        .map(|chunk| Cmp::new(&chunk[0], &chunk[1]).identity())
+                        .collect();
+                    let seen_identities: Vec<(String, String)> = seen.keys().cloned().collect();
+
+                    for identity in seen_identities {
+                        if fixed_items.contains(&identity.0)
+                            && fixed_items.contains(&identity.1)
+                            && !kept_identities.contains(&identity)
+                        {
+                            if let Some(index) = seen.remove(&identity) {
+                                entries[index] = None;
+                            }
+                        }
+                    }
+
+                    for chunk in cmp_fix.0.windows(2) {
                         let higher = &chunk[0];
                         let lower = &chunk[1];
                         let cmp = Cmp::new(higher, lower);
-                        let prev = seen.insert(cmp.identity(), cmp.clone());
-                        assert!(prev.is_some(), "fixing a comparison that didn't exist");
+                        assert!(
+                            seen.contains_key(&cmp.identity()),
+                            "fixing a comparison that didn't exist"
+                        );
+                        insert_cmp(&mut entries, &mut seen, cmp);
                     }
                 }
             }
         }
-        seen.into_values().collect()
+        entries.into_iter().flatten().collect()
     }
 
     /// Removes items that are invalidated by the dependency system.
@@ -91,25 +237,105 @@ impl State {
     /// The reason it's not a hard error is because the user can change the dependency graph after already
     /// having made comparisons.
     fn remove_invalid_entries(&self) -> (Vec<Cmp>, Vec<Cmp>) {
-        todo!()
+        let graph = ItemGraph::new(self.items.clone());
+        let mut valid = vec![];
+        let mut invalid = vec![];
+
+        for cmp in self.fixed_entries() {
+            if graph.is_dependency_order(&cmp.lower, &cmp.higher) {
+                invalid.push(cmp);
+            } else {
+                valid.push(cmp);
+            }
+        }
+
+        (valid, invalid)
     }
 
     /// Checks if comparisons are consistent, meaning no contradictions.
     /// Contradictions are for example if you write A > B, B > C, and A < C.
     /// Or if a dependent of an item is ranked as more important than the item itself.
     fn is_valid(&self) -> bool {
-        todo!()
+        self.invalid_cycle().is_none()
     }
 
     fn prioritize(&self) -> Result<PriRes, ErrState> {
-        if !self.is_valid() {
-            return Err(ErrState::InvalidComparisons { cycle: vec![] });
+        if let Some(cycle) = self.invalid_cycle() {
+            return Err(ErrState::InvalidComparisons { cycle });
         } else {
-            let fixed_entries = self.fixed_entries();
-            let (valid_comparisons, invalid_comparisons) = self.remove_invalid_entries();
+            let (valid_comparisons, _invalid_comparisons) = self.remove_invalid_entries();
             Ok(prioritize(self.items.clone(), valid_comparisons))
         }
     }
+
+    fn invalid_cycle(&self) -> Option<Vec<String>> {
+        let (valid_comparisons, _) = self.remove_invalid_entries();
+        find_cycle(&valid_comparisons)
+    }
+}
+
+fn insert_cmp(
+    entries: &mut Vec<Option<Cmp>>,
+    seen: &mut BTreeMap<(String, String), usize>,
+    cmp: Cmp,
+) {
+    let identity = cmp.identity();
+    if let Some(index) = seen.get(&identity) {
+        entries[*index] = Some(cmp);
+    } else {
+        seen.insert(identity, entries.len());
+        entries.push(Some(cmp));
+    }
+}
+
+fn find_cycle(comparisons: &[Cmp]) -> Option<Vec<String>> {
+    let mut graph: BTreeMap<String, Vec<String>> = BTreeMap::new();
+
+    for cmp in comparisons {
+        graph
+            .entry(cmp.higher.clone())
+            .or_default()
+            .push(cmp.lower.clone());
+        graph.entry(cmp.lower.clone()).or_default();
+    }
+
+    for cmp in comparisons {
+        let mut stack = vec![];
+        let mut on_stack = BTreeSet::new();
+        if let Some(cycle) = find_cycle_from(&cmp.higher, &graph, &mut stack, &mut on_stack) {
+            return Some(cycle);
+        }
+    }
+
+    None
+}
+
+fn find_cycle_from(
+    node: &str,
+    graph: &BTreeMap<String, Vec<String>>,
+    stack: &mut Vec<String>,
+    on_stack: &mut BTreeSet<String>,
+) -> Option<Vec<String>> {
+    if let Some(start) = stack.iter().position(|name| name == node) {
+        return Some(stack[start..].to_vec());
+    }
+
+    if !on_stack.insert(node.to_string()) {
+        return None;
+    }
+
+    stack.push(node.to_string());
+
+    if let Some(nexts) = graph.get(node) {
+        for next in nexts {
+            if let Some(cycle) = find_cycle_from(next, graph, stack, on_stack) {
+                return Some(cycle);
+            }
+        }
+    }
+
+    stack.pop();
+    None
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
@@ -176,8 +402,8 @@ mod tests {
     use std::collections::BTreeSet;
 
     fn test_eq(mut expected: Vec<(&str, Float)>, mut received: Vec<(Item, Float)>) {
-        expected.sort_by_key(|k| k.1);
-        received.sort_by_key(|k| k.1);
+        expected.sort_by_key(|(name, score)| (*score, *name));
+        received.sort_by_key(|(item, score)| (*score, item.name.clone()));
         assert_eq!(expected.len(), received.len());
 
         for (exp, rec) in expected.iter().zip(&received) {
@@ -192,9 +418,9 @@ mod tests {
     #[test]
     fn test_cmp_identity() {
         let cmp = Cmp::new("foo", "bar");
-        assert_eq!(cmp.identity(), ("foo".to_string(), "bar".to_string()));
+        assert_eq!(cmp.identity(), ("bar".to_string(), "foo".to_string()));
         let cmp2 = Cmp::new("bar", "foo");
-        assert_eq!(cmp2.identity(), ("foo".to_string(), "bar".to_string()));
+        assert_eq!(cmp2.identity(), ("bar".to_string(), "foo".to_string()));
     }
 
     #[test]
@@ -354,8 +580,8 @@ mod tests {
         assert_eq!(
             identities,
             BTreeSet::from([
-                ("foo".to_string(), "bar".to_string()),
                 ("bar".to_string(), "baz".to_string()),
+                ("bar".to_string(), "foo".to_string()),
             ])
         );
         assert!(res.contains(&Cmp::new("foo", "bar")));
@@ -404,5 +630,93 @@ mod tests {
         let (valid_comparisons, invalid_comparisons) = state.remove_invalid_entries();
         assert_eq!(valid_comparisons, vec![Cmp::new("foo", "baz")]);
         assert_eq!(invalid_comparisons, vec![Cmp::new("bar", "foo")]);
+    }
+
+    #[test]
+    fn realistic_flashcard_weights_debug() {
+        let spanish = Item::new("spanish basics").with_dependents(vec![
+            Item::new("spanish grammar").with_dependents(vec![
+                Item::new("spanish adjective agreement"),
+                Item::new("spanish ser vs estar"),
+            ]),
+            Item::new("spanish vocab").with_dependents(vec![
+                Item::new("spanish vocab: gato -> cat"),
+                Item::new("spanish vocab: biblioteca -> library"),
+                Item::new("spanish vocab: trabajar -> to work"),
+            ]),
+            Item::new("spanish greetings").with_dependents(vec![
+                Item::new("spanish phrase: buenos dias"),
+                Item::new("spanish phrase: hasta luego"),
+            ]),
+        ]);
+
+        let japanese = Item::new("japanese basics").with_dependents(vec![
+            Item::new("japanese kana").with_dependents(vec![
+                Item::new("japanese hiragana: ka"),
+                Item::new("japanese katakana: neko"),
+            ]),
+            Item::new("japanese vocab").with_dependents(vec![
+                Item::new("japanese vocab: neko -> cat"),
+                Item::new("japanese vocab: mizu -> water"),
+            ]),
+        ]);
+
+        let tech = Item::new("software engineering").with_dependents(vec![
+            Item::new("rust").with_dependents(vec![
+                Item::new("rust ownership"),
+                Item::new("rust borrow checker"),
+                Item::new("rust trait bounds"),
+            ]),
+            Item::new("kubernetes").with_dependents(vec![
+                Item::new("kubernetes pod"),
+                Item::new("kubernetes deployment"),
+                Item::new("kubernetes service"),
+            ]),
+            Item::new("postgres").with_dependents(vec![
+                Item::new("postgres btree index"),
+                Item::new("postgres transaction isolation"),
+            ]),
+        ]);
+
+        let history = Item::new("history").with_dependents(vec![
+            Item::new("french revolution").with_dependents(vec![
+                Item::new("french revolution: estates-general"),
+                Item::new("french revolution: storming of the bastille"),
+            ]),
+            Item::new("world war ii").with_dependents(vec![
+                Item::new("ww2 normandy landings"),
+                Item::new("ww2 battle of britain"),
+                Item::new("ww2 manhattan project"),
+            ]),
+        ]);
+
+        let state = State::new(
+            vec![spanish, japanese, tech, history],
+            vec![
+                CmpEntry::Cmp(Cmp::new("software engineering", "spanish basics")),
+                CmpEntry::Cmp(Cmp::new("spanish basics", "japanese basics")),
+                CmpEntry::Cmp(Cmp::new("world war ii", "french revolution")),
+                CmpEntry::Cmp(Cmp::new("kubernetes", "spanish greetings")),
+                CmpEntry::Cmp(Cmp::new(
+                    "rust ownership",
+                    "french revolution: estates-general",
+                )),
+                CmpEntry::Cmp(Cmp::new("japanese kana", "spanish adjective agreement")),
+                CmpEntry::Cmp(Cmp::new("postgres btree index", "ww2 normandy landings")),
+            ],
+        );
+
+        let res = state.prioritize().unwrap();
+        let mut weights: Vec<_> = res
+            .0
+            .values()
+            .map(|(item, score)| (item.name.as_str(), *score))
+            .collect();
+        weights.sort_by(|left, right| right.1.cmp(&left.1).then_with(|| left.0.cmp(right.0)));
+
+        println!("\nrealistic flashcard importance weights:");
+        for (name, score) in weights {
+            println!("{:>5.1}  {}", score.into_inner(), name);
+        }
     }
 }
