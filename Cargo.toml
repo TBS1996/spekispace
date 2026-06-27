@@ -1,5 +1,5 @@
 [workspace]
-members = ["speki-core", "omtrent", "speki", "ledgerstore", "priority", "viktig"]
+members = ["speki-core", "omtrent", "speki", "ledgerstore", "viktig"]
 
 resolver = "2"
 
