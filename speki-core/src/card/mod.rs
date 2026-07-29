@@ -401,6 +401,28 @@ pub struct Card {
     is_remote: bool,
 }
 
+impl viktig::Node for Card {
+    type Id = CardId;
+
+    fn id(&self) -> CardId {
+        self.id
+    }
+
+    fn dependencies(&self) -> Vec<Arc<Self>> {
+        Card::dependencies(self)
+            .into_iter()
+            .filter_map(|id| self.card_provider.load(id))
+            .collect()
+    }
+
+    fn dependents(&self) -> Vec<Arc<Self>> {
+        self.direct_dependent_ids()
+            .into_iter()
+            .filter_map(|id| self.card_provider.load(id))
+            .collect()
+    }
+}
+
 impl PartialEq for Card {
     fn eq(&self, other: &Self) -> bool {
         self.id == other.id

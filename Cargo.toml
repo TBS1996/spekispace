@@ -7,6 +7,7 @@ resolver = "2"
 speki-core = { path = "speki-core" }
 omtrent = { path = "omtrent" }
 ledgerstore = { path = "ledgerstore" }
+viktig = { path = "viktig" }
 either = "1.15.0"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0.128"

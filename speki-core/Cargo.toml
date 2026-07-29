@@ -37,6 +37,8 @@ omtrent.workspace = true
 ledgerstore.workspace = true
 #ledgerstore = "0.1.2"
 
+viktig.workspace = true
+
 
 
 [dependencies.gkquad]

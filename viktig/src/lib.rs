@@ -29,6 +29,21 @@ pub trait Node {
     fn dependents(&self) -> Vec<Arc<Self>>;
 }
 
+/// Computes an importance score for every node reachable from `items`.
+///
+/// This is the public entry point: pass the root nodes (the graph is expanded
+/// by walking each node's dependencies/dependents) and get back `(id, score)`
+/// pairs. Scores use the soft "density" distribution pass. No pairwise
+/// comparisons are applied here yet.
+pub fn importance<N: Node>(items: Vec<Arc<N>>) -> Vec<(N::Id, f32)> {
+    let graph = Graph::new(items);
+    let scores = resolve_scores_distributed(&graph, &[]);
+    scores
+        .into_iter()
+        .map(|(id, score)| (id, score.into_inner()))
+        .collect()
+}
+
 fn prioritize_vec<N: Node>(items: Vec<N>, cmps: Vec<Cmp<N::Id>>) -> Vec<(Arc<N>, Float)> {
     prioritize(items.into_iter().map(Arc::new).collect(), cmps).into_vec()
 }
@@ -263,13 +278,19 @@ impl<N: Node> Graph<N> {
 
     fn add_item(&mut self, item: Arc<N>) {
         let id = item.id();
-        let dependencies = item.dependencies();
-        let dependents = item.dependents();
 
-        self.items.entry(id.clone()).or_insert_with(|| item.clone());
+        // Guard against re-processing. Real graphs populate edges in *both*
+        // directions (a node lists its dependencies and its dependents), so
+        // without this the traversal would loop forever. Every node records
+        // all of its own edges the first (and only) time it is added, which is
+        // enough to capture every edge in the graph.
+        if self.items.contains_key(&id) {
+            return;
+        }
+        self.items.insert(id.clone(), item.clone());
         self.dependents.entry(id.clone()).or_default();
 
-        for dependent in dependents {
+        for dependent in item.dependents() {
             let dependent_id = dependent.id();
             self.dependents
                 .entry(id.clone())
@@ -278,7 +299,7 @@ impl<N: Node> Graph<N> {
             self.add_item(dependent);
         }
 
-        for dependency in dependencies {
+        for dependency in item.dependencies() {
             let dependency_id = dependency.id();
             self.dependents
                 .entry(dependency_id)

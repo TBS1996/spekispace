@@ -22,22 +22,73 @@ use crate::{overlays::OverlayEnum, Cli, APP};
 #[derive(Clone)]
 pub struct App(pub Arc<speki_core::App>);
 
+/// The storage root the app uses, taking the debug/remote CLI flags into
+/// account. Does *not* wipe anything (see [`App::new`] for the `--debug` wipe).
+pub fn storage_root() -> std::path::PathBuf {
+    let cli = Cli::parse();
+
+    if cli.debug || cli.debug_persist {
+        dirs::data_local_dir().unwrap().join("speki_debug")
+    } else if cli.remote {
+        dirs::data_local_dir().unwrap().join("speki_remote")
+    } else {
+        Config::load().storage_path.clone()
+    }
+}
+
+/// Path of the importance file written by `--importance`.
+pub fn importance_path() -> std::path::PathBuf {
+    storage_root().join("importance.txt")
+}
+
+/// The loaded importance file. `Missing` means the file didn't exist; otherwise
+/// we hold whatever card -> importance mappings it contained.
+pub enum ImportanceFile {
+    Missing,
+    Loaded(std::collections::HashMap<CardId, f32>),
+}
+
+/// Lazily-loaded importance map, read once from disk on first access.
+pub static IMPORTANCE: GlobalSignal<ImportanceFile> = Signal::global(load_importance_file);
+
+fn load_importance_file() -> ImportanceFile {
+    let Ok(contents) = std::fs::read_to_string(importance_path()) else {
+        return ImportanceFile::Missing;
+    };
+
+    let mut map = std::collections::HashMap::new();
+    for line in contents.lines() {
+        let mut parts = line.split_whitespace();
+        if let (Some(id), Some(value)) = (parts.next(), parts.next()) {
+            if let (Ok(id), Ok(value)) = (id.parse::<CardId>(), value.parse::<f32>()) {
+                map.insert(id, value);
+            }
+        }
+    }
+
+    ImportanceFile::Loaded(map)
+}
+
+/// A short label describing a card's importance for display in the UI.
+pub fn importance_label(id: CardId) -> String {
+    match &*IMPORTANCE.read() {
+        ImportanceFile::Missing => "importance file not present".to_string(),
+        ImportanceFile::Loaded(map) => match map.get(&id) {
+            Some(value) => format!("importance: {value}"),
+            None => "no importance for this card".to_string(),
+        },
+    }
+}
+
 impl App {
     pub fn new() -> Self {
         let cli = Cli::parse();
 
-        let root = if cli.debug {
-            let path = dirs::data_local_dir().unwrap().join("speki_debug");
+        let root = storage_root();
+        if cli.debug {
             // creating a fresh root for debugging
-            let _ = std::fs::remove_dir_all(&path);
-            path
-        } else if cli.debug_persist {
-            dirs::data_local_dir().unwrap().join("speki_debug")
-        } else if cli.remote {
-            dirs::data_local_dir().unwrap().join("speki_remote")
-        } else {
-            Config::load().storage_path.clone()
-        };
+            let _ = std::fs::remove_dir_all(&root);
+        }
 
         Self(Arc::new(speki_core::App::new(root)))
     }

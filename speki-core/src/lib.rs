@@ -1187,6 +1187,13 @@ impl App {
         self.card_provider.load_all()
     }
 
+    /// Computes an importance score for every card based on the dependency
+    /// graph. Returns `(card id, importance)` pairs. No pairwise comparisons
+    /// are applied yet.
+    pub fn card_importance(&self) -> Vec<(CardId, f32)> {
+        viktig::importance(self.load_all_cards())
+    }
+
     pub fn load_card_sync(&self, id: CardId) -> Option<Card> {
         trace!("loading card: {id}");
         let card = self.card_provider.load(id);

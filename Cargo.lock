@@ -5086,6 +5086,7 @@ dependencies = [
  "toml",
  "tracing",
  "uuid",
+ "viktig",
 ]
 
 [[package]]

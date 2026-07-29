@@ -78,6 +78,13 @@ fn CardProperties(viewer: CardViewer, is_remote: bool) -> Element {
             is_remote,
         }
 
+        if let Some(card_id) = card_id {
+            div {
+                class: "text-sm text-gray-500 my-2",
+                "{crate::utils::importance_label(card_id)}"
+            }
+        }
+
         RenderDependencies { card_text: viewer.editor.front.text.clone(), card_id: old_card, dependencies: viewer.editor.dependencies.clone(), is_remote}
         if let Some(card_id) = old_card {
             RenderDependents { card_id, hidden: false}

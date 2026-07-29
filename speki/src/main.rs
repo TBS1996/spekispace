@@ -109,6 +109,11 @@ struct Cli {
     #[arg(long)]
     export: bool,
 
+    /// Compute importance scores for all cards, write them to a file, print the
+    /// file path, and exit without launching the GUI.
+    #[arg(long)]
+    importance: bool,
+
     /// Create or modify a card by passing a JSON CardAction. Can be combined with --card to modify an existing card.
     /// Example: --action '{"NormalType":{"front":{"Raw":"What is Rust?"},"back":{"Text":{"Raw":"A systems programming language"}}}}'
     #[arg(long)]
@@ -413,6 +418,19 @@ fn main() {
             .join("graph.dot");
         fs::write(&output_path, dot).expect("Failed to write graph file");
         println!("Graph exported to: {}", output_path.display());
+        return;
+    } else if cli.importance {
+        let root = crate::utils::storage_root();
+        let app = speki_core::App::new(root);
+
+        let mut contents = String::new();
+        for (id, importance) in app.card_importance() {
+            contents.push_str(&format!("{id} {importance}\n"));
+        }
+
+        let output_path = crate::utils::importance_path();
+        fs::write(&output_path, contents).expect("Failed to write importance file");
+        println!("{}", output_path.display());
         return;
     }
 
