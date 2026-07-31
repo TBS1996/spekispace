@@ -94,6 +94,10 @@ impl LedgerItem for Set {
 
 pub type SetId = Uuid;
 
+fn is_false(b: &bool) -> bool {
+    !*b
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Hash, Eq)]
 pub struct Set {
     pub id: SetId,
@@ -101,10 +105,10 @@ pub struct Set {
     pub expr: SetExpr,
     /// If true, for inputs A, B, C, will only show B when the filter expression is valid for A.
     /// As if B was dependent on A.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "is_false")]
     pub ordered: bool,
     /// TTS language to use for this set's cards (None = use default)
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tts_language: Option<crate::VoiceLanguage>,
 }
 
